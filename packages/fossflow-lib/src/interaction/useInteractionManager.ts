@@ -315,6 +315,17 @@ export const useInteractionManager = () => {
       if (!rendererRef.current) return;
 
       if (e.type === 'mousedown' && handlePanMouseDown(e)) {
+        // Still update mouse state so Pan mode can track mousedown position for drag
+        const uiState = uiStateApi.getState();
+        const nextMouse = getMouse({
+          interactiveElement: rendererRef.current,
+          zoom: uiState.zoom,
+          scroll: uiState.scroll,
+          lastMouse: uiState.mouse,
+          mouseEvent: e,
+          rendererSize
+        });
+        uiState.actions.setMouse(nextMouse);
         return;
       }
       if (e.type === 'mouseup' && handlePanMouseUp(e)) {

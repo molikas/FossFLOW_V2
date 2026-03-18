@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useUiStateStore, useUiStateStoreApi } from 'src/stores/uiStateStore';
-import { CoordsUtils, getItemAtTile } from 'src/utils';
+import { CoordsUtils, getItemAtTile, setWindowCursor } from 'src/utils';
 import { useScene } from 'src/hooks/useScene';
 import { SlimMouseEvent } from 'src/types';
 
@@ -30,6 +30,7 @@ export const usePanHandlers = () => {
     if (isPanningRef.current) {
       isPanningRef.current = false;
       panMethodRef.current = null;
+      setWindowCursor('default');
       actions.setMode({
         type: 'CURSOR',
         showCursor: true,
@@ -50,6 +51,12 @@ export const usePanHandlers = () => {
   }, [rendererEl, mouseTile, scene]);
 
   const handleMouseDown = useCallback((e: SlimMouseEvent): boolean => {
+    // Left-click while in pan mode exits back to select/cursor mode
+    if (e.button === 0 && modeType === 'PAN') {
+      endPan();
+      return true;
+    }
+
     if (e.button === 1 && panSettings.middleClickPan) {
       e.preventDefault();
       startPan('middle');
@@ -82,14 +89,18 @@ export const usePanHandlers = () => {
     }
 
     return false;
-  }, [panSettings, startPan, isEmptyArea]);
+  }, [modeType, panSettings, startPan, endPan, isEmptyArea]);
 
   const handleMouseUp = useCallback((e: SlimMouseEvent): boolean => {
-    if (isPanningRef.current) {
-      endPan();
-      return true;
+    if (!isPanningRef.current) return false;
+
+    // Right-click pan is a toggle — stay in pan mode when right button is released
+    if (panMethodRef.current === 'right' && e.button === 2) {
+      return false;
     }
-    return false;
+
+    endPan();
+    return true;
   }, [endPan]);
 
   useEffect(() => {

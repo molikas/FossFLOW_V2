@@ -18,10 +18,10 @@ export interface PanSettings {
 export const DEFAULT_PAN_SETTINGS: PanSettings = {
   // Mouse options - start with common defaults
   middleClickPan: true,
-  rightClickPan: false,
+  rightClickPan: true,
   ctrlClickPan: false,
   altClickPan: false,
-  emptyAreaClickPan: true,
+  emptyAreaClickPan: false,
   
   // Keyboard options
   arrowKeysPan: true,
