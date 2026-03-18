@@ -1,46 +1,45 @@
-import React, { useRef, useEffect, useState, memo } from 'react';
-import gsap from 'gsap';
+import React, { useRef, useEffect, memo } from 'react';
 import { Box, SxProps } from '@mui/material';
-import { useUiStateStore } from 'src/stores/uiStateStore';
+import { useUiStateStoreApi } from 'src/stores/uiStateStore';
 
 interface Props {
   children?: React.ReactNode;
   order?: number;
   sx?: SxProps;
-  disableAnimation?: boolean;
+  disableAnimation?: boolean; // kept for API compatibility, no longer used
 }
 
 export const SceneLayer = memo(({
   children,
   order = 0,
-  sx,
-  disableAnimation
+  sx
 }: Props) => {
-  const [isFirstRender, setIsFirstRender] = useState(true);
   const elementRef = useRef<HTMLDivElement>(null);
-
-  const scroll = useUiStateStore((state) => {
-    return state.scroll;
-  });
-  const zoom = useUiStateStore((state) => {
-    return state.zoom;
-  });
+  const storeApi = useUiStateStoreApi();
 
   useEffect(() => {
-    if (!elementRef.current) return;
+    const applyTransform = (x: number, y: number, scale: number) => {
+      if (!elementRef.current) return;
+      elementRef.current.style.transform =
+        `translateX(${x}px) translateY(${y}px) scale(${scale})`;
+    };
 
-    gsap.to(elementRef.current, {
-      duration: disableAnimation || isFirstRender ? 0 : 0.016, // ~1 frame at 60fps for smooth motion
-      ease: 'none', // Linear easing for immediate response
-      translateX: scroll.position.x,
-      translateY: scroll.position.y,
-      scale: zoom
+    // Apply current values immediately on mount
+    const { scroll, zoom } = storeApi.getState();
+    applyTransform(scroll.position.x, scroll.position.y, zoom);
+
+    // Subscribe to future scroll/zoom changes — bypasses React render cycle entirely
+    const unsubscribe = storeApi.subscribe((state, prev) => {
+      if (state.scroll === prev.scroll && state.zoom === prev.zoom) return;
+      applyTransform(
+        state.scroll.position.x,
+        state.scroll.position.y,
+        state.zoom
+      );
     });
 
-    if (isFirstRender) {
-      setIsFirstRender(false);
-    }
-  }, [zoom, scroll, disableAnimation, isFirstRender]);
+    return unsubscribe;
+  }, [storeApi]);
 
   return (
     <Box
@@ -53,6 +52,7 @@ export const SceneLayer = memo(({
         width: 0,
         height: 0,
         userSelect: 'none',
+        willChange: 'transform',
         ...sx
       }}
     >
