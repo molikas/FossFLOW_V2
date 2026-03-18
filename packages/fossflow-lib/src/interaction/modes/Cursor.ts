@@ -174,6 +174,13 @@ export const Cursor: ModeActions = {
           id: uiState.mode.mousedownItem.id
         });
       }
+    } else if (!hasMoved) {
+      // Plain left-click on empty canvas — show context menu (add node / rectangle)
+      uiState.actions.setItemControls(null);
+      uiState.actions.setContextMenu({
+        type: 'EMPTY',
+        tile: uiState.mouse.position.tile
+      });
     } else {
       uiState.actions.setItemControls(null);
     }

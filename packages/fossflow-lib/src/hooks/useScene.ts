@@ -5,7 +5,8 @@ import {
   ViewItem,
   Connector,
   TextBox,
-  Rectangle
+  Rectangle,
+  ItemReference
 } from 'src/types';
 import { useUiStateStore } from 'src/stores/uiStateStore';
 import { useModelStore, useModelStoreApi } from 'src/stores/modelStore';
@@ -422,6 +423,36 @@ export const useScene = () => {
     [createModelItem, createViewItem, saveToHistoryBeforeChange]
   );
 
+  const deleteSelectedItems = useCallback(
+    (selectedItems: ItemReference[]) => {
+      if (!currentViewId || selectedItems.length === 0) return;
+
+      transaction(() => {
+        // Delete nodes first — each cascades to its connected connectors
+        selectedItems
+          .filter((ref) => ref.type === 'ITEM')
+          .forEach((ref) => deleteViewItem(ref.id));
+
+        // After node cascades, check which connectors/textboxes/rectangles still exist
+        const liveView = getState().model.views.find((v) => v.id === currentViewId);
+        const existingConnectors = new Set((liveView?.connectors ?? []).map((c) => c.id));
+        const existingTextBoxes = new Set((liveView?.textBoxes ?? []).map((t) => t.id));
+        const existingRectangles = new Set((liveView?.rectangles ?? []).map((r) => r.id));
+
+        selectedItems.forEach((ref) => {
+          if (ref.type === 'CONNECTOR' && existingConnectors.has(ref.id)) {
+            deleteConnector(ref.id);
+          } else if (ref.type === 'TEXTBOX' && existingTextBoxes.has(ref.id)) {
+            deleteTextBox(ref.id);
+          } else if (ref.type === 'RECTANGLE' && existingRectangles.has(ref.id)) {
+            deleteRectangle(ref.id);
+          }
+        });
+      });
+    },
+    [currentViewId, transaction, deleteViewItem, deleteConnector, deleteTextBox, deleteRectangle, getState]
+  );
+
   return {
     items: itemsList,
     connectors: connectorsList,
@@ -444,6 +475,7 @@ export const useScene = () => {
     createRectangle,
     updateRectangle,
     deleteRectangle,
+    deleteSelectedItems,
     transaction,
     placeIcon
   };

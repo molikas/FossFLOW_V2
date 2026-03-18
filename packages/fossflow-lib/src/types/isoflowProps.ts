@@ -51,9 +51,18 @@ export interface LocaleProps {
     panCanvasAction: string;
     panCanvasShortcut: string;
     panCanvasDescription: string;
-    contextMenuAction: string;
-    contextMenuShortcut: string;
-    contextMenuDescription: string;
+    togglePanToolAction: string;
+    togglePanToolShortcut: string;
+    togglePanToolDescription: string;
+    lassoSelectAction: string;
+    lassoSelectShortcut: string;
+    lassoSelectDescription: string;
+    deselectAction: string;
+    deselectShortcut: string;
+    deselectDescription: string;
+    deleteSelectedAction: string;
+    deleteSelectedShortcut: string;
+    deleteSelectedDescription: string;
     // Mouse interactions
     selectToolAction: string;
     selectToolShortcut: string;

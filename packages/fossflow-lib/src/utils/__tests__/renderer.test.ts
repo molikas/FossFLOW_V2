@@ -54,6 +54,50 @@ describe('Tests renderer utils', () => {
     expect(outsideBounds).toBe(false);
   });
 
+  test('isWithinBounds() works with reversed bounds (bottom-right to top-left drag)', () => {
+    // Lasso dragged from bottom-right to top-left — sortByPosition normalises the order
+    const bounds: Coords[] = [
+      { x: 6, y: 6 },
+      { x: 4, y: 4 }
+    ];
+
+    expect(isWithinBounds({ x: 5, y: 5 }, bounds)).toBe(true);
+    expect(isWithinBounds({ x: 4, y: 4 }, bounds)).toBe(true);
+    expect(isWithinBounds({ x: 6, y: 6 }, bounds)).toBe(true);
+    expect(isWithinBounds({ x: 3, y: 5 }, bounds)).toBe(false);
+    expect(isWithinBounds({ x: 5, y: 7 }, bounds)).toBe(false);
+  });
+
+  test('isWithinBounds() works for a single-tile selection', () => {
+    const bounds: Coords[] = [
+      { x: 3, y: 3 },
+      { x: 3, y: 3 }
+    ];
+
+    expect(isWithinBounds({ x: 3, y: 3 }, bounds)).toBe(true);
+    expect(isWithinBounds({ x: 3, y: 4 }, bounds)).toBe(false);
+    expect(isWithinBounds({ x: 4, y: 3 }, bounds)).toBe(false);
+  });
+
+  test('isWithinBounds() — far-corner tiles are included, just-outside tiles are not', () => {
+    const bounds: Coords[] = [
+      { x: 2, y: 2 },
+      { x: 5, y: 5 }
+    ];
+
+    // All four corners are inside
+    expect(isWithinBounds({ x: 2, y: 2 }, bounds)).toBe(true);
+    expect(isWithinBounds({ x: 5, y: 5 }, bounds)).toBe(true);
+    expect(isWithinBounds({ x: 2, y: 5 }, bounds)).toBe(true);
+    expect(isWithinBounds({ x: 5, y: 2 }, bounds)).toBe(true);
+
+    // One tile outside each edge
+    expect(isWithinBounds({ x: 1, y: 3 }, bounds)).toBe(false);
+    expect(isWithinBounds({ x: 6, y: 3 }, bounds)).toBe(false);
+    expect(isWithinBounds({ x: 3, y: 1 }, bounds)).toBe(false);
+    expect(isWithinBounds({ x: 3, y: 6 }, bounds)).toBe(false);
+  });
+
   test('screenToIso() works correctly when mouse is at center of project', () => {
     const zoom = 1;
     const rendererSize = getRendererSize({ width: 10, height: 10 }, zoom);

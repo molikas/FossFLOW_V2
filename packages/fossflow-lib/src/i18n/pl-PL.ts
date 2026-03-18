@@ -44,9 +44,15 @@ const locale: LocaleProps = {
     panCanvasAction: "Przesuwanie obszaru roboczego",
     panCanvasShortcut: "Kliknij lewym przyciskiem myszy + przeciągnij",
     panCanvasDescription: "Przesuwaj obszar roboczy w trybie przesuwania",
-    contextMenuAction: "Menu kontekstowe",
-    contextMenuShortcut: "Prawy przycisk myszy",
-    contextMenuDescription: "Otwórz menu kontekstowe dla elementów lub pustej przestrzeni",
+    togglePanToolAction: "Toggle Pan Tool",
+    togglePanToolShortcut: "Right-click",
+    togglePanToolDescription: "Toggle pan mode on/off; left-click to return to select mode",
+    lassoSelectAction: "Lasso Select",
+    lassoSelectShortcut: "Left-click + Drag (empty area)",
+    lassoSelectDescription: "Draw a rectangular selection box to select multiple items",
+    deselectAction: "Deselect",
+    deselectShortcut: "Left-click (empty area)",
+    deselectDescription: "Deselect the current selection and return to select mode",
     // Mouse interactions
     selectToolAction: "Wybierz narzędzie",
     selectToolShortcut: "Kliknij przycisk Wybierz",
@@ -65,7 +71,10 @@ const locale: LocaleProps = {
     createConnectorDescription: "Przełącz do trybu połączenia",
     addTextAction: "Dodaj Tekst",
     addTextShortcut: "Kliknij przycisk Tekst",
-    addTextDescription: "Utwórz nowe pole tekstowe"
+    addTextDescription: "Utwórz nowe pole tekstowe",
+    deleteSelectedAction: "Delete Selected",
+    deleteSelectedShortcut: "Delete (Backspace on Mac)",
+    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo"
   },
   connectorHintTooltip: {
     tipCreatingConnectors: "Wskazówka: Tworzenie połączeń",

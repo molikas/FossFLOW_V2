@@ -44,9 +44,15 @@ const locale: LocaleProps = {
     panCanvasAction: "Переместить холст",
     panCanvasShortcut: "Левая кнопка + перетаскивание",
     panCanvasDescription: "Переместить холст в режиме перемещения",
-    contextMenuAction: "Контекстное меню",
-    contextMenuShortcut: "Правая кнопка мыши",
-    contextMenuDescription: "Открыть контекстное меню для элементов или пустого пространства",
+    togglePanToolAction: "Toggle Pan Tool",
+    togglePanToolShortcut: "Right-click",
+    togglePanToolDescription: "Toggle pan mode on/off; left-click to return to select mode",
+    lassoSelectAction: "Lasso Select",
+    lassoSelectShortcut: "Left-click + Drag (empty area)",
+    lassoSelectDescription: "Draw a rectangular selection box to select multiple items",
+    deselectAction: "Deselect",
+    deselectShortcut: "Left-click (empty area)",
+    deselectDescription: "Deselect the current selection and return to select mode",
     // Mouse interactions
     selectToolAction: "Инструмент выделения",
     selectToolShortcut: "Нажать кнопку Выделить",
@@ -65,7 +71,10 @@ const locale: LocaleProps = {
     createConnectorDescription: "Переключиться в режим соединителя",
     addTextAction: "Добавить текст",
     addTextShortcut: "Нажать кнопку Текст",
-    addTextDescription: "Создать новое текстовое поле"
+    addTextDescription: "Создать новое текстовое поле",
+    deleteSelectedAction: "Delete Selected",
+    deleteSelectedShortcut: "Delete (Backspace on Mac)",
+    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo"
   },
   connectorHintTooltip: {
     tipCreatingConnectors: "Совет: Создание соединителей",

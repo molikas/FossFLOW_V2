@@ -93,6 +93,11 @@ export const HelpDialog = () => {
       action: t('deselectAction'),
       shortcut: t('deselectShortcut'),
       description: t('deselectDescription')
+    },
+    {
+      action: t('deleteSelectedAction'),
+      shortcut: t('deleteSelectedShortcut'),
+      description: t('deleteSelectedDescription')
     }
   ];
 

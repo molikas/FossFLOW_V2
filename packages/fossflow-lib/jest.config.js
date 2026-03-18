@@ -1,4 +1,8 @@
 /** @type {import('ts-jest').JestConfigWithTsJest} */
+// React loads its production build when NODE_ENV === 'production', which breaks
+// act() in tests. Ensure it is always 'test' regardless of the inherited environment.
+process.env.NODE_ENV = 'test';
+
 module.exports = {
   preset: "ts-jest",
   testEnvironment: "jsdom",

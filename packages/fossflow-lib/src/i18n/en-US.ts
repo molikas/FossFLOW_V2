@@ -71,7 +71,10 @@ const locale: LocaleProps = {
     createConnectorDescription: "Switch to connector mode",
     addTextAction: "Add Text",
     addTextShortcut: "Click Text button",
-    addTextDescription: "Create a new text box"
+    addTextDescription: "Create a new text box",
+    deleteSelectedAction: "Delete Selected",
+    deleteSelectedShortcut: "Delete (Backspace on Mac)",
+    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo"
   },
   connectorHintTooltip: {
     tipCreatingConnectors: "Tip: Creating Connectors",

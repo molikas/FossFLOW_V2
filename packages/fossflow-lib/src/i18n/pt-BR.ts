@@ -44,9 +44,15 @@ const locale: LocaleProps = {
     panCanvasAction: "Mover tela",
     panCanvasShortcut: "Clique esquerdo + Arrastar",
     panCanvasDescription: "Mover a tela no modo de movimentação",
-    contextMenuAction: "Menu de contexto",
-    contextMenuShortcut: "Clique direito",
-    contextMenuDescription: "Abrir menu de contexto para itens ou espaço vazio",
+    togglePanToolAction: "Toggle Pan Tool",
+    togglePanToolShortcut: "Right-click",
+    togglePanToolDescription: "Toggle pan mode on/off; left-click to return to select mode",
+    lassoSelectAction: "Lasso Select",
+    lassoSelectShortcut: "Left-click + Drag (empty area)",
+    lassoSelectDescription: "Draw a rectangular selection box to select multiple items",
+    deselectAction: "Deselect",
+    deselectShortcut: "Left-click (empty area)",
+    deselectDescription: "Deselect the current selection and return to select mode",
     // Mouse interactions
     selectToolAction: "Ferramenta de seleção",
     selectToolShortcut: "Clique no botão Selecionar",
@@ -65,7 +71,10 @@ const locale: LocaleProps = {
     createConnectorDescription: "Mudar para o modo de conector",
     addTextAction: "Adicionar texto",
     addTextShortcut: "Clique no botão Texto",
-    addTextDescription: "Criar uma nova caixa de texto"
+    addTextDescription: "Criar uma nova caixa de texto",
+    deleteSelectedAction: "Delete Selected",
+    deleteSelectedShortcut: "Delete (Backspace on Mac)",
+    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo"
   },
   connectorHintTooltip: {
     tipCreatingConnectors: "Dica: Criar conectores",

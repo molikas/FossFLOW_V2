@@ -107,7 +107,7 @@ export const useInteractionManager = () => {
   const scene = useScene();
   const { size: rendererSize } = useResizeObserver(rendererEl);
   const { undo, redo, canUndo, canRedo } = useHistory();
-  const { createTextBox } = scene;
+  const { createTextBox, deleteSelectedItems, deleteViewItem, deleteConnector, deleteTextBox, deleteRectangle } = scene;
   const { handleMouseDown: handlePanMouseDown, handleMouseUp: handlePanMouseUp } = usePanHandlers();
   const { scheduleUpdate, flushUpdate, cleanup } = useRAFThrottle();
 
@@ -144,6 +144,55 @@ export const useInteractionManager = () => {
         }
 
         return;
+      }
+
+      // Delete/Backspace — handled before the text-field guard so it always fires
+      // when a canvas selection exists (matches how diagram tools like Figma behave).
+      const isDeleteKey = e.key === 'Delete' || e.key === 'Backspace';
+      if (isDeleteKey) {
+        const mode = uiState.mode;
+
+        if (
+          (mode.type === 'LASSO' || mode.type === 'FREEHAND_LASSO') &&
+          mode.selection?.items?.length
+        ) {
+          e.preventDefault();
+          deleteSelectedItems(mode.selection.items);
+          uiState.actions.setMode({
+            type: 'CURSOR',
+            showCursor: true,
+            mousedownItem: null
+          });
+          uiState.actions.setItemControls(null);
+          return;
+        }
+
+        if (uiState.itemControls && uiState.itemControls.type !== 'ADD_ITEM') {
+          // Only fire if focus is NOT inside a text-editing element so that
+          // editing text in the properties panel still works normally.
+          const target = e.target as HTMLElement;
+          const inTextField =
+            target.tagName === 'INPUT' ||
+            target.tagName === 'TEXTAREA' ||
+            target.contentEditable === 'true' ||
+            !!target.closest('.ql-editor');
+
+          if (!inTextField) {
+            e.preventDefault();
+            const ctrl = uiState.itemControls;
+            if (ctrl.type === 'ITEM') {
+              deleteViewItem(ctrl.id);
+            } else if (ctrl.type === 'CONNECTOR') {
+              deleteConnector(ctrl.id);
+            } else if (ctrl.type === 'TEXTBOX') {
+              deleteTextBox(ctrl.id);
+            } else if (ctrl.type === 'RECTANGLE') {
+              deleteRectangle(ctrl.id);
+            }
+            uiState.actions.setItemControls(null);
+            return;
+          }
+        }
       }
 
       const target = e.target as HTMLElement;
@@ -265,7 +314,7 @@ export const useInteractionManager = () => {
     return () => {
       return window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [undo, redo, canUndo, canRedo, uiStateApi, createTextBox, scene]);
+  }, [undo, redo, canUndo, canRedo, uiStateApi, createTextBox, deleteSelectedItems, deleteViewItem, deleteConnector, deleteTextBox, deleteRectangle, scene]);
 
   const processMouseUpdate = useCallback(
     (nextMouse: Mouse, e: SlimMouseEvent) => {

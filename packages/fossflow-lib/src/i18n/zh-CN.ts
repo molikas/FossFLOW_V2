@@ -44,9 +44,15 @@ const locale: LocaleProps = {
     panCanvasAction: "平移画布",
     panCanvasShortcut: "左键拖拽",
     panCanvasDescription: "在平移模式下移动画布",
-    contextMenuAction: "上下文菜单",
-    contextMenuShortcut: "右键点击",
-    contextMenuDescription: "为项目或空白区域打开上下文菜单",
+    togglePanToolAction: "Toggle Pan Tool",
+    togglePanToolShortcut: "Right-click",
+    togglePanToolDescription: "Toggle pan mode on/off; left-click to return to select mode",
+    lassoSelectAction: "Lasso Select",
+    lassoSelectShortcut: "Left-click + Drag (empty area)",
+    lassoSelectDescription: "Draw a rectangular selection box to select multiple items",
+    deselectAction: "Deselect",
+    deselectShortcut: "Left-click (empty area)",
+    deselectDescription: "Deselect the current selection and return to select mode",
     // Mouse interactions
     selectToolAction: "选择工具",
     selectToolShortcut: "点击选择按钮",
@@ -65,7 +71,10 @@ const locale: LocaleProps = {
     createConnectorDescription: "切换到连接器模式",
     addTextAction: "添加文本",
     addTextShortcut: "点击文本按钮",
-    addTextDescription: "创建新的文本框"
+    addTextDescription: "创建新的文本框",
+    deleteSelectedAction: "Delete Selected",
+    deleteSelectedShortcut: "Delete (Backspace on Mac)",
+    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo"
   },
   connectorHintTooltip: {
     tipCreatingConnectors: "提示：创建连接器",

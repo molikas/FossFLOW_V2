@@ -44,9 +44,15 @@ const locale: LocaleProps = {
     panCanvasAction: "Geser Kanvas",
     panCanvasShortcut: "Klik Kiri + Seret",
     panCanvasDescription: "Geser kanvas saat dalam mode Geser",
-    contextMenuAction: "Menu Konteks",
-    contextMenuShortcut: "Klik Kanan",
-    contextMenuDescription: "Buka menu konteks untuk item atau ruang kosong",
+    togglePanToolAction: "Toggle Pan Tool",
+    togglePanToolShortcut: "Right-click",
+    togglePanToolDescription: "Toggle pan mode on/off; left-click to return to select mode",
+    lassoSelectAction: "Lasso Select",
+    lassoSelectShortcut: "Left-click + Drag (empty area)",
+    lassoSelectDescription: "Draw a rectangular selection box to select multiple items",
+    deselectAction: "Deselect",
+    deselectShortcut: "Left-click (empty area)",
+    deselectDescription: "Deselect the current selection and return to select mode",
     // Mouse interactions
     selectToolAction: "Alat Pilih",
     selectToolShortcut: "Klik tombol Pilih",
@@ -65,7 +71,10 @@ const locale: LocaleProps = {
     createConnectorDescription: "Beralih ke mode konektor",
     addTextAction: "Tambah Teks",
     addTextShortcut: "Klik tombol Teks",
-    addTextDescription: "Buat kotak teks baru"
+    addTextDescription: "Buat kotak teks baru",
+    deleteSelectedAction: "Delete Selected",
+    deleteSelectedShortcut: "Delete (Backspace on Mac)",
+    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo"
   },
   connectorHintTooltip: {
     tipCreatingConnectors: "Tip: Membuat Konektor",
