@@ -102,23 +102,33 @@ export const Lasso: ModeActions = {
         );
         return;
       }
-
-      // Clicked outside selection - clear it and stay in LASSO mode
-      uiState.actions.setMode(
-        produce(uiState.mode, (draft) => {
-          if (draft.type === 'LASSO') {
-            draft.selection = null;
-            draft.isDragging = false;
-          }
-        })
-      );
     }
+
+    // Clicked outside selection (or no selection) - exit back to cursor/select mode
+    uiState.actions.setMode({
+      type: 'CURSOR',
+      showCursor: true,
+      mousedownItem: null
+    });
   },
 
   mouseup: ({ uiState }) => {
     if (uiState.mode.type !== 'LASSO') return;
 
-    // Reset dragging state but keep selection
+    const hasSelection =
+      uiState.mode.selection && uiState.mode.selection.items.length > 0;
+
+    if (!hasSelection) {
+      // Dragged but caught nothing — exit back to cursor
+      uiState.actions.setMode({
+        type: 'CURSOR',
+        showCursor: true,
+        mousedownItem: null
+      });
+      return;
+    }
+
+    // Keep the selection visible, reset dragging flag
     uiState.actions.setMode(
       produce(uiState.mode, (draft) => {
         if (draft.type === 'LASSO') {

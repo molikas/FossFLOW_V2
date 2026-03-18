@@ -80,9 +80,19 @@ export const HelpDialog = () => {
       description: t('panCanvasDescription')
     },
     {
-      action: t('contextMenuAction'),
-      shortcut: t('contextMenuShortcut'),
-      description: t('contextMenuDescription')
+      action: t('togglePanToolAction'),
+      shortcut: t('togglePanToolShortcut'),
+      description: t('togglePanToolDescription')
+    },
+    {
+      action: t('lassoSelectAction'),
+      shortcut: t('lassoSelectShortcut'),
+      description: t('lassoSelectDescription')
+    },
+    {
+      action: t('deselectAction'),
+      shortcut: t('deselectShortcut'),
+      description: t('deselectDescription')
     }
   ];
 

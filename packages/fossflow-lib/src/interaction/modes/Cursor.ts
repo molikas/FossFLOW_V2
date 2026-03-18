@@ -100,12 +100,6 @@ const mousedown: ModeActionsAction = ({
     );
 
     uiState.actions.setItemControls(null);
-
-    // Show context menu for empty space on left click
-    uiState.actions.setContextMenu({
-      type: 'EMPTY',
-      tile: uiState.mouse.position.tile
-    });
   }
 };
 
@@ -141,12 +135,13 @@ export const Cursor: ModeActions = {
         isInitialMovement: true
       });
     } else {
-      // If no item is being dragged and the mouse has moved, switch to PAN mode
-      // Only do this if the drag started on empty space
+      // Empty-area drag → start lasso selection
       if (uiState.mouse.mousedown) {
         uiState.actions.setMode({
-          type: 'PAN',
-          showCursor: false
+          type: 'LASSO',
+          showCursor: true,
+          selection: null,
+          isDragging: false
         });
       }
     }
