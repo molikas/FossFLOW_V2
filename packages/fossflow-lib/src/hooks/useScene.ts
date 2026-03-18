@@ -3,6 +3,7 @@ import { shallow } from 'zustand/shallow';
 import {
   ModelItem,
   ViewItem,
+  View,
   Connector,
   TextBox,
   Rectangle,
@@ -13,14 +14,17 @@ import { useModelStore, useModelStoreApi } from 'src/stores/modelStore';
 import { useSceneStore, useSceneStoreApi } from 'src/stores/sceneStore';
 import * as reducers from 'src/stores/reducers';
 import type { State } from 'src/stores/reducers/types';
-import { getItemByIdOrThrow } from 'src/utils';
+import { generateId, getItemByIdOrThrow } from 'src/utils';
+import { useView } from 'src/hooks/useView';
 import {
   CONNECTOR_DEFAULTS,
   RECTANGLE_DEFAULTS,
-  TEXTBOX_DEFAULTS
+  TEXTBOX_DEFAULTS,
+  VIEW_DEFAULTS
 } from 'src/config';
 
 export const useScene = () => {
+  const { changeView } = useView();
   const { views, colors, icons, items, version, title, description } =
     useModelStore(
       (state) => ({
@@ -423,6 +427,75 @@ export const useScene = () => {
     [createModelItem, createViewItem, saveToHistoryBeforeChange]
   );
 
+  const switchView = useCallback(
+    (viewId: string) => {
+      const model = modelStoreApi.getState();
+      changeView(viewId, {
+        version: model.version,
+        title: model.title,
+        description: model.description,
+        colors: model.colors,
+        icons: model.icons,
+        items: model.items,
+        views: model.views
+      });
+    },
+    [modelStoreApi, changeView]
+  );
+
+  const createView = useCallback(
+    (newViewPartial?: Partial<View>) => {
+      const newViewId = generateId();
+      const newState = reducers.view({
+        action: 'CREATE_VIEW',
+        payload: { ...VIEW_DEFAULTS, ...newViewPartial, name: (newViewPartial?.name) ?? `Page ${views.length + 1}` },
+        ctx: { viewId: newViewId, state: getState() }
+      });
+      setState(newState);
+
+      // Switch to the newly created view
+      const model = newState.model;
+      changeView(newViewId, model);
+    },
+    [getState, setState, views, changeView]
+  );
+
+  const deleteView = useCallback(
+    (viewId: string) => {
+      if (views.length <= 1) return; // Cannot delete the last view
+
+      saveToHistoryBeforeChange();
+      const newState = reducers.view({
+        action: 'DELETE_VIEW',
+        payload: undefined,
+        ctx: { viewId, state: getState() }
+      });
+      setState(newState);
+
+      // If we deleted the current view, switch to another one
+      if (viewId === currentViewId) {
+        const remainingViews = newState.model.views;
+        if (remainingViews.length > 0) {
+          changeView(remainingViews[0].id, newState.model);
+        }
+      }
+    },
+    [views, currentViewId, getState, setState, saveToHistoryBeforeChange, changeView]
+  );
+
+  const updateView = useCallback(
+    (viewId: string, updates: Partial<Pick<View, 'name'>>) => {
+      saveToHistoryBeforeChange();
+      const newState = reducers.view({
+        action: 'UPDATE_VIEW',
+        payload: updates,
+        ctx: { viewId, state: getState() }
+      });
+      setState(newState);
+    },
+    [getState, setState, saveToHistoryBeforeChange]
+  );
+
   const deleteSelectedItems = useCallback(
     (selectedItems: ItemReference[]) => {
       if (!currentViewId || selectedItems.length === 0) return;
@@ -477,6 +550,10 @@ export const useScene = () => {
     deleteRectangle,
     deleteSelectedItems,
     transaction,
-    placeIcon
+    placeIcon,
+    switchView,
+    createView,
+    deleteView,
+    updateView
   };
 };

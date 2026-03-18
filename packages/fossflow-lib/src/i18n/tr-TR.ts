@@ -196,6 +196,11 @@ const locale: LocaleProps = {
     configPath2: "sol üstteki Hamburger simgesine tıklayın.",
     canDisable: "İsterseniz bu davranışı devre dışı bırakabilirsiniz.",
     signature: "-Stan"
+  },
+  viewTabs: {
+    addPage: "Add page",
+    deletePage: "Delete page",
+    renameDiagram: "Rename diagram"
   }
 };
 

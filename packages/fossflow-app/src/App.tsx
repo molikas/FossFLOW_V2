@@ -10,7 +10,8 @@ import {
 } from './diagramUtils';
 import { StorageManager } from './StorageManager';
 import { DiagramManager } from './components/DiagramManager';
-import { storageManager } from './services/storageService';
+import { useStorage } from './services/storageService';
+import type { IsoflowRef } from 'fossflow';
 import ChangeLanguage from './components/ChangeLanguage';
 import { allLocales } from 'fossflow';
 import { useIconPackManager, IconPackName } from './services/iconPackManager';
@@ -49,6 +50,9 @@ function EditorPage() {
   const iconPackManager = useIconPackManager(coreIcons);
   const { readonlyDiagramId } = useParams<{ readonlyDiagramId: string }>();
 
+  const isoflowRef = useRef<IsoflowRef>(null);
+  const { storage, isServerStorage: isStorageServer, isInitialized: isStorageInitialized } = useStorage();
+
   const [diagrams, setDiagrams] = useState<SavedDiagram[]>([]);
   const [isDiagramsInitialized, setIsDiagramsInitialized] = useState<boolean>(false);
   const [currentDiagram, setCurrentDiagram] = useState<SavedDiagram | null>(
@@ -58,13 +62,12 @@ function EditorPage() {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showLoadDialog, setShowLoadDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
-  const [fossflowKey, setFossflowKey] = useState(0); // Key to force re-render of FossFLOW
   const [currentModel, setCurrentModel] = useState<DiagramData | null>(null); // Store current model state
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [lastAutoSave, setLastAutoSave] = useState<Date | null>(null);
   const [showStorageManager, setShowStorageManager] = useState(false);
   const [showDiagramManager, setShowDiagramManager] = useState(false);
-  const [serverStorageAvailable, setServerStorageAvailable] = useState(false);
+  const serverStorageAvailable = isStorageServer && isStorageInitialized;
   const isReadonlyUrl =
     window.location.pathname.startsWith('/display/') && readonlyDiagramId;
 
@@ -112,61 +115,45 @@ function EditorPage() {
     };
   });
 
-  // Check for server storage availability
-  useEffect(() => {
-    storageManager
-      .initialize()
-      .then(() => {
-        setServerStorageAvailable(storageManager.isServerStorage());
-      })
-      .catch(console.error);
-  }, []);
-
   // Check if readonlyDiagramId exists - if exists, load diagram in view-only mode
   useEffect(() => {
-    if (!isReadonlyUrl || !serverStorageAvailable) return;
+    if (!isReadonlyUrl || !storage) return;
     const loadReadonlyDiagram = async () => {
       try {
-        const storage = storageManager.getStorage();
-        // Get diagram metadata
         const diagramList = await storage.listDiagrams();
-        const diagramInfo = diagramList.find((d) => {
-          return d.id === readonlyDiagramId;
-        });
-        // Load the diagram data from server storage
+        const diagramInfo = diagramList.find((d) => d.id === readonlyDiagramId);
         const data = await storage.loadDiagram(readonlyDiagramId);
-        // Convert to SavedDiagram interface format
         const readonlyDiagram: SavedDiagram = {
           id: readonlyDiagramId,
           name: diagramInfo?.name || data.title || 'Readonly Diagram',
           data: data,
           createdAt: new Date().toISOString(),
-          updatedAt:
-            diagramInfo?.lastModified.toISOString() || new Date().toISOString()
+          updatedAt: diagramInfo?.lastModified.toISOString() || new Date().toISOString()
         };
-        await loadDiagram(readonlyDiagram, true);
+        const importedIcons = (data.icons || []).filter((icon: any) => icon.collection === 'imported');
+        const mergedIcons = [...iconPackManager.loadedIcons, ...importedIcons];
+        const dataWithIcons = { ...data, icons: mergedIcons };
+        setCurrentDiagram(readonlyDiagram);
+        setDiagramName(readonlyDiagram.name);
+        setCurrentModel(dataWithIcons);
+        isoflowRef.current?.load(dataWithIcons);
       } catch (error) {
-        // Alert if unable to load readonly diagram and redirect to new diagram
         alert(t('dialog.readOnly.failed'));
         window.location.href = '/';
       }
     };
     loadReadonlyDiagram();
-  }, [readonlyDiagramId, serverStorageAvailable]);
+  }, [readonlyDiagramId, storage]);
 
-  // Update diagramData when loaded icons change
+  const currentModelRef = useRef<DiagramData | null>(null);
+  useEffect(() => { currentModelRef.current = currentModel; }, [currentModel]);
+
   useEffect(() => {
-    setDiagramData((prev) => {
-      return {
-        ...prev,
-        icons: [
-          ...iconPackManager.loadedIcons,
-          ...(prev.icons || []).filter((icon) => {
-            return icon.collection === 'imported';
-          })
-        ]
-      };
-    });
+    // When icon packs load/change, update icons in the active diagram without full remount
+    if (!isoflowRef.current || !currentModelRef.current) return;
+    const importedIcons = (currentModelRef.current.icons || []).filter((icon: any) => icon.collection === 'imported');
+    const mergedIcons = [...iconPackManager.loadedIcons, ...importedIcons];
+    isoflowRef.current.load({ ...currentModelRef.current, icons: mergedIcons });
   }, [iconPackManager.loadedIcons]);
 
   // Load diagrams from localStorage on component mount
@@ -346,13 +333,10 @@ function EditorPage() {
 
     setCurrentDiagram(diagram);
     setDiagramName(diagram.name);
-    setDiagramData(dataWithIcons);
     setCurrentModel(dataWithIcons);
-    setFossflowKey((prev) => {
-      return prev + 1;
-    }); // Force re-render of FossFLOW
     setShowLoadDialog(false);
     setHasUnsavedChanges(false);
+    isoflowRef.current?.load(dataWithIcons);
 
     // Save as last opened (without icons)
     try {
@@ -396,12 +380,9 @@ function EditorPage() {
       };
       setCurrentDiagram(null);
       setDiagramName('');
-      setDiagramData(emptyDiagram);
-      setCurrentModel(emptyDiagram); // Reset current model too
-      setFossflowKey((prev) => {
-        return prev + 1;
-      }); // Force re-render of FossFLOW
+      setCurrentModel(emptyDiagram);
       setHasUnsavedChanges(false);
+      isoflowRef.current?.load(emptyDiagram);
 
       // Clear last opened
       localStorage.removeItem('fossflow-last-opened');
@@ -424,7 +405,6 @@ function EditorPage() {
     };
 
     setCurrentModel(updatedModel);
-    setDiagramData(updatedModel);
 
     if (!isReadonlyUrl) {
       setHasUnsavedChanges(true);
@@ -568,15 +548,8 @@ function EditorPage() {
     setCurrentDiagram(newDiagram);
     setCurrentModel(mergedData);
     setHasUnsavedChanges(false);
-
-    // Update diagramData and key together
-    // This ensures Isoflow gets the correct data with the new key
-    setDiagramData(mergedData);
-    setFossflowKey((prev) => {
-      const newKey = prev + 1;
-      console.log(`App: Updated fossflowKey from ${prev} to ${newKey}`);
-      return newKey;
-    });
+    console.log(`App: Loading diagram ${id} via imperative ref`);
+    isoflowRef.current?.load(mergedData);
 
     console.log(
       `App: Finished loading diagram ${id}, final icon count: ${finalIcons.length}`
@@ -792,7 +765,7 @@ function EditorPage() {
 
       <div className="fossflow-container">
         <Isoflow
-          key={`${fossflowKey}-${i18n.language}`}
+          ref={isoflowRef}
           initialData={diagramData}
           onModelUpdated={handleModelUpdated}
           editorMode={isReadonlyUrl ? 'EXPLORABLE_READONLY' : 'EDITABLE'}
@@ -974,6 +947,8 @@ function EditorPage() {
       {/* Diagram Manager */}
       {showDiagramManager && (
         <DiagramManager
+          storage={storage!}
+          isServerStorage={isStorageServer}
           onLoadDiagram={handleDiagramManagerLoad}
           currentDiagramId={currentDiagram?.id}
           currentDiagramData={currentModel || diagramData}

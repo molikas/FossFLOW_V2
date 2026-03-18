@@ -4,7 +4,7 @@ export const version = PACKAGE_VERSION;
 export * as reducers from 'src/stores/reducers';
 export { INITIAL_DATA, INITIAL_SCENE_STATE } from 'src/config';
 export * from 'src/schemas';
-export type { IsoflowProps, InitialData } from 'src/types';
+export type { IsoflowProps, InitialData, IsoflowRef } from 'src/types';
 export * from 'src/types/model';
 
 // Export i18n locales

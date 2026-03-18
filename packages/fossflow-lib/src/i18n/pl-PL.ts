@@ -196,6 +196,11 @@ const locale: LocaleProps = {
     configPath2: "w lewym górnym rogu, aby uzyskać dostęp do ustawień.",
     canDisable: "Jeśli chcesz, możesz wyłączyć tę funkcję..",
     signature: "-Stan"
+  },
+  viewTabs: {
+    addPage: "Add page",
+    deletePage: "Delete page",
+    renameDiagram: "Rename diagram"
   }
 };
 

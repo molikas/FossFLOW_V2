@@ -196,6 +196,11 @@ const locale: LocaleProps = {
     configPath2: "di kiri atas untuk mengakses Konfigurasi.",
     canDisable: "Anda dapat menonaktifkan perilaku ini jika diinginkan.",
     signature: "-Stan"
+  },
+  viewTabs: {
+    addPage: "Add page",
+    deletePage: "Delete page",
+    renameDiagram: "Rename diagram"
   }
 };
 

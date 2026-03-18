@@ -25,13 +25,15 @@ import { ImportHintTooltip } from '../ImportHintTooltip/ImportHintTooltip';
 import { LassoHintTooltip } from '../LassoHintTooltip/LassoHintTooltip';
 import { LazyLoadingWelcomeNotification } from '../LazyLoadingWelcomeNotification/LazyLoadingWelcomeNotification';
 import { CoordsUtils, getTilePosition } from 'src/utils';
+import { ViewTabs } from 'src/components/ViewTabs/ViewTabs';
 
 const ToolsEnum = {
   MAIN_MENU: 'MAIN_MENU',
   ZOOM_CONTROLS: 'ZOOM_CONTROLS',
   TOOL_MENU: 'TOOL_MENU',
   ITEM_CONTROLS: 'ITEM_CONTROLS',
-  VIEW_TITLE: 'VIEW_TITLE'
+  VIEW_TITLE: 'VIEW_TITLE',
+  VIEW_TABS: 'VIEW_TABS'
 } as const;
 
 interface EditorModeMapping {
@@ -44,7 +46,7 @@ const EDITOR_MODE_MAPPING: EditorModeMapping = {
     'ZOOM_CONTROLS',
     'TOOL_MENU',
     'MAIN_MENU',
-    'VIEW_TITLE'
+    'VIEW_TABS'
   ],
   [EditorModeEnum.EXPLORABLE_READONLY]: ['ZOOM_CONTROLS', 'VIEW_TITLE'],
   [EditorModeEnum.NON_INTERACTIVE]: []
@@ -216,6 +218,24 @@ export const UiOverlay = () => {
                 </Typography>
               </Stack>
             </UiElement>
+          </Box>
+        )}
+
+        {availableTools.includes('VIEW_TABS') && (
+          <Box
+            sx={{
+              position: 'absolute',
+              display: 'flex',
+              justifyContent: 'center',
+              transform: 'translateX(-50%)'
+            }}
+            style={{
+              left: rendererSize.width / 2,
+              top: rendererSize.height - appPadding.y * 2,
+              maxWidth: rendererSize.width - 300
+            }}
+          >
+            <ViewTabs />
           </Box>
         )}
 

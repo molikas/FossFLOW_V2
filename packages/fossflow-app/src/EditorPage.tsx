@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Isoflow } from 'fossflow';
 import { flattenCollections } from '@isoflow/isopacks/dist/utils';
@@ -24,6 +24,23 @@ interface SavedDiagram {
   createdAt: string;
   updatedAt: string;
 }
+
+// Stable module-level constant — must NOT be inside the component to avoid new references on every render
+const emptyDiagramData: DiagramData = {
+  title: 'Untitled Diagram',
+  version: '',
+  icons: [],
+  colors: [
+    { id: 'blue', value: '#0066cc' },
+    { id: 'green', value: '#00aa00' },
+    { id: 'red', value: '#cc0000' },
+    { id: 'orange', value: '#ff6600' },
+    { id: 'purple', value: '#9900cc' },
+    { id: 'grey', value: '#666666' }
+  ],
+  items: [],
+  views: []
+};
 
 function EditorPage() {
   // Get readonly diagram ID from route params
@@ -57,40 +74,6 @@ function EditorPage() {
   const [showStorageManager, setShowStorageManager] = useState(false);
   const [showDiagramManager, setShowDiagramManager] = useState(false);
   const [serverStorageAvailable, setServerStorageAvailable] = useState(false);
-
-  // Initialize with empty diagram data
-  // Create default colors for connectors
-  const defaultColors = [
-    { id: 'blue', value: '#0066cc' },
-    { id: 'green', value: '#00aa00' },
-    { id: 'red', value: '#cc0000' },
-    { id: 'orange', value: '#ff6600' },
-    { id: 'purple', value: '#9900cc' },
-    { id: 'grey', value: '#666666' }
-  ];
-
-  const emptyDiagramData: DiagramData = {
-    scene: {
-      iconData: [],
-      nodeData: [],
-      connectorData: []
-    },
-    nonSceneData: {
-      properties: {
-        scale: 1,
-        scrollX: 0,
-        scrollY: 0,
-        showGrid: true,
-        showMinimap: false,
-        showSceneInspector: false
-      }
-    },
-    model: {
-      categories: [],
-      model: [],
-      connectorColors: defaultColors
-    }
-  };
 
   const [diagramData, setDiagramData] = useState<DiagramData>(emptyDiagramData);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -204,18 +187,12 @@ function EditorPage() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasUnsavedChanges, isReadonlyUrl]);
 
-  const handleModelUpdated = (model: any) => {
-    const updatedData = {
-      ...diagramData,
-      ...model
-    };
-    setCurrentModel(updatedData);
-
-    // Only mark as having unsaved changes if not in readonly mode
+  const handleModelUpdated = useCallback((model: any) => {
+    setCurrentModel(model);
     if (!isReadonlyUrl) {
       setHasUnsavedChanges(true);
     }
-  };
+  }, [isReadonlyUrl]);
 
   const saveDiagram = () => {
     if (!diagramName.trim()) {
@@ -345,7 +322,7 @@ function EditorPage() {
     }
 
     setDiagramData(emptyDiagramData);
-    setCurrentModel(emptyDiagramData);
+    setCurrentModel(null);
     setCurrentDiagram(null);
     setDiagramName('');
     setHasUnsavedChanges(false);
@@ -354,21 +331,37 @@ function EditorPage() {
     localStorage.removeItem('fossflow_autosave');
   };
 
-  const handleDiagramManagerLoad = async (diagram: any) => {
-    const mergedData = mergeDiagramData(diagramData, diagram.data);
-    setDiagramData(mergedData);
-    setCurrentModel(mergedData);
-    setCurrentDiagram({
-      id: diagram.id,
-      name: diagram.name,
-      data: mergedData,
-      createdAt: diagram.createdAt,
-      updatedAt: diagram.updatedAt
-    });
-    setDiagramName(diagram.name);
-    setHasUnsavedChanges(false);
-    setFossflowKey(prevKey => prevKey + 1);
-    setShowDiagramManager(false);
+  const handleDiagramManagerLoad = (id: string, data: any) => {
+    console.log('[Load] handleDiagramManagerLoad called', { id, title: data?.title, views: data?.views?.length, items: data?.items?.length });
+    try {
+      if (!data) {
+        console.error('[Load] data is null/undefined for id:', id);
+        return;
+      }
+      // Use emptyDiagramData as the fallback base so we never inherit stale fields from a prior load
+      const base = { title: '', icons: [], colors: [], items: [], views: [] };
+      const mergedData = mergeDiagramData(base as any, data);
+      console.log('[Load] merged title:', mergedData.title, 'views:', mergedData.views?.length, 'items:', mergedData.items?.length);
+      setDiagramData(mergedData);
+      setCurrentModel(mergedData);
+      setCurrentDiagram({
+        id,
+        name: data.name || data.title || '',
+        data: mergedData,
+        createdAt: data.createdAt || new Date().toISOString(),
+        updatedAt: data.updatedAt || data.lastModified || new Date().toISOString()
+      });
+      setDiagramName(data.name || data.title || '');
+      setHasUnsavedChanges(false);
+      setFossflowKey(prevKey => {
+        const next = prevKey + 1;
+        console.log('[Load] fossflowKey:', prevKey, '->', next);
+        return next;
+      });
+      // Note: DiagramManager closes itself via onClose() — no need to call setShowDiagramManager here
+    } catch (err) {
+      console.error('[Load] handleDiagramManagerLoad failed:', err);
+    }
   };
 
   return (
@@ -379,7 +372,7 @@ function EditorPage() {
             <button onClick={createNewDiagram} title={t('toolbar.new')}>
               📄 {t('toolbar.new')}
             </button>
-            <button onClick={() => setShowSaveDialog(true)} title={t('toolbar.save')}>
+            <button onClick={() => { if (!diagramName) setDiagramName(currentModel?.title || ''); setShowSaveDialog(true); }} title={t('toolbar.save')}>
               💾 {t('toolbar.save')}
             </button>
             <button onClick={() => setShowLoadDialog(true)} title={t('toolbar.load')}>
@@ -564,6 +557,7 @@ function EditorPage() {
           onClose={() => setShowDiagramManager(false)}
         />
       )}
+
     </div>
   );
 }

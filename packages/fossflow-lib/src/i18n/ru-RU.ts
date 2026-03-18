@@ -196,6 +196,11 @@ const locale: LocaleProps = {
     configPath2: "в верхнем левом углу, чтобы получить доступ к Конфигурации.",
     canDisable: "Вы можете отключить это поведение, если хотите.",
     signature: "-Stan"
+  },
+  viewTabs: {
+    addPage: "Add page",
+    deletePage: "Delete page",
+    renameDiagram: "Rename diagram"
   }
 };
 

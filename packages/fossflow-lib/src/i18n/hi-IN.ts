@@ -196,6 +196,11 @@ const locale: LocaleProps = {
     configPath2: "कॉन्फ़िगरेशन तक पहुंचने के लिए ऊपरी बाएं में।",
     canDisable: "यदि आप चाहें तो आप इस व्यवहार को अक्षम कर सकते हैं।",
     signature: "-Stan"
+  },
+  viewTabs: {
+    addPage: "Add page",
+    deletePage: "Delete page",
+    renameDiagram: "Rename diagram"
   }
 };
 

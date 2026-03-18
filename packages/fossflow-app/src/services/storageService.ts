@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Model } from 'fossflow/dist/types';
 
 export interface DiagramInfo {
@@ -213,6 +214,7 @@ class StorageManager {
   private serverStorage: ServerStorage;
   private sessionStorage: SessionStorage;
   private activeStorage: StorageService | null = null;
+  private initPromise: Promise<StorageService> | null = null;
 
   constructor() {
     this.serverStorage = new ServerStorage();
@@ -220,15 +222,26 @@ class StorageManager {
   }
 
   async initialize(): Promise<StorageService> {
-    // Try server storage first
-    if (await this.serverStorage.isAvailable()) {
-      console.log('Using server storage');
-      this.activeStorage = this.serverStorage;
-    } else {
-      console.log('Using session storage');
-      this.activeStorage = this.sessionStorage;
+    // Return the same in-flight promise if already initializing — prevents concurrent races
+    if (this.initPromise) return this.initPromise;
+
+    this.initPromise = (async () => {
+      if (await this.serverStorage.isAvailable()) {
+        console.log('Using server storage');
+        this.activeStorage = this.serverStorage;
+      } else {
+        console.log('Using session storage');
+        this.activeStorage = this.sessionStorage;
+      }
+      return this.activeStorage;
+    })();
+
+    try {
+      return await this.initPromise;
+    } finally {
+      // Clear so re-initialization can happen if needed (e.g. storage type changes)
+      this.initPromise = null;
     }
-    return this.activeStorage;
   }
 
   getStorage(): StorageService {
@@ -245,3 +258,19 @@ class StorageManager {
 
 // Export singleton instance
 export const storageManager = new StorageManager();
+
+export function useStorage() {
+  const [storage, setStorage] = useState<StorageService | null>(null);
+  const [isServerStorage, setIsServerStorage] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  useEffect(() => {
+    storageManager.initialize().then(() => {
+      setStorage(storageManager.getStorage());
+      setIsServerStorage(storageManager.isServerStorage());
+      setIsInitialized(true);
+    });
+  }, []);
+
+  return { storage, isServerStorage, isInitialized };
+}

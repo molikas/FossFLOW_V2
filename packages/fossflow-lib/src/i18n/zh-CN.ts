@@ -196,6 +196,11 @@ const locale: LocaleProps = {
     configPath2: "以访问配置。",
     canDisable: "如果您愿意，可以禁用此行为。",
     signature: "-Stan"
+  },
+  viewTabs: {
+    addPage: "Add page",
+    deletePage: "Delete page",
+    renameDiagram: "Rename diagram"
   }
 };
 

@@ -204,6 +204,11 @@ export interface LocaleProps {
     canDisable: string;
     signature: string;
   };
+  viewTabs: {
+    addPage: string;
+    deletePage: string;
+    renameDiagram: string;
+  };
   // other namespaces can be added here
 }
 
@@ -233,4 +238,8 @@ export interface IsoflowProps {
   renderer?: RendererProps;
   locale?: LocaleProps;
   iconPackManager?: IconPackManagerProps;
+}
+
+export interface IsoflowRef {
+  load: (data: InitialData) => void;
 }
