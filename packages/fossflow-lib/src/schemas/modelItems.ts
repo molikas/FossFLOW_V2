@@ -5,6 +5,7 @@ export const modelItemSchema = z.object({
   id,
   name: constrainedStrings.name,
   description: constrainedStrings.description.optional(),
+  headerLink: z.string().max(2048).optional(),
   icon: id.optional()
 });
 

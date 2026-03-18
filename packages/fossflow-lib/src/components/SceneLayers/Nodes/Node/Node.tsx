@@ -70,7 +70,21 @@ export const Node = memo(({ node, order }: Props) => {
             >
               <Stack spacing={1}>
                 {modelItem.name && (
-                  <Typography fontWeight={600}>{modelItem.name}</Typography>
+                  <Typography fontWeight={600}>
+                    {modelItem.headerLink ? (
+                      <a
+                        href={modelItem.headerLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: 'inherit', textDecoration: 'underline' }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {modelItem.name}
+                      </a>
+                    ) : (
+                      modelItem.name
+                    )}
+                  </Typography>
                 )}
                 {modelItem.description &&
                   modelItem.description !== MARKDOWN_EMPTY_VALUE && (
