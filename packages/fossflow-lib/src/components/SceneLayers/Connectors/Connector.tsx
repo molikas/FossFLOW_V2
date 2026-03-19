@@ -9,27 +9,21 @@ import {
 import { Circle } from 'src/components/Circle/Circle';
 import { Svg } from 'src/components/Svg/Svg';
 import { useIsoProjection } from 'src/hooks/useIsoProjection';
-import { useConnector } from 'src/hooks/useConnector';
 import { useScene } from 'src/hooks/useScene';
 import { useColor } from 'src/hooks/useColor';
 
 interface Props {
   connector: ReturnType<typeof useScene>['connectors'][0];
+  currentView: ReturnType<typeof useScene>['currentView'];
   isSelected?: boolean;
 }
 
-export const Connector = memo(({ connector: _connector, isSelected }: Props) => {
+export const Connector = memo(({ connector, currentView, isSelected }: Props) => {
   const theme = useTheme();
-  const predefinedColor = useColor(_connector.color);
-  const { currentView } = useScene();
-  const connector = useConnector(_connector.id);
-
-  if (!connector) {
-    return null;
-  }
+  const predefinedColor = useColor(connector.color);
 
   // Use custom color if provided, otherwise use predefined color
-  const color = connector.customColor 
+  const color = connector.customColor
     ? { value: connector.customColor }
     : predefinedColor;
     

@@ -1,4 +1,4 @@
-import { Coords, EditorModeEnum, MainMenuOptions } from './common';
+import { Coords, Size, EditorModeEnum, MainMenuOptions } from './common';
 import { Icon } from './model';
 import { ItemReference } from './scene';
 import { HotkeyProfile } from 'src/config/hotkeys';
@@ -177,6 +177,7 @@ export interface UiState {
   scroll: Scroll;
   mouse: Mouse;
   rendererEl: HTMLDivElement | null;
+  rendererSize: Size;
   enableDebugTools: boolean;
   hotkeyProfile: HotkeyProfile;
   panSettings: PanSettings;
@@ -205,6 +206,7 @@ export interface UiStateActions {
   setContextMenu: (contextMenu: ContextMenu | null) => void;
   setMouse: (mouse: Mouse) => void;
   setRendererEl: (el: HTMLDivElement) => void;
+  setRendererSize: (size: Size) => void;
   setEnableDebugTools: (enabled: boolean) => void;
   setHotkeyProfile: (profile: HotkeyProfile) => void;
   setPanSettings: (settings: PanSettings) => void;

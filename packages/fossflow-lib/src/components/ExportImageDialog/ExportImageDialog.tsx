@@ -1,4 +1,5 @@
 import React, {
+  memo,
   useRef,
   useEffect,
   useMemo,
@@ -51,7 +52,7 @@ interface CropArea {
   height: number;
 }
 
-export const ExportImageDialog = ({ onClose, quality = 1.5 }: Props) => {
+export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const cropCanvasRef = useRef<HTMLCanvasElement>(null);
   const isExporting = useRef<boolean>(false);
@@ -729,4 +730,4 @@ export const ExportImageDialog = ({ onClose, quality = 1.5 }: Props) => {
       </DialogContent>
     </Dialog>
   );
-};
+});

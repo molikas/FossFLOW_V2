@@ -8,14 +8,11 @@ import {
   CoordsUtils
 } from 'src/utils';
 import { useScene } from 'src/hooks/useScene';
-import { useResizeObserver } from './useResizeObserver';
 
 export const useDiagramUtils = () => {
   const scene = useScene();
-  const rendererEl = useUiStateStore((state) => {
-    return state.rendererEl;
-  });
-  const { size: rendererSize } = useResizeObserver(rendererEl);
+  // rendererSize is kept in sync with the single ResizeObserver in useInteractionManager
+  const rendererSize = useUiStateStore((state) => state.rendererSize);
   const uiStateActions = useUiStateStore((state) => {
     return state.actions;
   });

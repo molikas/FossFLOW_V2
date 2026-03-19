@@ -59,11 +59,19 @@ export const useInteractionManager = () => {
   const uiStateApi = useUiStateStoreApi();
   const modelStoreApi = useModelStoreApi();
   const scene = useScene();
+  // Single ResizeObserver for rendererEl — result is stored in the Zustand store
+  // so UiOverlay and useDiagramUtils can read it without creating their own observers.
   const { size: rendererSize } = useResizeObserver(rendererEl);
   const { undo, redo, canUndo, canRedo } = useHistory();
   const { createTextBox, deleteSelectedItems, deleteViewItem, deleteConnector, deleteTextBox, deleteRectangle } = scene;
   const { handleMouseDown: handlePanMouseDown, handleMouseUp: handlePanMouseUp } = usePanHandlers();
   const { scheduleUpdate, flushUpdate, cleanup } = useRAFThrottle();
+
+  // Sync the single rendererEl measurement into the store so UiOverlay and
+  // useDiagramUtils can read rendererSize without creating their own observers.
+  useEffect(() => {
+    uiStateApi.getState().actions.setRendererSize(rendererSize);
+  }, [rendererSize, uiStateApi]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -85,7 +93,7 @@ export const useInteractionManager = () => {
             (uiState.connectorInteractionMode === 'drag' && connectorMode.id !== null);
 
           if (isConnectionInProgress && connectorMode.id) {
-            scene.deleteConnector(connectorMode.id);
+            deleteConnector(connectorMode.id);
 
             uiState.actions.setMode({
               type: 'CONNECTOR',
@@ -303,7 +311,7 @@ export const useInteractionManager = () => {
     return () => {
       return window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [undo, redo, canUndo, canRedo, uiStateApi, createTextBox, deleteSelectedItems, deleteViewItem, deleteConnector, deleteTextBox, deleteRectangle, scene]);
+  }, [undo, redo, canUndo, canRedo, uiStateApi, createTextBox, deleteSelectedItems, deleteViewItem, deleteConnector, deleteTextBox, deleteRectangle]);
 
   const processMouseUpdate = useCallback(
     (nextMouse: Mouse, e: SlimMouseEvent) => {

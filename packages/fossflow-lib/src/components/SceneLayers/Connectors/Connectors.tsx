@@ -5,9 +5,10 @@ import { Connector } from './Connector';
 
 interface Props {
   connectors: ReturnType<typeof useScene>['connectors'];
+  currentView: ReturnType<typeof useScene>['currentView'];
 }
 
-export const Connectors = memo(({ connectors }: Props) => {
+export const Connectors = memo(({ connectors, currentView }: Props) => {
   const itemControls = useUiStateStore((state) => state.itemControls);
   const mode = useUiStateStore((state) => state.mode);
 
@@ -25,6 +26,7 @@ export const Connectors = memo(({ connectors }: Props) => {
         <Connector
           key={connector.id}
           connector={connector}
+          currentView={currentView}
           isSelected={selectedConnectorId === connector.id}
         />
       ))}

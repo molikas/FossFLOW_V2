@@ -30,7 +30,7 @@ export const Renderer = ({ showGrid, backgroundColor }: RendererProps) => {
     return state.actions;
   });
   const { setInteractionsElement } = useInteractionManager();
-  const { items, rectangles, connectors, textBoxes } = useScene();
+  const { items, rectangles, connectors, textBoxes, currentView } = useScene();
 
   useEffect(() => {
     if (!containerRef.current || !interactionsRef.current) return;
@@ -80,7 +80,7 @@ export const Renderer = ({ showGrid, backgroundColor }: RendererProps) => {
         </SceneLayer>
       )}
       <SceneLayer>
-        <Connectors connectors={connectors} />
+        <Connectors connectors={connectors} currentView={currentView} />
       </SceneLayer>
       <SceneLayer>
         <TextBoxes textBoxes={textBoxes} />

@@ -12,7 +12,6 @@ import { useUiStateStore } from 'src/stores/uiStateStore';
 import { MainMenu } from 'src/components/MainMenu/MainMenu';
 import { ZoomControls } from 'src/components/ZoomControls/ZoomControls';
 import { DebugUtils } from 'src/components/DebugUtils/DebugUtils';
-import { useResizeObserver } from 'src/hooks/useResizeObserver';
 import { ContextMenuManager } from 'src/components/ContextMenu/ContextMenuManager';
 import { useScene } from 'src/hooks/useScene';
 import { useModelStore } from 'src/stores/modelStore';
@@ -93,7 +92,6 @@ export const UiOverlay = () => {
     dialog,
     itemControls,
     editorMode,
-    rendererEl,
     iconPackManager,
     contextMenu
   } = useUiStateStore(
@@ -104,7 +102,6 @@ export const UiOverlay = () => {
       dialog: state.dialog,
       itemControls: state.itemControls,
       editorMode: state.editorMode,
-      rendererEl: state.rendererEl,
       iconPackManager: state.iconPackManager,
       contextMenu: state.contextMenu
     }),
@@ -118,7 +115,7 @@ export const UiOverlay = () => {
   const title = useModelStore((state) => {
     return state.title;
   });
-  const { size: rendererSize } = useResizeObserver(rendererEl);
+  const rendererSize = useUiStateStore((state) => state.rendererSize);
 
   return (
     <>

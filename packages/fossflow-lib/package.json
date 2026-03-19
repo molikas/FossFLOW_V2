@@ -32,7 +32,6 @@
     "chroma-js": "^3.2.0",
     "dom-to-image": "^2.6.0",
     "file-saver": "^2.0.5",
-    "gsap": "^3.14.2",
     "immer": "^11.1.4",
     "mui-color-input": "^2.0.3",
     "paper": "^0.12.18",
