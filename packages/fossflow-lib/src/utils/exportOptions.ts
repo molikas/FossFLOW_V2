@@ -1,5 +1,6 @@
 import domtoimage from 'dom-to-image-more';
 import FileSaver from 'file-saver';
+import { optimizeSvgDataUrl } from './svgOptimizer';
 import { Model, Size } from '../types';
 import { icons as availableIcons } from '../examples/initialData';
 
@@ -232,15 +233,15 @@ export const exportAsSVG = async (
 
   try {
     const svgData = await domtoimage.toSvg(el, options);
-    return svgData;
+    return optimizeSvgDataUrl(svgData);
   } catch (error) {
     console.error('SVG export failed, trying fallback method:', error);
-    // Fallback: try with minimal options
-    return await domtoimage.toSvg(el, {
+    const fallback = await domtoimage.toSvg(el, {
       width,
       height,
       cacheBust: true,
       bgcolor
     });
+    return optimizeSvgDataUrl(fallback);
   }
 };
