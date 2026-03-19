@@ -133,18 +133,27 @@ function EditorPage() {
     }
   }, []);
 
-  // Auto-save to localStorage every 30 seconds if there are unsaved changes
+  // Auto-save to localStorage every 30 seconds if there are unsaved changes.
+  // JSON.stringify is deferred to a browser-idle moment via requestIdleCallback
+  // so it cannot block an active user interaction.
   useEffect(() => {
     const autoSaveInterval = setInterval(() => {
       if (hasUnsavedChanges && currentModel && !isReadonlyUrl) {
-        const autoSaveData = {
+        const snapshot = {
           ...currentDiagram,
           data: currentModel,
           updatedAt: new Date().toISOString()
         };
-        localStorage.setItem('fossflow_autosave', JSON.stringify(autoSaveData));
-        setLastAutoSave(new Date());
-        console.log('Auto-saved to localStorage');
+        const doSave = () => {
+          localStorage.setItem('fossflow_autosave', JSON.stringify(snapshot));
+          setLastAutoSave(new Date());
+          console.log('Auto-saved to localStorage');
+        };
+        if (typeof requestIdleCallback !== 'undefined') {
+          requestIdleCallback(doSave, { timeout: 5000 });
+        } else {
+          setTimeout(doSave, 0);
+        }
       }
     }, 30000); // 30 seconds
 

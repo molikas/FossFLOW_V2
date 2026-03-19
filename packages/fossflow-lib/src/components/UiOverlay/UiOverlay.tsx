@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useRef } from 'react';
 import { Box, useTheme, Typography, Stack } from '@mui/material';
+import { shallow } from 'zustand/shallow';
 import { ChevronRight } from '@mui/icons-material';
 import { EditorModeEnum, DialogTypeEnum } from 'src/types';
 import { UiElement } from 'components/UiElement/UiElement';
@@ -53,9 +54,24 @@ const EDITOR_MODE_MAPPING: EditorModeMapping = {
 };
 
 const getEditorModeMapping = (editorMode: keyof typeof EditorModeEnum) => {
-  const availableUiFeatures = EDITOR_MODE_MAPPING[editorMode];
+  return EDITOR_MODE_MAPPING[editorMode];
+};
 
-  return availableUiFeatures;
+// Isolated component so UiOverlay doesn't re-render on every mouse move.
+// Only mounts when mode.type === 'PLACE_ICON'.
+const PlaceIconLayer = () => {
+  const { mode, mouse } = useUiStateStore(
+    (state) => ({ mode: state.mode, mouse: state.mouse }),
+    shallow
+  );
+
+  if (mode.type !== 'PLACE_ICON' || !mode.id) return null;
+
+  return (
+    <SceneLayer disableAnimation>
+      <DragAndDrop iconId={mode.id} tile={mouse.position.tile} />
+    </SceneLayer>
+  );
 };
 
 export const UiOverlay = () => {
@@ -69,42 +85,38 @@ export const UiOverlay = () => {
     },
     [theme]
   );
-  const uiStateActions = useUiStateStore((state) => {
-    return state.actions;
-  });
-  const enableDebugTools = useUiStateStore((state) => {
-    return state.enableDebugTools;
-  });
-  const mode = useUiStateStore((state) => {
-    return state.mode;
-  });
-  const mouse = useUiStateStore((state) => {
-    return state.mouse;
-  });
-  const dialog = useUiStateStore((state) => {
-    return state.dialog;
-  });
-  const itemControls = useUiStateStore((state) => {
-    return state.itemControls;
-  });
+
+  const {
+    uiStateActions,
+    enableDebugTools,
+    mode,
+    dialog,
+    itemControls,
+    editorMode,
+    rendererEl,
+    iconPackManager,
+    contextMenu
+  } = useUiStateStore(
+    (state) => ({
+      uiStateActions: state.actions,
+      enableDebugTools: state.enableDebugTools,
+      mode: state.mode,
+      dialog: state.dialog,
+      itemControls: state.itemControls,
+      editorMode: state.editorMode,
+      rendererEl: state.rendererEl,
+      iconPackManager: state.iconPackManager,
+      contextMenu: state.contextMenu
+    }),
+    shallow
+  );
+
   const { currentView } = useScene();
-  const editorMode = useUiStateStore((state) => {
-    return state.editorMode;
-  });
   const availableTools = useMemo(() => {
     return getEditorModeMapping(editorMode);
   }, [editorMode]);
-  const rendererEl = useUiStateStore((state) => {
-    return state.rendererEl;
-  });
   const title = useModelStore((state) => {
     return state.title;
-  });
-  const iconPackManager = useUiStateStore((state) => {
-    return state.iconPackManager;
-  });
-  const contextMenu = useUiStateStore((state) => {
-    return state.contextMenu;
   });
   const { size: rendererSize } = useResizeObserver(rendererEl);
 
@@ -257,11 +269,7 @@ export const UiOverlay = () => {
         )}
       </Box>
 
-      {mode.type === 'PLACE_ICON' && mode.id && (
-        <SceneLayer disableAnimation>
-          <DragAndDrop iconId={mode.id} tile={mouse.position.tile} />
-        </SceneLayer>
-      )}
+      <PlaceIconLayer />
 
       {dialog === DialogTypeEnum.EXPORT_IMAGE && (
         <ExportImageDialog
@@ -287,8 +295,8 @@ export const UiOverlay = () => {
 
       <SceneLayer>
         {contextMenu && (
-          <Box 
-            ref={contextMenuAnchorRef} 
+          <Box
+            ref={contextMenuAnchorRef}
             sx={{
               position: 'absolute',
               left: getTilePosition({ tile: contextMenu.tile }).x,

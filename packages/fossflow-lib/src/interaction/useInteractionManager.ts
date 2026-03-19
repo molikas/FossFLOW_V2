@@ -3,7 +3,7 @@ import { useModelStoreApi } from 'src/stores/modelStore';
 import { useUiStateStore, useUiStateStoreApi } from 'src/stores/uiStateStore';
 import { ModeActions, State, SlimMouseEvent, Mouse } from 'src/types';
 import { DialogTypeEnum } from 'src/types/ui';
-import { getMouse, getItemAtTile, generateId, incrementZoom, decrementZoom } from 'src/utils';
+import { getMouse, getItemAtTile, generateId, incrementZoom, decrementZoom, CoordsUtils } from 'src/utils';
 import { useResizeObserver } from 'src/hooks/useResizeObserver';
 import { useScene } from 'src/hooks/useScene';
 import { useHistory } from 'src/hooks/useHistory';
@@ -20,53 +20,7 @@ import { TextBox } from './modes/TextBox';
 import { Lasso } from './modes/Lasso';
 import { FreehandLasso } from './modes/FreehandLasso';
 import { usePanHandlers } from './usePanHandlers';
-
-interface PendingMouseUpdate {
-  mouse: Mouse;
-  event: SlimMouseEvent;
-}
-
-const useRAFThrottle = () => {
-  const rafIdRef = useRef<number | null>(null);
-  const pendingUpdateRef = useRef<PendingMouseUpdate | null>(null);
-  const callbackRef = useRef<((update: PendingMouseUpdate) => void) | null>(null);
-
-  const scheduleUpdate = useCallback((mouse: Mouse, event: SlimMouseEvent, callback: (update: PendingMouseUpdate) => void) => {
-    pendingUpdateRef.current = { mouse, event };
-    callbackRef.current = callback;
-
-    if (rafIdRef.current === null) {
-      rafIdRef.current = requestAnimationFrame(() => {
-        rafIdRef.current = null;
-        if (pendingUpdateRef.current && callbackRef.current) {
-          callbackRef.current(pendingUpdateRef.current);
-          pendingUpdateRef.current = null;
-        }
-      });
-    }
-  }, []);
-
-  const flushUpdate = useCallback(() => {
-    if (rafIdRef.current !== null) {
-      cancelAnimationFrame(rafIdRef.current);
-      rafIdRef.current = null;
-    }
-    if (pendingUpdateRef.current && callbackRef.current) {
-      callbackRef.current(pendingUpdateRef.current);
-      pendingUpdateRef.current = null;
-    }
-  }, []);
-
-  const cleanup = useCallback(() => {
-    if (rafIdRef.current !== null) {
-      cancelAnimationFrame(rafIdRef.current);
-      rafIdRef.current = null;
-    }
-    pendingUpdateRef.current = null;
-  }, []);
-
-  return { scheduleUpdate, flushUpdate, cleanup };
-};
+import { useRAFThrottle } from './useRAFThrottle';
 
 const modes: { [k in string]: ModeActions } = {
   CURSOR: Cursor,
@@ -306,6 +260,41 @@ export const useInteractionManager = () => {
           path: [],
           selection: null,
           isDragging: false
+        });
+      }
+
+      // Keyboard pan (arrow / wasd / ijkl) — consolidated here from usePanHandlers
+      const panSettings = uiState.panSettings;
+      const panSpeed = panSettings.keyboardPanSpeed;
+      let panDx = 0;
+      let panDy = 0;
+
+      if (panSettings.arrowKeysPan) {
+        if (e.key === 'ArrowUp')    { panDy =  panSpeed; e.preventDefault(); }
+        else if (e.key === 'ArrowDown')  { panDy = -panSpeed; e.preventDefault(); }
+        else if (e.key === 'ArrowLeft')  { panDx =  panSpeed; e.preventDefault(); }
+        else if (e.key === 'ArrowRight') { panDx = -panSpeed; e.preventDefault(); }
+      }
+
+      if (panSettings.wasdPan) {
+        if (key === 'w')      { panDy =  panSpeed; e.preventDefault(); }
+        else if (key === 's') { panDy = -panSpeed; e.preventDefault(); }
+        else if (key === 'a') { panDx =  panSpeed; e.preventDefault(); }
+        else if (key === 'd') { panDx = -panSpeed; e.preventDefault(); }
+      }
+
+      if (panSettings.ijklPan) {
+        if (key === 'i')      { panDy =  panSpeed; e.preventDefault(); }
+        else if (key === 'k') { panDy = -panSpeed; e.preventDefault(); }
+        else if (key === 'j') { panDx =  panSpeed; e.preventDefault(); }
+        else if (key === 'l') { panDx = -panSpeed; e.preventDefault(); }
+      }
+
+      if (panDx !== 0 || panDy !== 0) {
+        const currentScroll = uiState.scroll;
+        uiState.actions.setScroll({
+          position: CoordsUtils.add(currentScroll.position, { x: panDx, y: panDy }),
+          offset: currentScroll.offset
         });
       }
     };

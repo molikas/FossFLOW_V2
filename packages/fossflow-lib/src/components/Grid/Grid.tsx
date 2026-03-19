@@ -1,6 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Box } from '@mui/material';
-import gsap from 'gsap';
 import { Size } from 'src/types';
 import gridTileSvg from 'src/assets/grid-tile-bg.svg';
 import { useUiStateStore } from 'src/stores/uiStateStore';
@@ -11,7 +10,6 @@ import { useResizeObserver } from 'src/hooks/useResizeObserver';
 export const Grid = () => {
   const elementRef = useRef<HTMLDivElement>(null);
   const { size } = useResizeObserver(elementRef.current);
-  const [isFirstRender, setIsFirstRender] = useState(true);
   const scroll = useUiStateStore((state) => {
     return state.scroll;
   });
@@ -22,24 +20,17 @@ export const Grid = () => {
   useEffect(() => {
     if (!elementRef.current) return;
 
+    const el = elementRef.current;
     const tileSize = SizeUtils.multiply(PROJECTED_TILE_SIZE, zoom);
-    const elSize = elementRef.current.getBoundingClientRect();
+    const elSize = el.getBoundingClientRect();
     const backgroundPosition: Size = {
       width: elSize.width / 2 + scroll.position.x + tileSize.width / 2,
       height: elSize.height / 2 + scroll.position.y
     };
 
-    gsap.to(elementRef.current, {
-      duration: isFirstRender ? 0 : 0.016, // ~1 frame at 60fps for smooth motion
-      ease: 'none', // Linear easing for immediate response
-      backgroundSize: `${tileSize.width}px ${tileSize.height * 2}px`,
-      backgroundPosition: `${backgroundPosition.width}px ${backgroundPosition.height}px`
-    });
-
-    if (isFirstRender) {
-      setIsFirstRender(false);
-    }
-  }, [scroll, zoom, isFirstRender, size]);
+    el.style.backgroundSize = `${tileSize.width}px ${tileSize.height * 2}px`;
+    el.style.backgroundPosition = `${backgroundPosition.width}px ${backgroundPosition.height}px`;
+  }, [scroll, zoom, size]);
 
   return (
     <Box
