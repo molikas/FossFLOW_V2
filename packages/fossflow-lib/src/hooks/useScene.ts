@@ -9,6 +9,7 @@ import {
   Rectangle,
   ItemReference
 } from 'src/types';
+import { PastePayload } from 'src/clipboard/clipboard';
 import { useUiStateStore } from 'src/stores/uiStateStore';
 import { useModelStore, useModelStoreApi } from 'src/stores/modelStore';
 import { useSceneStore, useSceneStoreApi } from 'src/stores/sceneStore';
@@ -526,6 +527,23 @@ export const useScene = () => {
     [currentViewId, transaction, deleteViewItem, deleteConnector, deleteTextBox, deleteRectangle, getState]
   );
 
+  const pasteItems = useCallback(
+    (payload: PastePayload) => {
+      if (!currentViewId) return;
+
+      transaction(() => {
+        payload.items.forEach(({ modelItem, viewItem }) => {
+          createModelItem(modelItem);
+          createViewItem(viewItem);
+        });
+        payload.connectors.forEach((c) => createConnector(c));
+        payload.rectangles.forEach((r) => createRectangle(r));
+        payload.textBoxes.forEach((tb) => createTextBox(tb));
+      });
+    },
+    [currentViewId, transaction, createModelItem, createViewItem, createConnector, createRectangle, createTextBox]
+  );
+
   return {
     items: itemsList,
     connectors: connectorsList,
@@ -549,6 +567,7 @@ export const useScene = () => {
     updateRectangle,
     deleteRectangle,
     deleteSelectedItems,
+    pasteItems,
     transaction,
     placeIcon,
     switchView,

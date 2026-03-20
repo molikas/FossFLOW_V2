@@ -74,7 +74,11 @@ const locale: LocaleProps = {
     addTextDescription: "Yeni bir metin kutusu oluştur",
     deleteSelectedAction: "Delete Selected",
     deleteSelectedShortcut: "Delete (Backspace on Mac)",
-    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo"
+    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo",
+    copyAction: "Copy",
+    copyDescription: "Copy selected item(s) to clipboard",
+    pasteAction: "Paste",
+    pasteDescription: "Paste clipboard items at mouse position; offsets to avoid overlap"
   },
   connectorHintTooltip: {
     tipCreatingConnectors: "İpucu: Bağlayıcı Oluşturma",
@@ -144,7 +148,12 @@ const locale: LocaleProps = {
       toolRectangle: "Dikdörtgen",
       toolConnector: "Bağlayıcı",
       toolText: "Metin",
-      note: "Not: Kısayol tuşları metin alanlarında yazarken çalışmaz"
+      note: "Not: Kısayol tuşları metin alanlarında yazarken çalışmaz",
+      fixedShortcutsTitle: "Fixed Shortcuts (Always Active)",
+      fixedCopy: "Copy",
+      fixedPaste: "Paste",
+      fixedUndo: "Undo",
+      fixedRedo: "Redo"
     },
     pan: {
       title: "Kaydırma Ayarları",

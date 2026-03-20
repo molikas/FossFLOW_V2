@@ -34,6 +34,8 @@ interface KeyHandlerDeps {
   getCurrentScroll: () => { x: number; y: number };
   deleteSelected: jest.Mock;
   currentMode: string;
+  copy: jest.Mock;
+  paste: jest.Mock;
 }
 
 function buildKeyHandler(deps: KeyHandlerDeps) {
@@ -52,6 +54,16 @@ function buildKeyHandler(deps: KeyHandlerDeps) {
     // redo
     if ((cmdOrCtrl && shift && key === 'z') || (cmdOrCtrl && key === 'y')) {
       if (deps.canRedo) deps.redo();
+      return;
+    }
+    // copy
+    if (cmdOrCtrl && key === 'c') {
+      deps.copy();
+      return;
+    }
+    // paste
+    if (cmdOrCtrl && key === 'v') {
+      deps.paste();
       return;
     }
     // delete
@@ -84,6 +96,8 @@ function makeDeps(overrides: Partial<KeyHandlerDeps> = {}): KeyHandlerDeps {
     getCurrentScroll: () => ({ x: 0, y: 0 }),
     deleteSelected: jest.fn(),
     currentMode: 'CURSOR',
+    copy: jest.fn(),
+    paste: jest.fn(),
     ...overrides
   };
 }
@@ -137,6 +151,46 @@ describe('Keyboard dispatch — H-1 regression', () => {
       const deps = makeDeps({ canRedo: false });
       buildKeyHandler(deps)({ key: 'z', ctrlKey: true, shiftKey: true });
       expect(deps.redo).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('copy', () => {
+    it('Ctrl+C calls copy() exactly once', () => {
+      const deps = makeDeps();
+      buildKeyHandler(deps)({ key: 'c', ctrlKey: true });
+      expect(deps.copy).toHaveBeenCalledTimes(1);
+    });
+
+    it('Ctrl+C does NOT call paste()', () => {
+      const deps = makeDeps();
+      buildKeyHandler(deps)({ key: 'c', ctrlKey: true });
+      expect(deps.paste).not.toHaveBeenCalled();
+    });
+
+    it('bare "c" does NOT call copy()', () => {
+      const deps = makeDeps();
+      buildKeyHandler(deps)({ key: 'c', ctrlKey: false });
+      expect(deps.copy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('paste', () => {
+    it('Ctrl+V calls paste() exactly once', () => {
+      const deps = makeDeps();
+      buildKeyHandler(deps)({ key: 'v', ctrlKey: true });
+      expect(deps.paste).toHaveBeenCalledTimes(1);
+    });
+
+    it('Ctrl+V does NOT call copy()', () => {
+      const deps = makeDeps();
+      buildKeyHandler(deps)({ key: 'v', ctrlKey: true });
+      expect(deps.copy).not.toHaveBeenCalled();
+    });
+
+    it('bare "v" does NOT call paste()', () => {
+      const deps = makeDeps();
+      buildKeyHandler(deps)({ key: 'v', ctrlKey: false });
+      expect(deps.paste).not.toHaveBeenCalled();
     });
   });
 
@@ -213,6 +267,8 @@ describe('Keyboard dispatch — H-1 regression', () => {
       expect(deps.redo).not.toHaveBeenCalled();
       expect(deps.deleteSelected).not.toHaveBeenCalled();
       expect(deps.setScroll).not.toHaveBeenCalled();
+      expect(deps.copy).not.toHaveBeenCalled();
+      expect(deps.paste).not.toHaveBeenCalled();
     });
 
     it('pressing "z" without ctrl does not trigger undo', () => {

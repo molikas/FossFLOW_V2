@@ -74,7 +74,11 @@ const locale: LocaleProps = {
     addTextDescription: "একটি নতুন টেক্সট বক্স তৈরি করুন",
     deleteSelectedAction: "Delete Selected",
     deleteSelectedShortcut: "Delete (Backspace on Mac)",
-    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo"
+    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo",
+    copyAction: "Copy",
+    copyDescription: "Copy selected item(s) to clipboard",
+    pasteAction: "Paste",
+    pasteDescription: "Paste clipboard items at mouse position; offsets to avoid overlap"
   },
   connectorHintTooltip: {
     tipCreatingConnectors: "টিপ: সংযোগকারী তৈরি করা",
@@ -144,7 +148,12 @@ const locale: LocaleProps = {
       toolRectangle: "আয়তক্ষেত্র",
       toolConnector: "সংযোগকারী",
       toolText: "পাঠ্য",
-      note: "নোট: টেক্সট ফিল্ডে টাইপ না করার সময় শর্টকাটগুলি কাজ করে"
+      note: "নোট: টেক্সট ফিল্ডে টাইপ না করার সময় শর্টকাটগুলি কাজ করে",
+      fixedShortcutsTitle: "Fixed Shortcuts (Always Active)",
+      fixedCopy: "Copy",
+      fixedPaste: "Paste",
+      fixedUndo: "Undo",
+      fixedRedo: "Redo"
     },
     pan: {
       title: "প্যান সেটিংস",

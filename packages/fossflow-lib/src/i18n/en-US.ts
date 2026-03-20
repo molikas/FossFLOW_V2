@@ -74,7 +74,11 @@ const locale: LocaleProps = {
     addTextDescription: "Create a new text box",
     deleteSelectedAction: "Delete Selected",
     deleteSelectedShortcut: "Delete (Backspace on Mac)",
-    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo"
+    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo",
+    copyAction: "Copy",
+    copyDescription: "Copy selected item(s) to clipboard",
+    pasteAction: "Paste",
+    pasteDescription: "Paste clipboard items at mouse position; offsets to avoid overlap"
   },
   connectorHintTooltip: {
     tipCreatingConnectors: "Tip: Creating Connectors",
@@ -144,7 +148,12 @@ const locale: LocaleProps = {
       toolRectangle: "Rectangle",
       toolConnector: "Connector",
       toolText: "Text",
-      note: "Note: Hotkeys work when not typing in text fields"
+      note: "Note: Hotkeys work when not typing in text fields",
+      fixedShortcutsTitle: "Fixed Shortcuts (Always Active)",
+      fixedCopy: "Copy",
+      fixedPaste: "Paste",
+      fixedUndo: "Undo",
+      fixedRedo: "Redo"
     },
     pan: {
       title: "Pan Settings",

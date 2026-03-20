@@ -98,6 +98,16 @@ export const HelpDialog = () => {
       action: t('deleteSelectedAction'),
       shortcut: t('deleteSelectedShortcut'),
       description: t('deleteSelectedDescription')
+    },
+    {
+      action: t('copyAction'),
+      shortcut: 'Ctrl+C',
+      description: t('copyDescription')
+    },
+    {
+      action: t('pasteAction'),
+      shortcut: 'Ctrl+V',
+      description: t('pasteDescription')
     }
   ];
 

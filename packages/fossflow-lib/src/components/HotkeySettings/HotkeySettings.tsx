@@ -81,6 +81,37 @@ export const HotkeySettings = () => {
       <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
         {t('settings.hotkeys.note')}
       </Typography>
+
+      <Typography variant="subtitle1" sx={{ mt: 3, mb: 1, fontWeight: 'bold' }}>
+        {t('settings.hotkeys.fixedShortcutsTitle')}
+      </Typography>
+      <TableContainer component={Paper}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>{t('settings.hotkeys.tool')}</TableCell>
+              <TableCell>{t('settings.hotkeys.hotkey')}</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {[
+              { name: t('settings.hotkeys.fixedCopy'), key: 'Ctrl+C' },
+              { name: t('settings.hotkeys.fixedPaste'), key: 'Ctrl+V' },
+              { name: t('settings.hotkeys.fixedUndo'), key: 'Ctrl+Z' },
+              { name: t('settings.hotkeys.fixedRedo'), key: 'Ctrl+Y / Ctrl+Shift+Z' }
+            ].map((item) => (
+              <TableRow key={item.name}>
+                <TableCell>{item.name}</TableCell>
+                <TableCell>
+                  <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                    {item.key}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
     </Box>
   );
 };

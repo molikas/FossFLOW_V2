@@ -74,7 +74,11 @@ const locale: LocaleProps = {
     addTextDescription: "Crea una nuova casella di testo",
     deleteSelectedAction: "Delete Selected",
     deleteSelectedShortcut: "Delete (Backspace on Mac)",
-    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo"
+    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo",
+    copyAction: "Copy",
+    copyDescription: "Copy selected item(s) to clipboard",
+    pasteAction: "Paste",
+    pasteDescription: "Paste clipboard items at mouse position; offsets to avoid overlap"
   },
   connectorHintTooltip: {
     tipCreatingConnectors: "Suggerimento: Creazione connettori",
@@ -144,7 +148,12 @@ const locale: LocaleProps = {
       toolRectangle: "Rettangolo",
       toolConnector: "Connettore",
       toolText: "Testo",
-      note: "Nota: Le scorciatoie funzionano quando non stai digitando nei campi di testo"
+      note: "Nota: Le scorciatoie funzionano quando non stai digitando nei campi di testo",
+      fixedShortcutsTitle: "Fixed Shortcuts (Always Active)",
+      fixedCopy: "Copy",
+      fixedPaste: "Paste",
+      fixedUndo: "Undo",
+      fixedRedo: "Redo"
     },
     pan: {
       title: "Impostazioni Panoramica",

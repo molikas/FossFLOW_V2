@@ -74,7 +74,11 @@ const locale: LocaleProps = {
     addTextDescription: "Создать новое текстовое поле",
     deleteSelectedAction: "Delete Selected",
     deleteSelectedShortcut: "Delete (Backspace on Mac)",
-    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo"
+    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo",
+    copyAction: "Copy",
+    copyDescription: "Copy selected item(s) to clipboard",
+    pasteAction: "Paste",
+    pasteDescription: "Paste clipboard items at mouse position; offsets to avoid overlap"
   },
   connectorHintTooltip: {
     tipCreatingConnectors: "Совет: Создание соединителей",
@@ -144,7 +148,12 @@ const locale: LocaleProps = {
       toolRectangle: "Прямоугольник",
       toolConnector: "Соединитель",
       toolText: "Текст",
-      note: "Примечание: Горячие клавиши работают, когда вы не вводите текст в текстовых полях"
+      note: "Примечание: Горячие клавиши работают, когда вы не вводите текст в текстовых полях",
+      fixedShortcutsTitle: "Fixed Shortcuts (Always Active)",
+      fixedCopy: "Copy",
+      fixedPaste: "Paste",
+      fixedUndo: "Undo",
+      fixedRedo: "Redo"
     },
     pan: {
       title: "Настройки перемещения",

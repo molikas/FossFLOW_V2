@@ -82,6 +82,10 @@ export interface LocaleProps {
     addTextAction: string;
     addTextShortcut: string;
     addTextDescription: string;
+    copyAction: string;
+    copyDescription: string;
+    pasteAction: string;
+    pasteDescription: string;
   };
   connectorHintTooltip: {
     tipCreatingConnectors: string;
@@ -152,6 +156,11 @@ export interface LocaleProps {
       toolConnector: string;
       toolText: string;
       note: string;
+      fixedShortcutsTitle: string;
+      fixedCopy: string;
+      fixedPaste: string;
+      fixedUndo: string;
+      fixedRedo: string;
     };
     pan: {
       title: string;

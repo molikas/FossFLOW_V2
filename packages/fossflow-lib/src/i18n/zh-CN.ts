@@ -74,7 +74,11 @@ const locale: LocaleProps = {
     addTextDescription: "创建新的文本框",
     deleteSelectedAction: "Delete Selected",
     deleteSelectedShortcut: "Delete (Backspace on Mac)",
-    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo"
+    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo",
+    copyAction: "Copy",
+    copyDescription: "Copy selected item(s) to clipboard",
+    pasteAction: "Paste",
+    pasteDescription: "Paste clipboard items at mouse position; offsets to avoid overlap"
   },
   connectorHintTooltip: {
     tipCreatingConnectors: "提示：创建连接器",
@@ -144,7 +148,12 @@ const locale: LocaleProps = {
       toolRectangle: "矩形",
       toolConnector: "连接器",
       toolText: "文本",
-      note: "注意：在文本输入框中输入时快捷键不生效"
+      note: "注意：在文本输入框中输入时快捷键不生效",
+      fixedShortcutsTitle: "Fixed Shortcuts (Always Active)",
+      fixedCopy: "Copy",
+      fixedPaste: "Paste",
+      fixedUndo: "Undo",
+      fixedRedo: "Redo"
     },
     pan: {
       title: "平移设置",

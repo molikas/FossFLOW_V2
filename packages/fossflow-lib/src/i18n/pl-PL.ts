@@ -74,7 +74,11 @@ const locale: LocaleProps = {
     addTextDescription: "Utwórz nowe pole tekstowe",
     deleteSelectedAction: "Delete Selected",
     deleteSelectedShortcut: "Delete (Backspace on Mac)",
-    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo"
+    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo",
+    copyAction: "Copy",
+    copyDescription: "Copy selected item(s) to clipboard",
+    pasteAction: "Paste",
+    pasteDescription: "Paste clipboard items at mouse position; offsets to avoid overlap"
   },
   connectorHintTooltip: {
     tipCreatingConnectors: "Wskazówka: Tworzenie połączeń",
@@ -144,7 +148,12 @@ const locale: LocaleProps = {
       toolRectangle: "Prostokąt",
       toolConnector: "Połączenia",
       toolText: "Tekst",
-      note: "Uwaga: Skróty klawiszowe działają, gdy nie wpisujesz tekstu w polach tekstowych."
+      note: "Uwaga: Skróty klawiszowe działają, gdy nie wpisujesz tekstu w polach tekstowych.",
+      fixedShortcutsTitle: "Fixed Shortcuts (Always Active)",
+      fixedCopy: "Copy",
+      fixedPaste: "Paste",
+      fixedUndo: "Undo",
+      fixedRedo: "Redo"
     },
     pan: {
       title: "Ustawienia przesuwania",

@@ -127,8 +127,11 @@ export const NodeSettings = ({
         <RichTextEditor
           value={modelItem.description}
           onChange={(text) => {
-            if (modelItem.description !== text)
-              onModelItemUpdated({ description: text });
+            const isEmpty = !text || text.trim() === '<p><br></p>';
+            const stored = modelItem.description;
+            const storedIsEmpty = !stored || stored.trim() === '<p><br></p>';
+            if (isEmpty && storedIsEmpty) return;
+            if (stored !== text) onModelItemUpdated({ description: isEmpty ? undefined : text });
           }}
         />
       </Section>
@@ -139,7 +142,7 @@ export const NodeSettings = ({
             step={20}
             min={60}
             max={280}
-            value={node.labelHeight}
+            value={node.labelHeight ?? 80}
             onChange={(e, newHeight) => {
               const labelHeight = newHeight as number;
               onViewItemUpdated({ labelHeight });

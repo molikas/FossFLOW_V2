@@ -21,6 +21,7 @@ import { Lasso } from './modes/Lasso';
 import { FreehandLasso } from './modes/FreehandLasso';
 import { usePanHandlers } from './usePanHandlers';
 import { useRAFThrottle } from './useRAFThrottle';
+import { useCopyPaste } from 'src/clipboard/useCopyPaste';
 
 const modes: { [k in string]: ModeActions } = {
   CURSOR: Cursor,
@@ -63,6 +64,7 @@ export const useInteractionManager = () => {
   // so UiOverlay and useDiagramUtils can read it without creating their own observers.
   const { size: rendererSize } = useResizeObserver(rendererEl);
   const { undo, redo, canUndo, canRedo } = useHistory();
+  const { handleCopy, handlePaste } = useCopyPaste();
   const { createTextBox, deleteSelectedItems, deleteViewItem, deleteConnector, deleteTextBox, deleteRectangle } = scene;
   const { handleMouseDown: handlePanMouseDown, handleMouseUp: handlePanMouseUp } = usePanHandlers();
   const { scheduleUpdate, flushUpdate, cleanup } = useRAFThrottle();
@@ -185,6 +187,16 @@ export const useInteractionManager = () => {
         if (canRedo) {
           redo();
         }
+      }
+
+      if (isCtrlOrCmd && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        handleCopy();
+      }
+
+      if (isCtrlOrCmd && e.key.toLowerCase() === 'v') {
+        e.preventDefault();
+        handlePaste();
       }
 
       if (e.key === 'F1') {
@@ -311,7 +323,7 @@ export const useInteractionManager = () => {
     return () => {
       return window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [undo, redo, canUndo, canRedo, uiStateApi, createTextBox, deleteSelectedItems, deleteViewItem, deleteConnector, deleteTextBox, deleteRectangle]);
+  }, [undo, redo, canUndo, canRedo, uiStateApi, createTextBox, deleteSelectedItems, deleteViewItem, deleteConnector, deleteTextBox, deleteRectangle, handleCopy, handlePaste]);
 
   const processMouseUpdate = useCallback(
     (nextMouse: Mouse, e: SlimMouseEvent) => {

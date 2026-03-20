@@ -74,7 +74,11 @@ const locale: LocaleProps = {
     addTextDescription: "Buat kotak teks baru",
     deleteSelectedAction: "Delete Selected",
     deleteSelectedShortcut: "Delete (Backspace on Mac)",
-    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo"
+    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo",
+    copyAction: "Copy",
+    copyDescription: "Copy selected item(s) to clipboard",
+    pasteAction: "Paste",
+    pasteDescription: "Paste clipboard items at mouse position; offsets to avoid overlap"
   },
   connectorHintTooltip: {
     tipCreatingConnectors: "Tip: Membuat Konektor",
@@ -144,7 +148,12 @@ const locale: LocaleProps = {
       toolRectangle: "Persegi Panjang",
       toolConnector: "Konektor",
       toolText: "Teks",
-      note: "Catatan: Pintasan berfungsi saat tidak mengetik di bidang teks"
+      note: "Catatan: Pintasan berfungsi saat tidak mengetik di bidang teks",
+      fixedShortcutsTitle: "Fixed Shortcuts (Always Active)",
+      fixedCopy: "Copy",
+      fixedPaste: "Paste",
+      fixedUndo: "Undo",
+      fixedRedo: "Redo"
     },
     pan: {
       title: "Pengaturan Geser",
