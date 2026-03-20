@@ -18,6 +18,18 @@ FossFLOW is a powerful, open-source Progressive Web App (PWA) for creating beaut
 - 📤 **Import/Export** - Share diagrams as JSON files
 - 🎯 **Session Storage** - Quick save without dialogs
 - 🌐 **Offline Support** - Work without internet connection
+- 📋 **Copy/Paste** - Copy and paste nodes, connectors, rectangles, and text boxes with `Ctrl+C` / `Ctrl+V`
+- 🔲 **Lasso Select** - Draw a selection box to select and move multiple items at once
+
+
+## Changelog
+
+### Latest
+
+- **Copy/Paste** (`Ctrl+C` / `Ctrl+V`): Copy and paste any selection of nodes, connectors, rectangles, and text boxes. Pastes at mouse position with collision avoidance, full ID remapping, and a single undo step. Post-paste selection highlights all pasted items.
+- **Lasso hint auto-dismiss**: The lasso selection tip tooltip now automatically dismisses after the first time you use lasso mode, rather than requiring a manual close every session.
+- **Node label fix**: Clicking a node to edit it no longer incorrectly adds an empty description block to the node's canvas label.
+- **Help dialog & hotkey settings**: Copy/paste shortcuts documented in the Help dialog (`?`) and Settings → Hotkeys panel.
 
 
 ## Try it online
@@ -73,10 +85,14 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ### Keyboard Shortcuts
 
-- `Delete` - Remove selected items
+- `Delete` / `Backspace` - Remove selected items
+- `Ctrl+Z` - Undo
+- `Ctrl+Y` / `Ctrl+Shift+Z` - Redo
+- `Ctrl+C` - Copy selected item(s)
+- `Ctrl+V` - Paste at mouse position
 - Mouse wheel - Zoom in/out
-- Click and drag - Pan around canvas
-- ***NEW*** Crtl+Z undo Ctrl+Y redo
+- Click and drag (empty area) - Lasso select multiple items
+- Right-click - Toggle pan mode
 
 ## Building for Production
 
