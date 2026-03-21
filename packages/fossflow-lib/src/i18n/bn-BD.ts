@@ -44,9 +44,15 @@ const locale: LocaleProps = {
     panCanvasAction: "ক্যানভাস প্যান করুন",
     panCanvasShortcut: "বাম-ক্লিক + টেনে আনুন",
     panCanvasDescription: "প্যান মোডে ক্যানভাস প্যান করুন",
-    contextMenuAction: "প্রসঙ্গ মেনু",
-    contextMenuShortcut: "ডান-ক্লিক",
-    contextMenuDescription: "আইটেম বা খালি স্থানের জন্য প্রসঙ্গ মেনু খুলুন",
+    togglePanToolAction: "Toggle Pan Tool",
+    togglePanToolShortcut: "Right-click",
+    togglePanToolDescription: "Toggle pan mode on/off; left-click to return to select mode",
+    lassoSelectAction: "Lasso Select",
+    lassoSelectShortcut: "Left-click + Drag (empty area)",
+    lassoSelectDescription: "Draw a rectangular selection box to select multiple items",
+    deselectAction: "Deselect",
+    deselectShortcut: "Left-click (empty area)",
+    deselectDescription: "Deselect the current selection and return to select mode",
     // Mouse interactions
     selectToolAction: "নির্বাচন টুল",
     selectToolShortcut: "নির্বাচন বোতামে ক্লিক করুন",
@@ -65,7 +71,14 @@ const locale: LocaleProps = {
     createConnectorDescription: "সংযোগকারী মোডে স্যুইচ করুন",
     addTextAction: "পাঠ্য যোগ করুন",
     addTextShortcut: "পাঠ্য বোতামে ক্লিক করুন",
-    addTextDescription: "একটি নতুন টেক্সট বক্স তৈরি করুন"
+    addTextDescription: "একটি নতুন টেক্সট বক্স তৈরি করুন",
+    deleteSelectedAction: "Delete Selected",
+    deleteSelectedShortcut: "Delete (Backspace on Mac)",
+    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo",
+    copyAction: "Copy",
+    copyDescription: "Copy selected item(s) to clipboard",
+    pasteAction: "Paste",
+    pasteDescription: "Paste clipboard items at mouse position; offsets to avoid overlap"
   },
   connectorHintTooltip: {
     tipCreatingConnectors: "টিপ: সংযোগকারী তৈরি করা",
@@ -135,7 +148,12 @@ const locale: LocaleProps = {
       toolRectangle: "আয়তক্ষেত্র",
       toolConnector: "সংযোগকারী",
       toolText: "পাঠ্য",
-      note: "নোট: টেক্সট ফিল্ডে টাইপ না করার সময় শর্টকাটগুলি কাজ করে"
+      note: "নোট: টেক্সট ফিল্ডে টাইপ না করার সময় শর্টকাটগুলি কাজ করে",
+      fixedShortcutsTitle: "Fixed Shortcuts (Always Active)",
+      fixedCopy: "Copy",
+      fixedPaste: "Paste",
+      fixedUndo: "Undo",
+      fixedRedo: "Redo"
     },
     pan: {
       title: "প্যান সেটিংস",
@@ -187,6 +205,11 @@ const locale: LocaleProps = {
     configPath2: "কনফিগারেশন অ্যাক্সেস করতে উপরের বাম দিকে।",
     canDisable: "আপনি চাইলে এই আচরণ নিষ্ক্রিয় করতে পারেন।",
     signature: "-Stan"
+  },
+  viewTabs: {
+    addPage: "Add page",
+    deletePage: "Delete page",
+    renameDiagram: "Rename diagram"
   }
 };
 

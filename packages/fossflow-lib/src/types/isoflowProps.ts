@@ -51,9 +51,18 @@ export interface LocaleProps {
     panCanvasAction: string;
     panCanvasShortcut: string;
     panCanvasDescription: string;
-    contextMenuAction: string;
-    contextMenuShortcut: string;
-    contextMenuDescription: string;
+    togglePanToolAction: string;
+    togglePanToolShortcut: string;
+    togglePanToolDescription: string;
+    lassoSelectAction: string;
+    lassoSelectShortcut: string;
+    lassoSelectDescription: string;
+    deselectAction: string;
+    deselectShortcut: string;
+    deselectDescription: string;
+    deleteSelectedAction: string;
+    deleteSelectedShortcut: string;
+    deleteSelectedDescription: string;
     // Mouse interactions
     selectToolAction: string;
     selectToolShortcut: string;
@@ -73,6 +82,10 @@ export interface LocaleProps {
     addTextAction: string;
     addTextShortcut: string;
     addTextDescription: string;
+    copyAction: string;
+    copyDescription: string;
+    pasteAction: string;
+    pasteDescription: string;
   };
   connectorHintTooltip: {
     tipCreatingConnectors: string;
@@ -143,6 +156,11 @@ export interface LocaleProps {
       toolConnector: string;
       toolText: string;
       note: string;
+      fixedShortcutsTitle: string;
+      fixedCopy: string;
+      fixedPaste: string;
+      fixedUndo: string;
+      fixedRedo: string;
     };
     pan: {
       title: string;
@@ -195,6 +213,11 @@ export interface LocaleProps {
     canDisable: string;
     signature: string;
   };
+  viewTabs: {
+    addPage: string;
+    deletePage: string;
+    renameDiagram: string;
+  };
   // other namespaces can be added here
 }
 
@@ -224,4 +247,8 @@ export interface IsoflowProps {
   renderer?: RendererProps;
   locale?: LocaleProps;
   iconPackManager?: IconPackManagerProps;
+}
+
+export interface IsoflowRef {
+  load: (data: InitialData) => void;
 }

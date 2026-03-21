@@ -1,0 +1,332 @@
+/**
+ * REGRESSION — Cursor mode handler contracts (real module)
+ *
+ * Tests the ACTUAL Cursor.ts module.
+ * Specifically covers the mousedownHandled flag logic that prevents spurious
+ * context-menu opening after external setMode calls.
+ *
+ * Classified as VALID: imports the real Cursor module.
+ */
+
+import { Cursor } from 'src/interaction/modes/Cursor';
+
+// ---------------------------------------------------------------------------
+// Mocks
+// ---------------------------------------------------------------------------
+const mockGetItemAtTile = jest.fn(() => null);
+const mockHasMovedTile = jest.fn(() => false);
+
+jest.mock('src/utils', () => ({
+  getItemAtTile: (...args: any[]) => mockGetItemAtTile(...args),
+  hasMovedTile: (...args: any[]) => mockHasMovedTile(...args),
+  getAnchorAtTile: jest.fn(() => null),
+  getItemByIdOrThrow: jest.fn(),
+  generateId: jest.fn(() => 'new-id'),
+  CoordsUtils: {
+    zero: () => ({ x: 0, y: 0 }),
+    isEqual: jest.fn(() => false)
+  },
+  getAnchorTile: jest.fn(() => ({ x: 0, y: 0 })),
+  connectorPathTileToGlobal: jest.fn(() => ({ x: 0, y: 0 }))
+}));
+
+// Cursor.ts imports useScene for type only — mock to prevent module resolution errors
+jest.mock('src/hooks/useScene', () => ({ useScene: jest.fn() }));
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+function makeUiState(overrides: any = {}) {
+  return {
+    mode: overrides.mode ?? {
+      type: 'CURSOR',
+      showCursor: true,
+      mousedownItem: null,
+      mousedownHandled: false
+    },
+    mouse: overrides.mouse ?? {
+      position: { tile: { x: 5, y: 5 }, screen: { x: 50, y: 50 } },
+      mousedown: null,
+      delta: null
+    },
+    actions: overrides.actions ?? {
+      setMode: jest.fn(),
+      setItemControls: jest.fn(),
+      setContextMenu: jest.fn()
+    }
+  };
+}
+
+function makeScene() {
+  return { connectors: [], items: [], rectangles: [], textBoxes: [] };
+}
+
+function callMousedown(uiState: any, isRendererInteraction: boolean) {
+  Cursor.mousedown!({ uiState, scene: makeScene(), isRendererInteraction } as any);
+}
+
+function callMouseup(uiState: any, isRendererInteraction = true) {
+  Cursor.mouseup!({ uiState, scene: makeScene(), isRendererInteraction } as any);
+}
+
+function callMousemove(uiState: any) {
+  Cursor.mousemove!({ uiState, scene: makeScene(), isRendererInteraction: true } as any);
+}
+
+// ---------------------------------------------------------------------------
+// mousedown
+// ---------------------------------------------------------------------------
+describe('Cursor.mousedown (real module)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetItemAtTile.mockReturnValue(null);
+  });
+
+  it('does nothing when isRendererInteraction is false', () => {
+    const uiState = makeUiState();
+    callMousedown(uiState, false);
+    expect(uiState.actions.setMode).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when mode type is not CURSOR', () => {
+    const uiState = makeUiState({ mode: { type: 'LASSO', selection: null, isDragging: false } });
+    callMousedown(uiState, true);
+    expect(uiState.actions.setMode).not.toHaveBeenCalled();
+  });
+
+  it('sets mousedownHandled=true and mousedownItem when item is at tile', () => {
+    mockGetItemAtTile.mockReturnValue({ type: 'ITEM', id: 'node1' });
+    const uiState = makeUiState();
+    callMousedown(uiState, true);
+    expect(uiState.actions.setMode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mousedownItem: { type: 'ITEM', id: 'node1' },
+        mousedownHandled: true
+      })
+    );
+  });
+
+  it('sets mousedownHandled=true and mousedownItem=null on empty tile, clears itemControls', () => {
+    mockGetItemAtTile.mockReturnValue(null);
+    const uiState = makeUiState();
+    callMousedown(uiState, true);
+    expect(uiState.actions.setMode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mousedownItem: null,
+        mousedownHandled: true
+      })
+    );
+    expect(uiState.actions.setItemControls).toHaveBeenCalledWith(null);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// mouseup
+// ---------------------------------------------------------------------------
+describe('Cursor.mouseup (real module)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockHasMovedTile.mockReturnValue(false);
+  });
+
+  it('does nothing when isRendererInteraction is false', () => {
+    const uiState = makeUiState();
+    callMouseup(uiState, false);
+    expect(uiState.actions.setMode).not.toHaveBeenCalled();
+    expect(uiState.actions.setContextMenu).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when mode type is not CURSOR', () => {
+    const uiState = makeUiState({ mode: { type: 'LASSO', selection: null, isDragging: false } });
+    callMouseup(uiState);
+    expect(uiState.actions.setMode).not.toHaveBeenCalled();
+  });
+
+  it('sets itemControls for ITEM when mousedownItem is an ITEM and no movement', () => {
+    const uiState = makeUiState({
+      mode: {
+        type: 'CURSOR',
+        showCursor: true,
+        mousedownItem: { type: 'ITEM', id: 'node1' },
+        mousedownHandled: true
+      },
+      mouse: {
+        position: { tile: { x: 5, y: 5 }, screen: { x: 50, y: 50 } },
+        mousedown: { tile: { x: 5, y: 5 }, screen: { x: 50, y: 50 } },
+        delta: null
+      }
+    });
+    callMouseup(uiState);
+    expect(uiState.actions.setItemControls).toHaveBeenCalledWith({ type: 'ITEM', id: 'node1' });
+  });
+
+  it('sets itemControls for RECTANGLE when mousedownItem is a RECTANGLE and no movement', () => {
+    const uiState = makeUiState({
+      mode: {
+        type: 'CURSOR',
+        showCursor: true,
+        mousedownItem: { type: 'RECTANGLE', id: 'rect1' },
+        mousedownHandled: true
+      },
+      mouse: {
+        position: { tile: { x: 5, y: 5 }, screen: { x: 50, y: 50 } },
+        mousedown: { tile: { x: 5, y: 5 }, screen: { x: 50, y: 50 } },
+        delta: null
+      }
+    });
+    callMouseup(uiState);
+    expect(uiState.actions.setItemControls).toHaveBeenCalledWith({ type: 'RECTANGLE', id: 'rect1' });
+  });
+
+  it('opens context menu when mousedownHandled=true, no item, no movement', () => {
+    const uiState = makeUiState({
+      mode: {
+        type: 'CURSOR',
+        showCursor: true,
+        mousedownItem: null,
+        mousedownHandled: true
+      },
+      mouse: {
+        position: { tile: { x: 3, y: 4 }, screen: { x: 30, y: 40 } },
+        mousedown: { tile: { x: 3, y: 4 }, screen: { x: 30, y: 40 } },
+        delta: null
+      }
+    });
+    callMouseup(uiState);
+    expect(uiState.actions.setContextMenu).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'EMPTY', tile: { x: 3, y: 4 } })
+    );
+  });
+
+  it('does NOT open context menu when mousedownHandled is false/undefined (external setMode)', () => {
+    const uiState = makeUiState({
+      mode: {
+        type: 'CURSOR',
+        showCursor: true,
+        mousedownItem: null,
+        mousedownHandled: false  // mode was set externally, no preceding mousedown
+      },
+      mouse: {
+        position: { tile: { x: 3, y: 4 }, screen: { x: 30, y: 40 } },
+        mousedown: null, // no mousedown recorded
+        delta: null
+      }
+    });
+    callMouseup(uiState);
+    expect(uiState.actions.setContextMenu).not.toHaveBeenCalled();
+  });
+
+  it('does NOT open context menu when mousedownHandled is undefined (external setMode)', () => {
+    const uiState = makeUiState({
+      mode: {
+        type: 'CURSOR',
+        showCursor: true,
+        mousedownItem: null
+        // mousedownHandled: not set (undefined)
+      },
+      mouse: {
+        position: { tile: { x: 3, y: 4 }, screen: { x: 30, y: 40 } },
+        mousedown: null,
+        delta: null
+      }
+    });
+    callMouseup(uiState);
+    expect(uiState.actions.setContextMenu).not.toHaveBeenCalled();
+  });
+
+  it('resets mousedownItem and mousedownHandled to null/false after mouseup', () => {
+    const uiState = makeUiState({
+      mode: {
+        type: 'CURSOR',
+        showCursor: true,
+        mousedownItem: { type: 'ITEM', id: 'n1' },
+        mousedownHandled: true
+      },
+      mouse: {
+        position: { tile: { x: 5, y: 5 }, screen: { x: 50, y: 50 } },
+        mousedown: { tile: { x: 5, y: 5 }, screen: { x: 50, y: 50 } },
+        delta: null
+      }
+    });
+    callMouseup(uiState);
+    const lastCall = uiState.actions.setMode.mock.calls[uiState.actions.setMode.mock.calls.length - 1][0];
+    expect(lastCall.mousedownItem).toBeNull();
+    expect(lastCall.mousedownHandled).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// mousemove
+// ---------------------------------------------------------------------------
+describe('Cursor.mousemove (real module)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('does nothing when mode type is not CURSOR', () => {
+    const uiState = makeUiState({ mode: { type: 'LASSO', selection: null, isDragging: false } });
+    Cursor.mousemove!({ uiState, scene: makeScene(), isRendererInteraction: true } as any);
+    expect(uiState.actions.setMode).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when hasMovedTile returns false', () => {
+    mockHasMovedTile.mockReturnValue(false);
+    const uiState = makeUiState({
+      mode: {
+        type: 'CURSOR',
+        showCursor: true,
+        mousedownItem: { type: 'ITEM', id: 'n1' },
+        mousedownHandled: true
+      },
+      mouse: {
+        position: { tile: { x: 5, y: 5 }, screen: { x: 50, y: 50 } },
+        mousedown: { tile: { x: 5, y: 5 }, screen: { x: 50, y: 50 } },
+        delta: null
+      }
+    });
+    callMousemove(uiState);
+    expect(uiState.actions.setMode).not.toHaveBeenCalled();
+  });
+
+  it('transitions to DRAG_ITEMS when item is mousedownItem and tile moved', () => {
+    mockHasMovedTile.mockReturnValue(true);
+    const uiState = makeUiState({
+      mode: {
+        type: 'CURSOR',
+        showCursor: true,
+        mousedownItem: { type: 'ITEM', id: 'n1' },
+        mousedownHandled: true
+      },
+      mouse: {
+        position: { tile: { x: 8, y: 8 }, screen: { x: 80, y: 80 } },
+        mousedown: { tile: { x: 5, y: 5 }, screen: { x: 50, y: 50 } },
+        delta: { tile: { x: 3, y: 3 }, screen: { x: 30, y: 30 } }
+      }
+    });
+    callMousemove(uiState);
+    expect(uiState.actions.setMode).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'DRAG_ITEMS' })
+    );
+  });
+
+  it('transitions to LASSO when mousedownItem is null and tile moved', () => {
+    mockHasMovedTile.mockReturnValue(true);
+    const uiState = makeUiState({
+      mode: {
+        type: 'CURSOR',
+        showCursor: true,
+        mousedownItem: null,
+        mousedownHandled: true
+      },
+      mouse: {
+        position: { tile: { x: 8, y: 8 }, screen: { x: 80, y: 80 } },
+        mousedown: { tile: { x: 5, y: 5 }, screen: { x: 50, y: 50 } },
+        delta: { tile: { x: 3, y: 3 }, screen: { x: 30, y: 30 } }
+      }
+    });
+    callMousemove(uiState);
+    expect(uiState.actions.setMode).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'LASSO' })
+    );
+  });
+});

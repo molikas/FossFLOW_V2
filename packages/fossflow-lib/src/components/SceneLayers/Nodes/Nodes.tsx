@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo, useMemo } from 'react';
 import { ViewItem } from 'src/types';
 import { Node } from './Node/Node';
 
@@ -6,14 +6,14 @@ interface Props {
   nodes: ViewItem[];
 }
 
-export const Nodes = ({ nodes }: Props) => {
+export const Nodes = memo(({ nodes }: Props) => {
+  const reversedNodes = useMemo(() => [...nodes].reverse(), [nodes]);
+
   return (
     <>
-      {[...nodes].reverse().map((node) => {
-        return (
-          <Node key={node.id} order={-node.tile.x - node.tile.y} node={node} />
-        );
-      })}
+      {reversedNodes.map((node) => (
+        <Node key={node.id} order={-node.tile.x - node.tile.y} node={node} />
+      ))}
     </>
   );
-};
+});

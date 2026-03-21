@@ -44,9 +44,15 @@ const locale: LocaleProps = {
     panCanvasAction: "कैनवास को पैन करें",
     panCanvasShortcut: "बाएँ-क्लिक + ड्रैग",
     panCanvasDescription: "पैन मोड में कैनवास को पैन करें",
-    contextMenuAction: "संदर्भ मेनू",
-    contextMenuShortcut: "राइट-क्लिक",
-    contextMenuDescription: "आइटम या खाली स्थान के लिए संदर्भ मेनू खोलें",
+    togglePanToolAction: "Toggle Pan Tool",
+    togglePanToolShortcut: "Right-click",
+    togglePanToolDescription: "Toggle pan mode on/off; left-click to return to select mode",
+    lassoSelectAction: "Lasso Select",
+    lassoSelectShortcut: "Left-click + Drag (empty area)",
+    lassoSelectDescription: "Draw a rectangular selection box to select multiple items",
+    deselectAction: "Deselect",
+    deselectShortcut: "Left-click (empty area)",
+    deselectDescription: "Deselect the current selection and return to select mode",
     // Mouse interactions
     selectToolAction: "चयन उपकरण",
     selectToolShortcut: "चयन बटन क्लिक करें",
@@ -65,7 +71,14 @@ const locale: LocaleProps = {
     createConnectorDescription: "कनेक्टर मोड पर स्विच करें",
     addTextAction: "टेक्स्ट जोड़ें",
     addTextShortcut: "टेक्स्ट बटन क्लिक करें",
-    addTextDescription: "एक नया टेक्स्ट बॉक्स बनाएं"
+    addTextDescription: "एक नया टेक्स्ट बॉक्स बनाएं",
+    deleteSelectedAction: "Delete Selected",
+    deleteSelectedShortcut: "Delete (Backspace on Mac)",
+    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo",
+    copyAction: "Copy",
+    copyDescription: "Copy selected item(s) to clipboard",
+    pasteAction: "Paste",
+    pasteDescription: "Paste clipboard items at mouse position; offsets to avoid overlap"
   },
   connectorHintTooltip: {
     tipCreatingConnectors: "टिप: कनेक्टर बनाना",
@@ -135,7 +148,12 @@ const locale: LocaleProps = {
       toolRectangle: "आयत",
       toolConnector: "कनेक्टर",
       toolText: "टेक्स्ट",
-      note: "नोट: टेक्स्ट फ़ील्ड में टाइप न करने पर शॉर्टकट काम करते हैं"
+      note: "नोट: टेक्स्ट फ़ील्ड में टाइप न करने पर शॉर्टकट काम करते हैं",
+      fixedShortcutsTitle: "Fixed Shortcuts (Always Active)",
+      fixedCopy: "Copy",
+      fixedPaste: "Paste",
+      fixedUndo: "Undo",
+      fixedRedo: "Redo"
     },
     pan: {
       title: "पैन सेटिंग्स",
@@ -187,6 +205,11 @@ const locale: LocaleProps = {
     configPath2: "कॉन्फ़िगरेशन तक पहुंचने के लिए ऊपरी बाएं में।",
     canDisable: "यदि आप चाहें तो आप इस व्यवहार को अक्षम कर सकते हैं।",
     signature: "-Stan"
+  },
+  viewTabs: {
+    addPage: "Add page",
+    deletePage: "Delete page",
+    renameDiagram: "Rename diagram"
   }
 };
 

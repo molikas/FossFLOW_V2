@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Box, IconButton, Paper, Typography, useTheme } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
 import { useUiStateStore } from 'src/stores/uiStateStore';
@@ -16,6 +16,7 @@ export const LassoHintTooltip = ({ toolMenuRef }: Props) => {
   const modeType = useUiStateStore((state) => state.mode.type);
   const [isDismissed, setIsDismissed] = useState(true);
   const [position, setPosition] = useState({ top: 16, right: 16 });
+  const wasVisibleRef = useRef(false);
 
   useEffect(() => {
     // Check if the hint has been dismissed before
@@ -24,6 +25,19 @@ export const LassoHintTooltip = ({ toolMenuRef }: Props) => {
       setIsDismissed(false);
     }
   }, []);
+
+  // Auto-dismiss after first viewing: once the user leaves lasso mode the
+  // tooltip is marked as seen so it never shows again in this or future sessions.
+  useEffect(() => {
+    const isLassoMode = modeType === 'LASSO' || modeType === 'FREEHAND_LASSO';
+    if (isLassoMode && !isDismissed) {
+      wasVisibleRef.current = true;
+    } else if (!isLassoMode && wasVisibleRef.current && !isDismissed) {
+      wasVisibleRef.current = false;
+      setIsDismissed(true);
+      localStorage.setItem(STORAGE_KEY, 'true');
+    }
+  }, [modeType, isDismissed]);
 
   useEffect(() => {
     // Calculate position based on toolbar

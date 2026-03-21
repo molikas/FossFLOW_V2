@@ -81,8 +81,8 @@ export const Lasso: ModeActions = {
     );
   },
 
-  mousedown: ({ uiState }) => {
-    if (uiState.mode.type !== 'LASSO') return;
+  mousedown: ({ uiState, isRendererInteraction }) => {
+    if (uiState.mode.type !== 'LASSO' || !isRendererInteraction) return;
 
     // If there's an existing selection, check if click is within it
     if (uiState.mode.selection) {
@@ -102,23 +102,34 @@ export const Lasso: ModeActions = {
         );
         return;
       }
-
-      // Clicked outside selection - clear it and stay in LASSO mode
-      uiState.actions.setMode(
-        produce(uiState.mode, (draft) => {
-          if (draft.type === 'LASSO') {
-            draft.selection = null;
-            draft.isDragging = false;
-          }
-        })
-      );
     }
+
+    // Clicked outside selection (or no selection) - exit back to cursor/select mode
+    uiState.actions.setMode({
+      type: 'CURSOR',
+      showCursor: true,
+      mousedownItem: null
+    });
   },
 
   mouseup: ({ uiState }) => {
     if (uiState.mode.type !== 'LASSO') return;
+    if (!uiState.mouse.mousedown) return; // toolbar click — mousedown was stopped, skip
 
-    // Reset dragging state but keep selection
+    const hasSelection =
+      uiState.mode.selection && uiState.mode.selection.items.length > 0;
+
+    if (!hasSelection) {
+      // Dragged but caught nothing — exit back to cursor
+      uiState.actions.setMode({
+        type: 'CURSOR',
+        showCursor: true,
+        mousedownItem: null
+      });
+      return;
+    }
+
+    // Keep the selection visible, reset dragging flag
     uiState.actions.setMode(
       produce(uiState.mode, (draft) => {
         if (draft.type === 'LASSO') {

@@ -44,9 +44,15 @@ const locale: LocaleProps = {
     panCanvasAction: "Переместить холст",
     panCanvasShortcut: "Левая кнопка + перетаскивание",
     panCanvasDescription: "Переместить холст в режиме перемещения",
-    contextMenuAction: "Контекстное меню",
-    contextMenuShortcut: "Правая кнопка мыши",
-    contextMenuDescription: "Открыть контекстное меню для элементов или пустого пространства",
+    togglePanToolAction: "Toggle Pan Tool",
+    togglePanToolShortcut: "Right-click",
+    togglePanToolDescription: "Toggle pan mode on/off; left-click to return to select mode",
+    lassoSelectAction: "Lasso Select",
+    lassoSelectShortcut: "Left-click + Drag (empty area)",
+    lassoSelectDescription: "Draw a rectangular selection box to select multiple items",
+    deselectAction: "Deselect",
+    deselectShortcut: "Left-click (empty area)",
+    deselectDescription: "Deselect the current selection and return to select mode",
     // Mouse interactions
     selectToolAction: "Инструмент выделения",
     selectToolShortcut: "Нажать кнопку Выделить",
@@ -65,7 +71,14 @@ const locale: LocaleProps = {
     createConnectorDescription: "Переключиться в режим соединителя",
     addTextAction: "Добавить текст",
     addTextShortcut: "Нажать кнопку Текст",
-    addTextDescription: "Создать новое текстовое поле"
+    addTextDescription: "Создать новое текстовое поле",
+    deleteSelectedAction: "Delete Selected",
+    deleteSelectedShortcut: "Delete (Backspace on Mac)",
+    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo",
+    copyAction: "Copy",
+    copyDescription: "Copy selected item(s) to clipboard",
+    pasteAction: "Paste",
+    pasteDescription: "Paste clipboard items at mouse position; offsets to avoid overlap"
   },
   connectorHintTooltip: {
     tipCreatingConnectors: "Совет: Создание соединителей",
@@ -135,7 +148,12 @@ const locale: LocaleProps = {
       toolRectangle: "Прямоугольник",
       toolConnector: "Соединитель",
       toolText: "Текст",
-      note: "Примечание: Горячие клавиши работают, когда вы не вводите текст в текстовых полях"
+      note: "Примечание: Горячие клавиши работают, когда вы не вводите текст в текстовых полях",
+      fixedShortcutsTitle: "Fixed Shortcuts (Always Active)",
+      fixedCopy: "Copy",
+      fixedPaste: "Paste",
+      fixedUndo: "Undo",
+      fixedRedo: "Redo"
     },
     pan: {
       title: "Настройки перемещения",
@@ -187,6 +205,11 @@ const locale: LocaleProps = {
     configPath2: "в верхнем левом углу, чтобы получить доступ к Конфигурации.",
     canDisable: "Вы можете отключить это поведение, если хотите.",
     signature: "-Stan"
+  },
+  viewTabs: {
+    addPage: "Add page",
+    deletePage: "Delete page",
+    renameDiagram: "Rename diagram"
   }
 };
 

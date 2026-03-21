@@ -44,9 +44,15 @@ const locale: LocaleProps = {
     panCanvasAction: "Desplazar lienzo",
     panCanvasShortcut: "Clic izquierdo + Arrastrar",
     panCanvasDescription: "Desplazar el lienzo en modo desplazamiento",
-    contextMenuAction: "Menú contextual",
-    contextMenuShortcut: "Clic derecho",
-    contextMenuDescription: "Abrir menú contextual para elementos o espacio vacío",
+    togglePanToolAction: "Toggle Pan Tool",
+    togglePanToolShortcut: "Right-click",
+    togglePanToolDescription: "Toggle pan mode on/off; left-click to return to select mode",
+    lassoSelectAction: "Lasso Select",
+    lassoSelectShortcut: "Left-click + Drag (empty area)",
+    lassoSelectDescription: "Draw a rectangular selection box to select multiple items",
+    deselectAction: "Deselect",
+    deselectShortcut: "Left-click (empty area)",
+    deselectDescription: "Deselect the current selection and return to select mode",
     // Mouse interactions
     selectToolAction: "Herramienta de selección",
     selectToolShortcut: "Clic en botón Seleccionar",
@@ -65,7 +71,14 @@ const locale: LocaleProps = {
     createConnectorDescription: "Cambiar al modo de conector",
     addTextAction: "Añadir texto",
     addTextShortcut: "Clic en botón Texto",
-    addTextDescription: "Crear un nuevo cuadro de texto"
+    addTextDescription: "Crear un nuevo cuadro de texto",
+    deleteSelectedAction: "Delete Selected",
+    deleteSelectedShortcut: "Delete (Backspace on Mac)",
+    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo",
+    copyAction: "Copy",
+    copyDescription: "Copy selected item(s) to clipboard",
+    pasteAction: "Paste",
+    pasteDescription: "Paste clipboard items at mouse position; offsets to avoid overlap"
   },
   connectorHintTooltip: {
     tipCreatingConnectors: "Consejo: Crear conectores",
@@ -135,7 +148,12 @@ const locale: LocaleProps = {
       toolRectangle: "Rectángulo",
       toolConnector: "Conector",
       toolText: "Texto",
-      note: "Nota: Los atajos funcionan cuando no estás escribiendo en campos de texto"
+      note: "Nota: Los atajos funcionan cuando no estás escribiendo en campos de texto",
+      fixedShortcutsTitle: "Fixed Shortcuts (Always Active)",
+      fixedCopy: "Copy",
+      fixedPaste: "Paste",
+      fixedUndo: "Undo",
+      fixedRedo: "Redo"
     },
     pan: {
       title: "Configuración de desplazamiento",
@@ -187,6 +205,11 @@ const locale: LocaleProps = {
     configPath2: "en la esquina superior izquierda para acceder a la Configuración.",
     canDisable: "Puedes desactivar este comportamiento si lo deseas.",
     signature: "-Stan"
+  },
+  viewTabs: {
+    addPage: "Add page",
+    deletePage: "Delete page",
+    renameDiagram: "Rename diagram"
   }
 };
 

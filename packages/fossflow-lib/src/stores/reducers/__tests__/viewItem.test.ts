@@ -382,4 +382,52 @@ describe('viewItem reducer', () => {
       expect(result.model.views[0].connectors).toHaveLength(0);
     });
   });
+
+  describe('batch-delete cascade (deleteSelectedItems pattern)', () => {
+    it('deleting two items that share a connector removes the connector once', () => {
+      // connector1 connects item1 <-> item2; deleting both in sequence should
+      // leave zero connectors with no double-delete error
+      let result = deleteViewItem('item1', mockContext);
+      // connector1 should be gone after cascade from item1 deletion
+      expect(result.model.views[0].connectors).toHaveLength(0);
+
+      // Now delete item2 — connector1 is already gone, item2 should still be removable
+      result = deleteViewItem('item2', { ...mockContext, state: result });
+
+      expect(result.model.views[0].items).toHaveLength(0);
+      expect(result.model.views[0].connectors).toHaveLength(0);
+    });
+
+    it('connector shared by two deleted items is not double-counted', () => {
+      // Simulate the deleteSelectedItems logic:
+      // 1. delete all ITEM types first (cascade removes shared connectors)
+      // 2. attempt to delete remaining connectors that still exist (none should remain)
+      let result = deleteViewItem('item1', mockContext);
+      result = deleteViewItem('item2', { ...mockContext, state: result });
+
+      const remainingConnectorIds = result.model.views[0].connectors?.map((c) => c.id) ?? [];
+      expect(remainingConnectorIds).not.toContain('connector1');
+    });
+
+    it('unrelated connector survives batch delete of two items', () => {
+      const standaloneConnector: Connector = {
+        id: 'connectorStandalone',
+        anchors: [
+          { id: 'sa1', ref: { tile: { x: 10, y: 10 } } },
+          { id: 'sa2', ref: { tile: { x: 11, y: 11 } } }
+        ]
+      };
+      mockState.model.views[0].connectors = [mockConnector, standaloneConnector];
+      mockState.scene.connectors['connectorStandalone'] = {
+        path: { tiles: [], rectangle: { from: { x: 10, y: 10 }, to: { x: 11, y: 11 } } }
+      };
+
+      // Delete both items; connector1 should cascade-delete, standaloneConnector should survive
+      let result = deleteViewItem('item1', mockContext);
+      result = deleteViewItem('item2', { ...mockContext, state: result });
+
+      expect(result.model.views[0].connectors).toHaveLength(1);
+      expect(result.model.views[0].connectors![0].id).toBe('connectorStandalone');
+    });
+  });
 });

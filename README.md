@@ -5,6 +5,41 @@ All code is generated using Claude with sanity check reviews + manual testing. I
 See original project: FossFLOW for details more details
 ## [Unreleased]
 
+### 2026-03-20
+
+#### Features
+- **Copy/paste toasts:** Snackbar notifications for copy ("Copied N items"), paste ("Pasted N items"), and empty-clipboard paste ("Nothing to paste")
+- **Connector mode indicator:** Toolbar shows a "Click" / "Drag" chip next to the Connector button so the active interaction mode is always visible
+- **Settings consolidation:** Pan, Zoom, and Labels settings merged into a single "Canvas" tab — settings dialog reduced from 6 tabs to 4 (Hotkeys · Canvas · Connector · Icon Packs)
+- **SMNRCT hotkey description:** Dropdown now explains the SMNRCT and "None" profiles inline
+
+#### Bug Fixes
+- **Pan settings toggles inverted:** All 4 mouse-button toggles (middle, right, ctrl, alt click pan) were displaying inverted state — fixed
+- **Right-click context menu removed:** Right-click no longer opens a canvas context menu; right-click is reserved for pan only
+- **Undo/Redo removed from main menu:** Were duplicated — already available in the toolbar and via keyboard shortcuts
+- **ImportHintTooltip hardcoded position:** Tooltip now positions dynamically below the toolbar instead of at a fixed offset
+- **ConnectorHintTooltip auto-dismiss:** Tooltip now permanently dismisses after the user leaves connector mode for the first time (mirrors LassoHintTooltip behaviour)
+- **Copy/paste centroid bug:** Centroid calculation now includes rectangles (midpoint of from/to) and textboxes, not just icon nodes — pasted groups land at the correct position relative to the mouse
+- **Orphaned connector anchors on paste:** Connectors pasted without their anchored items now have the orphaned anchor reference detached cleanly
+- **Fixed shortcuts deduplicated:** Ctrl+C/V/Z/Y strings extracted to `src/config/shortcuts.ts` — single source of truth imported by both HotkeySettings and HelpDialog
+- **Toolbar click triggering canvas actions:** Clicking any toolbar button while in Lasso, FreehandLasso, or other modes could propagate to the window-level interaction manager and trigger spurious canvas actions (e.g. opening the "Add Node" context menu). Fixed with three layers of defence:
+  - ToolMenu wrapper gains `onMouseDown stopPropagation` (matches existing ControlsContainer pattern)
+  - `Lasso.mousedown` and `FreehandLasso.mousedown` gain `isRendererInteraction` guard (all other mode handlers already had this)
+  - `Lasso.mouseup` and `FreehandLasso.mouseup` gain `!mouse.mousedown` guard — toolbar clicks never record a canvas mousedown, so stray mouseups are safely ignored
+- **"Add Node" context menu appearing on mode transitions:** Switching from Pan → Select, or exiting pan via left-click, incorrectly triggered the empty-canvas context menu. Fixed by adding `mousedownHandled?: boolean` to `CursorMode` — the context menu now only opens when `Cursor.mousedown` explicitly processed the initiating click
+
+#### Tests
+- **Toolbar propagation regression suite** (`toolMenu.propagation.test.tsx`): B/C tests upgraded from inline replicas to real `Lasso.ts` module imports — regressions in the actual file now caught
+- **Lasso mode suite** (`Lasso.modes.test.ts`, +14 tests): full contract coverage of mousedown/mouseup/mousemove including all guards
+- **Cursor mode suite** (`Cursor.modes.test.ts`, +12 tests): full contract coverage including `mousedownHandled` flag, context menu gate, and all mode transitions
+- **Connector reducer rewrite** (`connector.test.ts`): replaced stale `{from,to}` anchor format with real `ConnectorAnchor[]` array format; tests now cover the actual API
+- **Shortcuts constants** (`shortcuts.test.ts`, +7 tests): regression guard for all 6 `FIXED_SHORTCUTS` values
+- **Settings defaults** (`settings.defaults.test.ts`, +11 tests): pin default hotkey profile, pan/zoom settings, keyboard pan speed
+- **uiOverlay editor modes** (`uiOverlay.editorModes.test.ts`): clarified as semi-valid with explicit note to verify against production mapping
+- Test count: 402 → 449, 48 suites, all passing
+
+---
+
 ### 2026-03-19
 
 #### Bug Fixes

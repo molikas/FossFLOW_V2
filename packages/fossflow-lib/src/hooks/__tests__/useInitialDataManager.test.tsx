@@ -5,6 +5,11 @@ import * as modelStoreModule from 'src/stores/modelStore';
 import * as uiStateStoreModule from 'src/stores/uiStateStore';
 import * as useViewModule from 'src/hooks/useView';
 
+// Silence console.error output in these tests
+const originalConsoleError = console.error;
+beforeAll(() => { console.error = jest.fn(); });
+afterAll(() => { console.error = originalConsoleError; });
+
 // Mock console methods
 const originalConsoleWarn = console.warn;
 const originalConsoleLog = console.log;
@@ -44,7 +49,8 @@ describe('useInitialDataManager - Orphaned Connector Handling', () => {
     // Setup mock model store
     mockModelStore = {
       actions: {
-        set: jest.fn()
+        set: jest.fn(),
+        clearHistory: jest.fn()
       },
       icons: [],
       colors: []
@@ -72,6 +78,11 @@ describe('useInitialDataManager - Orphaned Connector Handling', () => {
         return selector(mockUiStateStore);
       }
       return mockUiStateStore;
+    });
+
+    // Setup mock useUiStateStoreApi
+    (uiStateStoreModule.useUiStateStoreApi as jest.Mock).mockReturnValue({
+      getState: jest.fn().mockReturnValue({ view: null, rendererEl: null })
     });
 
     // Setup mock changeView
@@ -373,7 +384,10 @@ describe('useInitialDataManager - Orphaned Connector Handling', () => {
       result.current.load(initialData);
     });
 
-    expect(window.alert).toHaveBeenCalledWith('There is an error in your model.');
+    expect(console.error).toHaveBeenCalledWith(
+      '[useInitialDataManager] Model validation failed:',
+      [{ message: 'Validation failed' }]
+    );
     expect(mockModelStore.actions.set).not.toHaveBeenCalled();
     expect(result.current.isReady).toBe(false);
   });

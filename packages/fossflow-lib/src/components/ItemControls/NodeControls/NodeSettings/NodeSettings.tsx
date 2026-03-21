@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Slider, Box, TextField } from '@mui/material';
+import { Slider, Box, TextField, Stack, IconButton, Tooltip } from '@mui/material';
+import { InsertLink as InsertLinkIcon } from '@mui/icons-material';
 import { ModelItem, ViewItem } from 'src/types';
 import { RichTextEditor } from 'src/components/RichTextEditor/RichTextEditor';
 import { useModelItem } from 'src/hooks/useModelItem';
@@ -28,7 +29,10 @@ export const NodeSettings = ({
   const modelItem = useModelItem(node.id);
   const modelActions = useModelStore((state) => state.actions);
   const icons = useModelStore((state) => state.icons);
-  
+
+  // Show link input if a link is already set on this node
+  const [showLinkInput, setShowLinkInput] = useState(!!modelItem?.headerLink);
+
   // Local state for smooth slider interaction
   const currentIcon = icons.find(icon => icon.id === modelItem?.icon);
   const [localScale, setLocalScale] = useState(currentIcon?.scale || 1);
@@ -44,22 +48,22 @@ export const NodeSettings = ({
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
-    
+
     debounceRef.current = setTimeout(() => {
-      const updatedIcons = icons.map(icon => 
-        icon.id === modelItem?.icon 
+      const updatedIcons = icons.map(icon =>
+        icon.id === modelItem?.icon
           ? { ...icon, scale }
           : icon
       );
       modelActions.set({ icons: updatedIcons });
-    }, 100); // 100ms debounce
+    }, 100);
   }, [icons, modelItem?.icon, modelActions]);
 
   // Handle slider change with local state + debounced store update
   const handleScaleChange = useCallback((e: Event, newScale: number | number[]) => {
     const scale = newScale as number;
-    setLocalScale(scale); // Immediate UI update
-    updateIconScale(scale); // Debounced store update
+    setLocalScale(scale);
+    updateIconScale(scale);
   }, [updateIconScale]);
 
   // Cleanup timeout on unmount
@@ -71,6 +75,14 @@ export const NodeSettings = ({
     };
   }, []);
 
+  const handleToggleLink = useCallback(() => {
+    if (showLinkInput && modelItem?.headerLink) {
+      // Turning off — clear the stored link
+      onModelItemUpdated({ headerLink: undefined });
+    }
+    setShowLinkInput((prev) => !prev);
+  }, [showLinkInput, modelItem?.headerLink, onModelItemUpdated]);
+
   if (!modelItem) {
     return null;
   }
@@ -78,20 +90,48 @@ export const NodeSettings = ({
   return (
     <>
       <Section title="Name">
-        <TextField
-          value={modelItem.name}
-          onChange={(e) => {
-            const text = e.target.value as string;
-            if (modelItem.name !== text) onModelItemUpdated({ name: text });
-          }}
-        />
+        <Stack direction="row" spacing={0.5} alignItems="center">
+          <TextField
+            value={modelItem.name}
+            onChange={(e) => {
+              const text = e.target.value as string;
+              if (modelItem.name !== text) onModelItemUpdated({ name: text });
+            }}
+            sx={{ flex: 1 }}
+          />
+          <Tooltip title={showLinkInput ? 'Remove link' : 'Add link to name'}>
+            <IconButton
+              size="small"
+              color={modelItem.headerLink ? 'primary' : 'default'}
+              onClick={handleToggleLink}
+            >
+              <InsertLinkIcon />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+        {showLinkInput && (
+          <TextField
+            value={modelItem.headerLink || ''}
+            placeholder="https://..."
+            size="small"
+            fullWidth
+            sx={{ mt: 1 }}
+            onChange={(e) => {
+              const text = e.target.value;
+              onModelItemUpdated({ headerLink: text || undefined });
+            }}
+          />
+        )}
       </Section>
       <Section title="Description">
         <RichTextEditor
           value={modelItem.description}
           onChange={(text) => {
-            if (modelItem.description !== text)
-              onModelItemUpdated({ description: text });
+            const isEmpty = !text || text.trim() === '<p><br></p>';
+            const stored = modelItem.description;
+            const storedIsEmpty = !stored || stored.trim() === '<p><br></p>';
+            if (isEmpty && storedIsEmpty) return;
+            if (stored !== text) onModelItemUpdated({ description: isEmpty ? undefined : text });
           }}
         />
       </Section>
@@ -102,7 +142,7 @@ export const NodeSettings = ({
             step={20}
             min={60}
             max={280}
-            value={node.labelHeight}
+            value={node.labelHeight ?? 80}
             onChange={(e, newHeight) => {
               const labelHeight = newHeight as number;
               onViewItemUpdated({ labelHeight });

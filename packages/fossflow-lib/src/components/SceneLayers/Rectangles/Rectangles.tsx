@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo, useMemo } from 'react';
 import { useScene } from 'src/hooks/useScene';
 import { Rectangle } from './Rectangle';
 
@@ -6,12 +6,14 @@ interface Props {
   rectangles: ReturnType<typeof useScene>['rectangles'];
 }
 
-export const Rectangles = ({ rectangles }: Props) => {
+export const Rectangles = memo(({ rectangles }: Props) => {
+  const reversedRectangles = useMemo(() => [...rectangles].reverse(), [rectangles]);
+
   return (
     <>
-      {[...rectangles].reverse().map((rectangle) => {
-        return <Rectangle key={rectangle.id} {...rectangle} />;
-      })}
+      {reversedRectangles.map((rectangle) => (
+        <Rectangle key={rectangle.id} {...rectangle} />
+      ))}
     </>
   );
-};
+});

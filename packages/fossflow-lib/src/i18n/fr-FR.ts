@@ -44,9 +44,15 @@ const locale: LocaleProps = {
     panCanvasAction: "Déplacer le canevas",
     panCanvasShortcut: "Clic gauche + Glisser",
     panCanvasDescription: "Déplacer le canevas en mode déplacement",
-    contextMenuAction: "Menu contextuel",
-    contextMenuShortcut: "Clic droit",
-    contextMenuDescription: "Ouvrir le menu contextuel pour les éléments ou l'espace vide",
+    togglePanToolAction: "Toggle Pan Tool",
+    togglePanToolShortcut: "Right-click",
+    togglePanToolDescription: "Toggle pan mode on/off; left-click to return to select mode",
+    lassoSelectAction: "Lasso Select",
+    lassoSelectShortcut: "Left-click + Drag (empty area)",
+    lassoSelectDescription: "Draw a rectangular selection box to select multiple items",
+    deselectAction: "Deselect",
+    deselectShortcut: "Left-click (empty area)",
+    deselectDescription: "Deselect the current selection and return to select mode",
     // Mouse interactions
     selectToolAction: "Outil de sélection",
     selectToolShortcut: "Cliquer sur le bouton Sélectionner",
@@ -65,7 +71,14 @@ const locale: LocaleProps = {
     createConnectorDescription: "Passer en mode connecteur",
     addTextAction: "Ajouter du texte",
     addTextShortcut: "Cliquer sur le bouton Texte",
-    addTextDescription: "Créer une nouvelle zone de texte"
+    addTextDescription: "Créer une nouvelle zone de texte",
+    deleteSelectedAction: "Delete Selected",
+    deleteSelectedShortcut: "Delete (Backspace on Mac)",
+    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo",
+    copyAction: "Copy",
+    copyDescription: "Copy selected item(s) to clipboard",
+    pasteAction: "Paste",
+    pasteDescription: "Paste clipboard items at mouse position; offsets to avoid overlap"
   },
   connectorHintTooltip: {
     tipCreatingConnectors: "Astuce : Créer des connecteurs",
@@ -135,7 +148,12 @@ const locale: LocaleProps = {
       toolRectangle: "Rectangle",
       toolConnector: "Connecteur",
       toolText: "Texte",
-      note: "Remarque : Les raccourcis fonctionnent lorsque vous ne tapez pas dans des champs de texte"
+      note: "Remarque : Les raccourcis fonctionnent lorsque vous ne tapez pas dans des champs de texte",
+      fixedShortcutsTitle: "Fixed Shortcuts (Always Active)",
+      fixedCopy: "Copy",
+      fixedPaste: "Paste",
+      fixedUndo: "Undo",
+      fixedRedo: "Redo"
     },
     pan: {
       title: "Paramètres de déplacement",
@@ -187,6 +205,11 @@ const locale: LocaleProps = {
     configPath2: "en haut à gauche pour accéder à la Configuration.",
     canDisable: "Vous pouvez désactiver ce comportement si vous le souhaitez.",
     signature: "-Stan"
+  },
+  viewTabs: {
+    addPage: "Add page",
+    deletePage: "Delete page",
+    renameDiagram: "Rename diagram"
   }
 };
 

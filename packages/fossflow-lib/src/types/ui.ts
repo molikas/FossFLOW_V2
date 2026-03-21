@@ -1,4 +1,4 @@
-import { Coords, EditorModeEnum, MainMenuOptions } from './common';
+import { Coords, Size, EditorModeEnum, MainMenuOptions } from './common';
 import { Icon } from './model';
 import { ItemReference } from './scene';
 import { HotkeyProfile } from 'src/config/hotkeys';
@@ -38,6 +38,7 @@ export interface CursorMode {
   type: 'CURSOR';
   showCursor: boolean;
   mousedownItem: ItemReference | null;
+  mousedownHandled?: boolean;
 }
 
 export interface DragItemsMode {
@@ -163,6 +164,11 @@ export interface ContextMenu {
 
 export type ConnectorInteractionMode = 'click' | 'drag';
 
+export interface Notification {
+  message: string;
+  severity: 'info' | 'success' | 'warning';
+}
+
 export interface UiState {
   view: string;
   mainMenuOptions: MainMenuOptions;
@@ -177,6 +183,7 @@ export interface UiState {
   scroll: Scroll;
   mouse: Mouse;
   rendererEl: HTMLDivElement | null;
+  rendererSize: Size;
   enableDebugTools: boolean;
   hotkeyProfile: HotkeyProfile;
   panSettings: PanSettings;
@@ -185,7 +192,7 @@ export interface UiState {
   connectorInteractionMode: ConnectorInteractionMode;
   expandLabels: boolean;
   iconPackManager: IconPackManagerProps | null;
-
+  notification: Notification | null;
 }
 
 export interface UiStateActions {
@@ -205,6 +212,7 @@ export interface UiStateActions {
   setContextMenu: (contextMenu: ContextMenu | null) => void;
   setMouse: (mouse: Mouse) => void;
   setRendererEl: (el: HTMLDivElement) => void;
+  setRendererSize: (size: Size) => void;
   setEnableDebugTools: (enabled: boolean) => void;
   setHotkeyProfile: (profile: HotkeyProfile) => void;
   setPanSettings: (settings: PanSettings) => void;
@@ -213,6 +221,7 @@ export interface UiStateActions {
   setConnectorInteractionMode: (mode: ConnectorInteractionMode) => void;
   setExpandLabels: (expand: boolean) => void;
   setIconPackManager: (iconPackManager: IconPackManagerProps | null) => void;
+  setNotification: (notification: Notification | null) => void;
 
 }
 

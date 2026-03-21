@@ -44,9 +44,15 @@ const locale: LocaleProps = {
     panCanvasAction: "Tuvali Kaydır",
     panCanvasShortcut: "Sol tık + Sürükle",
     panCanvasDescription: "Kaydırma modundayken tuvali kaydır",
-    contextMenuAction: "Bağlam Menüsü",
-    contextMenuShortcut: "Sağ tık",
-    contextMenuDescription: "Öğeler veya boş alan için bağlam menüsünü aç",
+    togglePanToolAction: "Toggle Pan Tool",
+    togglePanToolShortcut: "Right-click",
+    togglePanToolDescription: "Toggle pan mode on/off; left-click to return to select mode",
+    lassoSelectAction: "Lasso Select",
+    lassoSelectShortcut: "Left-click + Drag (empty area)",
+    lassoSelectDescription: "Draw a rectangular selection box to select multiple items",
+    deselectAction: "Deselect",
+    deselectShortcut: "Left-click (empty area)",
+    deselectDescription: "Deselect the current selection and return to select mode",
     // Mouse interactions
     selectToolAction: "Seçim Aracı",
     selectToolShortcut: "Seç butonuna tıkla",
@@ -65,7 +71,14 @@ const locale: LocaleProps = {
     createConnectorDescription: "Bağlayıcı moduna geç",
     addTextAction: "Metin Ekle",
     addTextShortcut: "Metin butonuna tıkla",
-    addTextDescription: "Yeni bir metin kutusu oluştur"
+    addTextDescription: "Yeni bir metin kutusu oluştur",
+    deleteSelectedAction: "Delete Selected",
+    deleteSelectedShortcut: "Delete (Backspace on Mac)",
+    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo",
+    copyAction: "Copy",
+    copyDescription: "Copy selected item(s) to clipboard",
+    pasteAction: "Paste",
+    pasteDescription: "Paste clipboard items at mouse position; offsets to avoid overlap"
   },
   connectorHintTooltip: {
     tipCreatingConnectors: "İpucu: Bağlayıcı Oluşturma",
@@ -135,7 +148,12 @@ const locale: LocaleProps = {
       toolRectangle: "Dikdörtgen",
       toolConnector: "Bağlayıcı",
       toolText: "Metin",
-      note: "Not: Kısayol tuşları metin alanlarında yazarken çalışmaz"
+      note: "Not: Kısayol tuşları metin alanlarında yazarken çalışmaz",
+      fixedShortcutsTitle: "Fixed Shortcuts (Always Active)",
+      fixedCopy: "Copy",
+      fixedPaste: "Paste",
+      fixedUndo: "Undo",
+      fixedRedo: "Redo"
     },
     pan: {
       title: "Kaydırma Ayarları",
@@ -187,6 +205,11 @@ const locale: LocaleProps = {
     configPath2: "sol üstteki Hamburger simgesine tıklayın.",
     canDisable: "İsterseniz bu davranışı devre dışı bırakabilirsiniz.",
     signature: "-Stan"
+  },
+  viewTabs: {
+    addPage: "Add page",
+    deletePage: "Delete page",
+    renameDiagram: "Rename diagram"
   }
 };
 

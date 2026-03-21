@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Box, IconButton, Paper, Typography, useTheme } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
 import { useUiStateStore } from 'src/stores/uiStateStore';
@@ -20,14 +20,27 @@ export const ConnectorHintTooltip = ({ toolMenuRef }: Props) => {
   );
   const [isDismissed, setIsDismissed] = useState(true);
   const [position, setPosition] = useState({ top: 16, right: 16 });
+  const wasVisibleRef = useRef(false);
 
   useEffect(() => {
-    // Check if the hint has been dismissed before
     const dismissed = localStorage.getItem(STORAGE_KEY);
     if (dismissed !== 'true') {
       setIsDismissed(false);
     }
   }, []);
+
+  // Auto-dismiss after first use: once the user leaves connector mode the
+  // tooltip is marked as seen so it never shows again.
+  useEffect(() => {
+    const isConnectorMode = modeType === 'CONNECTOR';
+    if (isConnectorMode && !isDismissed) {
+      wasVisibleRef.current = true;
+    } else if (!isConnectorMode && wasVisibleRef.current && !isDismissed) {
+      wasVisibleRef.current = false;
+      setIsDismissed(true);
+      localStorage.setItem(STORAGE_KEY, 'true');
+    }
+  }, [modeType, isDismissed]);
 
   useEffect(() => {
     // Calculate position based on toolbar

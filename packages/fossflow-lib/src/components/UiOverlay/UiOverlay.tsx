@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useRef } from 'react';
 import { Box, useTheme, Typography, Stack } from '@mui/material';
+import { shallow } from 'zustand/shallow';
 import { ChevronRight } from '@mui/icons-material';
 import { EditorModeEnum, DialogTypeEnum } from 'src/types';
 import { UiElement } from 'components/UiElement/UiElement';
@@ -11,7 +12,6 @@ import { useUiStateStore } from 'src/stores/uiStateStore';
 import { MainMenu } from 'src/components/MainMenu/MainMenu';
 import { ZoomControls } from 'src/components/ZoomControls/ZoomControls';
 import { DebugUtils } from 'src/components/DebugUtils/DebugUtils';
-import { useResizeObserver } from 'src/hooks/useResizeObserver';
 import { ContextMenuManager } from 'src/components/ContextMenu/ContextMenuManager';
 import { useScene } from 'src/hooks/useScene';
 import { useModelStore } from 'src/stores/modelStore';
@@ -24,14 +24,17 @@ import { ConnectorRerouteTooltip } from '../ConnectorRerouteTooltip/ConnectorRer
 import { ImportHintTooltip } from '../ImportHintTooltip/ImportHintTooltip';
 import { LassoHintTooltip } from '../LassoHintTooltip/LassoHintTooltip';
 import { LazyLoadingWelcomeNotification } from '../LazyLoadingWelcomeNotification/LazyLoadingWelcomeNotification';
+import { NotificationSnackbar } from '../NotificationSnackbar/NotificationSnackbar';
 import { CoordsUtils, getTilePosition } from 'src/utils';
+import { ViewTabs } from 'src/components/ViewTabs/ViewTabs';
 
 const ToolsEnum = {
   MAIN_MENU: 'MAIN_MENU',
   ZOOM_CONTROLS: 'ZOOM_CONTROLS',
   TOOL_MENU: 'TOOL_MENU',
   ITEM_CONTROLS: 'ITEM_CONTROLS',
-  VIEW_TITLE: 'VIEW_TITLE'
+  VIEW_TITLE: 'VIEW_TITLE',
+  VIEW_TABS: 'VIEW_TABS'
 } as const;
 
 interface EditorModeMapping {
@@ -44,16 +47,31 @@ const EDITOR_MODE_MAPPING: EditorModeMapping = {
     'ZOOM_CONTROLS',
     'TOOL_MENU',
     'MAIN_MENU',
-    'VIEW_TITLE'
+    'VIEW_TABS'
   ],
   [EditorModeEnum.EXPLORABLE_READONLY]: ['ZOOM_CONTROLS', 'VIEW_TITLE'],
   [EditorModeEnum.NON_INTERACTIVE]: []
 };
 
 const getEditorModeMapping = (editorMode: keyof typeof EditorModeEnum) => {
-  const availableUiFeatures = EDITOR_MODE_MAPPING[editorMode];
+  return EDITOR_MODE_MAPPING[editorMode];
+};
 
-  return availableUiFeatures;
+// Isolated component so UiOverlay doesn't re-render on every mouse move.
+// Only mounts when mode.type === 'PLACE_ICON'.
+const PlaceIconLayer = () => {
+  const { mode, mouse } = useUiStateStore(
+    (state) => ({ mode: state.mode, mouse: state.mouse }),
+    shallow
+  );
+
+  if (mode.type !== 'PLACE_ICON' || !mode.id) return null;
+
+  return (
+    <SceneLayer disableAnimation>
+      <DragAndDrop iconId={mode.id} tile={mouse.position.tile} />
+    </SceneLayer>
+  );
 };
 
 export const UiOverlay = () => {
@@ -67,44 +85,38 @@ export const UiOverlay = () => {
     },
     [theme]
   );
-  const uiStateActions = useUiStateStore((state) => {
-    return state.actions;
-  });
-  const enableDebugTools = useUiStateStore((state) => {
-    return state.enableDebugTools;
-  });
-  const mode = useUiStateStore((state) => {
-    return state.mode;
-  });
-  const mouse = useUiStateStore((state) => {
-    return state.mouse;
-  });
-  const dialog = useUiStateStore((state) => {
-    return state.dialog;
-  });
-  const itemControls = useUiStateStore((state) => {
-    return state.itemControls;
-  });
+
+  const {
+    uiStateActions,
+    enableDebugTools,
+    mode,
+    dialog,
+    itemControls,
+    editorMode,
+    iconPackManager,
+    contextMenu
+  } = useUiStateStore(
+    (state) => ({
+      uiStateActions: state.actions,
+      enableDebugTools: state.enableDebugTools,
+      mode: state.mode,
+      dialog: state.dialog,
+      itemControls: state.itemControls,
+      editorMode: state.editorMode,
+      iconPackManager: state.iconPackManager,
+      contextMenu: state.contextMenu
+    }),
+    shallow
+  );
+
   const { currentView } = useScene();
-  const editorMode = useUiStateStore((state) => {
-    return state.editorMode;
-  });
   const availableTools = useMemo(() => {
     return getEditorModeMapping(editorMode);
   }, [editorMode]);
-  const rendererEl = useUiStateStore((state) => {
-    return state.rendererEl;
-  });
   const title = useModelStore((state) => {
     return state.title;
   });
-  const iconPackManager = useUiStateStore((state) => {
-    return state.iconPackManager;
-  });
-  const contextMenu = useUiStateStore((state) => {
-    return state.contextMenu;
-  });
-  const { size: rendererSize } = useResizeObserver(rendererEl);
+  const rendererSize = useUiStateStore((state) => state.rendererSize);
 
   return (
     <>
@@ -140,6 +152,7 @@ export const UiOverlay = () => {
         {availableTools.includes('TOOL_MENU') && (
           <Box
             ref={toolMenuRef}
+            onMouseDown={(e) => e.stopPropagation()}
             sx={{
               position: 'absolute',
               transform: 'translateX(-100%)'
@@ -219,6 +232,24 @@ export const UiOverlay = () => {
           </Box>
         )}
 
+        {availableTools.includes('VIEW_TABS') && (
+          <Box
+            sx={{
+              position: 'absolute',
+              display: 'flex',
+              justifyContent: 'center',
+              transform: 'translateX(-50%)'
+            }}
+            style={{
+              left: rendererSize.width / 2,
+              top: rendererSize.height - appPadding.y * 2,
+              maxWidth: rendererSize.width - 300
+            }}
+          >
+            <ViewTabs />
+          </Box>
+        )}
+
         {enableDebugTools && (
           <UiElement
             sx={{
@@ -237,11 +268,7 @@ export const UiOverlay = () => {
         )}
       </Box>
 
-      {mode.type === 'PLACE_ICON' && mode.id && (
-        <SceneLayer disableAnimation>
-          <DragAndDrop iconId={mode.id} tile={mouse.position.tile} />
-        </SceneLayer>
-      )}
+      <PlaceIconLayer />
 
       {dialog === DialogTypeEnum.EXPORT_IMAGE && (
         <ExportImageDialog
@@ -259,16 +286,18 @@ export const UiOverlay = () => {
       {editorMode === EditorModeEnum.EDITABLE && <ConnectorHintTooltip toolMenuRef={toolMenuRef} />}
       {editorMode === EditorModeEnum.EDITABLE && <ConnectorEmptySpaceTooltip />}
       {editorMode === EditorModeEnum.EDITABLE && <ConnectorRerouteTooltip />}
-      {editorMode === EditorModeEnum.EDITABLE && <ImportHintTooltip />}
+      {editorMode === EditorModeEnum.EDITABLE && <ImportHintTooltip toolMenuRef={toolMenuRef} />}
       {editorMode === EditorModeEnum.EDITABLE && <LassoHintTooltip toolMenuRef={toolMenuRef} />}
 
       {/* Show lazy loading welcome notification if icon pack manager is provided */}
       {iconPackManager && <LazyLoadingWelcomeNotification />}
 
+      <NotificationSnackbar />
+
       <SceneLayer>
         {contextMenu && (
-          <Box 
-            ref={contextMenuAnchorRef} 
+          <Box
+            ref={contextMenuAnchorRef}
             sx={{
               position: 'absolute',
               left: getTilePosition({ tile: contextMenu.tile }).x,

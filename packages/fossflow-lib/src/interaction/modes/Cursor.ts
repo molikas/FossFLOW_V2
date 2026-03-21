@@ -90,22 +90,18 @@ const mousedown: ModeActionsAction = ({
     uiState.actions.setMode(
       produce(uiState.mode, (draft) => {
         draft.mousedownItem = itemAtTile;
+        draft.mousedownHandled = true;
       })
     );
   } else {
     uiState.actions.setMode(
       produce(uiState.mode, (draft) => {
         draft.mousedownItem = null;
+        draft.mousedownHandled = true;
       })
     );
 
     uiState.actions.setItemControls(null);
-
-    // Show context menu for empty space on left click
-    uiState.actions.setContextMenu({
-      type: 'EMPTY',
-      tile: uiState.mouse.position.tile
-    });
   }
 };
 
@@ -141,12 +137,13 @@ export const Cursor: ModeActions = {
         isInitialMovement: true
       });
     } else {
-      // If no item is being dragged and the mouse has moved, switch to PAN mode
-      // Only do this if the drag started on empty space
+      // Empty-area drag → start lasso selection
       if (uiState.mouse.mousedown) {
         uiState.actions.setMode({
-          type: 'PAN',
-          showCursor: false
+          type: 'LASSO',
+          showCursor: true,
+          selection: null,
+          isDragging: false
         });
       }
     }
@@ -179,6 +176,13 @@ export const Cursor: ModeActions = {
           id: uiState.mode.mousedownItem.id
         });
       }
+    } else if (!hasMoved && uiState.mode.mousedownHandled) {
+      // Plain left-click on empty canvas — show context menu (add node / rectangle)
+      uiState.actions.setItemControls(null);
+      uiState.actions.setContextMenu({
+        type: 'EMPTY',
+        tile: uiState.mouse.position.tile
+      });
     } else {
       uiState.actions.setItemControls(null);
     }
@@ -186,6 +190,7 @@ export const Cursor: ModeActions = {
     uiState.actions.setMode(
       produce(uiState.mode, (draft) => {
         draft.mousedownItem = null;
+        draft.mousedownHandled = false;
       })
     );
   }

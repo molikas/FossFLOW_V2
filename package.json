@@ -39,9 +39,6 @@
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
   },
-  "dependencies": {
-    "dom-to-image-more": "^3.7.2"
-  },
   "overrides": {
     "lodash": "^4.17.23",
     "lodash-es": "^4.17.23",

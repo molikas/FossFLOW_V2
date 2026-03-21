@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useCallback } from 'react';
 import ReactQuill from 'react-quill-new';
 import { Box } from '@mui/material';
 import RichTextEditorErrorBoundary from './RichTextEditorErrorBoundary';
@@ -46,6 +46,8 @@ export const RichTextEditor = ({
   height = 120,
   styles
 }: Props) => {
+  const isMountedRef = useRef(false);
+
   const modules = useMemo(() => {
     if (!readOnly)
       return {
@@ -54,6 +56,20 @@ export const RichTextEditor = ({
 
     return { toolbar: false };
   }, [readOnly]);
+
+  // Quill fires onChange once on mount to normalize its internal state (e.g.
+  // empty string → '<p><br></p>'). Skip that first synthetic call so it never
+  // gets written back to the model.
+  const handleChange = useCallback(
+    (text: string) => {
+      if (!isMountedRef.current) {
+        isMountedRef.current = true;
+        return;
+      }
+      onChange?.(text);
+    },
+    [onChange]
+  );
 
   return (
     <RichTextEditorErrorBoundary>
@@ -79,8 +95,8 @@ export const RichTextEditor = ({
           },
           '.ql-editor': {
             whiteSpace: 'pre-wrap', // Preserve multiple spaces and tabs
-            ...(readOnly ? { p: 0 } : {}),
-            padding: '12px 15px' // Add consistent padding to prevent text overlap with tooltips
+            padding: '12px 15px', // Add consistent padding to prevent text overlap with tooltips
+            ...(readOnly ? { p: 0 } : {}) // readOnly overrides padding: no padding on canvas labels
           },
           '.ql-tooltip': {
             zIndex: 1000 // Ensure tooltips appear above content but don't obscure text
@@ -91,7 +107,7 @@ export const RichTextEditor = ({
           theme="snow"
           value={value ?? ''}
           readOnly={readOnly}
-          onChange={onChange}
+          onChange={handleChange}
           formats={formats}
           modules={modules}
         />

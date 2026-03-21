@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { Stack, Divider } from '@mui/material';
+import { Stack, Divider, Chip } from '@mui/material';
 import {
   PanToolOutlined as PanToolIcon,
   NearMeOutlined as NearMeIcon,
@@ -36,6 +36,9 @@ export const ToolMenu = () => {
   });
   const hotkeyProfile = useUiStateStore((state) => {
     return state.hotkeyProfile;
+  });
+  const connectorInteractionMode = useUiStateStore((state) => {
+    return state.connectorInteractionMode;
   });
 
   const hotkeys = HOTKEY_PROFILES[hotkeyProfile];
@@ -173,6 +176,14 @@ export const ToolMenu = () => {
           }}
           isActive={mode.type === 'CONNECTOR'}
         />
+        {mode.type === 'CONNECTOR' && (
+          <Chip
+            label={connectorInteractionMode === 'click' ? 'Click' : 'Drag'}
+            size="small"
+            variant="outlined"
+            sx={{ fontSize: '0.65rem', height: 18, mx: 'auto' }}
+          />
+        )}
         <IconButton
           name={`Text${hotkeys.text ? ` (${hotkeys.text.toUpperCase()})` : ''}`}
           Icon={<TitleIcon />}

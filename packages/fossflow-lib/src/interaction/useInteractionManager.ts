@@ -3,7 +3,7 @@ import { useModelStoreApi } from 'src/stores/modelStore';
 import { useUiStateStore, useUiStateStoreApi } from 'src/stores/uiStateStore';
 import { ModeActions, State, SlimMouseEvent, Mouse } from 'src/types';
 import { DialogTypeEnum } from 'src/types/ui';
-import { getMouse, getItemAtTile, generateId, incrementZoom, decrementZoom } from 'src/utils';
+import { getMouse, getItemAtTile, generateId, incrementZoom, decrementZoom, CoordsUtils } from 'src/utils';
 import { useResizeObserver } from 'src/hooks/useResizeObserver';
 import { useScene } from 'src/hooks/useScene';
 import { useHistory } from 'src/hooks/useHistory';
@@ -20,53 +20,8 @@ import { TextBox } from './modes/TextBox';
 import { Lasso } from './modes/Lasso';
 import { FreehandLasso } from './modes/FreehandLasso';
 import { usePanHandlers } from './usePanHandlers';
-
-interface PendingMouseUpdate {
-  mouse: Mouse;
-  event: SlimMouseEvent;
-}
-
-const useRAFThrottle = () => {
-  const rafIdRef = useRef<number | null>(null);
-  const pendingUpdateRef = useRef<PendingMouseUpdate | null>(null);
-  const callbackRef = useRef<((update: PendingMouseUpdate) => void) | null>(null);
-
-  const scheduleUpdate = useCallback((mouse: Mouse, event: SlimMouseEvent, callback: (update: PendingMouseUpdate) => void) => {
-    pendingUpdateRef.current = { mouse, event };
-    callbackRef.current = callback;
-
-    if (rafIdRef.current === null) {
-      rafIdRef.current = requestAnimationFrame(() => {
-        rafIdRef.current = null;
-        if (pendingUpdateRef.current && callbackRef.current) {
-          callbackRef.current(pendingUpdateRef.current);
-          pendingUpdateRef.current = null;
-        }
-      });
-    }
-  }, []);
-
-  const flushUpdate = useCallback(() => {
-    if (rafIdRef.current !== null) {
-      cancelAnimationFrame(rafIdRef.current);
-      rafIdRef.current = null;
-    }
-    if (pendingUpdateRef.current && callbackRef.current) {
-      callbackRef.current(pendingUpdateRef.current);
-      pendingUpdateRef.current = null;
-    }
-  }, []);
-
-  const cleanup = useCallback(() => {
-    if (rafIdRef.current !== null) {
-      cancelAnimationFrame(rafIdRef.current);
-      rafIdRef.current = null;
-    }
-    pendingUpdateRef.current = null;
-  }, []);
-
-  return { scheduleUpdate, flushUpdate, cleanup };
-};
+import { useRAFThrottle } from './useRAFThrottle';
+import { useCopyPaste } from 'src/clipboard/useCopyPaste';
 
 const modes: { [k in string]: ModeActions } = {
   CURSOR: Cursor,
@@ -105,11 +60,20 @@ export const useInteractionManager = () => {
   const uiStateApi = useUiStateStoreApi();
   const modelStoreApi = useModelStoreApi();
   const scene = useScene();
+  // Single ResizeObserver for rendererEl — result is stored in the Zustand store
+  // so UiOverlay and useDiagramUtils can read it without creating their own observers.
   const { size: rendererSize } = useResizeObserver(rendererEl);
   const { undo, redo, canUndo, canRedo } = useHistory();
-  const { createTextBox } = scene;
+  const { handleCopy, handlePaste } = useCopyPaste();
+  const { createTextBox, deleteSelectedItems, deleteViewItem, deleteConnector, deleteTextBox, deleteRectangle } = scene;
   const { handleMouseDown: handlePanMouseDown, handleMouseUp: handlePanMouseUp } = usePanHandlers();
   const { scheduleUpdate, flushUpdate, cleanup } = useRAFThrottle();
+
+  // Sync the single rendererEl measurement into the store so UiOverlay and
+  // useDiagramUtils can read rendererSize without creating their own observers.
+  useEffect(() => {
+    uiStateApi.getState().actions.setRendererSize(rendererSize);
+  }, [rendererSize, uiStateApi]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -131,7 +95,7 @@ export const useInteractionManager = () => {
             (uiState.connectorInteractionMode === 'drag' && connectorMode.id !== null);
 
           if (isConnectionInProgress && connectorMode.id) {
-            scene.deleteConnector(connectorMode.id);
+            deleteConnector(connectorMode.id);
 
             uiState.actions.setMode({
               type: 'CONNECTOR',
@@ -144,6 +108,55 @@ export const useInteractionManager = () => {
         }
 
         return;
+      }
+
+      // Delete/Backspace — handled before the text-field guard so it always fires
+      // when a canvas selection exists (matches how diagram tools like Figma behave).
+      const isDeleteKey = e.key === 'Delete' || e.key === 'Backspace';
+      if (isDeleteKey) {
+        const mode = uiState.mode;
+
+        if (
+          (mode.type === 'LASSO' || mode.type === 'FREEHAND_LASSO') &&
+          mode.selection?.items?.length
+        ) {
+          e.preventDefault();
+          deleteSelectedItems(mode.selection.items);
+          uiState.actions.setMode({
+            type: 'CURSOR',
+            showCursor: true,
+            mousedownItem: null
+          });
+          uiState.actions.setItemControls(null);
+          return;
+        }
+
+        if (uiState.itemControls && uiState.itemControls.type !== 'ADD_ITEM') {
+          // Only fire if focus is NOT inside a text-editing element so that
+          // editing text in the properties panel still works normally.
+          const target = e.target as HTMLElement;
+          const inTextField =
+            target.tagName === 'INPUT' ||
+            target.tagName === 'TEXTAREA' ||
+            target.contentEditable === 'true' ||
+            !!target.closest('.ql-editor');
+
+          if (!inTextField) {
+            e.preventDefault();
+            const ctrl = uiState.itemControls;
+            if (ctrl.type === 'ITEM') {
+              deleteViewItem(ctrl.id);
+            } else if (ctrl.type === 'CONNECTOR') {
+              deleteConnector(ctrl.id);
+            } else if (ctrl.type === 'TEXTBOX') {
+              deleteTextBox(ctrl.id);
+            } else if (ctrl.type === 'RECTANGLE') {
+              deleteRectangle(ctrl.id);
+            }
+            uiState.actions.setItemControls(null);
+            return;
+          }
+        }
       }
 
       const target = e.target as HTMLElement;
@@ -174,6 +187,16 @@ export const useInteractionManager = () => {
         if (canRedo) {
           redo();
         }
+      }
+
+      if (isCtrlOrCmd && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        handleCopy();
+      }
+
+      if (isCtrlOrCmd && e.key.toLowerCase() === 'v') {
+        e.preventDefault();
+        handlePaste();
       }
 
       if (e.key === 'F1') {
@@ -259,13 +282,48 @@ export const useInteractionManager = () => {
           isDragging: false
         });
       }
+
+      // Keyboard pan (arrow / wasd / ijkl) — consolidated here from usePanHandlers
+      const panSettings = uiState.panSettings;
+      const panSpeed = panSettings.keyboardPanSpeed;
+      let panDx = 0;
+      let panDy = 0;
+
+      if (panSettings.arrowKeysPan) {
+        if (e.key === 'ArrowUp')    { panDy =  panSpeed; e.preventDefault(); }
+        else if (e.key === 'ArrowDown')  { panDy = -panSpeed; e.preventDefault(); }
+        else if (e.key === 'ArrowLeft')  { panDx =  panSpeed; e.preventDefault(); }
+        else if (e.key === 'ArrowRight') { panDx = -panSpeed; e.preventDefault(); }
+      }
+
+      if (panSettings.wasdPan) {
+        if (key === 'w')      { panDy =  panSpeed; e.preventDefault(); }
+        else if (key === 's') { panDy = -panSpeed; e.preventDefault(); }
+        else if (key === 'a') { panDx =  panSpeed; e.preventDefault(); }
+        else if (key === 'd') { panDx = -panSpeed; e.preventDefault(); }
+      }
+
+      if (panSettings.ijklPan) {
+        if (key === 'i')      { panDy =  panSpeed; e.preventDefault(); }
+        else if (key === 'k') { panDy = -panSpeed; e.preventDefault(); }
+        else if (key === 'j') { panDx =  panSpeed; e.preventDefault(); }
+        else if (key === 'l') { panDx = -panSpeed; e.preventDefault(); }
+      }
+
+      if (panDx !== 0 || panDy !== 0) {
+        const currentScroll = uiState.scroll;
+        uiState.actions.setScroll({
+          position: CoordsUtils.add(currentScroll.position, { x: panDx, y: panDy }),
+          offset: currentScroll.offset
+        });
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => {
       return window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [undo, redo, canUndo, canRedo, uiStateApi, createTextBox, scene]);
+  }, [undo, redo, canUndo, canRedo, uiStateApi, createTextBox, deleteSelectedItems, deleteViewItem, deleteConnector, deleteTextBox, deleteRectangle, handleCopy, handlePaste]);
 
   const processMouseUpdate = useCallback(
     (nextMouse: Mouse, e: SlimMouseEvent) => {
@@ -315,6 +373,17 @@ export const useInteractionManager = () => {
       if (!rendererRef.current) return;
 
       if (e.type === 'mousedown' && handlePanMouseDown(e)) {
+        // Still update mouse state so Pan mode can track mousedown position for drag
+        const uiState = uiStateApi.getState();
+        const nextMouse = getMouse({
+          interactiveElement: rendererRef.current,
+          zoom: uiState.zoom,
+          scroll: uiState.scroll,
+          lastMouse: uiState.mouse,
+          mouseEvent: e,
+          rendererSize
+        });
+        uiState.actions.setMouse(nextMouse);
         return;
       }
       if (e.type === 'mouseup' && handlePanMouseUp(e)) {
@@ -347,32 +416,8 @@ export const useInteractionManager = () => {
   const onContextMenu = useCallback(
     (e: SlimMouseEvent) => {
       e.preventDefault();
-
-      const uiState = uiStateApi.getState();
-
-      if (uiState.panSettings.rightClickPan) {
-        return;
-      }
-
-      const itemAtTile = getItemAtTile({
-        tile: uiState.mouse.position.tile,
-        scene
-      });
-
-      if (itemAtTile) {
-        uiState.actions.setContextMenu({
-          type: 'ITEM',
-          item: itemAtTile,
-          tile: uiState.mouse.position.tile
-        });
-      } else {
-        uiState.actions.setContextMenu({
-          type: 'EMPTY',
-          tile: uiState.mouse.position.tile
-        });
-      }
     },
-    [uiStateApi, scene]
+    []
   );
 
   useEffect(() => {

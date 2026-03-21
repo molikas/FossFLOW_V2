@@ -31,8 +31,8 @@ export const Node = memo(({ node, order }: Props) => {
   const description = useMemo(() => {
     if (
       !modelItem ||
-      modelItem.description === undefined ||
-      modelItem.description === MARKDOWN_EMPTY_VALUE
+      !modelItem.description ||
+      modelItem.description.trim() === MARKDOWN_EMPTY_VALUE
     )
       return null;
 
@@ -70,11 +70,24 @@ export const Node = memo(({ node, order }: Props) => {
             >
               <Stack spacing={1}>
                 {modelItem.name && (
-                  <Typography fontWeight={600}>{modelItem.name}</Typography>
+                  <Typography fontWeight={600}>
+                    {modelItem.headerLink ? (
+                      <a
+                        href={modelItem.headerLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: 'inherit', textDecoration: 'underline' }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {modelItem.name}
+                      </a>
+                    ) : (
+                      modelItem.name
+                    )}
+                  </Typography>
                 )}
-                {modelItem.description &&
-                  modelItem.description !== MARKDOWN_EMPTY_VALUE && (
-                    <RichTextEditor value={modelItem.description} readOnly />
+                {description && (
+                    <RichTextEditor value={description} readOnly />
                   )}
               </Stack>
             </ExpandableLabel>

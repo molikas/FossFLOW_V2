@@ -1,8 +1,8 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, forwardRef, useImperativeHandle } from 'react';
 import { ThemeProvider } from '@mui/material/styles';
 import { Box } from '@mui/material';
 import { theme } from 'src/styles/theme';
-import { IsoflowProps } from 'src/types';
+import { IsoflowProps, IsoflowRef } from 'src/types';
 import { setWindowCursor, modelFromModelStore } from 'src/utils';
 import { useModelStore, ModelProvider } from 'src/stores/modelStore';
 import { SceneProvider } from 'src/stores/sceneStore';
@@ -15,7 +15,7 @@ import { INITIAL_DATA, MAIN_MENU_OPTIONS } from 'src/config';
 import { useInitialDataManager } from 'src/hooks/useInitialDataManager';
 import enUS from 'src/i18n/en-US';
 
-const App = ({
+const App = forwardRef<IsoflowRef, IsoflowProps>(({
   initialData,
   mainMenuOptions = MAIN_MENU_OPTIONS,
   width = '100%',
@@ -26,7 +26,7 @@ const App = ({
   renderer,
   locale = enUS,
   iconPackManager,
-}: IsoflowProps) => {
+}, ref) => {
   const uiStateActions = useUiStateStore((state) => {
     return state.actions;
   });
@@ -37,9 +37,20 @@ const App = ({
 
   const { load } = initialDataManager;
 
+  useImperativeHandle(ref, () => ({ load }), [load]);
+
+  const mergedInitialData = useMemo(() => {
+    // Strip undefined values so they don't override INITIAL_DATA defaults
+    // (e.g. saved data missing 'title' should fall back to INITIAL_DATA.title, not override with undefined)
+    const defined = Object.fromEntries(
+      Object.entries(initialData || {}).filter(([, v]) => v !== undefined)
+    ) as Partial<typeof INITIAL_DATA>;
+    return { ...INITIAL_DATA, ...defined };
+  }, [initialData]);
+
   useEffect(() => {
-    load({ ...INITIAL_DATA, ...initialData });
-  }, [initialData, load]);
+    load(mergedInitialData);
+  }, [mergedInitialData, load]);
 
   useEffect(() => {
     uiStateActions.setEditorMode(editorMode);
@@ -52,11 +63,15 @@ const App = ({
     };
   }, []);
 
-  useEffect(() => {
-    if (!initialDataManager.isReady || !onModelUpdated) return;
+  // Use a ref so onModelUpdated changes never re-trigger this effect (prevents infinite re-render loop)
+  const onModelUpdatedRef = useRef(onModelUpdated);
+  useEffect(() => { onModelUpdatedRef.current = onModelUpdated; });
 
-    onModelUpdated(model);
-  }, [model, initialDataManager.isReady, onModelUpdated]);
+  useEffect(() => {
+    if (!initialDataManager.isReady || !onModelUpdatedRef.current) return;
+
+    onModelUpdatedRef.current(model);
+  }, [model, initialDataManager.isReady]);
 
   useEffect(() => {
     uiStateActions.setEnableDebugTools(enableDebugTools);
@@ -91,23 +106,23 @@ const App = ({
       </Box>
     </>
   );
-};
+});
 
-export const Isoflow = (props: IsoflowProps) => {
+export const Isoflow = forwardRef<IsoflowRef, IsoflowProps>((props, ref) => {
   return (
     <ThemeProvider theme={theme}>
       <LocaleProvider locale={props.locale || enUS}>
         <ModelProvider>
           <SceneProvider>
             <UiStateProvider>
-              <App {...props} />
+              <App {...props} ref={ref} />
             </UiStateProvider>
           </SceneProvider>
         </ModelProvider>
       </LocaleProvider>
     </ThemeProvider>
   );
-};
+});
 
 const useIsoflow = () => {
   const rendererEl = useUiStateStore((state) => {

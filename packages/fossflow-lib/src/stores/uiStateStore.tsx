@@ -26,6 +26,7 @@ const initialState = () => {
       isMainMenuOpen: false,
       dialog: null,
       rendererEl: null,
+      rendererSize: { width: 0, height: 0 },
       contextMenu: null,
       mouse: {
         position: { screen: CoordsUtils.zero(), tile: CoordsUtils.zero() },
@@ -41,6 +42,7 @@ const initialState = () => {
       connectorInteractionMode: 'click', // Default to click mode
       expandLabels: false, // Default to collapsed labels
       iconPackManager: null, // Will be set by Isoflow if provided
+      notification: null,
 
       actions: {
         setView: (view) => {
@@ -104,6 +106,9 @@ const initialState = () => {
         setRendererEl: (el: HTMLDivElement) => {
           set({ rendererEl: el });
         },
+        setRendererSize: (size) => {
+          set({ rendererSize: size });
+        },
         setHotkeyProfile: (hotkeyProfile: HotkeyProfile) => {
           set({ hotkeyProfile });
         },
@@ -124,6 +129,9 @@ const initialState = () => {
         },
         setIconPackManager: (iconPackManager) => {
           set({ iconPackManager });
+        },
+        setNotification: (notification) => {
+          set({ notification });
         }
       }
     };

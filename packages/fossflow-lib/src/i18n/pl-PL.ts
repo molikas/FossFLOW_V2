@@ -44,9 +44,15 @@ const locale: LocaleProps = {
     panCanvasAction: "Przesuwanie obszaru roboczego",
     panCanvasShortcut: "Kliknij lewym przyciskiem myszy + przeciągnij",
     panCanvasDescription: "Przesuwaj obszar roboczy w trybie przesuwania",
-    contextMenuAction: "Menu kontekstowe",
-    contextMenuShortcut: "Prawy przycisk myszy",
-    contextMenuDescription: "Otwórz menu kontekstowe dla elementów lub pustej przestrzeni",
+    togglePanToolAction: "Toggle Pan Tool",
+    togglePanToolShortcut: "Right-click",
+    togglePanToolDescription: "Toggle pan mode on/off; left-click to return to select mode",
+    lassoSelectAction: "Lasso Select",
+    lassoSelectShortcut: "Left-click + Drag (empty area)",
+    lassoSelectDescription: "Draw a rectangular selection box to select multiple items",
+    deselectAction: "Deselect",
+    deselectShortcut: "Left-click (empty area)",
+    deselectDescription: "Deselect the current selection and return to select mode",
     // Mouse interactions
     selectToolAction: "Wybierz narzędzie",
     selectToolShortcut: "Kliknij przycisk Wybierz",
@@ -65,7 +71,14 @@ const locale: LocaleProps = {
     createConnectorDescription: "Przełącz do trybu połączenia",
     addTextAction: "Dodaj Tekst",
     addTextShortcut: "Kliknij przycisk Tekst",
-    addTextDescription: "Utwórz nowe pole tekstowe"
+    addTextDescription: "Utwórz nowe pole tekstowe",
+    deleteSelectedAction: "Delete Selected",
+    deleteSelectedShortcut: "Delete (Backspace on Mac)",
+    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo",
+    copyAction: "Copy",
+    copyDescription: "Copy selected item(s) to clipboard",
+    pasteAction: "Paste",
+    pasteDescription: "Paste clipboard items at mouse position; offsets to avoid overlap"
   },
   connectorHintTooltip: {
     tipCreatingConnectors: "Wskazówka: Tworzenie połączeń",
@@ -135,7 +148,12 @@ const locale: LocaleProps = {
       toolRectangle: "Prostokąt",
       toolConnector: "Połączenia",
       toolText: "Tekst",
-      note: "Uwaga: Skróty klawiszowe działają, gdy nie wpisujesz tekstu w polach tekstowych."
+      note: "Uwaga: Skróty klawiszowe działają, gdy nie wpisujesz tekstu w polach tekstowych.",
+      fixedShortcutsTitle: "Fixed Shortcuts (Always Active)",
+      fixedCopy: "Copy",
+      fixedPaste: "Paste",
+      fixedUndo: "Undo",
+      fixedRedo: "Redo"
     },
     pan: {
       title: "Ustawienia przesuwania",
@@ -187,6 +205,11 @@ const locale: LocaleProps = {
     configPath2: "w lewym górnym rogu, aby uzyskać dostęp do ustawień.",
     canDisable: "Jeśli chcesz, możesz wyłączyć tę funkcję..",
     signature: "-Stan"
+  },
+  viewTabs: {
+    addPage: "Add page",
+    deletePage: "Delete page",
+    renameDiagram: "Rename diagram"
   }
 };
 

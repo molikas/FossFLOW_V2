@@ -42,18 +42,24 @@ const locale: LocaleProps = {
     zoomOutShortcut: "Mouse Wheel Down",
     zoomOutDescription: "Zoom out from the canvas",
     panCanvasAction: "Pan Canvas",
-    panCanvasShortcut: "Left-click + Drag",
+    panCanvasShortcut: "Right-click + Drag",
     panCanvasDescription: "Pan the canvas when in Pan mode",
-    contextMenuAction: "Context Menu",
-    contextMenuShortcut: "Right-click",
-    contextMenuDescription: "Open context menu for items or empty space",
+    togglePanToolAction: "Toggle Pan Tool",
+    togglePanToolShortcut: "Right-click",
+    togglePanToolDescription: "Toggle pan mode on/off; left-click to return to select mode",
+    lassoSelectAction: "Lasso Select",
+    lassoSelectShortcut: "Left-click + Drag (empty area)",
+    lassoSelectDescription: "Draw a rectangular selection box to select multiple items",
+    deselectAction: "Deselect",
+    deselectShortcut: "Left-click (empty area)",
+    deselectDescription: "Deselect the current selection and return to select mode",
     // Mouse interactions
     selectToolAction: "Select Tool",
     selectToolShortcut: "Click Select button",
     selectToolDescription: "Switch to selection mode",
     panToolAction: "Pan Tool",
-    panToolShortcut: "Click Pan button",
-    panToolDescription: "Switch to pan mode for moving canvas",
+    panToolShortcut: "Click Pan button or Right-click",
+    panToolDescription: "Switch to pan mode for moving the canvas; right-click toggles on/off",
     addItemAction: "Add Item",
     addItemShortcut: "Click Add item button",
     addItemDescription: "Open icon picker to add new items",
@@ -65,7 +71,14 @@ const locale: LocaleProps = {
     createConnectorDescription: "Switch to connector mode",
     addTextAction: "Add Text",
     addTextShortcut: "Click Text button",
-    addTextDescription: "Create a new text box"
+    addTextDescription: "Create a new text box",
+    deleteSelectedAction: "Delete Selected",
+    deleteSelectedShortcut: "Delete (Backspace on Mac)",
+    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo",
+    copyAction: "Copy",
+    copyDescription: "Copy selected item(s) to clipboard",
+    pasteAction: "Paste",
+    pasteDescription: "Paste clipboard items at mouse position; offsets to avoid overlap"
   },
   connectorHintTooltip: {
     tipCreatingConnectors: "Tip: Creating Connectors",
@@ -135,7 +148,12 @@ const locale: LocaleProps = {
       toolRectangle: "Rectangle",
       toolConnector: "Connector",
       toolText: "Text",
-      note: "Note: Hotkeys work when not typing in text fields"
+      note: "Note: Hotkeys work when not typing in text fields",
+      fixedShortcutsTitle: "Fixed Shortcuts (Always Active)",
+      fixedCopy: "Copy",
+      fixedPaste: "Paste",
+      fixedUndo: "Undo",
+      fixedRedo: "Redo"
     },
     pan: {
       title: "Pan Settings",
@@ -187,6 +205,11 @@ const locale: LocaleProps = {
     configPath2: "in the top left to access Configuration.",
     canDisable: "You can disable this behaviour if you wish.",
     signature: "-Stan"
+  },
+  viewTabs: {
+    addPage: "Add page",
+    deletePage: "Delete page",
+    renameDiagram: "Rename diagram"
   }
 };
 

@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { storageManager, DiagramInfo } from '../services/storageService';
+import { DiagramInfo, StorageService } from '../services/storageService';
 import './DiagramManager.css';
 
 interface Props {
+  storage: StorageService;
+  isServerStorage: boolean;
   onLoadDiagram: (id: string, data: any) => void;
   currentDiagramId?: string;
   currentDiagramData?: any;
@@ -10,6 +12,8 @@ interface Props {
 }
 
 export const DiagramManager: React.FC<Props> = ({
+  storage,
+  isServerStorage,
   onLoadDiagram,
   currentDiagramId,
   currentDiagramData,
@@ -18,7 +22,6 @@ export const DiagramManager: React.FC<Props> = ({
   const [diagrams, setDiagrams] = useState<DiagramInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isServerStorage, setIsServerStorage] = useState(false);
   const [saveName, setSaveName] = useState('');
   const [showSaveDialog, setShowSaveDialog] = useState(false);
 
@@ -31,17 +34,11 @@ export const DiagramManager: React.FC<Props> = ({
       setLoading(true);
       setError(null);
 
-      console.log('DiagramManager: Initializing storage...');
-      // Initialize storage if not already done
-      await storageManager.initialize();
-      const isServer = storageManager.isServerStorage();
-      setIsServerStorage(isServer);
       console.log(
-        `DiagramManager: Using ${isServer ? 'server' : 'session'} storage`
+        `DiagramManager: Using ${isServerStorage ? 'server' : 'session'} storage`
       );
 
       // Load diagram list
-      const storage = storageManager.getStorage();
       console.log('DiagramManager: Loading diagram list...');
       const list = await storage.listDiagrams();
       console.log(`DiagramManager: Loaded ${list.length} diagrams`);
@@ -62,17 +59,10 @@ export const DiagramManager: React.FC<Props> = ({
       setError(null);
       console.log(`DiagramManager: Loading diagram ${id}...`);
 
-      const storage = storageManager.getStorage();
       const data = await storage.loadDiagram(id);
 
       console.log(`DiagramManager: Successfully loaded diagram ${id}`);
       onLoadDiagram(id, data);
-
-      // Small delay to ensure parent component finishes state updates
-      await new Promise((resolve) => {
-        return setTimeout(resolve, 100);
-      });
-
       onClose();
     } catch (err) {
       console.error(`DiagramManager: Failed to load diagram ${id}:`, err);
@@ -88,7 +78,6 @@ export const DiagramManager: React.FC<Props> = ({
     }
 
     try {
-      const storage = storageManager.getStorage();
       await storage.deleteDiagram(id);
       await loadDiagrams(); // Refresh list
     } catch (err) {
@@ -130,8 +119,6 @@ export const DiagramManager: React.FC<Props> = ({
     }
 
     try {
-      const storage = storageManager.getStorage();
-
       // Check if a diagram with this name already exists (excluding current diagram)
       const existingDiagram = diagrams.find((d) => {
         return d.name === saveName.trim() && d.id !== currentDiagramId;
@@ -217,7 +204,7 @@ export const DiagramManager: React.FC<Props> = ({
           <button
             className="action-button primary"
             onClick={() => {
-              setSaveName(currentDiagramData?.name || 'Untitled Diagram');
+              setSaveName(currentDiagramData?.title || currentDiagramData?.name || '');
               setShowSaveDialog(true);
             }}
           >

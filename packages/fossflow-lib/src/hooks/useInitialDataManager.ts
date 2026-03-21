@@ -1,4 +1,4 @@
-import { useCallback, useState, useRef } from 'react';
+import { useCallback, useState } from 'react';
 import { InitialData, IconCollectionState } from 'src/types';
 import { INITIAL_DATA, INITIAL_SCENE_STATE } from 'src/config';
 import {
@@ -11,145 +11,133 @@ import {
 import * as reducers from 'src/stores/reducers';
 import { useModelStore } from 'src/stores/modelStore';
 import { useView } from 'src/hooks/useView';
-import { useUiStateStore } from 'src/stores/uiStateStore';
+import { useUiStateStore, useUiStateStoreApi } from 'src/stores/uiStateStore';
 import { modelSchema } from 'src/schemas/model';
 
 export const useInitialDataManager = () => {
   const [isReady, setIsReady] = useState(false);
-  const prevInitialData = useRef<InitialData | undefined>(undefined);
-  const model = useModelStore((state) => {
-    return state;
-  });
-  const uiStateActions = useUiStateStore((state) => {
-    return state.actions;
-  });
-  const rendererEl = useUiStateStore((state) => {
-    return state.rendererEl;
-  });
-  const editorMode = useUiStateStore((state) => {
-    return state.editorMode;
-  });
+  const modelActions = useModelStore((state) => state.actions);
+  const modelIcons = useModelStore((state) => state.icons);
+  const modelColors = useModelStore((state) => state.colors);
+  const uiStateActions = useUiStateStore((state) => state.actions);
   const { changeView } = useView();
+  const uiStateStoreApi = useUiStateStoreApi();
 
   const load = useCallback(
     (_initialData: InitialData) => {
-      if (!_initialData || prevInitialData.current === _initialData) return;
+      if (!_initialData) return;
 
-      // Deep comparison to prevent unnecessary reloads when data hasn't actually changed
-      // Skip this check for NON_INTERACTIVE mode (used by export) to ensure proper initialization
-      if (prevInitialData.current && editorMode !== 'NON_INTERACTIVE') {
-        const prevConnectors = JSON.stringify(prevInitialData.current.views?.[0]?.connectors || []);
-        const newConnectors = JSON.stringify(_initialData.views?.[0]?.connectors || []);
-        const prevItems = JSON.stringify(prevInitialData.current.items || []);
-        const newItems = JSON.stringify(_initialData.items || []);
-        const prevIcons = JSON.stringify(prevInitialData.current.icons || []);
-        const newIcons = JSON.stringify(_initialData.icons || []);
-        const prevColors = JSON.stringify(prevInitialData.current.colors || []);
-        const newColors = JSON.stringify(_initialData.colors || []);
-
-        if (prevConnectors === newConnectors && prevItems === newItems &&
-            prevIcons === newIcons && prevColors === newColors) {
-          // Data hasn't actually changed, skip reload
-          return;
-        }
-      }
-
+      console.log('[useInitialDataManager] loading:', _initialData.title, 'views:', _initialData.views?.length);
       setIsReady(false);
 
-      const validationResult = modelSchema.safeParse(_initialData);
+      try {
+        // Clean up invalid connector references before validation
+        const initialData = { ..._initialData };
+        initialData.views = initialData.views.map(view => {
+          if (!view.connectors) return view;
 
-      if (!validationResult.success) {
-        // TODO: let's get better at reporting error messages here (starting with how we present them to users)
-        // - not in console but in a modal
-        console.log(validationResult.error.errors);
-        window.alert('There is an error in your model.');
-        return;
-      }
+          const validConnectors = view.connectors.filter(connector => {
+            const hasValidAnchors = connector.anchors.every(anchor => {
+              if (anchor.ref.item) {
+                return view.items.some(item => item.id === anchor.ref.item);
+              }
+              return true;
+            });
 
-      // Clean up invalid connector references before loading
-      const initialData = { ..._initialData };
-      initialData.views = initialData.views.map(view => {
-        if (!view.connectors) return view;
-
-        const validConnectors = view.connectors.filter(connector => {
-          // Check if all anchors reference existing items
-          const hasValidAnchors = connector.anchors.every(anchor => {
-            if (anchor.ref.item) {
-              // Check if the referenced item exists in the view
-              return view.items.some(item => item.id === anchor.ref.item);
+            if (!hasValidAnchors) {
+              console.warn(`Removing connector ${connector.id} due to invalid item references`);
             }
-            return true; // Allow anchors that reference other anchors
+
+            return hasValidAnchors;
           });
 
-          if (!hasValidAnchors) {
-            console.warn(`Removing connector ${connector.id} due to invalid item references`);
-          }
-
-          return hasValidAnchors;
+          return { ...view, connectors: validConnectors };
         });
 
-        return { ...view, connectors: validConnectors };
-      });
+        // Validate
+        const validationResult = modelSchema.safeParse(initialData);
 
-      if (initialData.views.length === 0) {
-        const updates = reducers.view({
-          action: 'CREATE_VIEW',
-          payload: {},
-          ctx: {
-            state: { model: initialData, scene: INITIAL_SCENE_STATE },
-            viewId: generateId()
-          }
-        });
+        if (!validationResult.success) {
+          console.error('[useInitialDataManager] Model validation failed:', validationResult.error.errors);
+          setIsReady(false);
+          return;
+        }
 
-        Object.assign(initialData, updates.model);
-      }
+        if (initialData.views.length === 0) {
+          const updates = reducers.view({
+            action: 'CREATE_VIEW',
+            payload: {},
+            ctx: {
+              state: { model: initialData, scene: INITIAL_SCENE_STATE },
+              viewId: generateId()
+            }
+          });
 
-      prevInitialData.current = initialData;
-      model.actions.set(initialData, true);
+          Object.assign(initialData, updates.model);
+        }
 
-      const view = getItemByIdOrThrow(
-        initialData.views,
-        initialData.view ?? initialData.views[0].id
-      );
+        modelActions.set(initialData, true);
+        modelActions.clearHistory();
 
-      changeView(view.value.id, initialData);
-
-      if (initialData.fitToView) {
-        const rendererSize = rendererEl?.getBoundingClientRect();
-
-        const { zoom, scroll } = getFitToViewParams(view.value, {
-          width: rendererSize?.width ?? 0,
-          height: rendererSize?.height ?? 0
-        });
-
+        // Reset scroll/zoom for a clean slate on each load
         uiStateActions.setScroll({
-          position: scroll,
+          position: CoordsUtils.zero(),
           offset: CoordsUtils.zero()
         });
+        uiStateActions.setZoom(1);
 
-        uiStateActions.setZoom(zoom);
+        const activeViewId = uiStateStoreApi.getState().view;
+        const targetViewId = initialData.view
+          ?? (activeViewId && initialData.views.some((v) => v.id === activeViewId)
+            ? activeViewId
+            : initialData.views[0].id);
+        const view = getItemByIdOrThrow(initialData.views, targetViewId);
+
+        changeView(view.value.id, initialData);
+
+        if (initialData.fitToView) {
+          const rendererEl = uiStateStoreApi.getState().rendererEl;
+          const rendererSize = rendererEl?.getBoundingClientRect();
+
+          const { zoom, scroll } = getFitToViewParams(view.value, {
+            width: rendererSize?.width ?? 0,
+            height: rendererSize?.height ?? 0
+          });
+
+          uiStateActions.setScroll({
+            position: scroll,
+            offset: CoordsUtils.zero()
+          });
+
+          uiStateActions.setZoom(zoom);
+        }
+
+        const categoriesState: IconCollectionState[] = categoriseIcons(
+          initialData.icons
+        ).map((collection) => {
+          return {
+            id: collection.name,
+            isExpanded: false
+          };
+        });
+
+        uiStateActions.setIconCategoriesState(categoriesState);
+
+        console.log('[useInitialDataManager] load complete, isReady=true');
+        setIsReady(true);
+
+      } catch (err) {
+        console.error('[useInitialDataManager] load threw unexpectedly:', err);
+        setIsReady(false);
       }
-
-      const categoriesState: IconCollectionState[] = categoriseIcons(
-        initialData.icons
-      ).map((collection) => {
-        return {
-          id: collection.name,
-          isExpanded: false
-        };
-      });
-
-      uiStateActions.setIconCategoriesState(categoriesState);
-
-      setIsReady(true);
     },
-    [changeView, model.actions, rendererEl, uiStateActions, editorMode]
+    [changeView, modelActions, uiStateActions, uiStateStoreApi]
   );
 
   const clear = useCallback(() => {
-    load({ ...INITIAL_DATA, icons: model.icons, colors: model.colors });
+    load({ ...INITIAL_DATA, icons: modelIcons, colors: modelColors });
     uiStateActions.resetUiState();
-  }, [load, model.icons, model.colors, uiStateActions]);
+  }, [load, modelIcons, modelColors, uiStateActions]);
 
   return {
     load,

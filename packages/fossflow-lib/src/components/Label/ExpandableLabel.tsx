@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Box } from '@mui/material';
+import { shallow } from 'zustand/shallow';
 import { useResizeObserver } from 'src/hooks/useResizeObserver';
 import { Gradient } from 'src/components/Gradient/Gradient';
 import { ExpandButton } from './ExpandButton';
@@ -17,9 +18,14 @@ export const ExpandableLabel = ({
   onToggleExpand,
   ...rest
 }: Props) => {
-  const forceExpandLabels = useUiStateStore((state) => state.expandLabels);
-  const editorMode = useUiStateStore((state) => state.editorMode);
-  const labelSettings = useUiStateStore((state) => state.labelSettings);
+  const { forceExpandLabels, editorMode, labelSettings } = useUiStateStore(
+    (state) => ({
+      forceExpandLabels: state.expandLabels,
+      editorMode: state.editorMode,
+      labelSettings: state.labelSettings
+    }),
+    shallow
+  );
   const [isExpanded, setIsExpanded] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const { observe, size: contentSize } = useResizeObserver();

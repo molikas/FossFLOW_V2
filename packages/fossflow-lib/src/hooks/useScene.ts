@@ -3,23 +3,29 @@ import { shallow } from 'zustand/shallow';
 import {
   ModelItem,
   ViewItem,
+  View,
   Connector,
   TextBox,
-  Rectangle
+  Rectangle,
+  ItemReference
 } from 'src/types';
+import { PastePayload } from 'src/clipboard/clipboard';
 import { useUiStateStore } from 'src/stores/uiStateStore';
 import { useModelStore, useModelStoreApi } from 'src/stores/modelStore';
 import { useSceneStore, useSceneStoreApi } from 'src/stores/sceneStore';
 import * as reducers from 'src/stores/reducers';
 import type { State } from 'src/stores/reducers/types';
-import { getItemByIdOrThrow } from 'src/utils';
+import { generateId, getItemByIdOrThrow } from 'src/utils';
+import { useView } from 'src/hooks/useView';
 import {
   CONNECTOR_DEFAULTS,
   RECTANGLE_DEFAULTS,
-  TEXTBOX_DEFAULTS
+  TEXTBOX_DEFAULTS,
+  VIEW_DEFAULTS
 } from 'src/config';
 
 export const useScene = () => {
+  const { changeView } = useView();
   const { views, colors, icons, items, version, title, description } =
     useModelStore(
       (state) => ({
@@ -422,6 +428,122 @@ export const useScene = () => {
     [createModelItem, createViewItem, saveToHistoryBeforeChange]
   );
 
+  const switchView = useCallback(
+    (viewId: string) => {
+      const model = modelStoreApi.getState();
+      changeView(viewId, {
+        version: model.version,
+        title: model.title,
+        description: model.description,
+        colors: model.colors,
+        icons: model.icons,
+        items: model.items,
+        views: model.views
+      });
+    },
+    [modelStoreApi, changeView]
+  );
+
+  const createView = useCallback(
+    (newViewPartial?: Partial<View>) => {
+      const newViewId = generateId();
+      const newState = reducers.view({
+        action: 'CREATE_VIEW',
+        payload: { ...VIEW_DEFAULTS, ...newViewPartial, name: (newViewPartial?.name) ?? `Page ${views.length + 1}` },
+        ctx: { viewId: newViewId, state: getState() }
+      });
+      setState(newState);
+
+      // Switch to the newly created view
+      const model = newState.model;
+      changeView(newViewId, model);
+    },
+    [getState, setState, views, changeView]
+  );
+
+  const deleteView = useCallback(
+    (viewId: string) => {
+      if (views.length <= 1) return; // Cannot delete the last view
+
+      saveToHistoryBeforeChange();
+      const newState = reducers.view({
+        action: 'DELETE_VIEW',
+        payload: undefined,
+        ctx: { viewId, state: getState() }
+      });
+      setState(newState);
+
+      // If we deleted the current view, switch to another one
+      if (viewId === currentViewId) {
+        const remainingViews = newState.model.views;
+        if (remainingViews.length > 0) {
+          changeView(remainingViews[0].id, newState.model);
+        }
+      }
+    },
+    [views, currentViewId, getState, setState, saveToHistoryBeforeChange, changeView]
+  );
+
+  const updateView = useCallback(
+    (viewId: string, updates: Partial<Pick<View, 'name'>>) => {
+      saveToHistoryBeforeChange();
+      const newState = reducers.view({
+        action: 'UPDATE_VIEW',
+        payload: updates,
+        ctx: { viewId, state: getState() }
+      });
+      setState(newState);
+    },
+    [getState, setState, saveToHistoryBeforeChange]
+  );
+
+  const deleteSelectedItems = useCallback(
+    (selectedItems: ItemReference[]) => {
+      if (!currentViewId || selectedItems.length === 0) return;
+
+      transaction(() => {
+        // Delete nodes first — each cascades to its connected connectors
+        selectedItems
+          .filter((ref) => ref.type === 'ITEM')
+          .forEach((ref) => deleteViewItem(ref.id));
+
+        // After node cascades, check which connectors/textboxes/rectangles still exist
+        const liveView = getState().model.views.find((v) => v.id === currentViewId);
+        const existingConnectors = new Set((liveView?.connectors ?? []).map((c) => c.id));
+        const existingTextBoxes = new Set((liveView?.textBoxes ?? []).map((t) => t.id));
+        const existingRectangles = new Set((liveView?.rectangles ?? []).map((r) => r.id));
+
+        selectedItems.forEach((ref) => {
+          if (ref.type === 'CONNECTOR' && existingConnectors.has(ref.id)) {
+            deleteConnector(ref.id);
+          } else if (ref.type === 'TEXTBOX' && existingTextBoxes.has(ref.id)) {
+            deleteTextBox(ref.id);
+          } else if (ref.type === 'RECTANGLE' && existingRectangles.has(ref.id)) {
+            deleteRectangle(ref.id);
+          }
+        });
+      });
+    },
+    [currentViewId, transaction, deleteViewItem, deleteConnector, deleteTextBox, deleteRectangle, getState]
+  );
+
+  const pasteItems = useCallback(
+    (payload: PastePayload) => {
+      if (!currentViewId) return;
+
+      transaction(() => {
+        payload.items.forEach(({ modelItem, viewItem }) => {
+          createModelItem(modelItem);
+          createViewItem(viewItem);
+        });
+        payload.connectors.forEach((c) => createConnector(c));
+        payload.rectangles.forEach((r) => createRectangle(r));
+        payload.textBoxes.forEach((tb) => createTextBox(tb));
+      });
+    },
+    [currentViewId, transaction, createModelItem, createViewItem, createConnector, createRectangle, createTextBox]
+  );
+
   return {
     items: itemsList,
     connectors: connectorsList,
@@ -444,7 +566,13 @@ export const useScene = () => {
     createRectangle,
     updateRectangle,
     deleteRectangle,
+    deleteSelectedItems,
+    pasteItems,
     transaction,
-    placeIcon
+    placeIcon,
+    switchView,
+    createView,
+    deleteView,
+    updateView
   };
 };

@@ -44,9 +44,15 @@ const locale: LocaleProps = {
     panCanvasAction: "Sposta la tela",
     panCanvasShortcut: "Clic sinistro + trascina",
     panCanvasDescription: "Muovi la tela in modalità panoramica",
-    contextMenuAction: "Menu contestuale",
-    contextMenuShortcut: "Tasto destro",
-    contextMenuDescription: "Apri il menu contestuale per elementi o spazio vuoto",
+    togglePanToolAction: "Toggle Pan Tool",
+    togglePanToolShortcut: "Right-click",
+    togglePanToolDescription: "Toggle pan mode on/off; left-click to return to select mode",
+    lassoSelectAction: "Lasso Select",
+    lassoSelectShortcut: "Left-click + Drag (empty area)",
+    lassoSelectDescription: "Draw a rectangular selection box to select multiple items",
+    deselectAction: "Deselect",
+    deselectShortcut: "Left-click (empty area)",
+    deselectDescription: "Deselect the current selection and return to select mode",
     // Mouse interactions
     selectToolAction: "Strumento Selezione",
     selectToolShortcut: "Clicca il pulsante Selezione",
@@ -65,7 +71,14 @@ const locale: LocaleProps = {
     createConnectorDescription: "Passa alla modalità connettore",
     addTextAction: "Aggiungi testo",
     addTextShortcut: "Clicca il pulsante Testo",
-    addTextDescription: "Crea una nuova casella di testo"
+    addTextDescription: "Crea una nuova casella di testo",
+    deleteSelectedAction: "Delete Selected",
+    deleteSelectedShortcut: "Delete (Backspace on Mac)",
+    deleteSelectedDescription: "Delete the selected item or all items in a lasso selection; supports undo/redo",
+    copyAction: "Copy",
+    copyDescription: "Copy selected item(s) to clipboard",
+    pasteAction: "Paste",
+    pasteDescription: "Paste clipboard items at mouse position; offsets to avoid overlap"
   },
   connectorHintTooltip: {
     tipCreatingConnectors: "Suggerimento: Creazione connettori",
@@ -135,7 +148,12 @@ const locale: LocaleProps = {
       toolRectangle: "Rettangolo",
       toolConnector: "Connettore",
       toolText: "Testo",
-      note: "Nota: Le scorciatoie funzionano quando non stai digitando nei campi di testo"
+      note: "Nota: Le scorciatoie funzionano quando non stai digitando nei campi di testo",
+      fixedShortcutsTitle: "Fixed Shortcuts (Always Active)",
+      fixedCopy: "Copy",
+      fixedPaste: "Paste",
+      fixedUndo: "Undo",
+      fixedRedo: "Redo"
     },
     pan: {
       title: "Impostazioni Panoramica",
@@ -187,6 +205,11 @@ const locale: LocaleProps = {
     configPath2: "in alto a sinistra per accedere alla Configurazione.",
     canDisable: "Puoi disattivare questo comportamento se lo desideri.",
     signature: "-Stan"
+  },
+  viewTabs: {
+    addPage: "Add page",
+    deletePage: "Delete page",
+    renameDiagram: "Rename diagram"
   }
 };
 

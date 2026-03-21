@@ -19,6 +19,7 @@ import {
 import { Close as CloseIcon } from '@mui/icons-material';
 import { useUiStateStore } from 'src/stores/uiStateStore';
 import { DialogTypeEnum } from 'src/types/ui';
+import { FIXED_SHORTCUTS } from 'src/config/shortcuts';
 import { useTranslation } from 'src/stores/localeStore';
 
 interface ShortcutItem {
@@ -46,22 +47,22 @@ export const HelpDialog = () => {
   const keyboardShortcuts = [
     {
       action: t('undoAction'),
-      shortcut: 'Ctrl+Z',
+      shortcut: FIXED_SHORTCUTS.undo,
       description: t('undoDescription')
     },
     {
       action: t('redoAction'),
-      shortcut: 'Ctrl+Y',
+      shortcut: FIXED_SHORTCUTS.redo,
       description: t('redoDescription')
     },
     {
       action: t('redoAltAction'),
-      shortcut: 'Ctrl+Shift+Z',
+      shortcut: FIXED_SHORTCUTS.redoAlt,
       description: t('redoAltDescription')
     },
     {
       action: t('helpAction'),
-      shortcut: 'F1',
+      shortcut: FIXED_SHORTCUTS.help,
       description: t('helpDescription')
     },
     {
@@ -80,9 +81,34 @@ export const HelpDialog = () => {
       description: t('panCanvasDescription')
     },
     {
-      action: t('contextMenuAction'),
-      shortcut: t('contextMenuShortcut'),
-      description: t('contextMenuDescription')
+      action: t('togglePanToolAction'),
+      shortcut: t('togglePanToolShortcut'),
+      description: t('togglePanToolDescription')
+    },
+    {
+      action: t('lassoSelectAction'),
+      shortcut: t('lassoSelectShortcut'),
+      description: t('lassoSelectDescription')
+    },
+    {
+      action: t('deselectAction'),
+      shortcut: t('deselectShortcut'),
+      description: t('deselectDescription')
+    },
+    {
+      action: t('deleteSelectedAction'),
+      shortcut: t('deleteSelectedShortcut'),
+      description: t('deleteSelectedDescription')
+    },
+    {
+      action: t('copyAction'),
+      shortcut: FIXED_SHORTCUTS.copy,
+      description: t('copyDescription')
+    },
+    {
+      action: t('pasteAction'),
+      shortcut: FIXED_SHORTCUTS.paste,
+      description: t('pasteDescription')
     }
   ];
 
