@@ -528,19 +528,19 @@ Touch events are synthesized: `touchstart` → mousedown (button:0), `touchmove`
 | Test File | Status | Reason |
 |---|---|---|
 | `toolMenu.propagation.test.tsx` — A tests | VALID | Tests actual DOM stopPropagation |
-| `toolMenu.propagation.test.tsx` — B/C tests | SHALLOW | Tests inline replicas, not real Lasso module |
+| `toolMenu.propagation.test.tsx` — B/C tests | VALID *(updated 2026-03-20)* | Now imports real `Lasso.ts` module — inline replicas replaced |
 | `interactionManager.depStability.test.tsx` | VALID | Source text analysis; would catch dep array regression |
 | `useScene.listShape.test.tsx` | VALID | Tests real contract with mocked stores |
 | `useScene.referenceStability.test.tsx` | VALID | Memo stability is a real performance contract |
 | `viewOps.integration.test.tsx` | VALID | Tests real createView/updateView/deleteView reducers |
-| `uiOverlay.editorModes.test.ts` | SHALLOW | Tests local constant, not production EDITOR_MODE_MAPPING |
+| `uiOverlay.editorModes.test.ts` | SEMI-VALID | Tests local constant manually verified against production; importing UiOverlay in Jest not feasible (MUI createTheme at module load time pulls in full theme chain). To make VALID: extract EDITOR_MODE_MAPPING to a standalone config file with no MUI deps. |
 | `grid.backgroundFormula.test.ts` | VALID (fragile) | Tests formula replica; would need update if Grid.tsx changes |
 | `useRAFThrottle.cleanup.test.ts` | VALID | Tests real module; thorough RAF mock |
 | `useResizeObserver.lifecycle.test.ts` | VALID | Thorough lifecycle tests |
 | `keyboard.dispatch.test.tsx` | SHALLOW | Tests hand-written replica; placeholder addEventListener test |
 | `clipboard/__tests__/clipboard.test.ts` | SHALLOW | Tests only trivial getters/setters; does not test handleCopy/handlePaste |
 | `hooks/__tests__/useHistory.test.tsx` | VALID | Tests real hook with mocked store actions |
-| `stores/reducers/__tests__/connector.test.ts` | STALE | Uses old `{ anchors: {from, to} }` object format; real schema uses array |
+| `stores/reducers/__tests__/connector.test.ts` | VALID *(rewritten 2026-03-20)* | Fully rewritten with correct `ConnectorAnchor[]` array format and correct `Scene` shape |
 | `stores/reducers/__tests__/modelItem.test.ts` | VALID | Uses real fixture and reducer |
 | `stores/reducers/__tests__/viewItem.test.ts` — deleteViewItem | VALID | Cascade logic well tested |
 | `stores/reducers/__tests__/viewItem.test.ts` — updateViewItem | SHALLOW | Mock returns state unchanged; connector update path never tested |
@@ -550,7 +550,17 @@ Touch events are synthesized: `touchstart` → mousedown (button:0), `touchmove`
 | `DebugUtils` snapshot tests | SHALLOW | Snapshot tests break on any cosmetic change |
 | `connector.renderIsolation.test.tsx` | VALID (likely) | Render isolation is a real performance contract |
 
-**Total test count as of 2026-03-20**: 402 tests across 44 suites (per README).
+**Total test count as of 2026-03-20**: 449 tests across 48 suites.
+
+**New/updated suites (2026-03-20):**
+| File | Tests | Classification |
+|---|---|---|
+| `Lasso.modes.test.ts` | 14 | VALID — real Lasso module |
+| `Cursor.modes.test.ts` | 12 | VALID — real Cursor module |
+| `shortcuts.test.ts` | 7 | VALID — real constants |
+| `settings.defaults.test.ts` | 11 | VALID — real config |
+| `toolMenu.propagation.test.tsx` B/C | replaced | VALID — real Lasso.ts (was inline replica) |
+| `stores/reducers/__tests__/connector.test.ts` | rewritten | VALID — real array format (was STALE) |
 
 ---
 

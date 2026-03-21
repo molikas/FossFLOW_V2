@@ -29,8 +29,14 @@ See original project: FossFLOW for details more details
 - **"Add Node" context menu appearing on mode transitions:** Switching from Pan → Select, or exiting pan via left-click, incorrectly triggered the empty-canvas context menu. Fixed by adding `mousedownHandled?: boolean` to `CursorMode` — the context menu now only opens when `Cursor.mousedown` explicitly processed the initiating click
 
 #### Tests
-- **Toolbar propagation regression suite** (`toolMenu.propagation.test.tsx`, +8 tests): covers ToolMenu mousedown stopPropagation, `Lasso.mousedown` isRendererInteraction guard, and `Lasso.mouseup` mouse.mousedown guard
-- Test count: 394 → 402, 44 suites, all passing
+- **Toolbar propagation regression suite** (`toolMenu.propagation.test.tsx`): B/C tests upgraded from inline replicas to real `Lasso.ts` module imports — regressions in the actual file now caught
+- **Lasso mode suite** (`Lasso.modes.test.ts`, +14 tests): full contract coverage of mousedown/mouseup/mousemove including all guards
+- **Cursor mode suite** (`Cursor.modes.test.ts`, +12 tests): full contract coverage including `mousedownHandled` flag, context menu gate, and all mode transitions
+- **Connector reducer rewrite** (`connector.test.ts`): replaced stale `{from,to}` anchor format with real `ConnectorAnchor[]` array format; tests now cover the actual API
+- **Shortcuts constants** (`shortcuts.test.ts`, +7 tests): regression guard for all 6 `FIXED_SHORTCUTS` values
+- **Settings defaults** (`settings.defaults.test.ts`, +11 tests): pin default hotkey profile, pan/zoom settings, keyboard pan speed
+- **uiOverlay editor modes** (`uiOverlay.editorModes.test.ts`): clarified as semi-valid with explicit note to verify against production mapping
+- Test count: 402 → 449, 48 suites, all passing
 
 ---
 
