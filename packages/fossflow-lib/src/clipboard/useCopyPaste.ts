@@ -12,6 +12,10 @@ export const useCopyPaste = () => {
   const modelStoreApi = useModelStoreApi();
   const scene = useScene();
 
+  const showNotification = (message: string, severity: 'info' | 'success' | 'warning') => {
+    uiStateApi.getState().actions.setNotification({ message, severity });
+  };
+
   const handleCopy = useCallback(() => {
     const uiState = uiStateApi.getState();
     const model = modelStoreApi.getState();
@@ -88,13 +92,20 @@ export const useCopyPaste = () => {
       return;
     }
 
-    // Centroid of viewItem tiles
-    const tiles = clipboardItems.map((ci) => ci.viewItem.tile);
+    // Centroid across all pasted element positions
+    const allPoints = [
+      ...clipboardItems.map((ci) => ci.viewItem.tile),
+      ...clipboardRectangles.map((r) => ({
+        x: Math.round((r.from.x + r.to.x) / 2),
+        y: Math.round((r.from.y + r.to.y) / 2)
+      })),
+      ...clipboardTextBoxes.map((tb) => tb.tile)
+    ];
     const centroid =
-      tiles.length > 0
+      allPoints.length > 0
         ? {
-            x: Math.round(tiles.reduce((s, t) => s + t.x, 0) / tiles.length),
-            y: Math.round(tiles.reduce((s, t) => s + t.y, 0) / tiles.length)
+            x: Math.round(allPoints.reduce((s, t) => s + t.x, 0) / allPoints.length),
+            y: Math.round(allPoints.reduce((s, t) => s + t.y, 0) / allPoints.length)
           }
         : { x: 0, y: 0 };
 
@@ -105,11 +116,21 @@ export const useCopyPaste = () => {
       textBoxes: clipboardTextBoxes,
       centroid
     });
+
+    const totalCount =
+      clipboardItems.length +
+      clipboardConnectors.length +
+      clipboardRectangles.length +
+      clipboardTextBoxes.length;
+    showNotification(`Copied ${totalCount} item${totalCount !== 1 ? 's' : ''}`, 'info');
   }, [uiStateApi, modelStoreApi, scene]);
 
   const handlePaste = useCallback(() => {
     const clipboard = getClipboard();
-    if (!clipboard) return;
+    if (!clipboard) {
+      showNotification('Nothing to paste', 'warning');
+      return;
+    }
 
     const uiState = uiStateApi.getState();
     const mouseTile = uiState.mouse.position.tile;
@@ -151,13 +172,17 @@ export const useCopyPaste = () => {
       };
     });
 
-    // Remap connector anchors
+    // Remap connector anchors — remap known items, detach anchors pointing at items not in clipboard
     const newConnectors: Connector[] = clipboard.connectors.map((c) => ({
       ...c,
       id: idMap.get(c.id) ?? generateId(),
       anchors: c.anchors.map((anchor) => {
-        if (anchor.ref?.item && idMap.has(anchor.ref.item)) {
-          return { ...anchor, ref: { ...anchor.ref, item: idMap.get(anchor.ref.item)! } };
+        if (anchor.ref?.item) {
+          if (idMap.has(anchor.ref.item)) {
+            return { ...anchor, ref: { ...anchor.ref, item: idMap.get(anchor.ref.item)! } };
+          }
+          // Detach anchor from item that wasn't included in the paste
+          return { ...anchor, ref: { ...anchor.ref, item: undefined } };
         }
         return anchor;
       })
@@ -205,6 +230,10 @@ export const useCopyPaste = () => {
       isDragging: false
     });
     uiState.actions.setItemControls(null);
+
+    const pastedCount =
+      newItems.length + newConnectors.length + newRectangles.length + newTextBoxes.length;
+    showNotification(`Pasted ${pastedCount} item${pastedCount !== 1 ? 's' : ''}`, 'success');
   }, [uiStateApi, scene]);
 
   return { handleCopy, handlePaste };

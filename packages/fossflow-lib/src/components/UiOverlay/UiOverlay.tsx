@@ -24,6 +24,7 @@ import { ConnectorRerouteTooltip } from '../ConnectorRerouteTooltip/ConnectorRer
 import { ImportHintTooltip } from '../ImportHintTooltip/ImportHintTooltip';
 import { LassoHintTooltip } from '../LassoHintTooltip/LassoHintTooltip';
 import { LazyLoadingWelcomeNotification } from '../LazyLoadingWelcomeNotification/LazyLoadingWelcomeNotification';
+import { NotificationSnackbar } from '../NotificationSnackbar/NotificationSnackbar';
 import { CoordsUtils, getTilePosition } from 'src/utils';
 import { ViewTabs } from 'src/components/ViewTabs/ViewTabs';
 
@@ -151,6 +152,7 @@ export const UiOverlay = () => {
         {availableTools.includes('TOOL_MENU') && (
           <Box
             ref={toolMenuRef}
+            onMouseDown={(e) => e.stopPropagation()}
             sx={{
               position: 'absolute',
               transform: 'translateX(-100%)'
@@ -284,11 +286,13 @@ export const UiOverlay = () => {
       {editorMode === EditorModeEnum.EDITABLE && <ConnectorHintTooltip toolMenuRef={toolMenuRef} />}
       {editorMode === EditorModeEnum.EDITABLE && <ConnectorEmptySpaceTooltip />}
       {editorMode === EditorModeEnum.EDITABLE && <ConnectorRerouteTooltip />}
-      {editorMode === EditorModeEnum.EDITABLE && <ImportHintTooltip />}
+      {editorMode === EditorModeEnum.EDITABLE && <ImportHintTooltip toolMenuRef={toolMenuRef} />}
       {editorMode === EditorModeEnum.EDITABLE && <LassoHintTooltip toolMenuRef={toolMenuRef} />}
 
       {/* Show lazy loading welcome notification if icon pack manager is provided */}
       {iconPackManager && <LazyLoadingWelcomeNotification />}
+
+      <NotificationSnackbar />
 
       <SceneLayer>
         {contextMenu && (

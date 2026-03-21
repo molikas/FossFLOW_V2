@@ -16,6 +16,7 @@ import {
 } from '@mui/material';
 import { useUiStateStore } from 'src/stores/uiStateStore';
 import { HOTKEY_PROFILES, HotkeyProfile } from 'src/config/hotkeys';
+import { FIXED_SHORTCUTS } from 'src/config/shortcuts';
 import { useTranslation } from 'src/stores/localeStore';
 
 export const HotkeySettings = () => {
@@ -40,7 +41,7 @@ export const HotkeySettings = () => {
         {t('settings.hotkeys.title')}
       </Typography>
 
-      <FormControl fullWidth sx={{ mb: 3 }}>
+      <FormControl fullWidth sx={{ mb: 1 }}>
         <InputLabel>{t('settings.hotkeys.profile')}</InputLabel>
         <Select
           value={hotkeyProfile}
@@ -52,6 +53,19 @@ export const HotkeySettings = () => {
           <MenuItem value="none">{t('settings.hotkeys.profileNone')}</MenuItem>
         </Select>
       </FormControl>
+
+      {hotkeyProfile === 'smnrct' && (
+        <Typography variant="caption" color="text.secondary" sx={{ mb: 3, display: 'block' }}>
+          Keys S, M, N, R, C, T map to Select, Pan, Add item, Rectangle, Connector, Text —
+          designed for left-hand tool switching while the right hand stays on the mouse.
+        </Typography>
+      )}
+      {hotkeyProfile === 'none' && (
+        <Typography variant="caption" color="text.secondary" sx={{ mb: 3, display: 'block' }}>
+          All tool hotkeys are disabled. Use the toolbar buttons to switch tools.
+        </Typography>
+      )}
+      {hotkeyProfile === 'qwerty' && <Box sx={{ mb: 3 }} />}
 
       {hotkeyProfile !== 'none' && (
         <TableContainer component={Paper}>
@@ -95,10 +109,10 @@ export const HotkeySettings = () => {
           </TableHead>
           <TableBody>
             {[
-              { name: t('settings.hotkeys.fixedCopy'), key: 'Ctrl+C' },
-              { name: t('settings.hotkeys.fixedPaste'), key: 'Ctrl+V' },
-              { name: t('settings.hotkeys.fixedUndo'), key: 'Ctrl+Z' },
-              { name: t('settings.hotkeys.fixedRedo'), key: 'Ctrl+Y / Ctrl+Shift+Z' }
+              { name: t('settings.hotkeys.fixedCopy'), key: FIXED_SHORTCUTS.copy },
+              { name: t('settings.hotkeys.fixedPaste'), key: FIXED_SHORTCUTS.paste },
+              { name: t('settings.hotkeys.fixedUndo'), key: FIXED_SHORTCUTS.undo },
+              { name: t('settings.hotkeys.fixedRedo'), key: `${FIXED_SHORTCUTS.redo} / ${FIXED_SHORTCUTS.redoAlt}` }
             ].map((item) => (
               <TableRow key={item.name}>
                 <TableCell>{item.name}</TableCell>

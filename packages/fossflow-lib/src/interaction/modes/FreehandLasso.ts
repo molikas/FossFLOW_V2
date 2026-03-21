@@ -78,8 +78,8 @@ export const FreehandLasso: ModeActions = {
     );
   },
 
-  mousedown: ({ uiState }) => {
-    if (uiState.mode.type !== 'FREEHAND_LASSO') return;
+  mousedown: ({ uiState, isRendererInteraction }) => {
+    if (uiState.mode.type !== 'FREEHAND_LASSO' || !isRendererInteraction) return;
 
     // If there's an existing selection, check if click is within it
     if (uiState.mode.selection) {
@@ -129,6 +129,7 @@ export const FreehandLasso: ModeActions = {
 
   mouseup: ({ uiState, scene }) => {
     if (uiState.mode.type !== 'FREEHAND_LASSO') return;
+    if (!uiState.mouse.mousedown) return; // toolbar click — mousedown was stopped, skip
 
     // If we've drawn a path, convert to tiles and find items
     if (uiState.mode.path.length >= 3 && !uiState.mode.selection) {

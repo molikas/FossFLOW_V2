@@ -81,8 +81,8 @@ export const Lasso: ModeActions = {
     );
   },
 
-  mousedown: ({ uiState }) => {
-    if (uiState.mode.type !== 'LASSO') return;
+  mousedown: ({ uiState, isRendererInteraction }) => {
+    if (uiState.mode.type !== 'LASSO' || !isRendererInteraction) return;
 
     // If there's an existing selection, check if click is within it
     if (uiState.mode.selection) {
@@ -114,6 +114,7 @@ export const Lasso: ModeActions = {
 
   mouseup: ({ uiState }) => {
     if (uiState.mode.type !== 'LASSO') return;
+    if (!uiState.mouse.mousedown) return; // toolbar click — mousedown was stopped, skip
 
     const hasSelection =
       uiState.mode.selection && uiState.mode.selection.items.length > 0;

@@ -416,32 +416,8 @@ export const useInteractionManager = () => {
   const onContextMenu = useCallback(
     (e: SlimMouseEvent) => {
       e.preventDefault();
-
-      const uiState = uiStateApi.getState();
-
-      if (uiState.panSettings.rightClickPan) {
-        return;
-      }
-
-      const itemAtTile = getItemAtTile({
-        tile: uiState.mouse.position.tile,
-        scene
-      });
-
-      if (itemAtTile) {
-        uiState.actions.setContextMenu({
-          type: 'ITEM',
-          item: itemAtTile,
-          tile: uiState.mouse.position.tile
-        });
-      } else {
-        uiState.actions.setContextMenu({
-          type: 'EMPTY',
-          tile: uiState.mouse.position.tile
-        });
-      }
     },
-    [uiStateApi, scene]
+    []
   );
 
   useEffect(() => {

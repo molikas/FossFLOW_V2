@@ -5,17 +5,28 @@ import { useTranslation } from 'src/stores/localeStore';
 
 const STORAGE_KEY = 'fossflow_import_hint_dismissed';
 
-export const ImportHintTooltip = () => {
+interface Props {
+  toolMenuRef?: React.RefObject<HTMLElement | null>;
+}
+
+export const ImportHintTooltip = ({ toolMenuRef }: Props) => {
   const { t } = useTranslation('importHintTooltip');
   const [isDismissed, setIsDismissed] = useState(true);
+  const [position, setPosition] = useState({ top: 90, left: 16 });
 
   useEffect(() => {
-    // Check if the hint has been dismissed before
     const dismissed = localStorage.getItem(STORAGE_KEY);
     if (dismissed !== 'true') {
       setIsDismissed(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (toolMenuRef?.current) {
+      const rect = toolMenuRef.current.getBoundingClientRect();
+      setPosition({ top: rect.bottom + 16, left: 16 });
+    }
+  }, [toolMenuRef]);
 
   const handleDismiss = () => {
     setIsDismissed(true);
@@ -30,9 +41,9 @@ export const ImportHintTooltip = () => {
     <Box
       sx={{
         position: 'fixed',
-        top: 90,
-        left: 16,
-        zIndex: 1300, // Above most UI elements
+        top: position.top,
+        left: position.left,
+        zIndex: 1300,
         maxWidth: 280
       }}
     >

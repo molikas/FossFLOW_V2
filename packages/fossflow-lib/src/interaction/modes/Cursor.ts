@@ -90,12 +90,14 @@ const mousedown: ModeActionsAction = ({
     uiState.actions.setMode(
       produce(uiState.mode, (draft) => {
         draft.mousedownItem = itemAtTile;
+        draft.mousedownHandled = true;
       })
     );
   } else {
     uiState.actions.setMode(
       produce(uiState.mode, (draft) => {
         draft.mousedownItem = null;
+        draft.mousedownHandled = true;
       })
     );
 
@@ -174,7 +176,7 @@ export const Cursor: ModeActions = {
           id: uiState.mode.mousedownItem.id
         });
       }
-    } else if (!hasMoved) {
+    } else if (!hasMoved && uiState.mode.mousedownHandled) {
       // Plain left-click on empty canvas — show context menu (add node / rectangle)
       uiState.actions.setItemControls(null);
       uiState.actions.setContextMenu({
@@ -188,6 +190,7 @@ export const Cursor: ModeActions = {
     uiState.actions.setMode(
       produce(uiState.mode, (draft) => {
         draft.mousedownItem = null;
+        draft.mousedownHandled = false;
       })
     );
   }

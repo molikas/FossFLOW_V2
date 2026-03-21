@@ -19,6 +19,7 @@ import {
 import { Close as CloseIcon } from '@mui/icons-material';
 import { useUiStateStore } from 'src/stores/uiStateStore';
 import { DialogTypeEnum } from 'src/types/ui';
+import { FIXED_SHORTCUTS } from 'src/config/shortcuts';
 import { useTranslation } from 'src/stores/localeStore';
 
 interface ShortcutItem {
@@ -46,22 +47,22 @@ export const HelpDialog = () => {
   const keyboardShortcuts = [
     {
       action: t('undoAction'),
-      shortcut: 'Ctrl+Z',
+      shortcut: FIXED_SHORTCUTS.undo,
       description: t('undoDescription')
     },
     {
       action: t('redoAction'),
-      shortcut: 'Ctrl+Y',
+      shortcut: FIXED_SHORTCUTS.redo,
       description: t('redoDescription')
     },
     {
       action: t('redoAltAction'),
-      shortcut: 'Ctrl+Shift+Z',
+      shortcut: FIXED_SHORTCUTS.redoAlt,
       description: t('redoAltDescription')
     },
     {
       action: t('helpAction'),
-      shortcut: 'F1',
+      shortcut: FIXED_SHORTCUTS.help,
       description: t('helpDescription')
     },
     {
@@ -101,12 +102,12 @@ export const HelpDialog = () => {
     },
     {
       action: t('copyAction'),
-      shortcut: 'Ctrl+C',
+      shortcut: FIXED_SHORTCUTS.copy,
       description: t('copyDescription')
     },
     {
       action: t('pasteAction'),
-      shortcut: 'Ctrl+V',
+      shortcut: FIXED_SHORTCUTS.paste,
       description: t('pasteDescription')
     }
   ];

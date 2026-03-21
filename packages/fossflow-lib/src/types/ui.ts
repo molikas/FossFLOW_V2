@@ -38,6 +38,7 @@ export interface CursorMode {
   type: 'CURSOR';
   showCursor: boolean;
   mousedownItem: ItemReference | null;
+  mousedownHandled?: boolean;
 }
 
 export interface DragItemsMode {
@@ -163,6 +164,11 @@ export interface ContextMenu {
 
 export type ConnectorInteractionMode = 'click' | 'drag';
 
+export interface Notification {
+  message: string;
+  severity: 'info' | 'success' | 'warning';
+}
+
 export interface UiState {
   view: string;
   mainMenuOptions: MainMenuOptions;
@@ -186,7 +192,7 @@ export interface UiState {
   connectorInteractionMode: ConnectorInteractionMode;
   expandLabels: boolean;
   iconPackManager: IconPackManagerProps | null;
-
+  notification: Notification | null;
 }
 
 export interface UiStateActions {
@@ -215,6 +221,7 @@ export interface UiStateActions {
   setConnectorInteractionMode: (mode: ConnectorInteractionMode) => void;
   setExpandLabels: (expand: boolean) => void;
   setIconPackManager: (iconPackManager: IconPackManagerProps | null) => void;
+  setNotification: (notification: Notification | null) => void;
 
 }
 

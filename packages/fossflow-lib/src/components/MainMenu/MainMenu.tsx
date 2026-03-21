@@ -7,8 +7,6 @@ import {
   ImageOutlined as ExportImageIcon,
   FolderOpen as FolderOpenIcon,
   DeleteOutline as DeleteOutlineIcon,
-  Undo as UndoIcon,
-  Redo as RedoIcon,
   Settings as SettingsIcon,
 
 } from '@mui/icons-material';
@@ -43,7 +41,7 @@ export const MainMenu = () => {
     return state.actions;
   });
   const initialDataManager = useInitialDataManager();
-  const { undo, redo, canUndo, canRedo, clearHistory } = useHistory();
+  const { clearHistory } = useHistory();
 
   const { t } = useTranslation('mainMenu');
 
@@ -119,15 +117,7 @@ export const MainMenu = () => {
     uiStateActions.setIsMainMenuOpen(false);
   }, [uiStateActions, clear, clearHistory]);
 
-  const handleUndo = useCallback(() => {
-    undo();
-    uiStateActions.setIsMainMenuOpen(false);
-  }, [undo, uiStateActions]);
 
-  const handleRedo = useCallback(() => {
-    redo();
-    uiStateActions.setIsMainMenuOpen(false);
-  }, [redo, uiStateActions]);
 
   const onOpenSettings = useCallback(() => {
     uiStateActions.setIsMainMenuOpen(false);
@@ -184,26 +174,6 @@ export const MainMenu = () => {
         }}
       >
         <Card sx={{ py: 1 }}>
-          {/* Undo/Redo Section */}
-          <MenuItem
-            onClick={handleUndo}
-            Icon={<UndoIcon />}
-            disabled={!canUndo}
-          >
-            {t('undo')}
-          </MenuItem>
-
-          <MenuItem
-            onClick={handleRedo}
-            Icon={<RedoIcon />}
-            disabled={!canRedo}
-          >
-            {t('redo')}
-          </MenuItem>
-
-
-          {(canUndo || canRedo) && sectionVisibility.actions && <Divider />}
-
           {/* File Actions */}
           {mainMenuOptions.includes('ACTION.OPEN') && (
             <MenuItem onClick={onOpenModel} Icon={<FolderOpenIcon />}>

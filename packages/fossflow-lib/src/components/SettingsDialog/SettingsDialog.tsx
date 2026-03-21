@@ -85,20 +85,26 @@ export const SettingsDialog = ({ iconPackManager }: SettingsDialogProps) => {
           sx={{ borderBottom: 1, borderColor: 'divider' }}
         >
           <Tab label={t('settings.hotkeys.title')} />
-          <Tab label={t('settings.pan.title')} />
-          <Tab label="Zoom" />
-          <Tab label="Labels" />
+          <Tab label="Canvas" />
           <Tab label={t('settings.connector.title')} />
           {iconPackManager && <Tab label={t('settings.iconPacks.title')} />}
         </Tabs>
 
         <Box sx={{ mt: 2 }}>
           {tabValue === 0 && <HotkeySettings />}
-          {tabValue === 1 && <PanSettings />}
-          {tabValue === 2 && <ZoomSettings />}
-          {tabValue === 3 && <LabelSettings />}
-          {tabValue === 4 && <ConnectorSettings />}
-          {tabValue === 5 && iconPackManager && (
+          {tabValue === 1 && (
+            <>
+              <PanSettings />
+              <Box sx={{ px: 2, pb: 2 }}>
+                <ZoomSettings />
+              </Box>
+              <Box sx={{ px: 2, pb: 2 }}>
+                <LabelSettings />
+              </Box>
+            </>
+          )}
+          {tabValue === 2 && <ConnectorSettings />}
+          {tabValue === 3 && iconPackManager && (
             <IconPackSettings
               lazyLoadingEnabled={iconPackManager.lazyLoadingEnabled}
               onToggleLazyLoading={iconPackManager.onToggleLazyLoading}
