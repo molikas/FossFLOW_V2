@@ -28,15 +28,29 @@ See original project: FossFLOW for details more details
   - `Lasso.mouseup` and `FreehandLasso.mouseup` gain `!mouse.mousedown` guard — toolbar clicks never record a canvas mousedown, so stray mouseups are safely ignored
 - **"Add Node" context menu appearing on mode transitions:** Switching from Pan → Select, or exiting pan via left-click, incorrectly triggered the empty-canvas context menu. Fixed by adding `mousedownHandled?: boolean` to `CursorMode` — the context menu now only opens when `Cursor.mousedown` explicitly processed the initiating click
 
+#### Bug Fixes (easy wins)
+- **Zustand deprecated API warning:** Replaced `useStore(store, selector, equalityFn)` with `useStoreWithEqualityFn` from `zustand/traditional` in all three stores (`uiStateStore`, `modelStore`, `sceneStore`) — eliminates `[DEPRECATED]` console warning on every load
+- **Quill "bullet" format warning:** Removed `'bullet'` from `RichTextEditor` formats array — it was an unregistered alias causing `quill Cannot register "bullet"` on every TextBox open. Bullet list toolbar button and functionality unaffected
+- **i18n short-code locale 404:** Added `load: 'currentOnly'` to i18next config — stops the spurious `/i18n/app/en.json` request that always 404d before falling back to `en-US`
+- **`createModelItem` double-write:** Removed redundant `updateModelItem` call after `push` in the model item reducer — the item was already fully written; the second write was a no-op scan+spread
+
 #### Tests
 - **Toolbar propagation regression suite** (`toolMenu.propagation.test.tsx`): B/C tests upgraded from inline replicas to real `Lasso.ts` module imports — regressions in the actual file now caught
-- **Lasso mode suite** (`Lasso.modes.test.ts`, +14 tests): full contract coverage of mousedown/mouseup/mousemove including all guards
-- **Cursor mode suite** (`Cursor.modes.test.ts`, +12 tests): full contract coverage including `mousedownHandled` flag, context menu gate, and all mode transitions
-- **Connector reducer rewrite** (`connector.test.ts`): replaced stale `{from,to}` anchor format with real `ConnectorAnchor[]` array format; tests now cover the actual API
+- **Lasso mode suite** (`Lasso.modes.test.ts`, +15 tests): full contract coverage of mousedown/mouseup/mousemove including all guards
+- **Cursor mode suite** (`Cursor.modes.test.ts`, +16 tests): full contract coverage including `mousedownHandled` flag, context menu gate, and all mode transitions
+- **Connector reducer rewrite** (`connector.test.ts`, +21 tests): replaced stale `{from,to}` anchor format with real `ConnectorAnchor[]` array format; tests now cover the actual API
 - **Shortcuts constants** (`shortcuts.test.ts`, +7 tests): regression guard for all 6 `FIXED_SHORTCUTS` values
-- **Settings defaults** (`settings.defaults.test.ts`, +11 tests): pin default hotkey profile, pan/zoom settings, keyboard pan speed
+- **Settings defaults** (`settings.defaults.test.ts`, +14 tests): pin default hotkey profile, pan/zoom settings, keyboard pan speed
 - **uiOverlay editor modes** (`uiOverlay.editorModes.test.ts`): clarified as semi-valid with explicit note to verify against production mapping
-- Test count: 402 → 449, 48 suites, all passing
+- **Model item reducer** (`modelItem.test.ts`, +5 tests): double-write regression guard, immutability check, sparse-array behavior pin
+- **RichTextEditor formats** (`RichTextEditor.formats.test.ts`, +4 tests): 'bullet' absent, 'list' present, count pinned
+- **Zustand deprecation smoke test** (`zustand.deprecation.test.ts`, +4 tests): warn spy + source-file assertion across all 3 stores
+- **i18n config pin** (`i18n.config.test.ts`, +3 tests): load option and fallbackLng pinned
+- Test count: 402 → 465, 51 suites, all passing
+
+#### Docs
+- **`regression_tests.md`** (new): full reference document for all 51 test suites — production targets, test counts, VALID/SEMI-VALID classifications, coverage notes per suite, and known coverage gaps index
+- **`current_architecture.md`**: Section 3 (Test Audit) updated with all new suites; Section 7 runtime issues updated to mark 7d/7e/7g as resolved
 
 ---
 

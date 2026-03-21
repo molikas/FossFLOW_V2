@@ -541,7 +541,7 @@ Touch events are synthesized: `touchstart` → mousedown (button:0), `touchmove`
 | `clipboard/__tests__/clipboard.test.ts` | SHALLOW | Tests only trivial getters/setters; does not test handleCopy/handlePaste |
 | `hooks/__tests__/useHistory.test.tsx` | VALID | Tests real hook with mocked store actions |
 | `stores/reducers/__tests__/connector.test.ts` | VALID *(rewritten 2026-03-20)* | Fully rewritten with correct `ConnectorAnchor[]` array format and correct `Scene` shape |
-| `stores/reducers/__tests__/modelItem.test.ts` | VALID | Uses real fixture and reducer |
+| `stores/reducers/__tests__/modelItem.test.ts` | VALID *(extended 2026-03-20)* | Double-write regression, immutability, sparse-array pin added |
 | `stores/reducers/__tests__/viewItem.test.ts` — deleteViewItem | VALID | Cascade logic well tested |
 | `stores/reducers/__tests__/viewItem.test.ts` — updateViewItem | SHALLOW | Mock returns state unchanged; connector update path never tested |
 | `stores/reducers/__tests__/viewItem.test.ts` — createViewItem, batch-delete | VALID | |
@@ -549,18 +549,35 @@ Touch events are synthesized: `touchstart` → mousedown (button:0), `touchmove`
 | `utils/__tests__/` | VALID | Pure function tests |
 | `DebugUtils` snapshot tests | SHALLOW | Snapshot tests break on any cosmetic change |
 | `connector.renderIsolation.test.tsx` | VALID (likely) | Render isolation is a real performance contract |
+| `Lasso.modes.test.ts` | VALID *(added 2026-03-20)* | Real Lasso module — mousedown/mouseup/mousemove including all guards |
+| `Cursor.modes.test.ts` | VALID *(added 2026-03-20)* | Real Cursor module — mousedownHandled flag, context menu gate, mode transitions |
+| `shortcuts.test.ts` | VALID *(added 2026-03-20)* | Pins all FIXED_SHORTCUTS constant values |
+| `settings.defaults.test.ts` | VALID *(added 2026-03-20)* | Pins default hotkey profile, pan/zoom settings |
+| `RichTextEditor.formats.test.ts` | VALID *(added 2026-03-20)* | 'bullet' absent, 'list' present, count pin |
+| `stores/__tests__/zustand.deprecation.test.ts` | VALID *(added 2026-03-20)* | No deprecated API warning; source-file assertion all 3 stores |
+| `__perf_refactor_regression__/i18n.config.test.ts` | VALID *(added 2026-03-20)* | load:'currentOnly' and fallbackLng pins for app i18n config |
 
-**Total test count as of 2026-03-20**: 449 tests across 48 suites.
+**Total test count as of 2026-03-20 (easy wins)**: 465 tests across 51 suites.
 
-**New/updated suites (2026-03-20):**
+**New/updated suites — round 1 (2026-03-20, regression baseline):**
 | File | Tests | Classification |
 |---|---|---|
-| `Lasso.modes.test.ts` | 14 | VALID — real Lasso module |
-| `Cursor.modes.test.ts` | 12 | VALID — real Cursor module |
+| `Lasso.modes.test.ts` | 15 | VALID — real Lasso module |
+| `Cursor.modes.test.ts` | 16 | VALID — real Cursor module |
 | `shortcuts.test.ts` | 7 | VALID — real constants |
-| `settings.defaults.test.ts` | 11 | VALID — real config |
-| `toolMenu.propagation.test.tsx` B/C | replaced | VALID — real Lasso.ts (was inline replica) |
-| `stores/reducers/__tests__/connector.test.ts` | rewritten | VALID — real array format (was STALE) |
+| `settings.defaults.test.ts` | 14 | VALID — real config |
+| `toolMenu.propagation.test.tsx` B/C | 8 total | VALID — real Lasso.ts (was inline replica) |
+| `stores/reducers/__tests__/connector.test.ts` | 21 | VALID — real array format (was STALE) |
+
+**New/updated suites — round 2 (2026-03-20, easy wins):**
+| File | Tests | Change | Classification |
+|---|---|---|---|
+| `stores/reducers/__tests__/modelItem.test.ts` | 8 | +5 | VALID — double-write regression + sparse-array pin |
+| `components/RichTextEditor/__tests__/RichTextEditor.formats.test.ts` | 4 | new | VALID — Quill formats contract |
+| `stores/__tests__/zustand.deprecation.test.ts` | 4 | new | VALID — deprecated API smoke test |
+| `__perf_refactor_regression__/i18n.config.test.ts` | 3 | new | VALID — i18n config options |
+
+**Full regression suite documentation:** See `regression_tests.md` at repo root — 51 suites listed with production targets, test counts, classifications, coverage notes, and known gaps.
 
 ---
 
@@ -988,46 +1005,39 @@ Source: `scheduler.development.js` — this is React's cooperative scheduler run
 
 ---
 
-### 7d. Zustand Deprecated API Warning
+### 7d. Zustand Deprecated API Warning ✅ FIXED (2026-03-20)
 
 **Symptom:** Deprecation warning on every page load.
 
-**Console evidence:**
+**Console evidence (resolved):**
 ```
 [DEPRECATED] Use `createWithEqualityFn` instead of `create` or use
 `useStoreWithEqualityFn` instead of `useStore`. They can be imported from
 'zustand/traditional'. https://github.com/pmndrs/zustand/discussions/1937
 ```
-Source: The `useStore(store, selector, equalityFn)` call in `uiStateStore.tsx` (`useUiStateStore` hook).
+Source: The `useStore(store, selector, equalityFn)` call in all three stores.
 
-**Current usage in code:**
-```typescript
-// stores/uiStateStore.tsx
-const value = useStore(store, selector, equalityFn);
-```
+**Fix applied:** Replaced `useStore` from `zustand` with `useStoreWithEqualityFn` from `zustand/traditional` in `uiStateStore.tsx`, `modelStore.tsx`, and `sceneStore.tsx`. Identical behavior, no deprecation warning.
 
-**Fix when ready:** Replace `useStore` from `zustand` with `useStoreWithEqualityFn` from `zustand/traditional`. This is a low-risk, mechanical change. The behavioral contract is identical — it just uses the "traditional" API that supports equality functions without deprecation.
-
-**Note:** This warning will not affect functionality in the current zustand version but will become an error in a future major release.
+**Regression test:** `stores/__tests__/zustand.deprecation.test.ts` — spies on `console.warn` for all three stores and asserts no `[DEPRECATED]` message fires; also reads source files to confirm `useStoreWithEqualityFn` import is present.
 
 ---
 
-### 7e. i18n English Locale Parse Failure (Low Severity)
+### 7e. i18n English Locale Parse Failure ✅ FIXED (2026-03-20)
 
 **Symptom:** English locale file fails to load, silently falls back to `en-US`.
 
-**Console evidence:**
+**Console evidence (resolved):**
 ```
 i18next::backendConnector: loading namespace app for language en failed
   failed parsing /i18n/app/en.json to json
-i18next::backendConnector: loaded namespace app for language en-US Object
 ```
 
-**Root cause:** The server returns an HTML page (likely a 404 or the index.html SPA fallback) for `/i18n/app/en.json`. i18next attempts to parse the HTML as JSON, fails, but successfully falls back to `en-US` which does resolve correctly.
+**Root cause:** i18next's default behavior strips `en-US` to the short-code `en` and tries to load `/i18n/app/en.json` first. The dev server returns `index.html` for unknown routes, causing a JSON parse failure.
 
-**Impact:** Zero functional impact — `en-US` is the correct locale and loads successfully. The `en` short-code request is unnecessary.
+**Fix applied:** Added `load: 'currentOnly'` to `packages/fossflow-app/src/i18n.ts`. This instructs i18next to load only the exact locale string (e.g. `en-US`) without attempting the short-code variant.
 
-**Fix when ready:** Either add a redirect rule for `/i18n/app/en.json → /i18n/app/en-US.json`, or configure i18next to only request `en-US` without the short-code fallback.
+**Regression test:** `__perf_refactor_regression__/i18n.config.test.ts` — reads the app package's `i18n.ts` source and asserts `load: 'currentOnly'` and `fallbackLng: 'en-US'` are present.
 
 ---
 
@@ -1050,21 +1060,21 @@ storageService.ts:233 Using session storage
 
 ---
 
-### 7g. Quill "bullet" Format Registration Warning (Low Severity)
+### 7g. Quill "bullet" Format Registration Warning ✅ FIXED (2026-03-20)
 
 **Symptom:** Quill logs an error on initialization.
 
-**Console evidence:**
+**Console evidence (resolved):**
 ```
 quill Cannot register "bullet" specified in "formats" config.
   Are you sure it was registered?
 ```
 
-**Root cause:** The `react-quill-new` configuration in `RichTextEditor` specifies `formats: ['bullet', ...]` but the Quill instance (as used via `react-quill-new`) does not have the "bullet" format registered in the current package version. "bullet" is typically an alias for the "list" format's bullet variant.
+**Root cause:** The `formats` array in `RichTextEditor` included `'bullet'` — an unregistered alias for the `list` format's bullet variant. Quill validates the array against its registered format registry at mount time.
 
-**Impact:** Bullet list formatting may not work correctly in TextBox rich-text editing. Other formats (bold, italic, etc.) are unaffected.
+**Fix applied:** Removed `'bullet'` from the `formats` array in `RichTextEditor.tsx`. The toolbar config object `{ list: 'bullet' }` (which renders the bullet-list button) is unaffected — that is a separate toolbar configuration, not a format registration string. Bullet list functionality is unchanged; Quill's `list` format handles both bullet and ordered variants.
 
-**Note:** The Quill XSS vulnerability (GHSA-v3m3-f69x-jf25) was already addressed by pinning `react-quill-new` to avoid the affected `quill@2.0.3`. This format registration issue may be a side effect of the pinned version.
+**Regression test:** `components/RichTextEditor/__tests__/RichTextEditor.formats.test.ts` — asserts `'bullet'` absent, `'list'` present, all 9 expected formats present, count pinned at 9.
 
 ---
 
