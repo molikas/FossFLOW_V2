@@ -1,7 +1,7 @@
 import { Coords, Size, Scroll } from 'src/types';
 import { CoordsUtils, SizeUtils } from 'src/utils';
-import { PROJECTED_TILE_SIZE } from 'src/config';
-import { getGridSubset, isWithinBounds, screenToIso } from '../renderer';
+import { PROJECTED_TILE_SIZE, MIN_ZOOM, MAX_ZOOM, ZOOM_INCREMENT } from 'src/config';
+import { getGridSubset, isWithinBounds, screenToIso, incrementZoom, decrementZoom } from '../renderer';
 
 const getRendererSize = (tileSize: Size, zoom: number = 1): Size => {
   const projectedTileSize = SizeUtils.multiply(PROJECTED_TILE_SIZE, zoom);
@@ -149,7 +149,7 @@ describe('Tests renderer utils', () => {
     expect(tile).toEqual({ x: 0, y: 10 });
   });
 
-  test('screenToIso() works correctly when mouse is at center of project and zoom is 0.5 and screen is halfway scrolled', () => {
+  test('screenToIso() works correctly when mouse is at center of project and zoom 0.5 and halfway scrolled', () => {
     const zoom = 1;
     const rendererSize = getRendererSize({ width: 10, height: 10 }, zoom);
     const scroll = getScroll({
@@ -167,5 +167,43 @@ describe('Tests renderer utils', () => {
     });
 
     expect(tile).toEqual({ x: 0, y: 10 });
+  });
+});
+
+describe('incrementZoom / decrementZoom — boundary enforcement', () => {
+  test('incrementZoom at MAX_ZOOM returns MAX_ZOOM (clamped)', () => {
+    expect(incrementZoom(MAX_ZOOM)).toBe(MAX_ZOOM);
+  });
+
+  test('incrementZoom above MAX_ZOOM still returns MAX_ZOOM', () => {
+    expect(incrementZoom(MAX_ZOOM + 0.5)).toBe(MAX_ZOOM);
+  });
+
+  test('decrementZoom at MIN_ZOOM returns MIN_ZOOM (clamped)', () => {
+    expect(decrementZoom(MIN_ZOOM)).toBe(MIN_ZOOM);
+  });
+
+  test('decrementZoom below MIN_ZOOM still returns MIN_ZOOM', () => {
+    expect(decrementZoom(0)).toBe(MIN_ZOOM);
+    expect(decrementZoom(-1)).toBe(MIN_ZOOM);
+  });
+
+  test('incrementZoom adds ZOOM_INCREMENT from a mid-range value', () => {
+    expect(incrementZoom(0.5)).toBeCloseTo(0.5 + ZOOM_INCREMENT, 5);
+  });
+
+  test('decrementZoom subtracts ZOOM_INCREMENT from a mid-range value', () => {
+    expect(decrementZoom(0.5)).toBeCloseTo(0.5 - ZOOM_INCREMENT, 5);
+  });
+
+  test('result never has more than 2 decimal places (no float drift across full range)', () => {
+    let zoom = MIN_ZOOM;
+    while (zoom < MAX_ZOOM) {
+      zoom = incrementZoom(zoom);
+      const decimals = zoom.toString().includes('.')
+        ? zoom.toString().split('.')[1].length
+        : 0;
+      expect(decimals).toBeLessThanOrEqual(2);
+    }
   });
 });

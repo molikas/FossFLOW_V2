@@ -46,11 +46,16 @@ See original project: FossFLOW for details more details
 - **RichTextEditor formats** (`RichTextEditor.formats.test.ts`, +4 tests): 'bullet' absent, 'list' present, count pinned
 - **Zustand deprecation smoke test** (`zustand.deprecation.test.ts`, +4 tests): warn spy + source-file assertion across all 3 stores
 - **i18n config pin** (`i18n.config.test.ts`, +3 tests): load option and fallbackLng pinned
-- Test count: 402 → 465, 51 suites, all passing
+- **Pan handlers** (`usePanHandlers.test.ts`, +13 tests): all 9 handleMouseDown bypass conditions + handleMouseUp full coverage; pan cycle test (middle-click starts, mouseUp ends)
+- **Copy/paste** (`useCopyPaste.test.ts`, +10 tests): handleCopy (LASSO selection, itemControls, centroid including rects/textboxes, connector auto-include); handlePaste (null clipboard warning, ID remapping, orphan anchor detach, offset, LASSO mode set)
+- **History real-store** (`useHistory.realStore.test.tsx`, +7 tests): undo/redo round-trip with real Zustand stores; overflow cap at 50 entries; redo cleared after new mutation; transaction single-checkpoint guarantee; nested transaction guard
+- **Connector schema ref contracts** (`connector.test.ts`, +5 tests): anchorSchema tile-only ref, empty ref, simultaneous item+tile (no exclusivity guard documented); connectorSchema 0/1 anchor count (min is app-level invariant only)
+- **Zoom boundaries** (`renderer.test.ts`, +7 tests): `incrementZoom`/`decrementZoom` clamped at MIN\_ZOOM/MAX\_ZOOM; correct step size; no float drift across full range
+- Test count: 402 → 507, 54 suites, all passing
 
 #### Docs
-- **`regression_tests.md`** (new): full reference document for all 51 test suites — production targets, test counts, VALID/SEMI-VALID classifications, coverage notes per suite, and known coverage gaps index
-- **`current_architecture.md`**: Section 3 (Test Audit) updated with all new suites; Section 7 runtime issues updated to mark 7d/7e/7g as resolved
+- **`regression_tests.md`** (new): full reference document for all 54 test suites — production targets, test counts, VALID/SEMI-VALID classifications, coverage notes per suite, and known coverage gaps index
+- **`current_architecture.md`**: Section 3 (Test Audit) updated with all new suites (rounds 1–3); Section 7 runtime issues updated to mark 7d/7e/7g as resolved
 
 ---
 

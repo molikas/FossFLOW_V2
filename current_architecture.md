@@ -577,7 +577,18 @@ Touch events are synthesized: `touchstart` → mousedown (button:0), `touchmove`
 | `stores/__tests__/zustand.deprecation.test.ts` | 4 | new | VALID — deprecated API smoke test |
 | `__perf_refactor_regression__/i18n.config.test.ts` | 3 | new | VALID — i18n config options |
 
-**Full regression suite documentation:** See `regression_tests.md` at repo root — 51 suites listed with production targets, test counts, classifications, coverage notes, and known gaps.
+**New/updated suites — round 3 (2026-03-20, coverage gap closure):**
+| File | Tests | Change | Classification |
+|---|---|---|---|
+| `interaction/__tests__/usePanHandlers.test.ts` | 13 | new | VALID — all pan bypass conditions + handleMouseUp |
+| `clipboard/__tests__/useCopyPaste.test.ts` | 10 | new | VALID — handleCopy + handlePaste full coverage |
+| `hooks/__tests__/useHistory.realStore.test.tsx` | 7 | new | VALID — real store: overflow, transaction, undo/redo round-trip |
+| `schemas/__tests__/connector.test.ts` | 9 | +5 | VALID — anchorSchema ref contracts, no exclusivity guard |
+| `utils/__tests__/renderer.test.ts` | 16 | +7 | VALID — zoom boundary clamp, no float drift |
+
+**Total test count as of 2026-03-20 (coverage gaps):** 507 tests across 54 suites.
+
+**Full regression suite documentation:** See `regression_tests.md` at repo root — 54 suites listed with production targets, test counts, classifications, coverage notes, and known gaps.
 
 ---
 

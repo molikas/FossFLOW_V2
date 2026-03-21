@@ -1,7 +1,7 @@
 # Regression Test Suite Reference
 
 **Last updated:** 2026-03-20
-**Total:** 465 tests · 51 suites · all passing
+**Total:** 507 tests · 54 suites · all passing
 **Run:** `npm test --workspace=packages/fossflow-lib`
 
 ---
@@ -10,16 +10,16 @@
 
 | Layer | Suites | Tests |
 |---|---|---|
-| Interaction / Mode System | 5 | 74 |
-| Scene / Hooks | 5 | 56 |
+| Interaction / Mode System | 6 | 87 |
+| Scene / Hooks | 6 | 63 |
 | Reducers | 6 | 85 |
-| Schemas / Validation | 8 | 38 |
+| Schemas / Validation | 8 | 47 |
 | Components | 11 | 48 |
 | Perf / Render Isolation | 8 | 36 |
-| Utilities & Config | 8 | 64 |
-| Stores & Infrastructure | 3 | 15 |
+| Utilities & Config | 8 | 71 |
+| Stores & Infrastructure | 4 | 67 |
 | **Standalone app config** | **1** | **3** |
-| **Total** | **51** | **465** |
+| **Total** | **54** | **507** |
 
 ---
 
@@ -94,6 +94,20 @@ Pins that `useCallback`/`useMemo` dependency arrays in `useInteractionManager` d
 
 ---
 
+### [usePanHandlers.test.ts](packages/fossflow-lib/src/interaction/__tests__/usePanHandlers.test.ts) · 13 tests · ✅ VALID
+
+**Production target:** `src/interaction/usePanHandlers.ts`
+
+| Group | What's covered |
+|---|---|
+| `handleMouseDown` bypass conditions (10) | All 9 pan-trigger conditions: PAN mode left-click returns true; middle/right-click with setting on/off; ctrl-click; alt-click; emptyArea click (target=rendererEl, no item); regular left-click → false |
+| `handleMouseDown` full cycle (1) | middle-click starts pan (sets isPanningRef=true); mouseUp ends pan; setMode called with CURSOR |
+| `handleMouseUp` (3) | not panning → false; right-click pan is toggle (mouseup does NOT end pan); middle-click pan ends on mouseup |
+
+**Why this exists:** `handleMouseDown` is the "bypass path" — when it returns `true`, `processMouseUpdate` is skipped entirely. All 9 trigger conditions must be guarded so a refactor can't accidentally break or add a bypass.
+
+---
+
 ## Layer 2 — Scene / Hooks
 
 These tests cover the public API of `useScene`, view operations, clipboard history, and the initialization sequence.
@@ -126,7 +140,22 @@ Covers: `createView`, `updateView`, `deleteView`, `setActiveView` full lifecycle
 
 **Production target:** `src/hooks/useHistory.ts`
 
-Covers: `saveToHistory`/`undo`/`redo` round-trip; `canUndo`/`canRedo` flags; history overflow at 50 entries (oldest dropped); `transaction()` creates exactly one checkpoint; nested transaction guard.
+Covers (mocked stores): `saveToHistory`/`undo`/`redo` delegation to stores; `canUndo`/`canRedo` flags; `transaction()` blocks nested saves; `isInTransaction` flag; error recovery in transaction.
+
+---
+
+### [useHistory.realStore.test.tsx](packages/fossflow-lib/src/hooks/__tests__/useHistory.realStore.test.tsx) · 7 tests · ✅ VALID
+
+**Production targets:** `src/hooks/useHistory.ts`, `src/stores/modelStore.tsx`
+
+Uses real `ModelProvider` + `SceneProvider` wrappers — tests actual Zustand store behavior that mock-based tests cannot catch.
+
+| Group | What's covered |
+|---|---|
+| Real undo/redo (3) | `actions.set()` → `undo()` restores previous title; `canUndo` false on fresh store, true after mutation; redo stack cleared after new mutation |
+| Overflow (1) | After 51 mutations, `history.past.length` stays ≤ 50 (oldest entry dropped by `shift()`) |
+| Redo round-trip (1) | `undo()` then `redo()` returns to the later value |
+| Transaction real-store (2) | `transaction()` produces exactly 1 checkpoint for 3 ops; nested transaction produces only 1 checkpoint |
 
 ---
 
@@ -203,7 +232,7 @@ All schema tests use Zod's `.parse()` / `.safeParse()` directly. They act as liv
 | File | Production target | Tests | What's pinned |
 |---|---|---|---|
 | [colors.test.ts](packages/fossflow-lib/src/schemas/__tests__/colors.test.ts) | `schemas/colors.ts` | 4 | colorSchema fields, colorsSchema array |
-| [connector.test.ts](packages/fossflow-lib/src/schemas/__tests__/connector.test.ts) | `schemas/connector.ts` | 4 | anchorSchema (exactly one ref key), connectorSchema minimum 2 anchors |
+| [connector.test.ts](packages/fossflow-lib/src/schemas/__tests__/connector.test.ts) | `schemas/connector.ts` | 9 | anchorSchema (valid anchor, missing id); anchorSchema ref contracts (tile-only, empty ref, simultaneous item+tile — no exclusivity guard at schema level); connectorSchema (valid, missing anchors); connector anchor count (0 anchors allowed, 1 anchor allowed — minimum is app-level invariant only) |
 | [icons.test.ts](packages/fossflow-lib/src/schemas/__tests__/icons.test.ts) | `schemas/icons.ts` | 4 | iconSchema, iconsSchema |
 | [modelItems.test.ts](packages/fossflow-lib/src/schemas/__tests__/modelItems.test.ts) | `schemas/modelItems.ts` | 10 | modelItemSchema including `headerLink` optional URL field |
 | [rectangle.test.ts](packages/fossflow-lib/src/schemas/__tests__/rectangle.test.ts) | `schemas/rectangle.ts` | 2 | rectangleSchema required fields |
@@ -211,7 +240,7 @@ All schema tests use Zod's `.parse()` / `.safeParse()` directly. They act as liv
 | [validation.test.ts](packages/fossflow-lib/src/schemas/__tests__/validation.test.ts) | `schemas/validation.ts` | 10 | Full model validation, Zod coercion, invalid model rejection |
 | [views.test.ts](packages/fossflow-lib/src/schemas/__tests__/views.test.ts) | `schemas/views.ts` | 6 | viewItemSchema, viewSchema, viewsSchema |
 
-**Total: 42 tests**
+**Total: 47 tests**
 
 ---
 
@@ -322,7 +351,7 @@ Pins `load: 'currentOnly'` (prevents short-code `en` 404) and `fallbackLng: 'en-
 
 | File | Production target | Tests | What's covered |
 |---|---|---|---|
-| [renderer.test.ts](packages/fossflow-lib/src/utils/__tests__/renderer.test.ts) | `utils/renderer.ts` | 9 | Grid subset, bounds checking, screen-to-isometric coordinate conversion |
+| [renderer.test.ts](packages/fossflow-lib/src/utils/__tests__/renderer.test.ts) | `utils/renderer.ts` | 16 | Grid subset, bounds checking, screen-to-isometric coordinate conversion; `incrementZoom`/`decrementZoom` boundary enforcement (clamped at MIN_ZOOM/MAX_ZOOM, correct step, no float drift across full range) |
 | [common.test.ts](packages/fossflow-lib/src/utils/__tests__/common.test.ts) | `utils/common.ts` | 1 | `clamp()` function |
 | [immer.test.ts](packages/fossflow-lib/src/utils/__tests__/immer.test.ts) | Immer (third-party) | 2 | Array reference stability with Immer drafts |
 
@@ -346,6 +375,19 @@ Covers: `setClipboard` / `getClipboard` round-trip; null/undefined handling; cli
 
 ---
 
+### [useCopyPaste.test.ts](packages/fossflow-lib/src/clipboard/__tests__/useCopyPaste.test.ts) · 10 tests · ✅ VALID
+
+**Production target:** `src/clipboard/useCopyPaste.ts`
+
+| Group | What's covered |
+|---|---|
+| `handleCopy` (5) | LASSO selection gathered + centroid computed; itemControls single-item copy; empty selection → no clipboard write; centroid includes rectangle midpoints and textbox tiles (not just nodes); connector auto-include when both anchors in selected set |
+| `handlePaste` (5) | Null clipboard → 'Nothing to paste' warning; IDs remapped (pasted items get new IDs); orphan detach — anchor referencing item not in clipboard has item ref removed; offset = original tile + (mouse − centroid); sets LASSO mode with all pasted refs |
+
+**Why this exists:** `handlePaste` is the most complex operation in the codebase — ID remapping, anchor detachment, centroid offset, collision avoidance, and multi-type batch paste all in one function. Any refactor risks regressing the ID/anchor plumbing.
+
+---
+
 ## Known Coverage Gaps
 
 The following critical paths have **no regression tests** yet. See `current_architecture.md §4` for full detail.
@@ -354,23 +396,25 @@ The following critical paths have **no regression tests** yet. See `current_arch
 
 | Gap | Why it matters |
 |---|---|
-| `useCopyPaste.handlePaste` | Most complex operation — ID remapping, anchor detachment, centroid, collision avoidance. No test at all. |
-| `useCopyPaste.handleCopy` | Centroid calculation, LASSO vs itemControls selection paths. |
 | `useScene.deleteSelectedItems` | Cascade across mixed item types in one transaction. |
 | `useScene.pasteItems` | Requires all 3 Providers + real model data; transaction atomicity. |
-| `useHistory` undo/redo with real stores | Current history tests use mocked stores; real-data round-trip untested. |
-| History overflow at 50 entries | 51st `saveToHistory` should drop oldest — not tested. |
-| `transaction()` single-checkpoint guarantee | That N operations inside `transaction()` produce exactly 1 undo step. |
 
 ### Medium priority
 
 | Gap | Why it matters |
 |---|---|
-| `usePanHandlers.handleMouseDown` | Pan bypass path (returns early from `processMouseUpdate`) — all 6 pan-trigger conditions untested |
 | `CURSOR → DRAG_ITEMS` transition | mousemove while mousedown on item — real-module test missing |
 | `CURSOR → LASSO` transition | mousemove while mousedown on empty canvas — real-module test missing |
-| `anchorSchema` multi-key guard | Schema rejects anchor with both `item` and `tile` set — untested |
-| Zoom boundary enforcement | `MIN_ZOOM = 0.1`, `MAX_ZOOM = 1` respected by `incrementZoom`/`decrementZoom` — untested |
+
+### Resolved (previously listed as gaps)
+
+| Gap | Resolved by |
+|---|---|
+| `useCopyPaste.handlePaste` + `handleCopy` | `useCopyPaste.test.ts` — 10 tests (2026-03-20) |
+| `useHistory` real undo/redo + overflow + transaction | `useHistory.realStore.test.tsx` — 7 tests (2026-03-20) |
+| `usePanHandlers.handleMouseDown` — all bypass conditions | `usePanHandlers.test.ts` — 13 tests (2026-03-20) |
+| `anchorSchema` multi-key guard | `connector.test.ts` — 5 new schema tests (2026-03-20) |
+| Zoom boundary enforcement (`MIN_ZOOM`, `MAX_ZOOM`, float drift) | `renderer.test.ts` — 7 zoom tests (2026-03-20) |
 
 ---
 
