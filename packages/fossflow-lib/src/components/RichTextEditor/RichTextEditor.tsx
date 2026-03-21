@@ -26,7 +26,7 @@ const tools = [
 ];
 
 // Formats that Quill should recognize
-const formats = [
+export const formats = [
   'bold',
   'italic',
   'underline',
@@ -34,7 +34,6 @@ const formats = [
   'link',
   'header',
   'list',
-  'bullet',
   'blockquote',
   'code-block'
 ];

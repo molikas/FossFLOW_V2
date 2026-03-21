@@ -21,11 +21,9 @@ export const createModelItem = (
   newModelItem: ModelItem,
   state: State
 ): State => {
-  const newState = produce(state, (draft) => {
+  return produce(state, (draft) => {
     draft.model.items.push(newModelItem);
   });
-
-  return updateModelItem(newModelItem.id, newModelItem, newState);
 };
 
 export const deleteModelItem = (id: string, state: State): State => {

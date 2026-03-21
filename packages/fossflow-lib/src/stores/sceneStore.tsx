@@ -1,5 +1,6 @@
 import React, { createContext, useRef, useContext } from 'react';
-import { createStore, useStore } from 'zustand';
+import { createStore } from 'zustand';
+import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { SceneStore, Scene } from 'src/types';
 
 export interface SceneHistoryState {
@@ -193,7 +194,7 @@ export function useSceneStore<T>(
     throw new Error('Missing provider in the tree');
   }
 
-  const value = useStore(store, selector, equalityFn);
+  const value = useStoreWithEqualityFn(store, selector, equalityFn);
   return value;
 }
 
