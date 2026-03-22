@@ -6,9 +6,10 @@ import { useUiStateStore } from 'src/stores/uiStateStore';
 
 export const Cursor = memo(() => {
   const theme = useTheme();
-  const tile = useUiStateStore((state) => {
-    return state.mouse.position.tile;
-  });
+  const tile = useUiStateStore(
+    (state) => state.mouse.position.tile,
+    (a, b) => a.x === b.x && a.y === b.y
+  );
   const zoom = useUiStateStore((state) => {
     return state.zoom;
   });

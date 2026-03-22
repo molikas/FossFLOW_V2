@@ -13,7 +13,7 @@ import {
   HighlightAltOutlined as LassoIcon,
   GestureOutlined as FreehandLassoIcon
 } from '@mui/icons-material';
-import { useUiStateStore } from 'src/stores/uiStateStore';
+import { useUiStateStore, useUiStateStoreApi } from 'src/stores/uiStateStore';
 import { IconButton } from 'src/components/IconButton/IconButton';
 import { UiElement } from 'src/components/UiElement/UiElement';
 import { useScene } from 'src/hooks/useScene';
@@ -25,14 +25,12 @@ import { HOTKEY_PROFILES } from 'src/config/hotkeys';
 export const ToolMenu = () => {
   const { createTextBox } = useScene();
   const { undo, redo, canUndo, canRedo } = useHistory();
+  const uiStateStoreApi = useUiStateStoreApi();
   const mode = useUiStateStore((state) => {
     return state.mode;
   });
   const uiStateStoreActions = useUiStateStore((state) => {
     return state.actions;
-  });
-  const mousePosition = useUiStateStore((state) => {
-    return state.mouse.position.tile;
   });
   const hotkeyProfile = useUiStateStore((state) => {
     return state.hotkeyProfile;
@@ -53,11 +51,12 @@ export const ToolMenu = () => {
 
   const createTextBoxProxy = useCallback(() => {
     const textBoxId = generateId();
+    const mouseTile = uiStateStoreApi.getState().mouse.position.tile;
 
     createTextBox({
       ...TEXTBOX_DEFAULTS,
       id: textBoxId,
-      tile: mousePosition
+      tile: mouseTile
     });
 
     uiStateStoreActions.setMode({
@@ -65,7 +64,7 @@ export const ToolMenu = () => {
       showCursor: false,
       id: textBoxId
     });
-  }, [uiStateStoreActions, createTextBox, mousePosition]);
+  }, [uiStateStoreApi, uiStateStoreActions, createTextBox]);
 
   return (
     <UiElement>

@@ -1,8 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Box } from '@mui/material';
-import { Size } from 'src/types';
 import gridTileSvg from 'src/assets/grid-tile-bg.svg';
-import { useUiStateStore } from 'src/stores/uiStateStore';
+import { useUiStateStoreApi } from 'src/stores/uiStateStore';
 import { PROJECTED_TILE_SIZE } from 'src/config';
 import { SizeUtils } from 'src/utils/SizeUtils';
 import { useResizeObserver } from 'src/hooks/useResizeObserver';
@@ -10,27 +9,31 @@ import { useResizeObserver } from 'src/hooks/useResizeObserver';
 export const Grid = () => {
   const elementRef = useRef<HTMLDivElement>(null);
   const { size } = useResizeObserver(elementRef.current);
-  const scroll = useUiStateStore((state) => {
-    return state.scroll;
-  });
-  const zoom = useUiStateStore((state) => {
-    return state.zoom;
-  });
+  const storeApi = useUiStateStoreApi();
 
   useEffect(() => {
-    if (!elementRef.current) return;
-
     const el = elementRef.current;
-    const tileSize = SizeUtils.multiply(PROJECTED_TILE_SIZE, zoom);
-    const elSize = el.getBoundingClientRect();
-    const backgroundPosition: Size = {
-      width: elSize.width / 2 + scroll.position.x + tileSize.width / 2,
-      height: elSize.height / 2 + scroll.position.y
+    if (!el) return;
+
+    const applyBackground = (scrollX: number, scrollY: number, zoom: number) => {
+      const tileSize = SizeUtils.multiply(PROJECTED_TILE_SIZE, zoom);
+      const elSize = el.getBoundingClientRect();
+      el.style.backgroundSize = `${tileSize.width}px ${tileSize.height * 2}px`;
+      el.style.backgroundPosition = `${elSize.width / 2 + scrollX + tileSize.width / 2}px ${elSize.height / 2 + scrollY}px`;
     };
 
-    el.style.backgroundSize = `${tileSize.width}px ${tileSize.height * 2}px`;
-    el.style.backgroundPosition = `${backgroundPosition.width}px ${backgroundPosition.height}px`;
-  }, [scroll, zoom, size]);
+    // Apply immediately on mount / resize
+    const { scroll, zoom } = storeApi.getState();
+    applyBackground(scroll.position.x, scroll.position.y, zoom);
+
+    // Subscribe to scroll/zoom changes — bypasses React render cycle entirely
+    const unsubscribe = storeApi.subscribe((state, prev) => {
+      if (state.scroll === prev.scroll && state.zoom === prev.zoom) return;
+      applyBackground(state.scroll.position.x, state.scroll.position.y, state.zoom);
+    });
+
+    return unsubscribe;
+  }, [storeApi, size]); // size triggers recalculation on window resize
 
   return (
     <Box

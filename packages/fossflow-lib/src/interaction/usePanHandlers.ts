@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react';
-import { useUiStateStore } from 'src/stores/uiStateStore';
+import { useUiStateStore, useUiStateStoreApi } from 'src/stores/uiStateStore';
 import { getItemAtTile, setWindowCursor } from 'src/utils';
 import { useScene } from 'src/hooks/useScene';
 import { SlimMouseEvent } from 'src/types';
@@ -9,7 +9,7 @@ export const usePanHandlers = () => {
   const actions = useUiStateStore((state) => state.actions);
   const panSettings = useUiStateStore((state) => state.panSettings);
   const rendererEl = useUiStateStore((state) => state.rendererEl);
-  const mouseTile = useUiStateStore((state) => state.mouse.position.tile);
+  const uiStateApi = useUiStateStoreApi();
   const scene = useScene();
   const isPanningRef = useRef(false);
   const panMethodRef = useRef<string | null>(null);
@@ -42,12 +42,12 @@ export const usePanHandlers = () => {
     if (!rendererEl || e.target !== rendererEl) return false;
 
     const itemAtTile = getItemAtTile({
-      tile: mouseTile,
+      tile: uiStateApi.getState().mouse.position.tile,
       scene
     });
 
     return !itemAtTile;
-  }, [rendererEl, mouseTile, scene]);
+  }, [rendererEl, uiStateApi, scene]);
 
   const handleMouseDown = useCallback((e: SlimMouseEvent): boolean => {
     // Left-click while in pan mode exits back to select/cursor mode

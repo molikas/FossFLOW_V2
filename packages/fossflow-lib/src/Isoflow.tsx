@@ -48,7 +48,12 @@ const App = forwardRef<IsoflowRef, IsoflowProps>(({
     return { ...INITIAL_DATA, ...defined };
   }, [initialData]);
 
+  // Guard against React 18 StrictMode double-invoke: track which data ref was last loaded.
+  // Same object reference → already loaded (StrictMode remount). New reference → real prop change.
+  const loadedForRef = useRef<typeof mergedInitialData | null>(null);
   useEffect(() => {
+    if (loadedForRef.current === mergedInitialData) return;
+    loadedForRef.current = mergedInitialData;
     load(mergedInitialData);
   }, [mergedInitialData, load]);
 

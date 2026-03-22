@@ -226,11 +226,18 @@ class StorageManager {
     if (this.initPromise) return this.initPromise;
 
     this.initPromise = (async () => {
-      if (await this.serverStorage.isAvailable()) {
+      // Skip server availability check in dev — no backend running, avoids the
+      // HTML-as-JSON parse error and the 5-second timeout on every dev reload.
+      const isDev = typeof (import.meta as any).env !== 'undefined'
+        ? (import.meta as any).env.DEV
+        : false;
+
+      if (!isDev && await this.serverStorage.isAvailable()) {
         console.log('Using server storage');
         this.activeStorage = this.serverStorage;
       } else {
-        console.log('Using session storage');
+        if (isDev) console.log('Dev mode: using session storage (server check skipped)');
+        else console.log('Using session storage');
         this.activeStorage = this.sessionStorage;
       }
       return this.activeStorage;

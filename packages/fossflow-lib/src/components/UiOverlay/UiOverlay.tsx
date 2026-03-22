@@ -60,16 +60,17 @@ const getEditorModeMapping = (editorMode: keyof typeof EditorModeEnum) => {
 // Isolated component so UiOverlay doesn't re-render on every mouse move.
 // Only mounts when mode.type === 'PLACE_ICON'.
 const PlaceIconLayer = () => {
-  const { mode, mouse } = useUiStateStore(
-    (state) => ({ mode: state.mode, mouse: state.mouse }),
-    shallow
+  const mode = useUiStateStore((state) => state.mode);
+  const tile = useUiStateStore(
+    (state) => state.mouse.position.tile,
+    (a, b) => a.x === b.x && a.y === b.y
   );
 
   if (mode.type !== 'PLACE_ICON' || !mode.id) return null;
 
   return (
     <SceneLayer disableAnimation>
-      <DragAndDrop iconId={mode.id} tile={mouse.position.tile} />
+      <DragAndDrop iconId={mode.id} tile={tile} />
     </SceneLayer>
   );
 };
