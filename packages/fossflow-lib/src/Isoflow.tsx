@@ -48,14 +48,20 @@ const App = forwardRef<IsoflowRef, IsoflowProps>(({
     return { ...INITIAL_DATA, ...defined };
   }, [initialData]);
 
+  // Keep a ref to the latest load function so we can call it without adding it to effect deps.
+  // This prevents load-reference churn (from cascading store updates) from re-triggering the effect.
+  const loadRef = useRef(load);
+  useEffect(() => { loadRef.current = load; });
+
   // Guard against React 18 StrictMode double-invoke: track which data ref was last loaded.
   // Same object reference → already loaded (StrictMode remount). New reference → real prop change.
+  // Effect only depends on mergedInitialData, not load, so load-ref churn never triggers a reload.
   const loadedForRef = useRef<typeof mergedInitialData | null>(null);
   useEffect(() => {
     if (loadedForRef.current === mergedInitialData) return;
     loadedForRef.current = mergedInitialData;
-    load(mergedInitialData);
-  }, [mergedInitialData, load]);
+    loadRef.current(mergedInitialData);
+  }, [mergedInitialData]);
 
   useEffect(() => {
     uiStateActions.setEditorMode(editorMode);

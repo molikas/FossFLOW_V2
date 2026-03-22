@@ -228,9 +228,7 @@ class StorageManager {
     this.initPromise = (async () => {
       // Skip server availability check in dev — no backend running, avoids the
       // HTML-as-JSON parse error and the 5-second timeout on every dev reload.
-      const isDev = typeof (import.meta as any).env !== 'undefined'
-        ? (import.meta as any).env.DEV
-        : false;
+      const isDev = process.env.NODE_ENV !== 'production';
 
       if (!isDev && await this.serverStorage.isAvailable()) {
         console.log('Using server storage');

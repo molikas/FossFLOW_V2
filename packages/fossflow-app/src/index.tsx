@@ -28,13 +28,5 @@ root.render(
 // or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
 reportWebVitals();
 
-// Service worker registration - only in production for PWA functionality
-if (process.env.NODE_ENV === 'production') {
-  serviceWorkerRegistration.register({
-    onSuccess: () => console.log('Service worker registered successfully'),
-    onUpdate: () => console.log('Service worker update available')
-  });
-} else {
-  // Disable service worker in development to avoid cache issues
-  serviceWorkerRegistration.unregister();
-}
+// FossFLOW does not use PWA/offline support — always unregister any active service worker.
+serviceWorkerRegistration.unregister();

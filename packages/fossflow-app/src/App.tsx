@@ -148,8 +148,14 @@ function EditorPage() {
   const currentModelRef = useRef<DiagramData | null>(null);
   useEffect(() => { currentModelRef.current = currentModel; }, [currentModel]);
 
+  // Skip initial mount so StrictMode remount with stale currentModelRef doesn't trigger a spurious load.
+  // Only fire when loadedIcons genuinely changes after mount (e.g. user enables an icon pack).
+  const iconPackEffectMountedRef = useRef(false);
   useEffect(() => {
-    // When icon packs load/change, update icons in the active diagram without full remount
+    if (!iconPackEffectMountedRef.current) {
+      iconPackEffectMountedRef.current = true;
+      return;
+    }
     if (!isoflowRef.current || !currentModelRef.current) return;
     const importedIcons = (currentModelRef.current.icons || []).filter((icon: any) => icon.collection === 'imported');
     const mergedIcons = [...iconPackManager.loadedIcons, ...importedIcons];
