@@ -2,8 +2,7 @@ import React, { useMemo, memo } from 'react';
 import { Box, Typography, Stack } from '@mui/material';
 import {
   PROJECTED_TILE_SIZE,
-  DEFAULT_LABEL_HEIGHT,
-  MARKDOWN_EMPTY_VALUE
+  DEFAULT_LABEL_HEIGHT
 } from 'src/config';
 import { getTilePosition } from 'src/utils';
 import { useIcon } from 'src/hooks/useIcon';
@@ -29,14 +28,11 @@ export const Node = memo(({ node, order }: Props) => {
   }, [node.tile]);
 
   const description = useMemo(() => {
-    if (
-      !modelItem ||
-      !modelItem.description ||
-      modelItem.description.trim() === MARKDOWN_EMPTY_VALUE
-    )
-      return null;
-
-    return modelItem.description;
+    if (!modelItem?.description) return null;
+    // Strip all HTML tags to check for visible text — handles all Quill empty
+    // variants (<p><br></p>, <p><br/></p>, whitespace-only, etc.)
+    const visible = modelItem.description.replace(/<[^>]*>/g, '').trim();
+    return visible ? modelItem.description : null;
   }, [modelItem?.description]);
 
   // If modelItem doesn't exist, don't render the node

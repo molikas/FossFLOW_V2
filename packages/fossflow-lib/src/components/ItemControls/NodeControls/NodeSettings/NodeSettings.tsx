@@ -127,11 +127,13 @@ export const NodeSettings = ({
         <RichTextEditor
           value={modelItem.description}
           onChange={(text) => {
-            const isEmpty = !text || text.trim() === '<p><br></p>';
-            const stored = modelItem.description;
-            const storedIsEmpty = !stored || stored.trim() === '<p><br></p>';
+            const hasContent = (val: string | undefined) =>
+              !!val && val.replace(/<[^>]*>/g, '').trim() !== '';
+            const isEmpty = !hasContent(text);
+            const storedIsEmpty = !hasContent(modelItem.description);
             if (isEmpty && storedIsEmpty) return;
-            if (stored !== text) onModelItemUpdated({ description: isEmpty ? undefined : text });
+            if (modelItem.description !== text)
+              onModelItemUpdated({ description: isEmpty ? undefined : text });
           }}
         />
       </Section>
