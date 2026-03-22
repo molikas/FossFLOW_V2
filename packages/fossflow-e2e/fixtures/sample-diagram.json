@@ -1,0 +1,57 @@
+{
+  "title": "E2E Test Diagram",
+  "version": "1.0.0",
+  "icons": [
+    {
+      "id": "test-icon-1",
+      "name": "Server",
+      "isIsometric": true,
+      "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHJlY3QgeD0iMiIgeT0iMiIgd2lkdGg9IjIwIiBoZWlnaHQ9IjgiIHJ4PSIyIiBmaWxsPSIjNjY2Ii8+PHJlY3QgeD0iMiIgeT0iMTQiIHdpZHRoPSIyMCIgaGVpZ2h0PSI4IiByeD0iMiIgZmlsbD0iIzY2NiIvPjwvc3ZnPg=="
+    }
+  ],
+  "colors": [
+    {
+      "id": "default-color",
+      "label": "Default",
+      "value": "#6366F1"
+    }
+  ],
+  "items": [
+    {
+      "id": "node-e2e-1",
+      "name": "Node A",
+      "icon": "test-icon-1",
+      "description": null,
+      "headerLink": null
+    },
+    {
+      "id": "node-e2e-2",
+      "name": "Node B",
+      "icon": "test-icon-1",
+      "description": null,
+      "headerLink": null
+    }
+  ],
+  "views": [
+    {
+      "id": "view-e2e-1",
+      "title": "Main View",
+      "items": [
+        {
+          "id": "node-e2e-1",
+          "tile": { "x": 5, "y": 5 },
+          "labelHeight": 20
+        },
+        {
+          "id": "node-e2e-2",
+          "tile": { "x": 9, "y": 5 },
+          "labelHeight": 20
+        }
+      ],
+      "connectors": [],
+      "textBoxes": [],
+      "rectangles": []
+    }
+  ],
+  "fitToView": true
+}
