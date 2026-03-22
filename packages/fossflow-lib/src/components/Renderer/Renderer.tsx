@@ -46,6 +46,7 @@ export const Renderer = ({ showGrid, backgroundColor }: RendererProps) => {
   return (
     <Box
       ref={containerRef}
+      data-testid="fossflow-canvas"
       sx={{
         position: 'absolute',
         top: 0,

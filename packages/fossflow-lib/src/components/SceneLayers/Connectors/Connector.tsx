@@ -162,7 +162,7 @@ export const Connector = memo(({ connector, currentView, isSelected }: Props) =>
   const lineType = connector.lineType || 'SINGLE';
 
   return (
-    <Box style={css}>
+    <Box data-testid="connector-path" style={css}>
       <Svg
         style={{
           // TODO: The original x coordinates of each tile seems to be calculated wrongly.

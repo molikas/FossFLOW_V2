@@ -4,13 +4,13 @@ import { Box } from '@mui/material';
 import { theme } from 'src/styles/theme';
 import { IsoflowProps, IsoflowRef } from 'src/types';
 import { setWindowCursor, modelFromModelStore } from 'src/utils';
-import { useModelStore, ModelProvider } from 'src/stores/modelStore';
+import { useModelStore, ModelProvider, useModelStoreApi } from 'src/stores/modelStore';
 import { SceneProvider } from 'src/stores/sceneStore';
 import { LocaleProvider } from 'src/stores/localeStore';
 import { GlobalStyles } from 'src/styles/GlobalStyles';
 import { Renderer } from 'src/components/Renderer/Renderer';
 import { UiOverlay } from 'src/components/UiOverlay/UiOverlay';
-import { UiStateProvider, useUiStateStore } from 'src/stores/uiStateStore';
+import { UiStateProvider, useUiStateStore, useUiStateStoreApi } from 'src/stores/uiStateStore';
 import { INITIAL_DATA, MAIN_MENU_OPTIONS } from 'src/config';
 import { useInitialDataManager } from 'src/hooks/useInitialDataManager';
 import enUS from 'src/i18n/en-US';
@@ -34,6 +34,19 @@ const App = forwardRef<IsoflowRef, IsoflowProps>(({
   const model = useModelStore((state) => {
     return modelFromModelStore(state);
   });
+
+  // Expose Zustand store instances for Playwright e2e tests.
+  // Completely tree-shaken from production builds by the bundler.
+  const uiStore = useUiStateStoreApi();
+  const modelStore = useModelStoreApi();
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') {
+      (window as any).__fossflow__ = { ui: uiStore, model: modelStore };
+      return () => { delete (window as any).__fossflow__; };
+    }
+  // Store instances are stable (created once in Provider via useRef)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const { load } = initialDataManager;
 

@@ -20,6 +20,7 @@ export const IconGrid = ({ icons, onMouseDown, onClick, onDoubleClick, hoveredIn
         return (
           <Grid item xs={3} key={icon.id}>
             <Box
+              data-testid="icon-grid-item"
               sx={{
                 backgroundColor: isHovered ? 'action.hover' : 'transparent',
                 borderRadius: 1,

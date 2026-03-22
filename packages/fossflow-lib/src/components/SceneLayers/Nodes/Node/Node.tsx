@@ -58,7 +58,7 @@ export const Node = memo(({ node, order }: Props) => {
         }}
       >
         {(modelItem?.name || description) && (
-          <Box>
+          <Box data-testid="node-label">
             <ExpandableLabel
               maxWidth={250}
               expandDirection="BOTTOM"
@@ -72,6 +72,7 @@ export const Node = memo(({ node, order }: Props) => {
                         href={modelItem.headerLink}
                         target="_blank"
                         rel="noopener noreferrer"
+                        data-testid="node-header-link"
                         style={{ color: 'inherit', textDecoration: 'underline' }}
                         onClick={(e) => e.stopPropagation()}
                       >

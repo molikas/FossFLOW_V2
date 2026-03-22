@@ -22,6 +22,7 @@ export const ContextMenu = ({
       open={!!anchorEl}
       anchorEl={anchorEl}
       onClose={onClose}
+      PaperProps={{ 'data-testid': 'context-menu' } as any}
     >
       {menuItems.map((item, index) => {
         return <MenuItem key={index} onClick={item.onClick}>{item.label}</MenuItem>;

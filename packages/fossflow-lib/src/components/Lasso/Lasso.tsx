@@ -1,4 +1,5 @@
 import React from 'react';
+import { Box } from '@mui/material';
 import { useUiStateStore } from 'src/stores/uiStateStore';
 import { IsoTileArea } from 'src/components/IsoTileArea/IsoTileArea';
 
@@ -15,16 +16,18 @@ export const Lasso = () => {
   const { startTile, endTile } = selection;
 
   return (
-    <IsoTileArea
-      from={startTile}
-      to={endTile}
-      fill="rgba(33, 150, 243, 0.15)"
-      cornerRadius={8}
-      stroke={{
-        color: '#2196f3',
-        width: 2,
-        dashArray: '8 4'
-      }}
-    />
+    <Box data-testid="lasso-selection" sx={{ display: 'contents' }}>
+      <IsoTileArea
+        from={startTile}
+        to={endTile}
+        fill="rgba(33, 150, 243, 0.15)"
+        cornerRadius={8}
+        stroke={{
+          color: '#2196f3',
+          width: 2,
+          dashArray: '8 4'
+        }}
+      />
+    </Box>
   );
 };

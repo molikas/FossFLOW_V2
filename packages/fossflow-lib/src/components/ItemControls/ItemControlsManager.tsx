@@ -31,6 +31,7 @@ export const ItemControlsManager = () => {
 
   return (
     <Box
+      data-testid="item-controls-panel"
       sx={{
         width: '100%'
       }}

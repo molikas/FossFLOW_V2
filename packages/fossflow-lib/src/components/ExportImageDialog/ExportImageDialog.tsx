@@ -707,6 +707,7 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
                   </Button>
                   <Button
                     variant="outlined"
+                    data-testid="export-svg-button"
                     onClick={downloadSvgFile}
                     disabled={!svgData || (cropToContent && isInCropMode && !croppedImageData)}
                   >

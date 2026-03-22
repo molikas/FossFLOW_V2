@@ -1,0 +1,18 @@
+{
+  "name": "@fossflow/e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Playwright end-to-end tests for FossFLOW",
+  "scripts": {
+    "test": "playwright test --config playwright.config.ts",
+    "test:smoke": "playwright test --project=smoke --config playwright.config.ts",
+    "test:e2e": "playwright test --project=chromium --project=firefox --config playwright.config.ts",
+    "test:visual": "playwright test --project=visual --config playwright.config.ts",
+    "test:ui": "playwright test --ui --config playwright.config.ts",
+    "test:ci": "playwright test --config playwright.config.ts --trace on-first-retry"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "typescript": "^5.9.3"
+  }
+}
