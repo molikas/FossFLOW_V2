@@ -66,7 +66,7 @@ const initialState = () => {
               offset: CoordsUtils.zero()
             },
             itemControls: null,
-            zoom: 1
+            zoom: INITIAL_UI_STATE.zoom
           });
         },
         setMode: (mode) => {

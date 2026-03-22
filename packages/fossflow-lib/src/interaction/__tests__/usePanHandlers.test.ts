@@ -1,15 +1,17 @@
 /**
- * REGRESSION — usePanHandlers.handleMouseDown
+ * REGRESSION — usePanHandlers
  *
- * The pan handler is the "bypass path" in the interaction system: when it
- * returns true, processMouseUpdate is skipped entirely. All 6 pan-trigger
- * conditions must be tested to ensure the bypass fires (or doesn't) correctly.
+ * Right-click pan is now TRANSIENT (not sticky):
+ *  - Right mousedown: consume event, defer pan entry until drag threshold.
+ *  - Right mousemove (>4px): enter PAN mode.
+ *  - Right mouseup after drag: exit PAN, restore previous mode.
+ *  - Right mouseup without drag: deselect (close itemControls, clear lasso selection).
  *
- * Conditions:
- *  1. Left-click while already in PAN mode → endPan(), return true
+ * All other pan triggers are unchanged:
+ *  1. Left-click while in PAN mode → endPan(), return true
  *  2. Middle-click + middleClickPan=true → startPan('middle'), return true
  *  3. Middle-click + middleClickPan=false → return false
- *  4. Right-click + rightClickPan=true → startPan('right'), return true
+ *  4. Right-click + rightClickPan=true → consume event (return true), NO immediate PAN
  *  5. Right-click + rightClickPan=false → return false
  *  6. Left-click + ctrlKey + ctrlClickPan=true → startPan('ctrl'), return true
  *  7. Left-click + altKey + altClickPan=true → startPan('alt'), return true
@@ -24,9 +26,11 @@ import { usePanHandlers } from '../usePanHandlers';
 // Mutable mock state — updated per test
 // ---------------------------------------------------------------------------
 const mockSetMode = jest.fn();
+const mockSetItemControls = jest.fn();
+const mockSetMouse = jest.fn();
 const mockUiState = {
-  mode: { type: 'CURSOR' as string },
-  actions: { setMode: mockSetMode },
+  mode: { type: 'CURSOR' as string, selection: null },
+  actions: { setMode: mockSetMode, setItemControls: mockSetItemControls, setMouse: mockSetMouse },
   panSettings: {
     middleClickPan: true,
     rightClickPan: true,
@@ -63,13 +67,15 @@ jest.mock('src/hooks/useScene', () => ({
 // ---------------------------------------------------------------------------
 function makeEvent(overrides: Partial<{
   button: number; ctrlKey: boolean; altKey: boolean; target: EventTarget | null;
-  preventDefault: jest.Mock;
+  clientX: number; clientY: number; preventDefault: jest.Mock;
 }> = {}) {
   return {
     button: 0,
     ctrlKey: false,
     altKey: false,
     target: null,
+    clientX: 100,
+    clientY: 100,
     preventDefault: jest.fn(),
     ...overrides
   };
@@ -84,7 +90,8 @@ function setup() {
 // ---------------------------------------------------------------------------
 beforeEach(() => {
   jest.clearAllMocks();
-  mockUiState.mode.type = 'CURSOR';
+  mockUiState.mode = { type: 'CURSOR', selection: null };
+  mockUiState.actions = { setMode: mockSetMode, setItemControls: mockSetItemControls, setMouse: mockSetMouse } as any;
   mockUiState.panSettings.middleClickPan = true;
   mockUiState.panSettings.rightClickPan = true;
   mockUiState.panSettings.ctrlClickPan = true;
@@ -96,9 +103,6 @@ beforeEach(() => {
 
 describe('usePanHandlers.handleMouseDown — pan bypass conditions', () => {
   test('1. left-click while in PAN mode → returns true (bypasses canvas interaction)', () => {
-    // Contract: when modeType === 'PAN', any left-click returns true so the canvas
-    // interaction manager does not process it. The actual mode reset (endPan → setMode CURSOR)
-    // only fires if isPanningRef was set by a prior startPan call.
     mockUiState.mode.type = 'PAN';
     const { result } = setup();
     let returned: boolean = false;
@@ -109,13 +113,11 @@ describe('usePanHandlers.handleMouseDown — pan bypass conditions', () => {
   });
 
   test('1b. full cycle: middle-click starts pan, left-click ends pan → setMode CURSOR', () => {
-    // Start pan from CURSOR mode so isPanningRef is set
     mockUiState.mode.type = 'CURSOR';
     const { result } = setup();
     act(() => { result.current.handleMouseDown(makeEvent({ button: 1 })); });
     expect(mockSetMode).toHaveBeenCalledWith(expect.objectContaining({ type: 'PAN' }));
     mockSetMode.mockClear();
-    // Now simulate left-click to end pan (mouseUp path since isPanningRef=true)
     act(() => { result.current.handleMouseUp(makeEvent({ button: 0 })); });
     expect(mockSetMode).toHaveBeenCalledWith(expect.objectContaining({ type: 'CURSOR' }));
   });
@@ -141,24 +143,27 @@ describe('usePanHandlers.handleMouseDown — pan bypass conditions', () => {
     expect(mockSetMode).not.toHaveBeenCalled();
   });
 
-  test('4. right-click + rightClickPan=true → startPan and returns true', () => {
+  test('4. right-click + rightClickPan=true → consumes event (returns true) but does NOT immediately enter PAN', () => {
     const { result } = setup();
     let returned: boolean = false;
     act(() => {
       returned = result.current.handleMouseDown(makeEvent({ button: 2 }));
     });
     expect(returned).toBe(true);
-    expect(mockSetMode).toHaveBeenCalledWith(expect.objectContaining({ type: 'PAN' }));
+    // Pan entry is deferred — mode must not be set on mousedown alone
+    expect(mockSetMode).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'PAN' }));
   });
 
-  test('5. right-click + rightClickPan=false → returns false', () => {
+  test('5. right-click + rightClickPan=false → still consumed (returns true) but no PAN or deselect state set', () => {
     mockUiState.panSettings.rightClickPan = false;
     const { result } = setup();
     let returned: boolean = false;
     act(() => {
       returned = result.current.handleMouseDown(makeEvent({ button: 2 }));
     });
-    expect(returned).toBe(false);
+    // Always consumed — prevents Cursor.mousedown/mouseup from firing the context menu
+    expect(returned).toBe(true);
+    // No PAN mode entered and no deferred pan state set
     expect(mockSetMode).not.toHaveBeenCalled();
   });
 
@@ -186,7 +191,7 @@ describe('usePanHandlers.handleMouseDown — pan bypass conditions', () => {
     const fakeEl = {} as EventTarget;
     mockUiState.rendererEl = fakeEl;
     mockUiState.panSettings.emptyAreaClickPan = true;
-    mockGetItemAtTile.mockReturnValue(null); // empty area
+    mockGetItemAtTile.mockReturnValue(null);
     const { result } = setup();
     let returned: boolean = false;
     act(() => {
@@ -210,8 +215,51 @@ describe('usePanHandlers.handleMouseDown — pan bypass conditions', () => {
   });
 });
 
+describe('usePanHandlers.handleMouseMove — deferred right-drag pan', () => {
+  test('right-drag beyond threshold → enters PAN mode, returns false (processMouseUpdate runs)', () => {
+    const { result } = setup();
+    act(() => { result.current.handleMouseDown(makeEvent({ button: 2, clientX: 100, clientY: 100 })); });
+    mockSetMode.mockClear();
+    let consumed = false;
+    // Move beyond threshold
+    act(() => { consumed = result.current.handleMouseMove(makeEvent({ clientX: 106, clientY: 100 })); });
+    expect(mockSetMode).toHaveBeenCalledWith(expect.objectContaining({ type: 'PAN' }));
+    expect(consumed).toBe(false); // Pan.mousemove must run
+  });
+
+  test('right-drag below threshold → does NOT enter PAN, returns true (suppresses processMouseUpdate)', () => {
+    const { result } = setup();
+    act(() => { result.current.handleMouseDown(makeEvent({ button: 2, clientX: 100, clientY: 100 })); });
+    mockSetMode.mockClear();
+    let consumed = false;
+    // Move below threshold
+    act(() => { consumed = result.current.handleMouseMove(makeEvent({ clientX: 102, clientY: 101 })); });
+    expect(mockSetMode).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'PAN' }));
+    // Must suppress processMouseUpdate to prevent Cursor.mousemove triggering lasso
+    expect(consumed).toBe(true);
+  });
+
+  test('mousemove without prior right-down → returns false (no suppression)', () => {
+    const { result } = setup();
+    let consumed = false;
+    act(() => { consumed = result.current.handleMouseMove(makeEvent({ clientX: 200, clientY: 200 })); });
+    expect(mockSetMode).not.toHaveBeenCalled();
+    expect(consumed).toBe(false);
+  });
+
+  test('mousemove after pan has started → returns false (Pan.mousemove must run)', () => {
+    const { result } = setup();
+    act(() => { result.current.handleMouseDown(makeEvent({ button: 2, clientX: 100, clientY: 100 })); });
+    act(() => { result.current.handleMouseMove(makeEvent({ clientX: 110, clientY: 100 })); }); // starts pan
+    mockSetMode.mockClear();
+    let consumed = false;
+    act(() => { consumed = result.current.handleMouseMove(makeEvent({ clientX: 115, clientY: 100 })); });
+    expect(consumed).toBe(false);
+  });
+});
+
 describe('usePanHandlers.handleMouseUp', () => {
-  test('returns false if not currently panning', () => {
+  test('returns false if not panning and no prior right-down', () => {
     const { result } = setup();
     let returned: boolean = false;
     act(() => {
@@ -220,18 +268,46 @@ describe('usePanHandlers.handleMouseUp', () => {
     expect(returned).toBe(false);
   });
 
-  test('right-click pan is a toggle — mouseup on right button does NOT end pan', () => {
+  test('right-click without drag → deselect: closes itemControls, clears mousedown, returns true', () => {
     const { result } = setup();
-    // Start right-click pan
     act(() => { result.current.handleMouseDown(makeEvent({ button: 2 })); });
+    mockSetMode.mockClear();
+    mockSetItemControls.mockClear();
+    mockSetMouse.mockClear();
+    let returned: boolean = false;
+    act(() => {
+      returned = result.current.handleMouseUp(makeEvent({ button: 2 }));
+    });
+    expect(returned).toBe(true);
+    expect(mockSetItemControls).toHaveBeenCalledWith(null);
+    // Stale mousedown state must be cleared so Cursor.mousemove can't trigger lasso
+    expect(mockSetMouse).toHaveBeenCalledWith(expect.objectContaining({ mousedown: null }));
+    expect(mockSetMode).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'PAN' }));
+  });
+
+  test('right-drag then release → exits PAN and restores previous mode (CURSOR)', () => {
+    const { result } = setup();
+    // Start and cross threshold
+    act(() => { result.current.handleMouseDown(makeEvent({ button: 2, clientX: 100, clientY: 100 })); });
+    act(() => { result.current.handleMouseMove(makeEvent({ clientX: 110, clientY: 100 })); });
     mockSetMode.mockClear();
     let returned: boolean = false;
     act(() => {
       returned = result.current.handleMouseUp(makeEvent({ button: 2 }));
     });
-    // Right-click pan is toggle: mouseup on right button stays in pan
-    expect(returned).toBe(false);
-    expect(mockSetMode).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'CURSOR' }));
+    expect(returned).toBe(true);
+    // Should restore to CURSOR (was in CURSOR before right-click)
+    expect(mockSetMode).toHaveBeenCalledWith(expect.objectContaining({ type: 'CURSOR' }));
+  });
+
+  test('right-drag from CONNECTOR mode → restores CONNECTOR mode on release', () => {
+    mockUiState.mode = { type: 'CONNECTOR', selection: null };
+    const { result } = setup();
+    act(() => { result.current.handleMouseDown(makeEvent({ button: 2, clientX: 100, clientY: 100 })); });
+    act(() => { result.current.handleMouseMove(makeEvent({ clientX: 110, clientY: 100 })); });
+    mockSetMode.mockClear();
+    act(() => { result.current.handleMouseUp(makeEvent({ button: 2 })); });
+    expect(mockSetMode).toHaveBeenCalledWith(expect.objectContaining({ type: 'CONNECTOR' }));
   });
 
   test('middle-click pan ends on mouseup', () => {
@@ -244,5 +320,16 @@ describe('usePanHandlers.handleMouseUp', () => {
     });
     expect(returned).toBe(true);
     expect(mockSetMode).toHaveBeenCalledWith(expect.objectContaining({ type: 'CURSOR' }));
+  });
+
+  test('right-click without drag on LASSO mode → clears lasso selection', () => {
+    mockUiState.mode = { type: 'LASSO', selection: { startTile: { x: 0, y: 0 }, endTile: { x: 5, y: 5 }, items: [] } } as any;
+    const { result } = setup();
+    act(() => { result.current.handleMouseDown(makeEvent({ button: 2 })); });
+    mockSetMode.mockClear();
+    act(() => { result.current.handleMouseUp(makeEvent({ button: 2 })); });
+    expect(mockSetMode).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'LASSO', selection: null })
+    );
   });
 });

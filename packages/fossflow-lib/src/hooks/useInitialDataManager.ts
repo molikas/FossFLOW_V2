@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { InitialData, IconCollectionState } from 'src/types';
-import { INITIAL_DATA, INITIAL_SCENE_STATE } from 'src/config';
+import { INITIAL_DATA, INITIAL_SCENE_STATE, INITIAL_UI_STATE } from 'src/config';
 import {
   getFitToViewParams,
   CoordsUtils,
@@ -84,7 +84,7 @@ export const useInitialDataManager = () => {
           position: CoordsUtils.zero(),
           offset: CoordsUtils.zero()
         });
-        uiStateActions.setZoom(1);
+        uiStateActions.setZoom(INITIAL_UI_STATE.zoom);
 
         const activeViewId = uiStateStoreApi.getState().view;
         const targetViewId = initialData.view

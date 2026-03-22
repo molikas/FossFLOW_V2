@@ -95,7 +95,7 @@ export const INITIAL_DATA: InitialData = {
   fitToView: false
 };
 export const INITIAL_UI_STATE = {
-  zoom: 1,
+  zoom: 0.9,
   scroll: {
     position: CoordsUtils.zero(),
     offset: CoordsUtils.zero()

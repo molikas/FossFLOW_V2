@@ -66,7 +66,7 @@ export const useInteractionManager = () => {
   const { undo, redo, canUndo, canRedo } = useHistory();
   const { handleCopy, handlePaste } = useCopyPaste();
   const { createTextBox, deleteSelectedItems, deleteViewItem, deleteConnector, deleteTextBox, deleteRectangle } = scene;
-  const { handleMouseDown: handlePanMouseDown, handleMouseUp: handlePanMouseUp } = usePanHandlers();
+  const { handleMouseDown: handlePanMouseDown, handleMouseMove: handlePanMouseMove, handleMouseUp: handlePanMouseUp } = usePanHandlers();
   const { scheduleUpdate, flushUpdate, cleanup } = useRAFThrottle();
 
   // Sync the single rendererEl measurement into the store so UiOverlay and
@@ -403,14 +403,18 @@ export const useInteractionManager = () => {
 
       if (e.type === 'mousemove') {
         scheduleUpdate(nextMouse, e, (update) => {
-          processMouseUpdate(update.mouse, update.event);
+          // handlePanMouseMove returns true while right button is held below threshold —
+          // suppress processMouseUpdate to prevent Cursor.mousemove triggering lasso.
+          if (!handlePanMouseMove(update.event)) {
+            processMouseUpdate(update.mouse, update.event);
+          }
         });
       } else {
         flushUpdate();
         processMouseUpdate(nextMouse, e);
       }
     },
-    [uiStateApi, rendererSize, handlePanMouseDown, handlePanMouseUp, scheduleUpdate, flushUpdate, processMouseUpdate]
+    [uiStateApi, rendererSize, handlePanMouseDown, handlePanMouseMove, handlePanMouseUp, scheduleUpdate, flushUpdate, processMouseUpdate]
   );
 
   const onContextMenu = useCallback(
