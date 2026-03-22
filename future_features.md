@@ -20,7 +20,7 @@ Each feature must have the following sections:
 
 ## FF-001 — Right-click pan: transient vs. sticky mode
 
-**Status:** Idea
+**Status:** Implemented (2026-03-22)
 **Priority:** Medium
 **Area:** Interaction / Pan system
 

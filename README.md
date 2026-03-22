@@ -5,6 +5,27 @@ All code is generated using Claude with sanity check reviews + manual testing. I
 See original project: FossFLOW for details more details
 ## [Unreleased]
 
+### 2026-03-22
+
+#### Features
+- **Transient right-click pan (FF-001):** Single right-click deselects selection and dismisses item controls panel; right-click drag pans the canvas; releasing the right button restores whichever tool was active before the pan started (Select, Connector, Lasso, etc.). Behaviour gated by the existing `rightClickPan` pan setting — if disabled, right-click is still consumed (no context menu / add-node panel) but has no pan or deselect side-effects
+- **Default zoom 90%:** Canvas loads at 90% zoom instead of 100% for better initial viewport framing
+
+#### Bug Fixes
+- **Node description empty-state:** Clearing all text from a node's description in the editor now correctly collapses the canvas label. HTML-strip check replaces the previous fragile exact-string comparison — handles all Quill empty variants (`<p><br></p>`, whitespace-only, etc.)
+- **Service worker stale-build loop:** Replaced the legacy CRA cache-first service worker with a self-unregistering cleanup SW that clears all caches on activate. `index.tsx` always unregisters. FossFLOW is not a PWA and does not need offline caching
+- **StrictMode double-load:** `Isoflow.tsx` now uses a `loadRef` pattern to ensure the initial-data effect fires only once per genuine prop change, not on React 18 StrictMode's double-mount
+- **Storage dev bypass:** `storageService.ts` now uses `process.env.NODE_ENV !== 'production'` (rsbuild statically replaces this) instead of `import.meta.env.DEV` which was not inlined and caused a failed JSON parse + 5-second timeout on every dev reload
+
+#### Performance
+- **Subscription tightening (R-1):** Zustand equality functions added to mouse-state selectors in interaction hooks; reactive subscription removed from `usePanHandlers` — eliminates render churn on every mouse move
+- **Grid off Zustand (R-2):** `Grid.tsx` reads scroll position via `useRef` + resize-observer instead of subscribing to Zustand scroll state — removes per-frame store writes during pan
+
+#### Tests
+- **usePanHandlers suite extended (+7 tests, 13 → 20):** Right-click deferred pan — threshold exceeded → enters PAN; below threshold → suppresses processMouseUpdate; right-click without drag → deselect path (closes itemControls, clears mousedown state, returns true); right-drag then release → restores previous mode (CURSOR); right-drag from CONNECTOR mode → restores CONNECTOR; mousemove after pan started → returns false; LASSO right-click without drag → clears lasso selection
+
+---
+
 ### 2026-03-20
 
 #### Features

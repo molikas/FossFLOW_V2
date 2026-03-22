@@ -1,7 +1,7 @@
 # Regression Test Suite Reference
 
-**Last updated:** 2026-03-20
-**Total:** 507 tests · 54 suites · all passing
+**Last updated:** 2026-03-22
+**Total:** 514 tests · 54 suites · all passing
 **Run:** `npm test --workspace=packages/fossflow-lib`
 
 ---
@@ -94,17 +94,18 @@ Pins that `useCallback`/`useMemo` dependency arrays in `useInteractionManager` d
 
 ---
 
-### [usePanHandlers.test.ts](packages/fossflow-lib/src/interaction/__tests__/usePanHandlers.test.ts) · 13 tests · ✅ VALID
+### [usePanHandlers.test.ts](packages/fossflow-lib/src/interaction/__tests__/usePanHandlers.test.ts) · 20 tests · ✅ VALID
 
 **Production target:** `src/interaction/usePanHandlers.ts`
 
 | Group | What's covered |
 |---|---|
-| `handleMouseDown` bypass conditions (10) | All 9 pan-trigger conditions: PAN mode left-click returns true; middle/right-click with setting on/off; ctrl-click; alt-click; emptyArea click (target=rendererEl, no item); regular left-click → false |
-| `handleMouseDown` full cycle (1) | middle-click starts pan (sets isPanningRef=true); mouseUp ends pan; setMode called with CURSOR |
-| `handleMouseUp` (3) | not panning → false; right-click pan is toggle (mouseup does NOT end pan); middle-click pan ends on mouseup |
+| `handleMouseDown` bypass conditions (10) | All 9 pan-trigger conditions: PAN mode left-click returns true; middle/right-click with setting on/off; ctrl-click; alt-click; emptyArea click (target=rendererEl, no item); regular left-click → false; right-click deferred — returns true but does NOT immediately set PAN mode |
+| `handleMouseDown` full cycle (1) | middle-click starts pan; mouseUp ends pan; setMode called with CURSOR |
+| `handleMouseMove` — deferred right-drag pan (4) | drag beyond 4px threshold → enters PAN, returns false; below threshold → suppresses processMouseUpdate (returns true); mousemove without prior right-down → false; mousemove after pan started → false |
+| `handleMouseUp` (5) | not panning, no right-down → false; right-click without drag → closes itemControls + clears mousedown state + returns true; right-drag then release → exits PAN, restores CURSOR; right-drag from CONNECTOR mode → restores CONNECTOR; middle-click pan ends on mouseup; right-click without drag in LASSO mode → clears lasso selection |
 
-**Why this exists:** `handleMouseDown` is the "bypass path" — when it returns `true`, `processMouseUpdate` is skipped entirely. All 9 trigger conditions must be guarded so a refactor can't accidentally break or add a bypass.
+**Why this exists:** `handleMouseDown` is the bypass path — when it returns `true`, `processMouseUpdate` is skipped entirely. The transient right-click pan model (FF-001) adds deferred pan entry, threshold guarding in `handleMouseMove`, and a right-click-without-drag deselect path — all three branches must be independently tested so a refactor can't silently remove the threshold guard or reintroduce the immediate-PAN behaviour.
 
 ---
 
@@ -412,7 +413,7 @@ The following critical paths have **no regression tests** yet. See `current_arch
 |---|---|
 | `useCopyPaste.handlePaste` + `handleCopy` | `useCopyPaste.test.ts` — 10 tests (2026-03-20) |
 | `useHistory` real undo/redo + overflow + transaction | `useHistory.realStore.test.tsx` — 7 tests (2026-03-20) |
-| `usePanHandlers.handleMouseDown` — all bypass conditions | `usePanHandlers.test.ts` — 13 tests (2026-03-20) |
+| `usePanHandlers` — all bypass conditions + deferred right-click pan | `usePanHandlers.test.ts` — 20 tests (13 on 2026-03-20, +7 on 2026-03-22 for transient right-click pan) |
 | `anchorSchema` multi-key guard | `connector.test.ts` — 5 new schema tests (2026-03-20) |
 | Zoom boundary enforcement (`MIN_ZOOM`, `MAX_ZOOM`, float drift) | `renderer.test.ts` — 7 zoom tests (2026-03-20) |
 

@@ -5,6 +5,28 @@ All notable changes to FossFLOW will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Features
+
+* **interaction:** transient right-click pan — single right-click deselects; right-drag pans; releasing right button restores the previous tool (Select, Connector, Lasso, etc.). Behaviour is gated by the existing `rightClickPan` pan setting
+* **ux:** default canvas zoom changed from 100% to 90% for better initial viewport framing
+
+### Bug Fixes
+
+* **node:** canvas node description now correctly hidden when all text is cleared in the editor — HTML-strip check replaces fragile exact-string comparison, handling all Quill empty variants (`<p><br></p>`, whitespace-only, etc.)
+* **app:** service worker replaced with a self-unregistering version that clears all caches on activate, eliminating the stale-build serving loop
+* **app:** fixed StrictMode double-load in `Isoflow.tsx` — `loadRef` pattern ensures the initial-data effect only fires once per genuine prop change, not on React's StrictMode remount
+* **app:** fixed spurious icon-pack reload on StrictMode remount in `App.tsx` via `iconPackEffectMountedRef`
+* **storage:** `storageService.ts` dev-bypass now uses `process.env.NODE_ENV !== 'production'` (rsbuild-compatible) instead of `import.meta.env.DEV` which was not statically replaced
+
+### Performance
+
+* **interaction:** tightened mouse-state Zustand subscriptions with equality functions; removed reactive subscription in `usePanHandlers` — eliminates unnecessary re-renders on every mouse move
+* **grid:** Grid component reads scroll position via `useRef` / resize-observer instead of subscribing to Zustand scroll state — removes per-frame store writes during pan
+
+---
+
 ## [1.10.8](https://github.com/stan-smith/FossFLOW/compare/v1.10.7...v1.10.8) (2026-03-01)
 
 ### Bug Fixes

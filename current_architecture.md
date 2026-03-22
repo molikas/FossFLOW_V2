@@ -304,7 +304,13 @@ window ('mousemove'/'mousedown'/'mouseup')
 
 **Pan handler bypass path:**
 
-`usePanHandlers.handleMouseDown` intercepts mousedown for: (a) left-click while in PAN mode (exits pan), (b) middle-click + `middleClickPan`, (c) right-click + `rightClickPan`, (d) ctrl+left + `ctrlClickPan`, (e) alt+left + `altClickPan`, (f) empty-area left + `emptyAreaClickPan`. When it returns `true`, `onMouseEvent` still updates `mouse` state but does **not** call `processMouseUpdate`, so none of the mode handlers see this mousedown.
+`usePanHandlers.handleMouseDown` intercepts mousedown for: (a) left-click while in PAN mode (exits pan), (b) middle-click + `middleClickPan`, (c) right-click (always consumed — see below), (d) ctrl+left + `ctrlClickPan`, (e) alt+left + `altClickPan`, (f) empty-area left + `emptyAreaClickPan`. When it returns `true`, `onMouseEvent` still updates `mouse` state but does **not** call `processMouseUpdate`, so none of the mode handlers see this mousedown.
+
+**Transient right-click pan (implemented 2026-03-22, implements FF-001):** Right mousedown no longer immediately enters PAN. Instead:
+- `handleMouseDown` always returns `true` for button 2 (consumes the event — Cursor.mousedown never fires). When `rightClickPan=true`, additionally sets `rightDownRef.current = true`, `rightDownPositionRef.current`, and `previousModeTypeRef.current = modeType`.
+- `handleMouseMove` returns `true` while `rightDownRef` is set and below the 4px drag threshold — this suppresses `processMouseUpdate` entirely, preventing `Cursor.mousemove` from triggering LASSO from the stale `mouse.mousedown` state. Once the threshold is exceeded, calls `startPan('right')` and returns `false` (PAN mode active, `processMouseUpdate` runs normally for `Pan.mousemove`).
+- `handleMouseUp` for button 2: if dragging → `endPan()` (which calls `restorePreviousMode()` and clears `mouse.mousedown`); if not dragging → deselect path (closes `itemControls`, clears `mouse.mousedown`, resets any active LASSO selection). Always returns `true`.
+- `rightClickPan=false`: right mousedown still returns `true` (no Cursor interference) but sets no deferred state — right-click is fully consumed with no side-effects.
 
 ---
 
@@ -586,7 +592,7 @@ Touch events are synthesized: `touchstart` → mousedown (button:0), `touchmove`
 | `schemas/__tests__/connector.test.ts` | 9 | +5 | VALID — anchorSchema ref contracts, no exclusivity guard |
 | `utils/__tests__/renderer.test.ts` | 16 | +7 | VALID — zoom boundary clamp, no float drift |
 
-**Total test count as of 2026-03-20 (coverage gaps):** 507 tests across 54 suites.
+**Total test count as of 2026-03-22:** 514 tests across 54 suites (+7 for transient right-click pan, 2026-03-22).
 
 **Full regression suite documentation:** See `regression_tests.md` at repo root — 54 suites listed with production targets, test counts, classifications, coverage notes, and known gaps.
 
@@ -802,19 +808,30 @@ These functions/methods MUST have regression tests before any refactoring. Liste
 
 ---
 
-### 2. `usePanHandlers.handleMouseDown`
+### 2. `usePanHandlers.handleMouseDown` / `handleMouseMove` / `handleMouseUp`
 **File:** `src/interaction/usePanHandlers.ts`
 
-**Contracts:**
+**`handleMouseDown` contracts:**
 - Returns `true` and calls `endPan()` when `button === 0 && modeType === 'PAN'`.
 - Returns `true` and calls `startPan('middle')` when `button === 1 && panSettings.middleClickPan`.
-- Returns `true` and calls `startPan('right')` when `button === 2 && panSettings.rightClickPan`.
+- Returns `true` for `button === 2` in all cases (always consumed). When `rightClickPan=true`, additionally sets `rightDownRef`/`rightDownPositionRef`/`previousModeTypeRef` — does NOT call `startPan` immediately.
 - Returns `true` and calls `startPan('ctrl')` when `button === 0 && ctrlKey && panSettings.ctrlClickPan`.
 - Returns `true` and calls `startPan('alt')` when `button === 0 && altKey && panSettings.altClickPan`.
 - Returns `true` and calls `startPan('empty')` when `button === 0 && isEmptyArea && panSettings.emptyAreaClickPan`.
 - Returns `false` for regular left-click when none of the pan settings are triggered.
 
-**Critical edge cases:** `panSettings.middleClickPan = false` → middle click returns false; ctrl+alt pressed simultaneously; `isEmptyArea` when `rendererEl` is null.
+**`handleMouseMove` contracts:**
+- Returns `false` when `rightDownRef` is not set (normal path — no suppression).
+- Returns `false` once `isPanningRef` is set (pan active — let `processMouseUpdate` run for `Pan.mousemove`).
+- Returns `true` while `rightDownRef` is set and below 4px threshold (suppresses `processMouseUpdate`).
+- Calls `startPan('right')` and returns `false` when threshold exceeded.
+
+**`handleMouseUp` contracts (button 2):**
+- If `isPanningRef && panMethodRef === 'right'`: calls `endPan()`, returns `true`.
+- If `previousModeTypeRef !== null` (deferred right-click without drag): calls `setItemControls(null)`, `setMouse({...mouse, mousedown: null})`, resets LASSO/FREEHAND_LASSO selection if active, returns `true`.
+- Otherwise: returns `true` (always consumes right mouseup).
+
+**Critical edge cases:** `panSettings.middleClickPan = false` → middle click returns false; ctrl+alt pressed simultaneously; `isEmptyArea` when `rendererEl` is null; right-click without drag must not trigger context menu or lasso.
 
 ---
 
@@ -996,23 +1013,23 @@ Source: `scheduler.development.js` — this is React's cooperative scheduler run
 
 ---
 
-### 7c. useInitialDataManager Double Load
+### 7c. useInitialDataManager Double Load ✅ FIXED (2026-03-22)
 
 **Symptom:** The initialization sequence fires twice on every page load.
 
-**Console evidence:**
+**Console evidence (resolved):**
 ```
 [useInitialDataManager] loading: Untitled Diagram views: 0
 [useInitialDataManager] load complete, isReady=true
-[useInitialDataManager] loading: Untitled Diagram views: 0   ← fires again
+[useInitialDataManager] loading: Untitled Diagram views: 0   ← was firing again
 [useInitialDataManager] load complete, isReady=true
 ```
 
-**Root cause analysis:** Almost certainly React StrictMode double-invocation in development. React 18 StrictMode intentionally mounts components twice (mount → unmount → remount) to surface side effects in `useEffect`. The double load sequence is harmless in development but confirms that `useInitialDataManager` has a `useEffect` with side effects (loading diagram data) that will fire twice in StrictMode. This is **not a production bug** but means:
-1. Any initialization side effects (API calls, storage reads) fire twice in dev.
-2. Any cleanup that's missing from the effect's return function could leak.
+**Root cause:** React 18 StrictMode intentionally mounts components twice (mount → unmount → remount). `Isoflow.tsx` had a `useEffect` with `load` in its dependency array; `load` was recreated on every Zustand store update, causing the effect to re-trigger on every store change.
 
-**Check required before refactoring:** Verify that `useInitialDataManager`'s `useEffect` has a proper cleanup function. If the effect starts an async operation, the cleanup should cancel it on unmount.
+**Fix applied:** `loadRef` pattern in `Isoflow.tsx` — `load` is stored in a ref, and the effect dependency is the stable ref rather than the function. The effect now fires only once per genuine `mergedInitialData` prop change (different object reference), not on store updates or StrictMode remount.
+
+Also fixed: `useInitialDataManager.ts` hardcoded `uiStateActions.setZoom(1)` — changed to `uiStateActions.setZoom(INITIAL_UI_STATE.zoom)` so the configured default zoom (currently 0.9) is respected on diagram load.
 
 ---
 
@@ -1052,22 +1069,20 @@ i18next::backendConnector: loading namespace app for language en failed
 
 ---
 
-### 7f. Server Storage Not Available (Low Severity)
+### 7f. Server Storage Not Available ✅ FIXED (2026-03-22)
 
-**Symptom:** Storage service falls back to session storage on every load.
+**Symptom:** Storage service fell back to session storage on every load, with a JSON parse error in the console.
 
-**Console evidence:**
+**Console evidence (resolved):**
 ```
 storageService.ts:55 Server storage not available: SyntaxError: Unexpected token
   '<', "<!DOCTYPE "... is not valid JSON
 storageService.ts:233 Using session storage
 ```
 
-**Root cause:** `storageService.ts` makes an HTTP request to check server-side storage availability. The development server returns the SPA's `index.html` (HTML) for the storage check endpoint, which fails JSON parsing.
+**Root cause:** `storageService.ts` made an HTTP fetch to check server availability; in development the rsbuild dev server returns `index.html` for unknown routes. The original dev bypass used `import.meta.env.DEV` which rsbuild does not statically replace when accessed via a TypeScript type cast — the condition was never `true`, so the check always ran.
 
-**Impact:** Diagrams are stored in session storage only — lost on browser close. This is expected behavior for the development environment. In a production deployment with a proper backend, this endpoint would return a valid JSON response.
-
-**Note for refactoring:** The storage service has a try/catch that handles this gracefully. However, the failed fetch on every page load adds startup latency and a console error. Consider adding a `?dev=true` bypass or configuring a dev proxy rule.
+**Fix applied:** Changed the dev bypass in `storageService.ts` from `import.meta.env.DEV` to `process.env.NODE_ENV !== 'production'`. rsbuild statically replaces this at build time; in dev builds the storage check is skipped entirely, eliminating the parse error and 5-second timeout on every page load.
 
 ---
 
@@ -1105,4 +1120,4 @@ quill Cannot register "bullet" specified in "formats" config.
 
 ---
 
-*End of document. Last updated: 2026-03-20.*
+*End of document. Last updated: 2026-03-22.*

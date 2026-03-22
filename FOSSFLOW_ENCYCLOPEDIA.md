@@ -1,8 +1,8 @@
 # FossFLOW Codebase Encyclopedia
 
-**Last Updated**: October 2025
+**Last Updated**: March 2026
 **Original Created**: August 14, 2025 (commit 94bf3c0)
-**Major Updates**: 79 commits since creation including backend storage, i18n, lasso tools, and connector enhancements
+**Major Updates**: Transient right-click pan, node header links, description persistence fix, performance improvements, and service worker overhaul — plus 79+ prior commits including backend storage, i18n, lasso tools, and connector enhancements
 
 ---
 
@@ -279,17 +279,15 @@ The FossFLOW application is a Progressive Web App (PWA) built with RSBuild that 
 - Enhanced diagram loading with icon persistence (commit 4e13033)
 
 #### Service Worker
-- **Location**: `packages/fossflow-app/src/serviceWorkerRegistration.ts`
-- Enables offline functionality
-- Caches app resources
-- Provides PWA installation capability
+- **Location**: `packages/fossflow-app/public/service-worker.js`
+- Replaced the legacy CRA cache-first service worker with a **self-unregistering** version: on `activate` it unregisters itself and clears all caches, then lets the browser fetch fresh resources normally
+- This eliminates the stale-build serving loop that caused the app to load outdated JS after a rebuild
+- FossFLOW is not a PWA and does not need offline caching; the registration call in `index.tsx` always unregisters (2026-03)
 
 ### App Features
 
 - **Auto-Save**: Saves diagram to session storage every 5 seconds
 - **Import/Export**: JSON file format for diagram sharing
-- **PWA Support**: Installable on desktop and mobile
-- **Offline Mode**: Full functionality without internet
 - **Session Storage**: Quick save without file dialogs
 - **Server Storage**: Persistent backend storage (NEW)
 - **Multi-language**: English and Chinese support (NEW)
@@ -326,7 +324,10 @@ The FossFLOW application is a Progressive Web App (PWA) built with RSBuild that 
 - **Icon Types**:
   - `IsometricIcon.tsx`: 3D-style icons
   - `NonIsometricIcon.tsx`: Flat icons
-- **Updates**: Support for custom imported icons with scaling (commit dd80e86)
+- **Updates**:
+  - Support for custom imported icons with scaling (commit dd80e86)
+  - Header link: when `modelItem.headerLink` is set the node name renders as a clickable `<a>` tag that opens the URL in a new tab (2026-03)
+  - Description empty-state: HTML-strip check replaces fragile `MARKDOWN_EMPTY_VALUE` exact-string comparison — all Quill empty variants correctly collapse the label (2026-03)
 
 #### Connectors (`/Connectors/`)
 - **Purpose**: Lines between nodes
@@ -418,6 +419,7 @@ The FossFLOW application is a Progressive Web App (PWA) built with RSBuild that 
 - **Subdirectories**:
   - `/NodeControls/`: Node properties
     - `QuickIconSelector.tsx`: Quick icon picker (NEW - commit 8576e30)
+    - `NodeSettings.tsx`: Name field now has an **Insert Link** button (`InsertLinkIcon`) that reveals a URL input. The URL is stored as `modelItem.headerLink` and rendered as a clickable `<a>` on the canvas. Clearing the link removes it from the model. (2026-03)
   - `/ConnectorControls/`: Connector properties
     - Enhanced with multiple labels support (commit d5e02ea)
     - Line type selection (solid, dashed, dotted)
@@ -791,7 +793,7 @@ npm run dev:backend
 
 **Key Constants**:
 - `TILE_SIZE`: Base tile dimensions
-- `DEFAULT_ZOOM`: Initial zoom level
+- `INITIAL_UI_STATE.zoom`: Initial zoom level — **0.9** (90%) as of 2026-03; previously 1.0
 - `DEFAULT_FONT_SIZE`: Text defaults
 - `INITIAL_DATA`: Default model state
 
@@ -828,6 +830,16 @@ npm run dev:backend
 - `TextBox.ts`: Text editing
 - `Lasso.ts`: Rectangle lasso selection **[NEW]**
 - `FreehandLasso.ts`: Freehand lasso selection **[NEW]**
+
+**Right-click pan — transient model (2026-03):**
+
+`usePanHandlers.ts` implements a deferred, transient right-click pan:
+- **Right mousedown**: consumes the event (returns `true`) but does NOT enter `PAN` immediately. Sets `rightDownRef` and captures `previousModeTypeRef` (which tool was active).
+- **Right mousemove**: returns `true` (suppresses `processMouseUpdate`) while below the 4 px drag threshold, preventing `Cursor.mousemove` from triggering a lasso. Once threshold is exceeded, calls `startPan('right')` and returns `false` so `Pan.mousemove` can scroll normally.
+- **Right mouseup without drag**: deselect path — calls `setItemControls(null)`, clears `mouse.mousedown`, resets any active lasso selection. Returns `true`.
+- **Right mouseup after drag**: calls `endPan()`, which clears `mouse.mousedown` and calls `restorePreviousMode()` to reconstruct a clean mode matching the tool that was active before the pan. Returns `true`.
+- `rightClickPan=false`: right-click is still fully consumed (no Cursor.mousedown/mouseup interference), but no pan or deselect side-effects are applied.
+- This implements FF-001 from `future_features.md`.
 
 #### 4. Utilities (`packages/fossflow-lib/src/utils/`)
 
@@ -925,6 +937,7 @@ transaction(() => {
 **Icons?** → `/src/components/ItemControls/IconSelectionControls/`
 **Custom icon import?** → `/src/components/ItemControls/IconSelectionControls/IconGrid.tsx`
 **Node rendering?** → `/src/components/SceneLayers/Nodes/`
+**Node header link?** → `ModelItem.headerLink` + `Node.tsx` + `NodeSettings.tsx`
 **Connector drawing?** → `/src/components/SceneLayers/Connectors/`
 **Connector labels?** → `/src/components/SceneLayers/ConnectorLabels/` **[NEW]**
 **Connector creation mode?** → `/src/interaction/modes/Connector.ts` + `/src/components/ConnectorSettings/` **[NEW]**
@@ -1007,6 +1020,17 @@ transaction(() => {
 - **Zoom to Pan**: Improved zoom behavior (d3fdfea)
 - **Race Condition Fixes**: Diagram loading improvements (4e13033)
 - **Reroute Tooltips**: Connector manipulation guidance (d5db93c)
+
+### March 2026
+- **Transient Right-click Pan (FF-001)**: Right-click single press → deselect; right-click drag → pan; release → restore previous tool. Gated by `rightClickPan` pan setting. `usePanHandlers` extended with deferred-pan refs, drag threshold guard, and `restorePreviousMode()`.
+- **Default Zoom 90%**: `INITIAL_UI_STATE.zoom` changed from 1.0 to 0.9; `useInitialDataManager` load path updated to use config constant instead of hardcoded `1`.
+- **Node Header Link**: `ModelItem` gains `headerLink?: string`; node name renders as a clickable `<a>` when set; `NodeSettings` panel adds Insert Link button.
+- **Node Description Empty-State Fix**: HTML-strip empty detection in `Node.tsx` and `NodeSettings.tsx` replaces fragile `MARKDOWN_EMPTY_VALUE` exact-string check — all Quill empty variants now correctly collapse the canvas label.
+- **Service Worker Overhaul**: Legacy CRA cache-first SW replaced with a self-unregistering cleanup SW; `index.tsx` always unregisters. FossFLOW is no longer treated as a PWA.
+- **StrictMode Double-Load Fix**: `Isoflow.tsx` `loadRef` pattern prevents the initial-data effect from firing twice under React 18 StrictMode.
+- **Storage Dev Bypass**: `storageService.ts` uses `process.env.NODE_ENV !== 'production'` (rsbuild-statically-replaced) instead of `import.meta.env.DEV` which was not inlined.
+- **Perf — Subscription Tightening (R-1)**: Zustand equality functions added to mouse-state selectors; `usePanHandlers` reactive subscription removed.
+- **Perf — Grid Off Zustand (R-2)**: `Grid.tsx` reads scroll position via `useRef` + resize-observer; eliminates per-frame store writes during pan.
 
 ---
 
