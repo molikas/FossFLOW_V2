@@ -15,8 +15,15 @@ This fork extends the original Isoflow project with new features and fixes that 
 - **Copy and paste** — Select any combination of nodes, connectors, rectangles, and text boxes, then paste them anywhere on the canvas with `Ctrl+C` / `Ctrl+V`. Pasted items appear centered around your mouse cursor. Connectors between pasted nodes are included automatically, complete with their waypoints.
 - **Freehand lasso selection** — In addition to the rectangular lasso, you can draw a freehand polygon to select exactly the items you want, even in a crowded diagram.
 - **Dragging feels right** — Dragging nodes, text boxes, and rectangles now responds the instant you move, tracks your grab point precisely, and stops at the last valid position when blocked by another element rather than jumping around. The blue highlight tile always stays in sync with the cursor while dragging.
+- **Delete key** — Press `Delete` or `Backspace` to remove the selected item(s) directly from the canvas.
 - **Undo/redo** — Full multi-step undo and redo for all canvas changes.
 - **Multi-view diagrams** — Create multiple named views (tabs) within a single file. Each view is an independent canvas.
+
+### Node and text customisation
+
+- **Clickable links on nodes** — Attach a URL to any node's name. The label becomes a clickable link in the diagram, useful for linking to documentation, tickets, or external resources.
+- **Node label font size** — Adjust the font size of a node's canvas label from the node settings panel.
+- **Text box formatting** — Text boxes support rich text: bold, italic, bullet lists, and font size options, so you can use them for annotating diagrams as well as simple labels.
 
 ### Navigation and canvas
 
