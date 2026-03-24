@@ -7,17 +7,6 @@ export const fixModel = (model: Model): Model => {
   const issues = validateModel(model);
 
   return issues.reduce((acc, issue) => {
-    if (issue.type === 'INVALID_MODEL_TO_ICON_REF') {
-      return produce(acc, (draft) => {
-        const { index: itemIndex } = getItemByIdOrThrow(
-          draft.items,
-          issue.params.modelItem
-        );
-
-        draft.items[itemIndex].icon = undefined;
-      });
-    }
-
     if (issue.type === 'CONNECTOR_TOO_FEW_ANCHORS') {
       return produce(acc, (draft) => {
         const view = getItemByIdOrThrow(draft.views, issue.params.view);

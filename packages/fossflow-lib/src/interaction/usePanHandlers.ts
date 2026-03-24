@@ -187,6 +187,10 @@ export const usePanHandlers = () => {
       // Right-click without drag: deselect — close item controls and clear any lasso selection.
       if (previousModeTypeRef.current !== null) {
         const uiState = uiStateApi.getState();
+        // Close context menu if open
+        if (uiState.contextMenu !== null) {
+          uiState.actions.setContextMenu(null);
+        }
         uiState.actions.setItemControls(null);
         // Clear stale mousedown state so Cursor mode doesn't pick it up next frame
         uiState.actions.setMouse({ ...uiState.mouse, mousedown: null });
@@ -194,6 +198,8 @@ export const usePanHandlers = () => {
           actions.setMode({ type: 'LASSO', showCursor: true, selection: null, isDragging: false });
         } else if (uiState.mode.type === 'FREEHAND_LASSO') {
           actions.setMode({ type: 'FREEHAND_LASSO', showCursor: true, path: [], selection: null, isDragging: false });
+        } else if (uiState.mode.type === 'CONNECTOR') {
+          actions.setMode({ type: 'CURSOR', showCursor: true, mousedownItem: null });
         }
         previousModeTypeRef.current = null;
         return true;

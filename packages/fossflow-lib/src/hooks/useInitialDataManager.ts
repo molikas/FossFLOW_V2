@@ -31,15 +31,26 @@ export const useInitialDataManager = () => {
       setIsReady(false);
 
       try {
-        // Clean up invalid connector references before validation
-        const initialData = { ..._initialData };
-        initialData.views = initialData.views.map(view => {
-          if (!view.connectors) return view;
+        // Normalise and clean up data before validation.
+        // Work on a plain-object copy so we can safely mutate without TS complaints.
+        const rawData: Record<string, any> = { ..._initialData };
 
-          const validConnectors = view.connectors.filter(connector => {
-            const hasValidAnchors = connector.anchors.every(anchor => {
+        rawData.views = ((rawData.views ?? []) as any[]).map((view: any) => {
+          // Normalise: some diagrams use 'title' instead of 'name' for views
+          const normView: any = { ...view };
+          if (!normView.name && normView.title) {
+            normView.name = normView.title;
+          }
+
+          if (!normView.connectors) return normView;
+
+          const validConnectors = (normView.connectors as any[]).filter((connector: any) => {
+            const hasValidAnchors = (connector.anchors as any[]).every((anchor: any) => {
+              // Reject anchors with empty refs (can happen from a broken paste operation)
+              const refKeys = Object.keys(anchor.ref ?? {});
+              if (refKeys.length === 0) return false;
               if (anchor.ref.item) {
-                return view.items.some(item => item.id === anchor.ref.item);
+                return (normView.items as any[]).some((item: any) => item.id === anchor.ref.item);
               }
               return true;
             });
@@ -51,14 +62,18 @@ export const useInitialDataManager = () => {
             return hasValidAnchors;
           });
 
-          return { ...view, connectors: validConnectors };
+          return { ...normView, connectors: validConnectors };
         });
+
+        // Re-type after normalisation — Zod will validate the structure next
+        const initialData = rawData as unknown as typeof _initialData;
 
         // Validate
         const validationResult = modelSchema.safeParse(initialData);
 
         if (!validationResult.success) {
           console.error('[useInitialDataManager] Model validation failed:', validationResult.error.errors);
+          console.error('[useInitialDataManager] Validation error detail:', JSON.stringify(validationResult.error.errors, null, 2));
           setIsReady(false);
           return;
         }

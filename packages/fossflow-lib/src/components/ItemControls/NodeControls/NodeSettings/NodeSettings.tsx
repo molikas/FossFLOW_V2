@@ -152,6 +152,20 @@ export const NodeSettings = ({
           />
         </Section>
       )}
+      {modelItem.name && (
+        <Section title="Label font size">
+          <Slider
+            marks
+            step={2}
+            min={10}
+            max={24}
+            value={node.labelFontSize ?? 14}
+            onChange={(e, newSize) => {
+              onViewItemUpdated({ labelFontSize: newSize as number });
+            }}
+          />
+        </Section>
+      )}
 
       <Section title="Icon size">
         <Slider

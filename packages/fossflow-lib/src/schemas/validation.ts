@@ -8,6 +8,8 @@ import type {
 } from 'src/types';
 import { getAllAnchors, getItemByIdOrThrow } from 'src/utils';
 
+
+
 type IssueType =
   | {
       type: 'INVALID_ANCHOR_TO_VIEW_ITEM_REF';
@@ -56,13 +58,6 @@ type IssueType =
         anchor: string;
         view: string;
         connector: string;
-      };
-    }
-  | {
-      type: 'INVALID_MODEL_TO_ICON_REF';
-      params: {
-        modelItem: string;
-        icon: string;
       };
     }
   | {
@@ -271,30 +266,12 @@ export const validateView = (view: View, ctx: { model: Model }): Issue[] => {
 };
 
 export const validateModelItem = (
-  modelItem: ModelItem,
-  ctx: {
-    model: Model;
-  }
+  _modelItem: ModelItem,
+  _ctx: { model: Model }
 ): Issue[] => {
-  const issues: Issue[] = [];
-
-  if (!modelItem.icon) return issues;
-
-  try {
-    getItemByIdOrThrow(ctx.model.icons, modelItem.icon);
-  } catch (e) {
-    issues.push({
-      type: 'INVALID_MODEL_TO_ICON_REF',
-      params: {
-        modelItem: modelItem.id,
-        icon: modelItem.icon
-      },
-      message:
-        'Invalid item found in the model.  The item references an icon that does not exist.'
-    });
-  }
-
-  return issues;
+  // Icon references are intentionally not validated here: icons may come from
+  // external icon packs that are loaded separately and are not stored in model.icons.
+  return [];
 };
 
 export const validateModel = (model: Model): Issue[] => {

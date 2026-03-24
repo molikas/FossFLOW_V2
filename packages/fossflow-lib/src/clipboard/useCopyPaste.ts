@@ -35,8 +35,17 @@ export const useCopyPaste = () => {
       selectedConnectorIds = refs.filter((r) => r.type === 'CONNECTOR').map((r) => r.id);
       selectedRectangleIds = refs.filter((r) => r.type === 'RECTANGLE').map((r) => r.id);
       selectedTextBoxIds = refs.filter((r) => r.type === 'TEXTBOX').map((r) => r.id);
-    } else if (uiState.itemControls && uiState.itemControls.type === 'ITEM') {
-      selectedItemIds = [uiState.itemControls.id];
+    } else if (uiState.itemControls) {
+      const ctrl = uiState.itemControls;
+      if (ctrl.type === 'ITEM') {
+        selectedItemIds = [ctrl.id];
+      } else if (ctrl.type === 'TEXTBOX') {
+        selectedTextBoxIds = [ctrl.id];
+      } else if (ctrl.type === 'RECTANGLE') {
+        selectedRectangleIds = [ctrl.id];
+      } else if (ctrl.type === 'CONNECTOR') {
+        selectedConnectorIds = [ctrl.id];
+      }
     }
 
     if (
@@ -172,6 +181,16 @@ export const useCopyPaste = () => {
       };
     });
 
+    // Build a map of original item id -> pasted tile (for detach-to-tile conversion)
+    const originalTileMap = new Map<string, { x: number; y: number }>();
+    clipboard.items.forEach((ci) => {
+      originalTileMap.set(ci.viewItem.id, ci.viewItem.tile);
+    });
+    // Also include existing scene items so detached anchors can use their current tile
+    for (const vi of scene.currentView.items ?? []) {
+      if (!originalTileMap.has(vi.id)) originalTileMap.set(vi.id, vi.tile);
+    }
+
     // Remap connector anchors — remap known items, detach anchors pointing at items not in clipboard
     const newConnectors: Connector[] = clipboard.connectors.map((c) => ({
       ...c,
@@ -179,10 +198,11 @@ export const useCopyPaste = () => {
       anchors: c.anchors.map((anchor) => {
         if (anchor.ref?.item) {
           if (idMap.has(anchor.ref.item)) {
-            return { ...anchor, ref: { ...anchor.ref, item: idMap.get(anchor.ref.item)! } };
+            return { ...anchor, ref: { item: idMap.get(anchor.ref.item)! } };
           }
-          // Detach anchor from item that wasn't included in the paste
-          return { ...anchor, ref: { ...anchor.ref, item: undefined } };
+          // Detach anchor: convert to tile ref using the item's known position
+          const tile = originalTileMap.get(anchor.ref.item) ?? mouseTile;
+          return { ...anchor, ref: { tile } };
         }
         return anchor;
       })
@@ -211,23 +231,10 @@ export const useCopyPaste = () => {
       textBoxes: newTextBoxes
     });
 
-    // Select pasted items via LASSO mode
-    const newRefs = [
-      ...newItems.map((ni) => ({ type: 'ITEM' as const, id: ni.viewItem.id })),
-      ...newConnectors.map((c) => ({ type: 'CONNECTOR' as const, id: c.id })),
-      ...newRectangles.map((r) => ({ type: 'RECTANGLE' as const, id: r.id })),
-      ...newTextBoxes.map((tb) => ({ type: 'TEXTBOX' as const, id: tb.id }))
-    ];
-
     uiState.actions.setMode({
-      type: 'LASSO',
+      type: 'CURSOR',
       showCursor: true,
-      selection: {
-        startTile: { x: 0, y: 0 },
-        endTile: { x: 0, y: 0 },
-        items: newRefs
-      },
-      isDragging: false
+      mousedownItem: null
     });
     uiState.actions.setItemControls(null);
 

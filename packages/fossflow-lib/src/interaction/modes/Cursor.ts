@@ -15,7 +15,8 @@ import {
   generateId,
   CoordsUtils,
   getAnchorTile,
-  connectorPathTileToGlobal
+  connectorPathTileToGlobal,
+  setWindowCursor
 } from 'src/utils';
 import { useScene } from 'src/hooks/useScene';
 
@@ -120,6 +121,12 @@ export const Cursor: ModeActions = {
 
     let item = uiState.mode.mousedownItem;
 
+    // Update hover cursor when not holding down
+    if (!item && !uiState.mouse.mousedown) {
+      const hoverItem = getItemAtTile({ tile: uiState.mouse.position.tile, scene });
+      setWindowCursor(hoverItem ? 'pointer' : 'default');
+    }
+
     if (item?.type === 'CONNECTOR' && uiState.mouse.mousedown) {
       const anchor = getAnchor(item.id, uiState.mouse.mousedown.tile, scene);
 
@@ -137,8 +144,8 @@ export const Cursor: ModeActions = {
         isInitialMovement: true
       });
     } else {
-      // Empty-area drag → start lasso selection
-      if (uiState.mouse.mousedown) {
+      // Empty-area drag → start lasso selection (only when mousedown was properly handled)
+      if (uiState.mouse.mousedown && uiState.mode.mousedownHandled) {
         uiState.actions.setMode({
           type: 'LASSO',
           showCursor: true,

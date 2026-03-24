@@ -10,7 +10,10 @@ import {
 } from '@mui/material';
 import {
   TextRotationNone as TextRotationNoneIcon,
-  Close as CloseIcon
+  Close as CloseIcon,
+  FormatBold as FormatBoldIcon,
+  FormatItalic as FormatItalicIcon,
+  FormatUnderlined as FormatUnderlinedIcon
 } from '@mui/icons-material';
 import { useTextBox } from 'src/hooks/useTextBox';
 import { useUiStateStore } from 'src/stores/uiStateStore';
@@ -66,7 +69,7 @@ export const TextBoxControls = ({ id }: Props) => {
         <Section title="Text size">
           <Slider
             marks
-            step={0.3}
+            step={0.15}
             min={0.3}
             max={0.9}
             value={textBox.fontSize}
@@ -74,6 +77,32 @@ export const TextBoxControls = ({ id }: Props) => {
               updateTextBox(textBox.id, { fontSize: newSize as number });
             }}
           />
+        </Section>
+        <Section title="Formatting">
+          <ToggleButtonGroup
+            value={[
+              textBox.isBold ? 'bold' : null,
+              textBox.isItalic ? 'italic' : null,
+              textBox.isUnderline ? 'underline' : null
+            ].filter(Boolean)}
+            onChange={(_e, newFormats: string[]) => {
+              updateTextBox(textBox.id, {
+                isBold: newFormats.includes('bold'),
+                isItalic: newFormats.includes('italic'),
+                isUnderline: newFormats.includes('underline')
+              });
+            }}
+          >
+            <ToggleButton value="bold" size="small">
+              <FormatBoldIcon fontSize="small" />
+            </ToggleButton>
+            <ToggleButton value="italic" size="small">
+              <FormatItalicIcon fontSize="small" />
+            </ToggleButton>
+            <ToggleButton value="underline" size="small">
+              <FormatUnderlinedIcon fontSize="small" />
+            </ToggleButton>
+          </ToggleButtonGroup>
         </Section>
         <Section title="Alignment">
           <ToggleButtonGroup

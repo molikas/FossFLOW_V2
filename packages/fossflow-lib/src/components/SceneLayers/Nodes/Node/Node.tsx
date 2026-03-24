@@ -66,7 +66,7 @@ export const Node = memo(({ node, order }: Props) => {
             >
               <Stack spacing={1}>
                 {modelItem.name && (
-                  <Typography fontWeight={600}>
+                  <Typography fontWeight={600} fontSize={node.labelFontSize ?? 14}>
                     {modelItem.headerLink ? (
                       <a
                         href={modelItem.headerLink}

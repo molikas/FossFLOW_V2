@@ -8,7 +8,8 @@ import {
   hasMovedTile,
   getAnchorParent,
   getItemAtTile,
-  findNearestUnoccupiedTilesForGroup
+  findNearestUnoccupiedTilesForGroup,
+  setWindowCursor
 } from 'src/utils';
 
 const dragItems = (
@@ -130,10 +131,12 @@ export const DragItems: ModeActions = {
 
     const renderer = rendererRef;
     renderer.style.userSelect = 'none';
+    setWindowCursor('grabbing');
   },
   exit: ({ rendererRef }) => {
     const renderer = rendererRef;
     renderer.style.userSelect = 'auto';
+    setWindowCursor('default');
   },
   mousemove: ({ uiState, scene }) => {
     if (uiState.mode.type !== 'DRAG_ITEMS' || !uiState.mouse.mousedown) return;
@@ -158,6 +161,15 @@ export const DragItems: ModeActions = {
     if (!hasMovedTile(uiState.mouse) || !uiState.mouse.delta?.tile) return;
 
     const delta = uiState.mouse.delta.tile;
+
+    // Show not-allowed cursor when hovering over an occupied tile
+    const draggedIds = new Set(uiState.mode.items.map((i) => i.id));
+    const itemAtCursor = getItemAtTile({ tile: uiState.mouse.position.tile, scene });
+    if (itemAtCursor && !draggedIds.has(itemAtCursor.id)) {
+      setWindowCursor('not-allowed');
+    } else {
+      setWindowCursor('grabbing');
+    }
 
     dragItems(uiState.mode.items, uiState.mouse.position.tile, delta, scene);
   },

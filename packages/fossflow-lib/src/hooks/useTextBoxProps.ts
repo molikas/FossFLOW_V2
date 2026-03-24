@@ -14,9 +14,11 @@ export const useTextBoxProps = (textBox: TextBox) => {
       fontSize:
         UNPROJECTED_TILE_SIZE * (textBox.fontSize ?? TEXTBOX_DEFAULTS.fontSize),
       fontFamily: DEFAULT_FONT_FAMILY,
-      fontWeight: TEXTBOX_FONT_WEIGHT
+      fontWeight: textBox.isBold ? 700 : TEXTBOX_FONT_WEIGHT,
+      fontStyle: textBox.isItalic ? 'italic' : 'normal',
+      textDecoration: textBox.isUnderline ? 'underline' : 'none'
     };
-  }, [textBox.fontSize]);
+  }, [textBox.fontSize, textBox.isBold, textBox.isItalic, textBox.isUnderline]);
 
   const paddingX = useMemo(() => {
     return UNPROJECTED_TILE_SIZE * TEXTBOX_PADDING;
