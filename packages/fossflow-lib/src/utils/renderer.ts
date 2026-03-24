@@ -542,13 +542,35 @@ export const getTextWidth = (text: string, fontProps: FontProps) => {
   return (metrics.width + paddingX * 2) / UNPROJECTED_TILE_SIZE - 0.8;
 };
 
+const getPlainTextForMeasurement = (content: string): string => {
+  if (!content?.trim().startsWith('<')) return content;
+  // Split on closing block tags to isolate each paragraph/line
+  const lines = content
+    .split(/<\/p>|<\/div>|<br\s*\/?>/i)
+    .map((s) => s.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim())
+    .filter(Boolean);
+  // Width is determined by the longest line
+  return lines.reduce((a, b) => (a.length > b.length ? a : b), '');
+};
+
+const countHtmlLines = (content: string): number => {
+  if (!content?.trim().startsWith('<')) return 1;
+  // Count closing block-level tags — each represents one rendered line
+  const matches = content.match(/<\/(p|li|h[1-6])>/gi);
+  return Math.max(1, matches ? matches.length : 1);
+};
+
 export const getTextBoxDimensions = (textBox: TextBox): Size => {
-  const width = getTextWidth(textBox.content, {
-    fontSize: textBox.fontSize ?? TEXTBOX_DEFAULTS.fontSize,
+  const fontSize = textBox.fontSize ?? TEXTBOX_DEFAULTS.fontSize;
+  const width = getTextWidth(getPlainTextForMeasurement(textBox.content), {
+    fontSize,
     fontFamily: DEFAULT_FONT_FAMILY,
     fontWeight: TEXTBOX_FONT_WEIGHT
   });
-  const height = 1;
+  // Each line occupies `fontSize` tiles in height (lineHeight: 1).
+  // Round up so text never clips, minimum 1 tile.
+  const lineCount = countHtmlLines(textBox.content);
+  const height = Math.max(1, Math.ceil(lineCount * fontSize));
 
   return { width, height };
 };

@@ -16,9 +16,12 @@ export const useTextBoxProps = (textBox: TextBox) => {
       fontFamily: DEFAULT_FONT_FAMILY,
       fontWeight: textBox.isBold ? 700 : TEXTBOX_FONT_WEIGHT,
       fontStyle: textBox.isItalic ? 'italic' : 'normal',
-      textDecoration: textBox.isUnderline ? 'underline' : 'none'
+      textDecoration: textBox.isUnderline ? 'underline' : 'none',
+      color: textBox.color || 'inherit',
+      lineHeight: 1,
+      '& p': { margin: 0, padding: 0 }
     };
-  }, [textBox.fontSize, textBox.isBold, textBox.isItalic, textBox.isUnderline]);
+  }, [textBox.fontSize, textBox.isBold, textBox.isItalic, textBox.isUnderline, textBox.color]);
 
   const paddingX = useMemo(() => {
     return UNPROJECTED_TILE_SIZE * TEXTBOX_PADDING;

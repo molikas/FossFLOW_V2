@@ -8,7 +8,8 @@ export const viewItemSchema = z.object({
   id,
   tile: coords,
   labelHeight: z.number().optional(),
-  labelFontSize: z.number().optional()
+  labelFontSize: z.number().optional(),
+  labelColor: z.string().optional()
 });
 
 export const viewSchema = z.object({

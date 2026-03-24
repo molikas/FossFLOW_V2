@@ -2,7 +2,6 @@ import React from 'react';
 import { ProjectionOrientationEnum } from 'src/types';
 import {
   Box,
-  TextField,
   ToggleButton,
   ToggleButtonGroup,
   Slider,
@@ -10,18 +9,17 @@ import {
 } from '@mui/material';
 import {
   TextRotationNone as TextRotationNoneIcon,
-  Close as CloseIcon,
-  FormatBold as FormatBoldIcon,
-  FormatItalic as FormatItalicIcon,
-  FormatUnderlined as FormatUnderlinedIcon
+  Close as CloseIcon
 } from '@mui/icons-material';
 import { useTextBox } from 'src/hooks/useTextBox';
 import { useUiStateStore } from 'src/stores/uiStateStore';
 import { getIsoProjectionCss } from 'src/utils';
 import { useScene } from 'src/hooks/useScene';
+import { RichTextEditor } from 'src/components/RichTextEditor/RichTextEditor';
 import { ControlsContainer } from '../components/ControlsContainer';
 import { Section } from '../components/Section';
 import { DeleteButton } from '../components/DeleteButton';
+import { LabelColorPicker } from '../components/LabelColorPicker';
 
 interface Props {
   id: string;
@@ -58,12 +56,13 @@ export const TextBoxControls = ({ id }: Props) => {
         >
           <CloseIcon />
         </MUIIconButton>
-        <Section title="Enter text">
-          <TextField
+        <Section title="Text">
+          <RichTextEditor
             value={textBox.content}
-            onChange={(e) => {
-              updateTextBox(textBox.id, { content: e.target.value as string });
+            onChange={(html) => {
+              updateTextBox(textBox.id, { content: html });
             }}
+            height={120}
           />
         </Section>
         <Section title="Text size">
@@ -78,31 +77,11 @@ export const TextBoxControls = ({ id }: Props) => {
             }}
           />
         </Section>
-        <Section title="Formatting">
-          <ToggleButtonGroup
-            value={[
-              textBox.isBold ? 'bold' : null,
-              textBox.isItalic ? 'italic' : null,
-              textBox.isUnderline ? 'underline' : null
-            ].filter(Boolean)}
-            onChange={(_e, newFormats: string[]) => {
-              updateTextBox(textBox.id, {
-                isBold: newFormats.includes('bold'),
-                isItalic: newFormats.includes('italic'),
-                isUnderline: newFormats.includes('underline')
-              });
-            }}
-          >
-            <ToggleButton value="bold" size="small">
-              <FormatBoldIcon fontSize="small" />
-            </ToggleButton>
-            <ToggleButton value="italic" size="small">
-              <FormatItalicIcon fontSize="small" />
-            </ToggleButton>
-            <ToggleButton value="underline" size="small">
-              <FormatUnderlinedIcon fontSize="small" />
-            </ToggleButton>
-          </ToggleButtonGroup>
+        <Section title="Text color">
+          <LabelColorPicker
+            value={textBox.color}
+            onChange={(color) => updateTextBox(textBox.id, { color })}
+          />
         </Section>
         <Section title="Alignment">
           <ToggleButtonGroup

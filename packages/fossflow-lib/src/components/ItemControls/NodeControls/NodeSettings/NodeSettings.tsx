@@ -7,6 +7,7 @@ import { useModelItem } from 'src/hooks/useModelItem';
 import { useModelStore } from 'src/stores/modelStore';
 import { DeleteButton } from '../../components/DeleteButton';
 import { Section } from '../../components/Section';
+import { LabelColorPicker } from '../../components/LabelColorPicker';
 
 export type NodeUpdates = {
   model: Partial<ModelItem>;
@@ -163,6 +164,14 @@ export const NodeSettings = ({
             onChange={(e, newSize) => {
               onViewItemUpdated({ labelFontSize: newSize as number });
             }}
+          />
+        </Section>
+      )}
+      {modelItem.name && (
+        <Section title="Label color">
+          <LabelColorPicker
+            value={node.labelColor}
+            onChange={(color) => onViewItemUpdated({ labelColor: color })}
           />
         </Section>
       )}

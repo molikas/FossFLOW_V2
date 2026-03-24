@@ -1,4 +1,4 @@
-import { anchorSchema, connectorSchema } from '../connector';
+import { anchorSchema, connectorLabelSchema, connectorSchema } from '../connector';
 
 
 describe('anchorSchema', () => {
@@ -58,6 +58,39 @@ describe('connectorSchema', () => {
         })
       ).toBe(true);
     }
+  });
+});
+
+describe('connectorLabelSchema', () => {
+  const baseLabel = { id: 'l1', text: 'Label', position: 50 };
+
+  it('validates a minimal label', () => {
+    expect(connectorLabelSchema.safeParse(baseLabel).success).toBe(true);
+  });
+
+  it('accepts optional fontSize within range', () => {
+    expect(connectorLabelSchema.safeParse({ ...baseLabel, fontSize: 8 }).success).toBe(true);
+    expect(connectorLabelSchema.safeParse({ ...baseLabel, fontSize: 24 }).success).toBe(true);
+    expect(connectorLabelSchema.safeParse({ ...baseLabel, fontSize: 14 }).success).toBe(true);
+  });
+
+  it('rejects fontSize outside 8–24', () => {
+    expect(connectorLabelSchema.safeParse({ ...baseLabel, fontSize: 7 }).success).toBe(false);
+    expect(connectorLabelSchema.safeParse({ ...baseLabel, fontSize: 25 }).success).toBe(false);
+  });
+
+  it('accepts optional labelColor as hex string', () => {
+    expect(connectorLabelSchema.safeParse({ ...baseLabel, labelColor: '#ff0000' }).success).toBe(true);
+    expect(connectorLabelSchema.safeParse({ ...baseLabel, labelColor: '#000000' }).success).toBe(true);
+  });
+
+  it('fontSize and labelColor are fully optional', () => {
+    expect(connectorLabelSchema.safeParse(baseLabel).success).toBe(true);
+  });
+
+  it('fails if id is missing', () => {
+    const result = connectorLabelSchema.safeParse({ text: 'Label', position: 50 });
+    expect(result.success).toBe(false);
   });
 });
 

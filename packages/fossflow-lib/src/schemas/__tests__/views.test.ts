@@ -5,6 +5,12 @@ describe('viewItemSchema', () => {
     const valid = { id: 'item1', tile: { x: 1, y: 2 } };
     expect(viewItemSchema.safeParse(valid).success).toBe(true);
   });
+  it('accepts optional labelColor', () => {
+    expect(viewItemSchema.safeParse({ id: 'item1', tile: { x: 0, y: 0 }, labelColor: '#ff0000' }).success).toBe(true);
+  });
+  it('labelColor is optional — omitting it still passes', () => {
+    expect(viewItemSchema.safeParse({ id: 'item1', tile: { x: 0, y: 0 } }).success).toBe(true);
+  });
   it('fails if required fields are missing', () => {
     const invalid = { tile: { x: 1, y: 2 } };
     const result = viewItemSchema.safeParse(invalid);

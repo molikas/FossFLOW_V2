@@ -12,6 +12,13 @@ interface Props {
 export const TextBox = memo(({ textBox }: Props) => {
   const { paddingX, fontProps } = useTextBoxProps(textBox);
 
+  const from = useMemo(() => {
+    return CoordsUtils.add(textBox.tile, {
+      x: 0,
+      y: -(textBox.size.height - 1)
+    });
+  }, [textBox.tile, textBox.size.height]);
+
   const to = useMemo(() => {
     return CoordsUtils.add(textBox.tile, {
       x: textBox.size.width,
@@ -20,7 +27,7 @@ export const TextBox = memo(({ textBox }: Props) => {
   }, [textBox.tile, textBox.size.width]);
 
   const { css } = useIsoProjection({
-    from: textBox.tile,
+    from,
     to,
     orientation: textBox.orientation
   });
@@ -33,7 +40,7 @@ export const TextBox = memo(({ textBox }: Props) => {
           top: 0,
           left: 0,
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           width: '100%',
           height: '100%',
           px: toPx(paddingX)
@@ -44,7 +51,11 @@ export const TextBox = memo(({ textBox }: Props) => {
             ...fontProps
           }}
         >
-          {textBox.content}
+          {textBox.content?.trim().startsWith('<') ? (
+            <span dangerouslySetInnerHTML={{ __html: textBox.content }} />
+          ) : (
+            textBox.content
+          )}
         </Typography>
       </Box>
     </Box>

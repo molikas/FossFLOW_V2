@@ -114,7 +114,14 @@ export const ConnectorLabel = memo(({ connector: sceneConnector }: Props) => {
                 opacity: 0.95
               }}
             >
-              <Typography color="text.secondary" variant="body2">
+              <Typography
+                variant="body2"
+                sx={{
+                  fontWeight: 400,
+                  color: label.labelColor || 'text.primary',
+                  ...(label.fontSize ? { fontSize: `${label.fontSize}px` } : {})
+                }}
+              >
                 {label.text}
               </Typography>
             </Label>

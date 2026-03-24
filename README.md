@@ -22,8 +22,9 @@ This fork extends the original Isoflow project with new features and fixes that 
 ### Node and text customisation
 
 - **Clickable links on nodes** — Attach a URL to any node's name. The label becomes a clickable link in the diagram, useful for linking to documentation, tickets, or external resources.
-- **Node label font size** — Adjust the font size of a node's canvas label from the node settings panel.
-- **Text box formatting** — Text boxes support rich text: bold, italic, bullet lists, and font size options, so you can use them for annotating diagrams as well as simple labels.
+- **Node label font size and color** — Adjust the font size and text color of a node's canvas label from the node settings panel. Color presets match the diagram palette, with a custom color picker for anything else.
+- **Text box rich text and color** — Text boxes support the same rich text editor as node descriptions: bold, italic, bullet lists, headers, and more. Text color is adjustable per text box using the same palette + custom picker. The box expands downward to fit its content automatically.
+- **Connector label styling** — Each connector label has its own font size slider (8–24 px) and text color picker. The label position along the connector is set via both a slider and a number input. The connector color section is clearly labelled "Line Color" to avoid confusion with label color.
 
 ### Navigation and canvas
 
@@ -40,7 +41,84 @@ This fork extends the original Isoflow project with new features and fixes that 
 
 ---
 
+## Getting Started
+
+Everything runs inside Docker — you do not need Node.js or npm installed on your machine.
+
+### Prerequisites
+
+| Tool | Where to get it | Notes |
+|------|----------------|-------|
+| **Docker Desktop** | [docker.com/get-started](https://www.docker.com/get-started/) | Includes Docker Compose. Windows and Mac: install Docker Desktop. Linux: install [Docker Engine](https://docs.docker.com/engine/install/) + the [Compose plugin](https://docs.docker.com/compose/install/). |
+| **Git** | [git-scm.com](https://git-scm.com/downloads) | Windows: Git for Windows. Mac: comes with Xcode Command Line Tools (`xcode-select --install`). Linux: `sudo apt install git` / `sudo dnf install git`. |
+
+### Step 1 — Clone the repository
+
+Open a terminal (Command Prompt or PowerShell on Windows, Terminal on Mac/Linux) and run:
+
+```bash
+git clone https://github.com/molikas/FossFLOW_V2.git
+cd FossFLOW_V2
+```
+
+### Step 2 — Build and run (first time only)
+
+This downloads all dependencies and builds the app inside Docker. It takes 3–5 minutes the first time.
+
+```bash
+docker compose -f compose.dev.yml up --build
+```
+
+Once you see `Starting nginx...` in the output, open your browser and go to:
+
+**[http://localhost:3000](http://localhost:3000)**
+
+### Step 3 — Subsequent runs
+
+After the first build you can start the app much faster without rebuilding:
+
+```bash
+docker compose -f compose.dev.yml up
+```
+
+### Stopping the app
+
+Press `Ctrl+C` in the terminal where the app is running, or run this from another terminal in the same folder:
+
+```bash
+docker compose -f compose.dev.yml down
+```
+
+### Where your diagrams are saved
+
+All diagrams are saved automatically to a `diagrams/` folder inside the `FossFLOW_V2` directory on your machine. This folder is created the first time you save a diagram. Your data stays on your machine and is not sent anywhere.
+
+To back up your diagrams, copy the `diagrams/` folder to another location.
+
+---
+
 ## [Unreleased]
+
+### 2026-03-24
+
+#### Features
+
+- **Connector label font size:** Each label on a connector has its own font-size slider (8–24 px). The label position field gains a companion slider so position can be adjusted by dragging or typing.
+- **Connector label color:** Per-label text color picker using the scene palette swatches (circle buttons, matching the line color selector) plus a custom color input with eyedropper. Defaults to black. Section previously labelled "Color" renamed to "Line Color" to avoid ambiguity.
+- **TextBox rich text editing:** The text box editor now uses the same Quill-based `RichTextEditor` as node descriptions — supports bold, italic, underline, strikethrough, lists, headers, block-quote, and links. Content schema max length raised from 100 to 1000 characters to accommodate formatted text.
+- **TextBox auto-height:** The canvas text box element now expands downward to fit its content. Height is calculated from the number of paragraph/list block elements × font size in tiles. The placement tile stays as the drag/select handle; extra lines grow below it.
+- **TextBox text color:** Text boxes have a text color picker (same palette + custom picker as connector labels). Defaults to black; reset button returns to default.
+- **Node label color:** Node canvas labels have a text color picker in the settings panel, shown when the node has a name. Uses the same `LabelColorPicker` component for consistency.
+- **Consistent color picker UI:** All label/text color pickers (`LabelColorPicker`) use the same visual style as the connector line color section — preset palette circles, "Custom color" toggle switch, `CustomColorInput` with color swatch and hex field.
+
+#### Tests
+
+- **`connectorLabelSchema` suite** (`connector.test.ts`, +6 tests): validates minimal label, optional fontSize within 8–24 range, rejects out-of-range fontSize, optional labelColor, missing id failure
+- **`viewItemSchema` labelColor** (`views.test.ts`, +2 tests): accepts optional `labelColor`; omitting it still passes
+- **`textBoxSchema` color** (`textBox.test.ts`, +2 tests): accepts optional `color` field; omitting it still passes
+- Test count: 517 → 527, 54 suites, all passing
+
+---
 
 ### 2026-03-22
 

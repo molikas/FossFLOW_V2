@@ -21,4 +21,4 @@ prime/
 stage/
 overlay/
 .claude
-diagrams/diagram_*.json
+diagrams/

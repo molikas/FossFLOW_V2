@@ -43,7 +43,8 @@ export const VIEW_DEFAULTS: Required<
 
 export const VIEW_ITEM_DEFAULTS: Required<Omit<ViewItem, 'id' | 'tile'>> = {
   labelHeight: 80,
-  labelFontSize: 14
+  labelFontSize: 14,
+  labelColor: ''
 };
 
 export const CONNECTOR_DEFAULTS: Required<Omit<Connector, 'id' | 'color'>> = {
@@ -70,6 +71,7 @@ export const TEXTBOX_DEFAULTS: Required<Omit<TextBox, 'id' | 'tile'>> = {
   orientation: 'X',
   fontSize: 0.6,
   content: 'Text',
+  color: '',
   isBold: false,
   isItalic: false,
   isUnderline: false

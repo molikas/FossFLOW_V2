@@ -33,6 +33,7 @@ import { getConnectorLabels, generateId } from 'src/utils';
 import { ControlsContainer } from '../components/ControlsContainer';
 import { Section } from '../components/Section';
 import { DeleteButton } from '../components/DeleteButton';
+import { LabelColorPicker } from '../components/LabelColorPicker';
 
 interface Props {
   id: string;
@@ -216,50 +217,65 @@ export const ConnectorControls = ({ id }: Props) => {
                     sx={{ mb: 2 }}
                   />
 
-                  <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-                    <TextField
-                      label="Position (%)"
-                      type="number"
-                      value={label.position}
-                      onChange={(e) => {
-                        const inputValue = e.target.value;
-
-                        // Allow empty input
-                        if (inputValue === '') {
-                          handleUpdateLabel(label.id, { position: 0 });
-                          return;
-                        }
-
-                        const value = parseInt(inputValue, 10);
-                        if (!Number.isNaN(value)) {
-                          handleUpdateLabel(label.id, {
-                            position: Math.max(0, Math.min(100, value))
-                          });
-                        }
-                      }}
-                      onBlur={(e) => {
-                        // On blur, ensure we have a valid value
-                        if (e.target.value === '') {
-                          handleUpdateLabel(label.id, { position: 0 });
-                        }
-                      }}
-                      inputProps={{ min: 0, max: 100 }}
-                      sx={{ flex: 1 }}
-                    />
-
-                    {isDoubleLineType && (
-                      <Select
-                        value={label.line || '1'}
+                  <Box sx={{ mb: 2 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        Position (%)
+                      </Typography>
+                      <TextField
+                        type="number"
+                        size="small"
+                        value={label.position}
                         onChange={(e) => {
-                          return handleUpdateLabel(label.id, {
-                            line: e.target.value as '1' | '2'
-                          });
+                          const inputValue = e.target.value;
+                          if (inputValue === '') {
+                            handleUpdateLabel(label.id, { position: 0 });
+                            return;
+                          }
+                          const val = parseInt(inputValue, 10);
+                          if (!Number.isNaN(val)) {
+                            handleUpdateLabel(label.id, {
+                              position: Math.max(0, Math.min(100, val))
+                            });
+                          }
                         }}
-                        sx={{ flex: 1 }}
-                      >
-                        <MenuItem value="1">Line 1</MenuItem>
-                        <MenuItem value="2">Line 2</MenuItem>
-                      </Select>
+                        onBlur={(e) => {
+                          if (e.target.value === '') {
+                            handleUpdateLabel(label.id, { position: 0 });
+                          }
+                        }}
+                        inputProps={{ min: 0, max: 100 }}
+                        sx={{ width: 70 }}
+                      />
+                    </Box>
+                    <Slider
+                      step={1}
+                      min={0}
+                      max={100}
+                      value={label.position}
+                      onChange={(e, val) =>
+                        handleUpdateLabel(label.id, { position: val as number })
+                      }
+                    />
+                    {isDoubleLineType && (
+                      <Box sx={{ mt: 1 }}>
+                        <Typography variant="caption" color="text.secondary">
+                          Line
+                        </Typography>
+                        <Select
+                          value={label.line || '1'}
+                          onChange={(e) =>
+                            handleUpdateLabel(label.id, {
+                              line: e.target.value as '1' | '2'
+                            })
+                          }
+                          fullWidth
+                          size="small"
+                        >
+                          <MenuItem value="1">Line 1</MenuItem>
+                          <MenuItem value="2">Line 2</MenuItem>
+                        </Select>
+                      </Box>
                     )}
                   </Box>
 
@@ -278,6 +294,34 @@ export const ConnectorControls = ({ id }: Props) => {
                           height: value as number
                         });
                       }}
+                    />
+                  </Box>
+
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">
+                      Font size
+                    </Typography>
+                    <Slider
+                      marks
+                      step={1}
+                      min={8}
+                      max={24}
+                      value={label.fontSize ?? 12}
+                      onChange={(e, value) => {
+                        return handleUpdateLabel(label.id, {
+                          fontSize: value as number
+                        });
+                      }}
+                    />
+                  </Box>
+
+                  <Box sx={{ mb: 1 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      Label Color
+                    </Typography>
+                    <LabelColorPicker
+                      value={label.labelColor}
+                      onChange={(color) => handleUpdateLabel(label.id, { labelColor: color })}
                     />
                   </Box>
 
@@ -301,7 +345,7 @@ export const ConnectorControls = ({ id }: Props) => {
             })}
           </Box>
         </Section>
-        <Section title="Color">
+        <Section title="Line Color">
           <FormControlLabel
             control={
               <Switch

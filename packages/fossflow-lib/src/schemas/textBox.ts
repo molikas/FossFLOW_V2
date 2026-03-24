@@ -5,8 +5,9 @@ import { id, coords, constrainedStrings } from './common';
 export const textBoxSchema = z.object({
   id,
   tile: coords,
-  content: constrainedStrings.name,
+  content: constrainedStrings.description,
   fontSize: z.number().optional(),
+  color: z.string().optional(),
   isBold: z.boolean().optional(),
   isItalic: z.boolean().optional(),
   isUnderline: z.boolean().optional(),
