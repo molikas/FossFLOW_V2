@@ -3,6 +3,36 @@ All code is generated using Claude with sanity check reviews + manual testing. I
 
 
 See original project: FossFLOW for details more details
+
+---
+
+## What This Fork Adds
+
+This fork extends the original Isoflow project with new features and fixes that improve the day-to-day diagramming experience. Here is what you get:
+
+### Editing improvements
+
+- **Copy and paste** — Select any combination of nodes, connectors, rectangles, and text boxes, then paste them anywhere on the canvas with `Ctrl+C` / `Ctrl+V`. Pasted items appear centered around your mouse cursor. Connectors between pasted nodes are included automatically, complete with their waypoints.
+- **Freehand lasso selection** — In addition to the rectangular lasso, you can draw a freehand polygon to select exactly the items you want, even in a crowded diagram.
+- **Dragging feels right** — Dragging nodes, text boxes, and rectangles now responds the instant you move, tracks your grab point precisely, and stops at the last valid position when blocked by another element rather than jumping around. The blue highlight tile always stays in sync with the cursor while dragging.
+- **Undo/redo** — Full multi-step undo and redo for all canvas changes.
+- **Multi-view diagrams** — Create multiple named views (tabs) within a single file. Each view is an independent canvas.
+
+### Navigation and canvas
+
+- **Right-click to pan** — Hold right-click and drag to pan the canvas. Release to go back to what you were doing. No need to switch to a pan tool.
+- **Sensible default zoom** — The canvas opens at 90% zoom so you immediately have some room to work with.
+- **Context menu** — Right-click on an empty area of the canvas to quickly add a node or rectangle without reaching for the toolbar.
+
+### Quality-of-life fixes
+
+- **Clicking a node to edit it no longer adds an empty description block** to the node's label on the canvas.
+- **Language dropdown opens on click**, not on hover — it no longer pops open accidentally when you move the mouse past it.
+- **Lasso selection tip** auto-dismisses after you use it once, so it does not get in the way every session.
+- **Help dialog** (`F1` or `?`) documents all keyboard shortcuts including copy/paste.
+
+---
+
 ## [Unreleased]
 
 ### 2026-03-22
