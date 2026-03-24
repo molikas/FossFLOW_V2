@@ -45,7 +45,8 @@ export interface DragItemsMode {
   type: 'DRAG_ITEMS';
   showCursor: boolean;
   items: ItemReference[];
-  isInitialMovement: Boolean;
+  initialTiles: Record<string, Coords>; // nodes + textboxes: id -> tile at drag start
+  initialRectangles: Record<string, { from: Coords; to: Coords }>; // rectangles: id -> bounds at drag start
 }
 
 export interface PanMode {

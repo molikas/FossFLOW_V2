@@ -20,14 +20,22 @@ jest.mock('src/utils', () => ({
   getItemAtTile: (...args: any[]) => mockGetItemAtTile(...args),
   hasMovedTile: (...args: any[]) => mockHasMovedTile(...args),
   getAnchorAtTile: jest.fn(() => null),
-  getItemByIdOrThrow: jest.fn(),
+  // Return a realistic result for initialTiles capture; throws are silently caught
+  getItemByIdOrThrow: jest.fn((arr: any[], id: string) => {
+    const found = (arr as any[]).find((item: any) => item.id === id);
+    if (!found) throw new Error(`Not found: ${id}`);
+    return { index: 0, value: found };
+  }),
   generateId: jest.fn(() => 'new-id'),
   CoordsUtils: {
     zero: () => ({ x: 0, y: 0 }),
-    isEqual: jest.fn(() => false)
+    // Real coordinate comparison — drag detection uses this instead of hasMovedTile
+    isEqual: (a: any, b: any) => a.x === b.x && a.y === b.y,
+    subtract: (a: any, b: any) => ({ x: a.x - b.x, y: a.y - b.y })
   },
   getAnchorTile: jest.fn(() => ({ x: 0, y: 0 })),
-  connectorPathTileToGlobal: jest.fn(() => ({ x: 0, y: 0 }))
+  connectorPathTileToGlobal: jest.fn(() => ({ x: 0, y: 0 })),
+  setWindowCursor: jest.fn()
 }));
 
 // Cursor.ts imports useScene for type only — mock to prevent module resolution errors
@@ -57,8 +65,8 @@ function makeUiState(overrides: any = {}) {
   };
 }
 
-function makeScene() {
-  return { connectors: [], items: [], rectangles: [], textBoxes: [] };
+function makeScene(items: any[] = []) {
+  return { connectors: [], items, rectangles: [], textBoxes: [] };
 }
 
 function callMousedown(uiState: any, isRendererInteraction: boolean) {
@@ -69,8 +77,8 @@ function callMouseup(uiState: any, isRendererInteraction = true) {
   Cursor.mouseup!({ uiState, scene: makeScene(), isRendererInteraction } as any);
 }
 
-function callMousemove(uiState: any) {
-  Cursor.mousemove!({ uiState, scene: makeScene(), isRendererInteraction: true } as any);
+function callMousemove(uiState: any, scene = makeScene()) {
+  Cursor.mousemove!({ uiState, scene, isRendererInteraction: true } as any);
 }
 
 // ---------------------------------------------------------------------------
@@ -269,8 +277,8 @@ describe('Cursor.mousemove (real module)', () => {
     expect(uiState.actions.setMode).not.toHaveBeenCalled();
   });
 
-  it('does nothing when hasMovedTile returns false', () => {
-    mockHasMovedTile.mockReturnValue(false);
+  it('does nothing when position tile equals mousedown tile (no drag yet)', () => {
+    // position == mousedown → CoordsUtils.isEqual returns true → hasDragged = false
     const uiState = makeUiState({
       mode: {
         type: 'CURSOR',
@@ -288,8 +296,22 @@ describe('Cursor.mousemove (real module)', () => {
     expect(uiState.actions.setMode).not.toHaveBeenCalled();
   });
 
-  it('transitions to DRAG_ITEMS when item is mousedownItem and tile moved', () => {
-    mockHasMovedTile.mockReturnValue(true);
+  it('does nothing when mousedown is null and hasMovedTile is false (no hover update)', () => {
+    mockHasMovedTile.mockReturnValue(false);
+    const uiState = makeUiState({
+      mode: { type: 'CURSOR', showCursor: true, mousedownItem: null, mousedownHandled: false },
+      mouse: {
+        position: { tile: { x: 5, y: 5 }, screen: { x: 50, y: 50 } },
+        mousedown: null,
+        delta: null
+      }
+    });
+    callMousemove(uiState);
+    expect(uiState.actions.setMode).not.toHaveBeenCalled();
+  });
+
+  it('transitions to DRAG_ITEMS with showCursor:true when item dragged and position != mousedown', () => {
+    // position != mousedown → hasDragged = true → DRAG_ITEMS
     const uiState = makeUiState({
       mode: {
         type: 'CURSOR',
@@ -303,14 +325,46 @@ describe('Cursor.mousemove (real module)', () => {
         delta: { tile: { x: 3, y: 3 }, screen: { x: 30, y: 30 } }
       }
     });
-    callMousemove(uiState);
+    // Scene includes the node so initialTiles gets populated
+    const scene = makeScene([{ id: 'n1', tile: { x: 5, y: 5 } }]);
+    callMousemove(uiState, scene);
     expect(uiState.actions.setMode).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'DRAG_ITEMS' })
+      expect.objectContaining({
+        type: 'DRAG_ITEMS',
+        showCursor: true,
+        items: [{ type: 'ITEM', id: 'n1' }],
+        initialTiles: { 'n1': { x: 5, y: 5 } },
+        initialRectangles: {}
+      })
     );
   });
 
-  it('transitions to LASSO when mousedownItem is null and tile moved', () => {
-    mockHasMovedTile.mockReturnValue(true);
+  it('transitions to DRAG_ITEMS with showCursor:true when textbox dragged and position != mousedown', () => {
+    const uiState = makeUiState({
+      mode: {
+        type: 'CURSOR',
+        showCursor: true,
+        mousedownItem: { type: 'TEXTBOX', id: 'tb1' },
+        mousedownHandled: true
+      },
+      mouse: {
+        position: { tile: { x: 8, y: 5 }, screen: { x: 80, y: 50 } },
+        mousedown: { tile: { x: 5, y: 5 }, screen: { x: 50, y: 50 } },
+        delta: { tile: { x: 3, y: 0 }, screen: { x: 30, y: 0 } }
+      }
+    });
+    const scene = { connectors: [], items: [], rectangles: [], textBoxes: [{ id: 'tb1', tile: { x: 5, y: 5 } }] };
+    callMousemove(uiState, scene);
+    expect(uiState.actions.setMode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'DRAG_ITEMS',
+        showCursor: true,
+        initialTiles: { 'tb1': { x: 5, y: 5 } }
+      })
+    );
+  });
+
+  it('transitions to LASSO when mousedownItem is null and position != mousedown', () => {
     const uiState = makeUiState({
       mode: {
         type: 'CURSOR',

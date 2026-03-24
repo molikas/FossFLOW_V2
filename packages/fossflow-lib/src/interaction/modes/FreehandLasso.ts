@@ -1,6 +1,6 @@
 import { produce } from 'immer';
 import { ModeActions, ItemReference, Coords } from 'src/types';
-import { screenToIso, isPointInPolygon } from 'src/utils';
+import { screenToIso, isPointInPolygon, getItemByIdOrThrow } from 'src/utils';
 
 // Helper to find all items whose centers are within the freehand polygon
 const getItemsInFreehandBounds = (
@@ -51,11 +51,26 @@ export const FreehandLasso: ModeActions = {
 
     // If user is dragging an existing selection, switch to DRAG_ITEMS mode
     if (uiState.mode.isDragging && uiState.mode.selection) {
+      const initialTiles: Record<string, Coords> = {};
+      const initialRectangles: Record<string, { from: Coords; to: Coords }> = {};
+      uiState.mode.selection.items.forEach((item) => {
+        try {
+          if (item.type === 'ITEM') {
+            initialTiles[item.id] = getItemByIdOrThrow(scene.items, item.id).value.tile;
+          } else if (item.type === 'TEXTBOX') {
+            initialTiles[item.id] = getItemByIdOrThrow(scene.textBoxes, item.id).value.tile;
+          } else if (item.type === 'RECTANGLE') {
+            const r = getItemByIdOrThrow(scene.rectangles, item.id).value;
+            initialRectangles[item.id] = { from: r.from, to: r.to };
+          }
+        } catch {}
+      });
       uiState.actions.setMode({
         type: 'DRAG_ITEMS',
         showCursor: true,
         items: uiState.mode.selection.items,
-        isInitialMovement: true
+        initialTiles,
+        initialRectangles
       });
       return;
     }

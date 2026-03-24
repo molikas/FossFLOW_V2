@@ -20,7 +20,12 @@ const mockHasMovedTile = jest.fn(() => false);
 jest.mock('src/utils', () => ({
   isWithinBounds: (...args: any[]) => mockIsWithinBounds(...args),
   hasMovedTile: jest.fn(() => false),
-  CoordsUtils: { zero: () => ({ x: 0, y: 0 }) }
+  CoordsUtils: { zero: () => ({ x: 0, y: 0 }) },
+  getItemByIdOrThrow: jest.fn((arr: any[], id: string) => {
+    const found = (arr as any[]).find((item: any) => item.id === id);
+    if (!found) throw new Error(`Not found: ${id}`);
+    return { index: 0, value: found };
+  })
 }));
 
 // ---------------------------------------------------------------------------
@@ -248,7 +253,10 @@ describe('Lasso.mousemove (real module)', () => {
     expect(uiState.actions.setMode).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'DRAG_ITEMS',
-        items: [{ type: 'ITEM', id: 'n1' }]
+        showCursor: true,
+        items: [{ type: 'ITEM', id: 'n1' }],
+        initialTiles: {},        // getItemByIdOrThrow throws (n1 not in scene) → caught silently
+        initialRectangles: {}
       })
     );
   });

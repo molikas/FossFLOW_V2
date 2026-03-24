@@ -38,7 +38,7 @@
 | **Pan** | `interaction/modes/Pan.ts`, `interaction/usePanHandlers.ts` | `usePanHandlers` short-circuits `onMouseEvent` before `processMouseUpdate` | Reads `mouse.delta.screen`, writes `scroll.position`; uses `isPanningRef`, `panMethodRef` | Has a **bypass path** in `onMouseEvent` — middle/right/ctrl/alt/emptyArea clicks call `startPan()` directly and return early without going through `processMouseUpdate` |
 | **Lasso** | `interaction/modes/Lasso.ts` | Mode dispatch in `processMouseUpdate` | Reads `mouse.mousedown`, `mouse.position.tile`, `uiState.mode.selection`; writes mode with selection bounds + items array | `mousedown` guard (`!isRendererInteraction`) was **missing** until fixed; `mouseup` guard (`!mouse.mousedown`) was also missing; both caused toolbar-click→context-menu regression |
 | **Freehand Lasso** | `interaction/modes/FreehandLasso.ts` | Mode dispatch in `processMouseUpdate` | Reads `mouse.position.screen`, writes `mode.path` (screen coords); on mouseup converts path to tiles via `screenToIso`, runs `isPointInPolygon` | Same missing guards as Lasso — both were added as part of the same fix; uses `rendererEl.getBoundingClientRect()` at mouseup, not `rendererSize` |
-| **Drag Items** | `interaction/modes/DragItems.ts` | Transitioned to from Cursor.mousemove when mousedown + moved tile | Reads `mode.items`, `mouse.delta.tile`; calls `scene.transaction()` wrapping updateViewItem, updateTextBox, updateRectangle; handles anchor separately | `isInitialMovement` flag: first frame uses `mousedown.tile` delta, subsequent frames use `mouse.delta.tile`; sets `renderer.style.userSelect = 'none'` on entry |
+| **Drag Items** | `interaction/modes/DragItems.ts` | Transitioned to from Cursor.mousemove when mousedown + moved tile | Reads `mode.items`, `mode.initialTiles`, `mode.initialRectangles`, `mouse.position.tile`, `mouse.mousedown.tile`; uses **absolute positioning** (`initialTile + mouseOffset`); calls `scene.transaction()` wrapping updateViewItem, updateTextBox, updateRectangle | Guard: `mouseOffset != zero()` (replaces stale `hasMovedTile`); node collision = stay-at-last-valid (occupied-tile check only, no nearest-search); `not-allowed` cursor only when node dragged over another node; sets `renderer.style.userSelect = 'none'` on entry |
 | **Connector** | `interaction/modes/Connector.ts` | ToolMenu / hotkey → `setMode({type:'CONNECTOR'})` | Reads `connectorInteractionMode`; two sub-flows: click mode (first-click creates+stores `startAnchor`, second-click finalises) vs. drag mode (mousedown creates, mousemove updates anchor[1], mouseup finalises) | Entry calls `setWindowCursor('crosshair')`; Escape in `useInteractionManager` handles in-progress connection cleanup |
 | **Place Icon** | `interaction/modes/PlaceIcon.ts` | ToolMenu "Add item" → `setMode({type:'PLACE_ICON', id:null})`; id set when icon selected | On mouseup: calls `findNearestUnoccupiedTile` then `scene.placeIcon()` | If no tile found (`targetTile` is null), no item is placed — silent no-op |
 | **Draw Rectangle** | `interaction/modes/Rectangle/DrawRectangle.ts` | ToolMenu "Rectangle" | On mousedown: creates rectangle at cursor; on mousemove: `updateRectangle({to:...})`; on mouseup: → CURSOR | `isRendererInteraction` guard on mousedown |
@@ -52,7 +52,7 @@
 | **Copy** | `clipboard/useCopyPaste.ts` | `Ctrl+C` in `useInteractionManager` keydown handler → `handleCopy()` |
 | **Paste** | `clipboard/useCopyPaste.ts` | `Ctrl+V` in keydown handler → `handlePaste()` |
 
-Copy reads selection from `LASSO`/`FREEHAND_LASSO` mode or single-item `itemControls`. Paste calls `findNearestUnoccupiedTilesForGroup` for collision avoidance, remaps all IDs, detaches anchors pointing outside the paste selection, and calls `scene.pasteItems()`. After pasting, switches to `LASSO` mode with a synthetic selection of all pasted items.
+Copy reads selection from `LASSO`/`FREEHAND_LASSO` mode or single-item `itemControls`. Paste calls `findNearestUnoccupiedTilesForGroup` for collision avoidance, remaps all IDs, detaches anchors pointing outside the paste selection (converting `ref.item` to `ref.tile`), offsets all tile waypoint anchors (`ref.tile`) by the paste offset, and calls `scene.pasteItems()`. After pasting, switches to `CURSOR` mode (`mousedownItem: null`).
 
 ### History (Undo/Redo)
 
@@ -603,21 +603,21 @@ Touch events are synthesized: `touchstart` → mousedown (button:0), `touchmove`
 ### Critical Gaps
 
 **Mode state machine transitions — untested with real modules:**
-- No test for `CURSOR → DRAG_ITEMS` (mousemove while mousedown on item)
-- No test for `CURSOR → LASSO` (mousemove while mousedown on empty canvas)
-- No test for `LASSO → DRAG_ITEMS` (mousemove while isDragging within selection)
+- `CURSOR → DRAG_ITEMS` (mousemove while mousedown on item) — **now covered** in `Cursor.modes.test.ts`
+- `CURSOR → LASSO` (mousemove while mousedown on empty canvas) — **now covered** in `Cursor.modes.test.ts`
+- `LASSO → DRAG_ITEMS` (mousemove while isDragging within selection) — **now covered** in `Lasso.modes.test.ts`
 - No test for `DRAG_ITEMS → CURSOR` (mouseup)
 - No test for `FREEHAND_LASSO → DRAG_ITEMS`
 - No test for `RECTANGLE.TRANSFORM → CURSOR` on mouseup
 - No test for Pan mode transitions (entry/exit for all 5 pan methods)
 - No test for `isRendererInteraction=false` in the **actual mode files** (toolMenu.propagation tests use inline replicas)
 - No test for the `reducerTypeRef` entry/exit lifecycle — that `entry()` fires exactly once on mode change
-- No test for `mousedownHandled` flag — specifically that it prevents spurious context-menu after external `setMode`
+- `mousedownHandled` flag (prevents spurious context-menu after external `setMode`) — **now covered** in `Cursor.modes.test.ts`
 
 **Scene API mutations — untested:**
 - `placeIcon` — no test for two-step model+view creation as single transaction
 - `deleteSelectedItems` — no test for full cascade across mixed item types
-- `pasteItems` — **no test at all** (most complex operation in codebase)
+- `pasteItems` — covered via `useCopyPaste.test.ts` (handlePaste contracts including tile waypoint offset, orphan detach)
 - `switchView` — no test for UiState.view update
 - Transaction nesting in `useScene` (separate `transactionInProgress.current`)
 

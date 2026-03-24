@@ -22,11 +22,48 @@ FossFLOW is a powerful, open-source Progressive Web App (PWA) for creating beaut
 - 🔲 **Lasso Select** - Draw a selection box to select and move multiple items at once
 
 
+## What This Fork Adds
+
+This fork extends the original Isoflow project with new features and fixes that improve the day-to-day diagramming experience. Here is what you get:
+
+### Editing improvements
+
+- **Copy and paste** — Select any combination of nodes, connectors, rectangles, and text boxes, then paste them anywhere on the canvas with `Ctrl+C` / `Ctrl+V`. Pasted items appear centered around your mouse cursor. Connectors between pasted nodes are included automatically, complete with their waypoints.
+- **Freehand lasso selection** — In addition to the rectangular lasso, you can draw a freehand polygon to select exactly the items you want, even in a crowded diagram.
+- **Dragging feels right** — Dragging nodes, text boxes, and rectangles now responds the instant you move, tracks your grab point precisely, and stops at the last valid position when blocked by another element rather than jumping around. The blue highlight tile always stays in sync with the cursor while dragging.
+- **Undo/redo** — Full multi-step undo and redo for all canvas changes.
+- **Multi-view diagrams** — Create multiple named views (tabs) within a single file. Each view is an independent canvas.
+
+### Navigation and canvas
+
+- **Right-click to pan** — Hold right-click and drag to pan the canvas. Release to go back to what you were doing. No need to switch to a pan tool.
+- **Sensible default zoom** — The canvas opens at 90% zoom so you immediately have some room to work with.
+- **Context menu** — Right-click on an empty area of the canvas to quickly add a node or rectangle without reaching for the toolbar.
+
+### Quality-of-life fixes
+
+- **Clicking a node to edit it no longer adds an empty description block** to the node's label on the canvas.
+- **Language dropdown opens on click**, not on hover — it no longer pops open accidentally when you move the mouse past it.
+- **Lasso selection tip** auto-dismisses after you use it once, so it does not get in the way every session.
+- **Help dialog** (`F1` or `?`) documents all keyboard shortcuts including copy/paste.
+
+---
+
 ## Changelog
 
-### Latest
+### 2026-03-24
 
-- **Copy/Paste** (`Ctrl+C` / `Ctrl+V`): Copy and paste any selection of nodes, connectors, rectangles, and text boxes. Pastes at mouse position with collision avoidance, full ID remapping, and a single undo step. Post-paste selection highlights all pasted items.
+- **Node drag: absolute positioning** — Nodes, text boxes, and rectangles now move relative to the exact grab point rather than frame-by-frame delta, eliminating the drift and desync that occurred when holding a node still briefly during a drag.
+- **Drag activation: instant** — Drag now activates the moment the cursor moves to an adjacent tile. Previously there was a half-cell delay caused by a stale delta value (one animation frame behind). Affects nodes, text boxes, and rectangles.
+- **Node collision: stay-at-last-valid** — When a dragged node would overlap another node, it now stays at the last valid position instead of jumping to the nearest free tile. This makes dragging past occupied cells feel natural.
+- **Drag cursor highlight: always visible** — The blue tile highlight (cursor) now tracks the mouse correctly throughout a drag. Previously the highlight was hidden for nodes to mask a desync; with absolute positioning the desync is gone.
+- **Not-allowed cursor: nodes only** — The `not-allowed` cursor now only appears when a node is dragged onto another node. It no longer shows incorrectly when moving text boxes or rectangles.
+- **Connector copy-paste: waypoints move with the connector** — Intermediate tile waypoints in a connector path are now correctly offset when pasting. Previously they stayed at their original coordinates.
+- **Language selector: click to expand** — The language dropdown in the settings area now opens and closes on click only, instead of expanding on hover.
+
+### Previous
+
+- **Copy/Paste** (`Ctrl+C` / `Ctrl+V`): Copy and paste any selection of nodes, connectors, rectangles, and text boxes. Pastes at mouse position with collision avoidance, full ID remapping, and a single undo step.
 - **Lasso hint auto-dismiss**: The lasso selection tip tooltip now automatically dismisses after the first time you use lasso mode, rather than requiring a manual close every session.
 - **Node label fix**: Clicking a node to edit it no longer incorrectly adds an empty description block to the node's canvas label.
 - **Help dialog & hotkey settings**: Copy/paste shortcuts documented in the Help dialog (`?`) and Settings → Hotkeys panel.

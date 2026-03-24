@@ -33,7 +33,7 @@ const ChangeLanguage = () => {
     <div className="language-selector" ref={dropdownRef}>
       <div
         className="language-display"
-        onMouseEnter={() => setIsOpen(true)}
+        onClick={() => setIsOpen((prev) => !prev)}
       >
         A/文
       </div>

@@ -9,9 +9,10 @@
  *  5. handleCopy — connector auto-include: included when both item-anchors are in the selected set
  *  6. handlePaste — null clipboard: shows 'Nothing to paste' warning, no pasteItems call
  *  7. handlePaste — IDs are remapped: pasted items get new IDs distinct from originals
- *  8. handlePaste — orphan detach: connector anchor referencing an item NOT in clipboard loses item ref
+ *  8. handlePaste — orphan detach: connector anchor referencing an item NOT in clipboard loses item ref (converted to tile ref)
  *  9. handlePaste — offset: pasted tile = original tile + (mouse − centroid)
- * 10. handlePaste — sets LASSO mode with all pasted refs
+ * 10. handlePaste — sets CURSOR mode after paste
+ * 11. handlePaste — connector tile waypoints are offset by the paste offset
  */
 
 import { renderHook, act } from '@testing-library/react';
@@ -275,7 +276,8 @@ describe('useCopyPaste.handlePaste', () => {
     const connector = mockPasteItems.mock.calls[0][0].connectors[0];
     expect(connector.anchors[0].ref.item).toBeDefined();
     expect(connector.anchors[0].ref.item).not.toBe('item-A'); // remapped
-    expect(connector.anchors[1].ref.item).toBeUndefined();    // detached
+    expect(connector.anchors[1].ref.item).toBeUndefined();    // detached — no item ref
+    expect(connector.anchors[1].ref.tile).toBeDefined();      // converted to tile ref
   });
 
   test('9. offset applied correctly — pasted tile = original + (mouse − centroid)', () => {
@@ -296,7 +298,7 @@ describe('useCopyPaste.handlePaste', () => {
     expect(pasted.items[0].viewItem.tile).toEqual({ x: 8, y: 9 });
   });
 
-  test('10. paste sets LASSO mode with all pasted refs', () => {
+  test('10. paste sets CURSOR mode after paste', () => {
     _mockClipboard = {
       items: [{ modelItem: makeModelItem('item-P'), viewItem: makeViewItem('item-P', 1, 1) }],
       connectors: [],
@@ -311,18 +313,51 @@ describe('useCopyPaste.handlePaste', () => {
 
     expect(mockSetMode).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'LASSO',
-        selection: expect.objectContaining({
-          items: expect.arrayContaining([
-            expect.objectContaining({ type: 'ITEM' }),
-            expect.objectContaining({ type: 'RECTANGLE' })
-          ])
-        })
+        type: 'CURSOR',
+        showCursor: true,
+        mousedownItem: null
       })
     );
     expect(mockSetItemControls).toHaveBeenCalledWith(null);
     expect(mockSetNotification).toHaveBeenCalledWith(
       expect.objectContaining({ message: 'Pasted 2 items', severity: 'success' })
     );
+  });
+
+  test('11. connector tile waypoints are offset by the paste offset', () => {
+    // Connector: item-anchor at item-A, tile waypoint at (3, 3), item-anchor at item-B
+    // Paste offset: mouse (10,10) - centroid (5,5) = (5,5)
+    // Tile waypoint should move from (3,3) to (8,8)
+    _mockClipboard = {
+      items: [
+        { modelItem: makeModelItem('item-A'), viewItem: makeViewItem('item-A', 5, 5) },
+        { modelItem: makeModelItem('item-B'), viewItem: makeViewItem('item-B', 5, 5) }
+      ],
+      connectors: [
+        makeConnector('conn-1', [
+          { id: 'a1', ref: { item: 'item-A' } },
+          { id: 'a2', ref: { tile: { x: 3, y: 3 } } },  // tile waypoint
+          { id: 'a3', ref: { item: 'item-B' } }
+        ])
+      ],
+      rectangles: [],
+      textBoxes: [],
+      centroid: { x: 5, y: 5 }
+    };
+    mockUiState.mouse.position.tile = { x: 10, y: 10 }; // offset = (5,5)
+
+    const { result } = setup();
+    act(() => { result.current.handlePaste(); });
+
+    const connector = mockPasteItems.mock.calls[0][0].connectors[0];
+    // anchor[0]: item ref — remapped
+    expect(connector.anchors[0].ref.item).toBeDefined();
+    expect(connector.anchors[0].ref.item).not.toBe('item-A');
+    // anchor[1]: tile waypoint — should be offset by (5,5)
+    expect(connector.anchors[1].ref.tile).toEqual({ x: 8, y: 8 });
+    expect(connector.anchors[1].ref.item).toBeUndefined();
+    // anchor[2]: item ref — remapped
+    expect(connector.anchors[2].ref.item).toBeDefined();
+    expect(connector.anchors[2].ref.item).not.toBe('item-B');
   });
 });

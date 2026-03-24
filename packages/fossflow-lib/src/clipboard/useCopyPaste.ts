@@ -204,6 +204,13 @@ export const useCopyPaste = () => {
           const tile = originalTileMap.get(anchor.ref.item) ?? mouseTile;
           return { ...anchor, ref: { tile } };
         }
+        // Tile waypoint: apply paste offset so intermediate points move with the connector
+        if (anchor.ref?.tile) {
+          return {
+            ...anchor,
+            ref: { tile: { x: anchor.ref.tile.x + offset.x, y: anchor.ref.tile.y + offset.y } }
+          };
+        }
         return anchor;
       })
     }));

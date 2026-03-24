@@ -117,15 +117,27 @@ export const Cursor: ModeActions = {
     }
   },
   mousemove: ({ scene, uiState }) => {
-    if (uiState.mode.type !== 'CURSOR' || !hasMovedTile(uiState.mouse)) return;
+    if (uiState.mode.type !== 'CURSOR') return;
 
     let item = uiState.mode.mousedownItem;
 
-    // Update hover cursor when not holding down
+    // Hover cursor (no mousedown): still use hasMovedTile to avoid redundant work
     if (!item && !uiState.mouse.mousedown) {
-      const hoverItem = getItemAtTile({ tile: uiState.mouse.position.tile, scene });
-      setWindowCursor(hoverItem ? 'pointer' : 'default');
+      if (hasMovedTile(uiState.mouse)) {
+        const hoverItem = getItemAtTile({ tile: uiState.mouse.position.tile, scene });
+        setWindowCursor(hoverItem ? 'pointer' : 'default');
+      }
+      return;
     }
+
+    // Drag detection: use position vs mousedown directly instead of stale delta.
+    // hasMovedTile relies on delta which is one RAF frame behind, causing a half-tile delay.
+    if (!uiState.mouse.mousedown) return;
+    const hasDragged = !CoordsUtils.isEqual(
+      uiState.mouse.position.tile,
+      uiState.mouse.mousedown.tile
+    );
+    if (!hasDragged) return;
 
     if (item?.type === 'CONNECTOR' && uiState.mouse.mousedown) {
       const anchor = getAnchor(item.id, uiState.mouse.mousedown.tile, scene);
@@ -137,11 +149,24 @@ export const Cursor: ModeActions = {
     }
 
     if (item) {
+      const initialTiles: Record<string, Coords> = {};
+      const initialRectangles: Record<string, { from: Coords; to: Coords }> = {};
+      if (item.type === 'ITEM') {
+        try { initialTiles[item.id] = getItemByIdOrThrow(scene.items, item.id).value.tile; } catch {}
+      } else if (item.type === 'TEXTBOX') {
+        try { initialTiles[item.id] = getItemByIdOrThrow(scene.textBoxes, item.id).value.tile; } catch {}
+      } else if (item.type === 'RECTANGLE') {
+        try {
+          const r = getItemByIdOrThrow(scene.rectangles, item.id).value;
+          initialRectangles[item.id] = { from: r.from, to: r.to };
+        } catch {}
+      }
       uiState.actions.setMode({
         type: 'DRAG_ITEMS',
         showCursor: true,
         items: [item],
-        isInitialMovement: true
+        initialTiles,
+        initialRectangles
       });
     } else {
       // Empty-area drag → start lasso selection (only when mousedown was properly handled)

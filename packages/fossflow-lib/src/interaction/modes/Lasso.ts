@@ -1,6 +1,7 @@
 import { produce } from 'immer';
 import { ModeActions, ItemReference } from 'src/types';
-import { CoordsUtils, isWithinBounds, hasMovedTile } from 'src/utils';
+import { CoordsUtils, isWithinBounds, hasMovedTile, getItemByIdOrThrow } from 'src/utils';
+import type { Coords } from 'src/types';
 
 // Helper to find all items within the lasso bounds
 const getItemsInBounds = (
@@ -54,11 +55,26 @@ export const Lasso: ModeActions = {
 
     if (uiState.mode.isDragging && uiState.mode.selection) {
       // User is dragging an existing selection - switch to DRAG_ITEMS mode
+      const initialTiles: Record<string, Coords> = {};
+      const initialRectangles: Record<string, { from: Coords; to: Coords }> = {};
+      uiState.mode.selection.items.forEach((item) => {
+        try {
+          if (item.type === 'ITEM') {
+            initialTiles[item.id] = getItemByIdOrThrow(scene.items, item.id).value.tile;
+          } else if (item.type === 'TEXTBOX') {
+            initialTiles[item.id] = getItemByIdOrThrow(scene.textBoxes, item.id).value.tile;
+          } else if (item.type === 'RECTANGLE') {
+            const r = getItemByIdOrThrow(scene.rectangles, item.id).value;
+            initialRectangles[item.id] = { from: r.from, to: r.to };
+          }
+        } catch {}
+      });
       uiState.actions.setMode({
         type: 'DRAG_ITEMS',
         showCursor: true,
         items: uiState.mode.selection.items,
-        isInitialMovement: true
+        initialTiles,
+        initialRectangles
       });
       return;
     }
