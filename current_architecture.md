@@ -1120,4 +1120,178 @@ quill Cannot register "bullet" specified in "formats" config.
 
 ---
 
-*End of document. Last updated: 2026-03-22.*
+---
+
+## Section 8: DiagnosticsOverlay — Performance Monitoring System
+
+**File:** `packages/fossflow-app/src/components/DiagnosticsOverlay.tsx`
+
+### Purpose
+
+A lightweight, always-available performance monitoring overlay for collecting quantitative data during development and production debugging. Designed to be low-overhead, self-contained, and to produce output that can be dropped directly into an LLM for root-cause analysis without requiring a profiler session.
+
+### Architecture
+
+- Always rendered in `App.tsx`; visible as a collapsible pill button in the bottom-right corner regardless of dev/prod mode.
+- All mutable state lives in `useRef` objects — no state updates during collection, which avoids the overlay itself adding to the render churn it is measuring.
+- A single `setInterval` (1 second) calls `setLatest(Date.now())` once per second to trigger a React re-render for display. The actual data arrays are mutated in `requestAnimationFrame` callbacks.
+- `window.__fossflow__` (exposed by `Isoflow.tsx`) provides access to the three Zustand store instances (ui, model, scene) without importing from the lib package directly.
+
+### Data collection
+
+| Buffer | Max size | Entry fields | Approx. memory |
+|--------|----------|-------------|----------------|
+| Samples | 600 | timestamp, fps, heapMB, longTasks, nodes, connectors, textboxes, event flags | ~38 KB |
+| Events | 300 | timestamp, type, detail | ~18 KB |
+| **Total ceiling** | | | **~56 KB** |
+
+Oldest entry is dropped via `.shift()` when the buffer is full (circular buffer pattern). If left running in production indefinitely, memory stays bounded at ~56 KB.
+
+### Event categories detected per sample
+
+| Category | Events |
+|----------|--------|
+| Scene changes | `node_added`, `node_removed`, `connector_added`, `connector_removed`, `bulk_load` (Δ>5 items), `bulk_remove` |
+| FPS | `fps_degraded` (<30 fps), `fps_recovered` (≥50 fps) |
+| Long tasks | `longtask_burst` (Δ>5 tasks/sec vs previous sample) |
+| Memory | `gc` (heap drops >20 MB between samples), `memory_warning` (first breach of 200 MB) |
+| Interaction | `drag_start`, `drag_end` (detected via `uiState.mouse.mousedown` non-null) |
+| History | `undo` (`history.past` length shrinks), `redo` (`history.past` length grows after a `future` non-zero) |
+| Navigation | `zoom_changed` (Δ>0.1 zoom units), `view_changed` (view ID changes) |
+| Tab | `tab_hidden`, `tab_visible` (Page Visibility API) |
+
+Events are embedded as a compact string list in the sample row for the AI download, keeping token count low.
+
+### Download formats
+
+**AI-compact (`↓ AI`):** Array-of-arrays JSON. Header row names fields; each sample row is a flat array with an embedded event list. Minimises LLM token cost. Includes a `meta` block with session start time, diagram size at capture, and browser info.
+
+**Human-readable (`↓ Human`):** Pretty-printed JSON with labelled fields, ISO timestamps, and a `summary` block containing min/max/avg for FPS, heap, and long tasks, plus a flattened event timeline.
+
+### Production safety
+
+- **Disabled by default in production.** Monitoring loop does not start until the user enables it via the "Enable performance monitoring" checkbox. State persists in `localStorage` (`fossflow_perf_enabled`).
+- **Always on in development.** The checkbox is shown but disabled with a "(always on in dev)" label.
+- **Memory ceiling enforced.** Circular buffers hard-cap at 600 samples + 300 events regardless of how long monitoring runs.
+- **No background work when disabled.** The `requestAnimationFrame` callback and `PerformanceObserver` are only registered while monitoring is active. Disabling monitoring cancels the rAF loop and disconnects the observer.
+
+### Browser API dependencies
+
+- `performance.memory` — Chrome/Edge only. Heap metrics show `N/A` on Firefox/Safari.
+- `PerformanceObserver({ type: 'longtask' })` — Chrome/Edge only. Long task count stays 0 on Firefox/Safari.
+- `document.visibilityState` — all browsers.
+- `requestAnimationFrame` — all browsers.
+
+---
+
+## Section 9: Performance Fixes Applied (2026-03-24)
+
+### Background
+
+All measurements taken on a real diagram: **85 nodes, 54 connectors, 10 text boxes**. DiagnosticsOverlay was used to collect before/after data.
+
+### Fix 1 — `onModelUpdated` double-fire (`Isoflow.tsx`)
+
+**Root cause:** `useModelStore((state) => modelFromModelStore(state))` was called without an equality function. `modelFromModelStore` always returns a new object (new reference), so the selector's default `Object.is` check always reports a change. `saveToHistory` is called before every user action and writes to `history.past` — this alone was enough to trigger a new model reference on every store update, causing `onModelUpdated` (and anything downstream of it in the host `App`) to fire twice per user action.
+
+**Fix:** Added `shallow` equality from `zustand/shallow`:
+
+```ts
+const model = useModelStore(
+  (state) => modelFromModelStore(state),
+  shallow
+);
+```
+
+`shallow` compares object fields rather than object identity. `history.past` changes do not produce new top-level fields on the model object, so those store writes no longer produce new model references.
+
+**Impact:** Eliminated the dominant source of spurious renders at idle and during editing.
+
+### Fix 2 — `iconPackManager` prop churn (`App.tsx`)
+
+**Root cause:** The `iconPackManager` prop passed to `<Isoflow>` was an inline object literal:
+
+```tsx
+<Isoflow
+  iconPackManager={{
+    lazyLoadingEnabled: iconPackManager.lazyLoadingEnabled,
+    onToggleLazyLoading: iconPackManager.toggleLazyLoading,
+    // ...
+  }}
+/>
+```
+
+React recreates inline object literals on every render, so the prop reference always changed. `Isoflow.tsx` has a `useEffect` that calls `uiStateActions.setIconPackManager(iconPackManager)` when the prop changes. Every `App` render → new prop reference → `setIconPackManager` → Zustand store write → re-render → repeat.
+
+**Fix:** Wrapped the object in `useMemo` and the callback in `useCallback`:
+
+```tsx
+const handleTogglePack = useCallback(
+  (packName, enabled) => iconPackManager.togglePack(packName, enabled),
+  [iconPackManager.togglePack]
+);
+
+const iconPackManagerProp = useMemo(
+  () => ({ lazyLoadingEnabled: ..., onTogglePack: handleTogglePack, ... }),
+  [iconPackManager.lazyLoadingEnabled, ...]
+);
+```
+
+**Impact:** Eliminated the `setIconPackManager` render feedback loop.
+
+### Before / after metrics (85-node diagram)
+
+| Metric | Before | After | Improvement |
+|--------|--------|-------|-------------|
+| Long tasks at session start | ~195 | ~6 | 97% reduction |
+| Long task rate — idle | 6.4 / sec | ~0 / sec | eliminated |
+| Long task rate — normal editing | 6–10 / sec | ~1.6 / sec | ~75% reduction |
+| FPS — idle | 5–18 fps | 60 fps | 3–12× |
+| FPS — normal editing | 5–18 fps (never recovered) | 48–60 fps | 3–10× |
+| Diagram load recovery | Permanently degraded | Recovers to 60 fps in <1 s | qualitative |
+
+---
+
+## Section 10: Remaining Known Issues and Future Considerations
+
+### 10a. Drag performance (unresolved)
+
+**Symptom:** Sustained drag on an 85-node diagram drops FPS to 8–17 fps and generates 8–12 long tasks/sec. Drag events are clearly visible in DiagnosticsOverlay output.
+
+**Root cause:** `uiState.mouse` is updated in a `requestAnimationFrame` callback at 60 fps during drag. Multiple scene components subscribe to `uiState.mouse` (for cursor-following highlight, drag ghost, connector anchor snap, etc.) and re-render on every frame. With 85 nodes each potentially re-rendering 60×/sec, the render budget is exhausted.
+
+**Potential fixes (not yet applied):**
+- Render isolation: move the drag-ghost and cursor-highlight into their own DOM subtree that subscribes to mouse position directly without causing the main scene tree to re-render.
+- Deduplicate `uiState.mouse` subscriptions — only components that genuinely need cursor position per frame should subscribe; others should subscribe to coarser state.
+- Viewport culling: skip rendering nodes/connectors that are entirely outside the current viewport rectangle. This would reduce the constant render work regardless of drag state.
+
+### 10b. No scene virtualization
+
+**Symptom:** All nodes, connectors, rectangles, and text boxes in a view are rendered regardless of whether they are visible in the current viewport. Performance degrades roughly linearly with diagram size.
+
+**Impact:** On a 200+ node diagram, even idle FPS may struggle to reach 60 fps. The 85-node test diagram did reach 60 fps at idle after the fixes in Section 9, but headroom is limited.
+
+**Potential fix:** Implement a spatial index (e.g. a simple grid bucket or a quad-tree over the tile coordinate space) and skip rendering items whose tile bounding box does not intersect the current viewport rectangle. This is the highest-leverage structural improvement available.
+
+### 10c. Unexplained FPS spikes
+
+**Symptom:** Occasional FPS drops to 4–7 fps at seemingly random intervals (observed at approximately t=26s, t=41s, and t=108s in one session), without corresponding drag events, undo/redo events, or scene changes in the event log.
+
+**Hypothesis:** GC pressure adjacent to a React batch flush — heap dropped ~22 MB at one of the timestamps (logged as a `gc` event) which would pause JS execution. The other two occurrences were not accompanied by GC events and remain unexplained. Could be an edge-case re-render path triggered by a Zustand selector that is not yet using shallow equality.
+
+**Recommended next step:** If reproducible, use Chrome DevTools Performance timeline to identify which component tree is flushing during the spike.
+
+### 10d. Future considerations
+
+| Consideration | Notes |
+|---------------|-------|
+| Viewport culling | Highest-impact structural improvement; eliminates O(n) render cost for off-screen items |
+| Drag render isolation | Move mouse-position subscribers (drag ghost, cursor highlight) out of the main scene render tree |
+| Scene worker | Move connector path calculation off the main thread using a Web Worker + OffscreenCanvas or a message-passing model |
+| Connector batch rendering | Replace per-connector SVG elements with a single `<canvas>` layer for connectors; reduces DOM node count significantly on large diagrams |
+| Selector audit | Systematically add `shallow` or custom equality to all `useModelStore`/`useUiStateStore` selectors that return objects or arrays — any selector returning a new reference on every call is a hidden render multiplier |
+| DiagnosticsOverlay in CI | Extend the overlay's download format into a headless script that can capture a 10-second performance trace during e2e tests and fail the build if idle long tasks exceed a threshold |
+
+---
+
+*End of document. Last updated: 2026-03-24.*

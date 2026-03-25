@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Isoflow } from 'fossflow';
 import { flattenCollections } from '@isoflow/isopacks/dist/utils';
 import isoflowIsopack from '@isoflow/isopacks/dist/isoflow';
@@ -10,6 +10,7 @@ import {
 } from './diagramUtils';
 import { StorageManager } from './StorageManager';
 import { DiagramManager } from './components/DiagramManager';
+import { DiagnosticsOverlay } from './components/DiagnosticsOverlay';
 import { useStorage } from './services/storageService';
 import type { IsoflowRef } from 'fossflow';
 import ChangeLanguage from './components/ChangeLanguage';
@@ -564,9 +565,37 @@ function EditorPage() {
 
   // i18n
   const { t, i18n } = useTranslation('app');
-  
+
   // Get locale with fallback to en-US if not found
   const currentLocale = allLocales[i18n.language as keyof typeof allLocales] || allLocales['en-US'];
+
+  // Stable callback for iconPackManager to avoid recreating the prop object every render.
+  const handleTogglePack = useCallback(
+    (packName: string, enabled: boolean) => {
+      iconPackManager.togglePack(packName as any, enabled);
+    },
+    [iconPackManager.togglePack]
+  );
+
+  // Memoize the iconPackManager prop so Isoflow's useEffect doesn't fire on every App render.
+  // Without this, the inline object literal is a new reference every render, causing
+  // setIconPackManager to update the store on every render, triggering a render cascade.
+  const iconPackManagerProp = useMemo(
+    () => ({
+      lazyLoadingEnabled: iconPackManager.lazyLoadingEnabled,
+      onToggleLazyLoading: iconPackManager.toggleLazyLoading,
+      packInfo: Object.values(iconPackManager.packInfo),
+      enabledPacks: iconPackManager.enabledPacks,
+      onTogglePack: handleTogglePack
+    }),
+    [
+      iconPackManager.lazyLoadingEnabled,
+      iconPackManager.toggleLazyLoading,
+      iconPackManager.packInfo,
+      iconPackManager.enabledPacks,
+      handleTogglePack
+    ]
+  );
 
   // Auto-save functionality
   useEffect(() => {
@@ -776,15 +805,7 @@ function EditorPage() {
           onModelUpdated={handleModelUpdated}
           editorMode={isReadonlyUrl ? 'EXPLORABLE_READONLY' : 'EDITABLE'}
           locale={currentLocale}
-          iconPackManager={{
-            lazyLoadingEnabled: iconPackManager.lazyLoadingEnabled,
-            onToggleLazyLoading: iconPackManager.toggleLazyLoading,
-            packInfo: Object.values(iconPackManager.packInfo),
-            enabledPacks: iconPackManager.enabledPacks,
-            onTogglePack: (packName: string, enabled: boolean) => {
-              iconPackManager.togglePack(packName as any, enabled);
-            }
-          }}
+          iconPackManager={iconPackManagerProp}
         />
       </div>
 
@@ -963,6 +984,8 @@ function EditorPage() {
           }}
         />
       )}
+
+      <DiagnosticsOverlay />
     </div>
   );
 }

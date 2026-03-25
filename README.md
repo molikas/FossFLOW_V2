@@ -1,6 +1,8 @@
 This work aims to improve UX and other friction and experiment. This is for personal use and maybe "inspiration" for the original project...
 All code is generated using Claude with sanity check reviews + manual testing. I cannot guarantee the code 100% makes sense for the long term project vision, rather it focuses on eliminating friction fast.
 
+**Performance highlight:** On a real 85-node / 54-connector diagram, idle FPS improved from 5–18 fps to a consistent 60 fps after fixing two root-cause render bugs. Long tasks dropped from ~195 at session start (6.4/sec baseline) to ~6 at start (~0/sec idle). Normal editing (adding nodes, connecting them, undoing) now runs at 48–60 fps. See the [Performance section](#performance) below for details.
+
 
 See original project: FossFLOW for details more details
 
@@ -31,6 +33,30 @@ This fork extends the original Isoflow project with new features and fixes that 
 - **Right-click to pan** — Hold right-click and drag to pan the canvas. Release to go back to what you were doing. No need to switch to a pan tool.
 - **Sensible default zoom** — The canvas opens at 90% zoom so you immediately have some room to work with.
 - **Context menu** — Right-click on an empty area of the canvas to quickly add a node or rectangle without reaching for the toolbar.
+
+### Performance
+
+Two root-cause render bugs were found and fixed using a built-in diagnostics overlay. The improvements are measurable on diagrams you'd actually use day-to-day — not just empty canvases.
+
+**Test diagram:** 85 nodes, 54 connectors, 10 text boxes (a realistic mid-size architecture diagram).
+
+| Metric | Before fixes | After fixes |
+|--------|-------------|-------------|
+| Idle FPS | 5–18 fps | 60 fps |
+| FPS during normal editing | 5–18 fps (never recovered) | 48–60 fps |
+| Long tasks at session start | ~195 | ~6 |
+| Long task rate (idle) | 6.4 / sec | ~0 / sec |
+| Long task rate (editing) | 6–10 / sec | ~1.6 / sec |
+| Diagram load recovery | Permanently degraded | Recovers to 60 fps within 1 s |
+
+**Root causes fixed:**
+
+1. **`onModelUpdated` double-firing** — `modelFromModelStore` was called without a shallow equality check. Every `saveToHistory` call (fired before every user action) produced a new object reference and triggered `onModelUpdated` twice per action, cascading into continuous re-renders. Fix: `shallow` equality selector in `useModelStore`.
+2. **`iconPackManager` prop churn** — The icon pack manager prop was an inline object literal, recreated on every `App` render. This caused `setIconPackManager` to write to the Zustand store on every render, creating a feedback loop. Fix: `useMemo` + `useCallback`.
+
+**Remaining known issue:** Sustained drag on an 85-node diagram still drops FPS to 8–17 fps with 8–12 long tasks/sec. Root cause: `uiState.mouse` updates at 60 fps during drag, and multiple scene components subscribe to it and re-render on every frame. Needs viewport culling or render isolation of mouse-position-dependent components.
+
+- **Diagnostics overlay** — A collapsible performance overlay (bottom-right corner) shows live FPS, JS heap usage, long task count, scene item counts, and a timestamped event log. Two download formats: compact AI-friendly JSON and labelled human-readable JSON. Enabled by default in development; disabled by default in production with a toggle that persists in `localStorage`. The overlay auto-detects 9 event categories: GC events, FPS degradation/recovery, long-task bursts, drag start/end, undo/redo, zoom changes, view switches, tab visibility changes, and memory pressure warnings.
 
 ### Quality-of-life fixes
 
@@ -100,6 +126,12 @@ To back up your diagrams, copy the `diagrams/` folder to another location.
 ## [Unreleased]
 
 ### 2026-03-24
+
+#### Performance
+
+- **`onModelUpdated` double-fire fix:** Added `shallow` equality to `useModelStore` model selector in `Isoflow.tsx`. Without it, `saveToHistory` (called before every user action) produced a new object reference and fired `onModelUpdated` twice per action, cascading into continuous renders. On an 85-node diagram this was the primary driver of 6.4 long tasks/sec at idle. After fix: ~0/sec idle, 60 fps.
+- **`iconPackManager` prop churn fix:** Memoized the `iconPackManager` prop object and its callback in `App.tsx` with `useMemo`/`useCallback`. The inline object literal was recreated on every `App` render, causing `setIconPackManager` to write to the Zustand store on every render, creating a feedback loop.
+- **DiagnosticsOverlay:** Collapsible performance monitoring overlay (bottom-right pill button). Shows live FPS (color-coded), JS heap MB, long task count, node/connector/textbox counts, and a timestamped event log. Downloads in AI-compact (array-of-arrays, token-efficient) or human-readable (labelled JSON, summary stats) formats. Always-on in dev; disabled by default in prod with a `localStorage`-persisted toggle. Memory ceiling: ~56 KB max (600-sample circular buffer + 300-event log). Detects 9 event categories automatically: GC, FPS degradation/recovery, long-task burst, drag start/end, undo/redo, zoom change, view switch, tab visibility, memory warning.
 
 #### Features
 

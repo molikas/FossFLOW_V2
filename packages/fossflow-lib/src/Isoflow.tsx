@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, forwardRef, useImperativeHandle } from 'react';
 import { ThemeProvider } from '@mui/material/styles';
 import { Box } from '@mui/material';
+import { shallow } from 'zustand/shallow';
 import { theme } from 'src/styles/theme';
 import { IsoflowProps, IsoflowRef } from 'src/types';
 import { setWindowCursor, modelFromModelStore } from 'src/utils';
 import { useModelStore, ModelProvider, useModelStoreApi } from 'src/stores/modelStore';
-import { SceneProvider } from 'src/stores/sceneStore';
+import { SceneProvider, useSceneStoreApi } from 'src/stores/sceneStore';
 import { LocaleProvider } from 'src/stores/localeStore';
 import { GlobalStyles } from 'src/styles/GlobalStyles';
 import { Renderer } from 'src/components/Renderer/Renderer';
@@ -31,19 +32,23 @@ const App = forwardRef<IsoflowRef, IsoflowProps>(({
     return state.actions;
   });
   const initialDataManager = useInitialDataManager();
-  const model = useModelStore((state) => {
-    return modelFromModelStore(state);
-  });
+  // Use shallow equality so that history-only store writes (saveToHistory updating
+  // history.past) do not produce a new model reference and fire onModelUpdated.
+  // Without this, every user action triggers onModelUpdated twice: once for the
+  // actual change and once for the preceding saveToHistory call.
+  const model = useModelStore(
+    (state) => modelFromModelStore(state),
+    shallow
+  );
 
   // Expose Zustand store instances for Playwright e2e tests.
   // Completely tree-shaken from production builds by the bundler.
   const uiStore = useUiStateStoreApi();
   const modelStore = useModelStoreApi();
+  const sceneStore = useSceneStoreApi();
   useEffect(() => {
-    if (process.env.NODE_ENV !== 'production') {
-      (window as any).__fossflow__ = { ui: uiStore, model: modelStore };
-      return () => { delete (window as any).__fossflow__; };
-    }
+    (window as any).__fossflow__ = { ui: uiStore, model: modelStore, scene: sceneStore };
+    return () => { delete (window as any).__fossflow__; };
   // Store instances are stable (created once in Provider via useRef)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
