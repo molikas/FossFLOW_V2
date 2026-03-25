@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Box, IconButton as MUIIconButton, FormControlLabel, Switch, Typography } from '@mui/material';
 import { useRectangle } from 'src/hooks/useRectangle';
 import { ColorSelector } from 'src/components/ColorSelector/ColorSelector';
-import { ColorPicker } from 'src/components/ColorSelector/ColorPicker';
 import { CustomColorInput } from 'src/components/ColorSelector/CustomColorInput';
 import { useUiStateStore } from 'src/stores/uiStateStore';
 import { useScene } from 'src/hooks/useScene';

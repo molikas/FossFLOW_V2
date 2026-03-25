@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, FormControlLabel, Switch } from '@mui/material';
 import { useScene } from 'src/hooks/useScene';
 import { ColorSwatch } from 'src/components/ColorSelector/ColorSwatch';
@@ -23,6 +23,15 @@ export const LabelColorPicker = ({ value, onChange }: Props) => {
   const [useCustom, setUseCustom] = useState(
     !isPresetColor(value, presetHexValues)
   );
+
+  // Sync to custom mode if value changes externally to a non-preset colour
+  // (e.g. loading a diagram that already has a custom label colour).
+  // Only transitions TO custom — never resets a user's explicit toggle back to presets.
+  useEffect(() => {
+    if (!isPresetColor(value, presetHexValues)) {
+      setUseCustom(true);
+    }
+  }, [value]); // presetHexValues intentionally omitted: palette changes are rare and non-breaking
 
   const activeHex = value || BLACK;
   // Deduplicate: exclude any scene color that is already black
