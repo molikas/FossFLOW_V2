@@ -36,27 +36,16 @@ This fork extends the original Isoflow project with new features and fixes that 
 
 ### Performance
 
-Two root-cause render bugs were found and fixed using a built-in diagnostics overlay. The improvements are measurable on diagrams you'd actually use day-to-day — not just empty canvases.
+Measured on a real 85-node / 54-connector diagram:
 
-**Test diagram:** 85 nodes, 54 connectors, 10 text boxes (a realistic mid-size architecture diagram).
-
-| Metric | Before fixes | After fixes |
-|--------|-------------|-------------|
+| Metric | Before | After |
+|--------|--------|-------|
 | Idle FPS | 5–18 fps | 60 fps |
 | FPS during normal editing | 5–18 fps (never recovered) | 48–60 fps |
 | Long tasks at session start | ~195 | ~6 |
 | Long task rate (idle) | 6.4 / sec | ~0 / sec |
 | Long task rate (editing) | 6–10 / sec | ~1.6 / sec |
 | Diagram load recovery | Permanently degraded | Recovers to 60 fps within 1 s |
-
-**Root causes fixed:**
-
-1. **`onModelUpdated` double-firing** — `modelFromModelStore` was called without a shallow equality check. Every `saveToHistory` call (fired before every user action) produced a new object reference and triggered `onModelUpdated` twice per action, cascading into continuous re-renders. Fix: `shallow` equality selector in `useModelStore`.
-2. **`iconPackManager` prop churn** — The icon pack manager prop was an inline object literal, recreated on every `App` render. This caused `setIconPackManager` to write to the Zustand store on every render, creating a feedback loop. Fix: `useMemo` + `useCallback`.
-
-**Remaining known issue:** Sustained drag on an 85-node diagram still drops FPS to 8–17 fps with 8–12 long tasks/sec. Root cause: `uiState.mouse` updates at 60 fps during drag, and multiple scene components subscribe to it and re-render on every frame. Needs viewport culling or render isolation of mouse-position-dependent components.
-
-- **Diagnostics overlay** — A collapsible performance overlay (bottom-right corner) shows live FPS, JS heap usage, long task count, scene item counts, and a timestamped event log. Two download formats: compact AI-friendly JSON and labelled human-readable JSON. Enabled by default in development; disabled by default in production with a toggle that persists in `localStorage`. The overlay auto-detects 9 event categories: GC events, FPS degradation/recovery, long-task bursts, drag start/end, undo/redo, zoom changes, view switches, tab visibility changes, and memory pressure warnings.
 
 ### Quality-of-life fixes
 
@@ -69,57 +58,19 @@ Two root-cause render bugs were found and fixed using a built-in diagnostics ove
 
 ## Getting Started
 
-Everything runs inside Docker — you do not need Node.js or npm installed on your machine.
-
-### Prerequisites
-
-| Tool | Where to get it | Notes |
-|------|----------------|-------|
-| **Docker Desktop** | [docker.com/get-started](https://www.docker.com/get-started/) | Includes Docker Compose. Windows and Mac: install Docker Desktop. Linux: install [Docker Engine](https://docs.docker.com/engine/install/) + the [Compose plugin](https://docs.docker.com/compose/install/). |
-| **Git** | [git-scm.com](https://git-scm.com/downloads) | Windows: Git for Windows. Mac: comes with Xcode Command Line Tools (`xcode-select --install`). Linux: `sudo apt install git` / `sudo dnf install git`. |
-
-### Step 1 — Clone the repository
-
-Open a terminal (Command Prompt or PowerShell on Windows, Terminal on Mac/Linux) and run:
+Requires [Docker Desktop](https://www.docker.com/get-started/) and [Git](https://git-scm.com/downloads). No Node.js needed.
 
 ```bash
 git clone https://github.com/molikas/FossFLOW_V2.git
 cd FossFLOW_V2
+docker compose -f compose.dev.yml up --build   # first run — takes 3–5 min
 ```
 
-### Step 2 — Build and run (first time only)
+Open **http://localhost:3000**. Subsequent starts skip `--build`.
 
-This downloads all dependencies and builds the app inside Docker. It takes 3–5 minutes the first time.
+To stop: `Ctrl+C`, or `docker compose -f compose.dev.yml down` from another terminal.
 
-```bash
-docker compose -f compose.dev.yml up --build
-```
-
-Once you see `Starting nginx...` in the output, open your browser and go to:
-
-**[http://localhost:3000](http://localhost:3000)**
-
-### Step 3 — Subsequent runs
-
-After the first build you can start the app much faster without rebuilding:
-
-```bash
-docker compose -f compose.dev.yml up
-```
-
-### Stopping the app
-
-Press `Ctrl+C` in the terminal where the app is running, or run this from another terminal in the same folder:
-
-```bash
-docker compose -f compose.dev.yml down
-```
-
-### Where your diagrams are saved
-
-All diagrams are saved automatically to a `diagrams/` folder inside the `FossFLOW_V2` directory on your machine. This folder is created the first time you save a diagram. Your data stays on your machine and is not sent anywhere.
-
-To back up your diagrams, copy the `diagrams/` folder to another location.
+Diagrams are saved to a `diagrams/` folder in the project directory. Data stays on your machine.
 
 ---
 
