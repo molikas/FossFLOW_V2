@@ -115,9 +115,11 @@ export const Lasso: ModeActions = {
   },
 
   mousedown: ({ uiState, isRendererInteraction }) => {
-    if (uiState.mode.type !== 'LASSO' || !isRendererInteraction) return;
+    if (uiState.mode.type !== 'LASSO') return;
 
-    // If there's an existing selection, check if click is within it
+    // If there's an existing selection, check if click is within it.
+    // Allow this even for non-renderer clicks (e.g. clicking on a node element within
+    // the selection) so the drag still starts correctly.
     if (uiState.mode.selection) {
       const isWithinSelection = isWithinBounds(uiState.mouse.position.tile, [
         uiState.mode.selection.startTile,
@@ -137,7 +139,11 @@ export const Lasso: ModeActions = {
       }
     }
 
-    // Clicked outside selection (or no selection) - exit back to cursor/select mode
+    // Clicked outside selection (or no selection).
+    // Only reset to cursor for genuine canvas interactions — clicks on UI panels etc.
+    // should leave the lasso mode/selection unchanged.
+    if (!isRendererInteraction) return;
+
     uiState.actions.setMode({
       type: 'CURSOR',
       showCursor: true,

@@ -1,4 +1,4 @@
-A personal fork of [FossFLOW](https://github.com/molikas/FossFLOW) focused on UX polish, performance, and editing quality. All code is AI-assisted with manual review and testing.
+A personal fork of [FossFLOW](https://github.com/stan-smith/FossFLOW) focused on UX polish, performance, and editing quality. All code is AI-assisted with manual review and testing.
 
 **Performance highlight:** On a real 85-node / 54-connector diagram, idle FPS improved from 5–18 to a consistent 60 fps after fixing two root-cause render bugs. See the [Performance section](#performance) below.
 
@@ -83,11 +83,13 @@ Diagrams are saved to a `diagrams/` folder in the project directory.
 - **Stacked rectangle hit-testing:** Clicking at a tile covered by multiple rectangles now selects the visually topmost one.
 - **Save as creates a new file:** Saving under a different name now creates a new file instead of overwriting the current diagram.
 - **Connector waypoints move with lasso drag:** Tile-based connector waypoints (mid-connector anchors not attached to a node) now move with the selection during lasso and freehand-lasso drags.
+- **Lasso drag when clicking on a node within selection:** Clicking on a node element (rather than empty canvas) inside a lasso selection now correctly starts a group drag instead of redrawing the lasso from that node's tile. Previously, `isRendererInteraction = false` caused the mousedown to be ignored, so the next mousemove treated it as a new lasso stroke — clearing the selection and losing waypoints from it.
 
 #### Tests
 
 - `useCopyPaste.test.ts` +7 tests (11 → 18); `keyboard.dispatch.test.tsx` +3 (25 → 28); `shortcuts.test.ts` +1 (6 → 7); `renderer.test.ts` +4; `Lasso.modes.test.ts` +3
 - Test count: 537 → 545, 54 suites, all passing
+- **Note:** E2E tests are not currently passing and will be addressed in a separate session.
 
 ---
 

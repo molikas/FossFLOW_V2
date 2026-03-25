@@ -111,11 +111,12 @@ export const FreehandLasso: ModeActions = {
   },
 
   mousedown: ({ uiState, isRendererInteraction }) => {
-    if (uiState.mode.type !== 'FREEHAND_LASSO' || !isRendererInteraction) return;
+    if (uiState.mode.type !== 'FREEHAND_LASSO') return;
 
-    // If there's an existing selection, check if click is within it
+    // If there's an existing selection, check if click is within it.
+    // Allow this even for non-renderer clicks (e.g. clicking on a node element within
+    // the selection) so the drag still starts correctly.
     if (uiState.mode.selection) {
-      // Convert click position to tile
       const clickTile = uiState.mouse.position.tile;
       const isWithinSelection = isPointInPolygon(
         clickTile,
@@ -134,7 +135,10 @@ export const FreehandLasso: ModeActions = {
         return;
       }
 
-      // Clicked outside selection - clear it and start new path
+      // Clicked outside selection on canvas - clear it and start new path.
+      // Non-renderer clicks (panels, etc.) should leave the selection unchanged.
+      if (!isRendererInteraction) return;
+
       uiState.actions.setMode(
         produce(uiState.mode, (draft) => {
           if (draft.type === 'FREEHAND_LASSO') {
@@ -147,7 +151,9 @@ export const FreehandLasso: ModeActions = {
       return;
     }
 
-    // Start a new path
+    // No selection yet. Only start a new path for genuine canvas interactions.
+    if (!isRendererInteraction) return;
+
     uiState.actions.setMode(
       produce(uiState.mode, (draft) => {
         if (draft.type === 'FREEHAND_LASSO') {
