@@ -13,6 +13,12 @@
  *  9. handlePaste — offset: pasted tile = original tile + (mouse − centroid)
  * 10. handlePaste — sets CURSOR mode after paste
  * 11. handlePaste — connector tile waypoints are offset by the paste offset
+ * 12. handleCut — LASSO selection: items written to clipboard (same payload as copy)
+ * 13. handleCut — LASSO: selected items are deleted after clipboard is written
+ * 14. handleCut — LASSO: mode reset to CURSOR and itemControls cleared
+ * 15. handleCut — itemControls single-item: item written to clipboard AND deleted
+ * 16. handleCut — empty selection: clipboard NOT written, no deletion, no notification
+ * 17. handleCut — shows "Cut N items" notification
  */
 
 import { renderHook, act } from '@testing-library/react';
@@ -38,6 +44,11 @@ const mockSetMode = jest.fn();
 const mockSetNotification = jest.fn();
 const mockSetItemControls = jest.fn();
 const mockPasteItems = jest.fn();
+const mockDeleteSelectedItems = jest.fn();
+const mockDeleteViewItem = jest.fn();
+const mockDeleteConnector = jest.fn();
+const mockDeleteTextBox = jest.fn();
+const mockDeleteRectangle = jest.fn();
 
 const mockUiState = {
   mode: { type: 'CURSOR' as string, selection: null as any },
@@ -67,7 +78,12 @@ const mockScene = {
     rectangles: [] as any[],
     textBoxes: [] as any[]
   },
-  pasteItems: mockPasteItems
+  pasteItems: mockPasteItems,
+  deleteSelectedItems: mockDeleteSelectedItems,
+  deleteViewItem: mockDeleteViewItem,
+  deleteConnector: mockDeleteConnector,
+  deleteTextBox: mockDeleteTextBox,
+  deleteRectangle: mockDeleteRectangle
 };
 
 jest.mock('src/hooks/useScene', () => ({
@@ -325,6 +341,7 @@ describe('useCopyPaste.handlePaste', () => {
   });
 
   test('11. connector tile waypoints are offset by the paste offset', () => {
+
     // Connector: item-anchor at item-A, tile waypoint at (3, 3), item-anchor at item-B
     // Paste offset: mouse (10,10) - centroid (5,5) = (5,5)
     // Tile waypoint should move from (3,3) to (8,8)
@@ -359,5 +376,121 @@ describe('useCopyPaste.handlePaste', () => {
     // anchor[2]: item ref — remapped
     expect(connector.anchors[2].ref.item).toBeDefined();
     expect(connector.anchors[2].ref.item).not.toBe('item-B');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// handleCut
+// ---------------------------------------------------------------------------
+describe('useCopyPaste.handleCut', () => {
+  test('12. LASSO selection — items written to clipboard (same payload as copy)', () => {
+    mockModelState.items = [makeModelItem('item-1'), makeModelItem('item-2')];
+    mockScene.currentView.items = [makeViewItem('item-1', 4, 6), makeViewItem('item-2', 8, 10)];
+    mockUiState.mode = {
+      type: 'LASSO',
+      selection: {
+        items: [
+          { type: 'ITEM', id: 'item-1' },
+          { type: 'ITEM', id: 'item-2' }
+        ]
+      }
+    } as any;
+
+    const { result } = setup();
+    act(() => { result.current.handleCut(); });
+
+    expect(mockSetClipboard).toHaveBeenCalledTimes(1);
+    const payload = mockSetClipboard.mock.calls[0][0];
+    expect(payload.items).toHaveLength(2);
+    expect(payload.items.map((ci: any) => ci.viewItem.id).sort()).toEqual(['item-1', 'item-2']);
+    expect(payload.centroid).toEqual({ x: 6, y: 8 });
+  });
+
+  test('13. LASSO selection — deleteSelectedItems called with the selection refs', () => {
+    mockModelState.items = [makeModelItem('item-1')];
+    mockScene.currentView.items = [makeViewItem('item-1', 0, 0)];
+    const selectionItems = [{ type: 'ITEM', id: 'item-1' }];
+    mockUiState.mode = {
+      type: 'LASSO',
+      selection: { items: selectionItems }
+    } as any;
+
+    const { result } = setup();
+    act(() => { result.current.handleCut(); });
+
+    expect(mockDeleteSelectedItems).toHaveBeenCalledTimes(1);
+    expect(mockDeleteSelectedItems).toHaveBeenCalledWith(selectionItems);
+  });
+
+  test('14. LASSO cut — mode reset to CURSOR and itemControls cleared', () => {
+    mockModelState.items = [makeModelItem('item-1')];
+    mockScene.currentView.items = [makeViewItem('item-1', 0, 0)];
+    mockUiState.mode = {
+      type: 'LASSO',
+      selection: { items: [{ type: 'ITEM', id: 'item-1' }] }
+    } as any;
+
+    const { result } = setup();
+    act(() => { result.current.handleCut(); });
+
+    expect(mockSetMode).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'CURSOR', showCursor: true, mousedownItem: null })
+    );
+    expect(mockSetItemControls).toHaveBeenCalledWith(null);
+  });
+
+  test('15. itemControls single-item — item written to clipboard AND deleted via deleteViewItem', () => {
+    mockModelState.items = [makeModelItem('solo')];
+    mockScene.currentView.items = [makeViewItem('solo', 3, 3)];
+    mockUiState.mode = { type: 'CURSOR', selection: null } as any;
+    mockUiState.itemControls = { type: 'ITEM', id: 'solo' };
+
+    const { result } = setup();
+    act(() => { result.current.handleCut(); });
+
+    // Clipboard written
+    const payload = mockSetClipboard.mock.calls[0][0];
+    expect(payload.items).toHaveLength(1);
+    expect(payload.items[0].viewItem.id).toBe('solo');
+
+    // Item deleted
+    expect(mockDeleteViewItem).toHaveBeenCalledWith('solo');
+    expect(mockSetItemControls).toHaveBeenCalledWith(null);
+  });
+
+  test('16. empty selection — clipboard NOT written, no deletion', () => {
+    mockUiState.mode = { type: 'CURSOR', selection: null } as any;
+    mockUiState.itemControls = null;
+
+    const { result } = setup();
+    act(() => { result.current.handleCut(); });
+
+    expect(mockSetClipboard).not.toHaveBeenCalled();
+    expect(mockDeleteSelectedItems).not.toHaveBeenCalled();
+    expect(mockDeleteViewItem).not.toHaveBeenCalled();
+    expect(mockSetNotification).not.toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('Cut') })
+    );
+  });
+
+  test('17. shows "Cut N items" success notification', () => {
+    mockModelState.items = [makeModelItem('item-1'), makeModelItem('item-2')];
+    mockScene.currentView.items = [makeViewItem('item-1', 0, 0), makeViewItem('item-2', 2, 2)];
+    mockUiState.mode = {
+      type: 'LASSO',
+      selection: {
+        items: [
+          { type: 'ITEM', id: 'item-1' },
+          { type: 'ITEM', id: 'item-2' }
+        ]
+      }
+    } as any;
+
+    const { result } = setup();
+    act(() => { result.current.handleCut(); });
+
+    expect(mockSetNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'Cut 2 items', severity: 'success' })
+    );
   });
 });

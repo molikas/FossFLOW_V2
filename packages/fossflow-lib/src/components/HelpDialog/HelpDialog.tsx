@@ -101,6 +101,11 @@ export const HelpDialog = () => {
       description: t('deleteSelectedDescription')
     },
     {
+      action: t('cutAction'),
+      shortcut: FIXED_SHORTCUTS.cut,
+      description: t('cutDescription')
+    },
+    {
       action: t('copyAction'),
       shortcut: FIXED_SHORTCUTS.copy,
       description: t('copyDescription')

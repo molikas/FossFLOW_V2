@@ -9,6 +9,7 @@
 import { FIXED_SHORTCUTS } from 'src/config/shortcuts';
 
 describe('FIXED_SHORTCUTS constants', () => {
+  it('cut is Ctrl+X', () => expect(FIXED_SHORTCUTS.cut).toBe('Ctrl+X'));
   it('copy is Ctrl+C', () => expect(FIXED_SHORTCUTS.copy).toBe('Ctrl+C'));
   it('paste is Ctrl+V', () => expect(FIXED_SHORTCUTS.paste).toBe('Ctrl+V'));
   it('undo is Ctrl+Z', () => expect(FIXED_SHORTCUTS.undo).toBe('Ctrl+Z'));
@@ -16,9 +17,9 @@ describe('FIXED_SHORTCUTS constants', () => {
   it('redoAlt is Ctrl+Shift+Z', () => expect(FIXED_SHORTCUTS.redoAlt).toBe('Ctrl+Shift+Z'));
   it('help is F1', () => expect(FIXED_SHORTCUTS.help).toBe('F1'));
 
-  it('all 6 keys are defined', () => {
+  it('all 7 keys are defined', () => {
     const keys = Object.keys(FIXED_SHORTCUTS);
-    expect(keys).toHaveLength(6);
-    expect(keys).toEqual(expect.arrayContaining(['copy', 'paste', 'undo', 'redo', 'redoAlt', 'help']));
+    expect(keys).toHaveLength(7);
+    expect(keys).toEqual(expect.arrayContaining(['cut', 'copy', 'paste', 'undo', 'redo', 'redoAlt', 'help']));
   });
 });

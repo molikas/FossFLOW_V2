@@ -109,6 +109,7 @@ export const HotkeySettings = () => {
           </TableHead>
           <TableBody>
             {[
+              { name: t('settings.hotkeys.fixedCut'), key: FIXED_SHORTCUTS.cut },
               { name: t('settings.hotkeys.fixedCopy'), key: FIXED_SHORTCUTS.copy },
               { name: t('settings.hotkeys.fixedPaste'), key: FIXED_SHORTCUTS.paste },
               { name: t('settings.hotkeys.fixedUndo'), key: FIXED_SHORTCUTS.undo },

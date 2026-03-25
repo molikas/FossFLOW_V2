@@ -14,7 +14,7 @@ This fork extends the original Isoflow project with new features and fixes that 
 
 ### Editing improvements
 
-- **Copy and paste** — Select any combination of nodes, connectors, rectangles, and text boxes, then paste them anywhere on the canvas with `Ctrl+C` / `Ctrl+V`. Pasted items appear centered around your mouse cursor. Connectors between pasted nodes are included automatically, complete with their waypoints.
+- **Cut, copy and paste** — Select any combination of nodes, connectors, rectangles, and text boxes. `Ctrl+X` cuts (removes items and puts them on the clipboard), `Ctrl+C` copies, `Ctrl+V` pastes at your mouse position. Connectors between pasted nodes are included automatically, complete with their waypoints. Cut supports full undo/redo.
 - **Freehand lasso selection** — In addition to the rectangular lasso, you can draw a freehand polygon to select exactly the items you want, even in a crowded diagram.
 - **Dragging feels right** — Dragging nodes, text boxes, and rectangles now responds the instant you move, tracks your grab point precisely, and stops at the last valid position when blocked by another element rather than jumping around. The blue highlight tile always stays in sync with the cursor while dragging.
 - **Delete key** — Press `Delete` or `Backspace` to remove the selected item(s) directly from the canvas.
@@ -124,6 +124,21 @@ To back up your diagrams, copy the `diagrams/` folder to another location.
 ---
 
 ## [Unreleased]
+
+### 2026-03-25
+
+#### Features
+
+- **Cut (Ctrl+X):** Cut the selected item(s) to the clipboard. The selection is removed from the canvas and can be pasted with `Ctrl+V`. Works with single-item selection (via item controls panel) and multi-item lasso selection. Cut supports full undo/redo — pressing `Ctrl+Z` after a cut restores the deleted items while the clipboard retains the payload for subsequent pastes.
+
+#### Tests
+
+- **`useCopyPaste` suite** (`useCopyPaste.test.ts`, +6 tests, 11 → 17): LASSO payload identical to copy; `deleteSelectedItems` called with correct refs; mode reset to CURSOR after LASSO cut; single-item cut via itemControls deletes via `deleteViewItem`; empty selection — no clipboard write and no deletion; "Cut N items" success notification
+- **`keyboard.dispatch` suite** (`keyboard.dispatch.test.tsx`, +3 tests, 25 → 28): `Ctrl+X` calls `cut()` exactly once; `Ctrl+X` does NOT trigger copy or paste; bare "x" does not call cut
+- **`shortcuts.test.ts`** (+1 test, 6 → 7): `cut` is `Ctrl+X`; key count updated to 7
+- Test count: 527 → 537, 54 suites, all passing
+
+---
 
 ### 2026-03-24
 

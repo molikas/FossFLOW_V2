@@ -82,6 +82,8 @@ export interface LocaleProps {
     addTextAction: string;
     addTextShortcut: string;
     addTextDescription: string;
+    cutAction: string;
+    cutDescription: string;
     copyAction: string;
     copyDescription: string;
     pasteAction: string;
@@ -157,6 +159,7 @@ export interface LocaleProps {
       toolText: string;
       note: string;
       fixedShortcutsTitle: string;
+      fixedCut: string;
       fixedCopy: string;
       fixedPaste: string;
       fixedUndo: string;

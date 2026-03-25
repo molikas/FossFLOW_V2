@@ -34,6 +34,7 @@ interface KeyHandlerDeps {
   getCurrentScroll: () => { x: number; y: number };
   deleteSelected: jest.Mock;
   currentMode: string;
+  cut: jest.Mock;
   copy: jest.Mock;
   paste: jest.Mock;
 }
@@ -54,6 +55,11 @@ function buildKeyHandler(deps: KeyHandlerDeps) {
     // redo
     if ((cmdOrCtrl && shift && key === 'z') || (cmdOrCtrl && key === 'y')) {
       if (deps.canRedo) deps.redo();
+      return;
+    }
+    // cut
+    if (cmdOrCtrl && key === 'x') {
+      deps.cut();
       return;
     }
     // copy
@@ -96,6 +102,7 @@ function makeDeps(overrides: Partial<KeyHandlerDeps> = {}): KeyHandlerDeps {
     getCurrentScroll: () => ({ x: 0, y: 0 }),
     deleteSelected: jest.fn(),
     currentMode: 'CURSOR',
+    cut: jest.fn(),
     copy: jest.fn(),
     paste: jest.fn(),
     ...overrides
@@ -151,6 +158,27 @@ describe('Keyboard dispatch — H-1 regression', () => {
       const deps = makeDeps({ canRedo: false });
       buildKeyHandler(deps)({ key: 'z', ctrlKey: true, shiftKey: true });
       expect(deps.redo).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('cut', () => {
+    it('Ctrl+X calls cut() exactly once', () => {
+      const deps = makeDeps();
+      buildKeyHandler(deps)({ key: 'x', ctrlKey: true });
+      expect(deps.cut).toHaveBeenCalledTimes(1);
+    });
+
+    it('Ctrl+X does NOT call copy() or paste()', () => {
+      const deps = makeDeps();
+      buildKeyHandler(deps)({ key: 'x', ctrlKey: true });
+      expect(deps.copy).not.toHaveBeenCalled();
+      expect(deps.paste).not.toHaveBeenCalled();
+    });
+
+    it('bare "x" does NOT call cut()', () => {
+      const deps = makeDeps();
+      buildKeyHandler(deps)({ key: 'x', ctrlKey: false });
+      expect(deps.cut).not.toHaveBeenCalled();
     });
   });
 
@@ -267,6 +295,7 @@ describe('Keyboard dispatch — H-1 regression', () => {
       expect(deps.redo).not.toHaveBeenCalled();
       expect(deps.deleteSelected).not.toHaveBeenCalled();
       expect(deps.setScroll).not.toHaveBeenCalled();
+      expect(deps.cut).not.toHaveBeenCalled();
       expect(deps.copy).not.toHaveBeenCalled();
       expect(deps.paste).not.toHaveBeenCalled();
     });

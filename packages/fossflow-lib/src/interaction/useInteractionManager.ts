@@ -64,7 +64,7 @@ export const useInteractionManager = () => {
   // so UiOverlay and useDiagramUtils can read it without creating their own observers.
   const { size: rendererSize } = useResizeObserver(rendererEl);
   const { undo, redo, canUndo, canRedo } = useHistory();
-  const { handleCopy, handlePaste } = useCopyPaste();
+  const { handleCopy, handleCut, handlePaste } = useCopyPaste();
   const { createTextBox, deleteSelectedItems, deleteViewItem, deleteConnector, deleteTextBox, deleteRectangle } = scene;
   const { handleMouseDown: handlePanMouseDown, handleMouseMove: handlePanMouseMove, handleMouseUp: handlePanMouseUp } = usePanHandlers();
   const { scheduleUpdate, flushUpdate, cleanup } = useRAFThrottle();
@@ -187,6 +187,11 @@ export const useInteractionManager = () => {
         if (canRedo) {
           redo();
         }
+      }
+
+      if (isCtrlOrCmd && e.key.toLowerCase() === 'x') {
+        e.preventDefault();
+        handleCut();
       }
 
       if (isCtrlOrCmd && e.key.toLowerCase() === 'c') {
@@ -323,7 +328,7 @@ export const useInteractionManager = () => {
     return () => {
       return window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [undo, redo, canUndo, canRedo, uiStateApi, createTextBox, deleteSelectedItems, deleteViewItem, deleteConnector, deleteTextBox, deleteRectangle, handleCopy, handlePaste]);
+  }, [undo, redo, canUndo, canRedo, uiStateApi, createTextBox, deleteSelectedItems, deleteViewItem, deleteConnector, deleteTextBox, deleteRectangle, handleCopy, handleCut, handlePaste]);
 
   const processMouseUpdate = useCallback(
     (nextMouse: Mouse, e: SlimMouseEvent) => {

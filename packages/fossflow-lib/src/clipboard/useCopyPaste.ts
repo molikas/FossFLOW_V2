@@ -5,7 +5,7 @@ import { useScene } from 'src/hooks/useScene';
 import { Connector, Rectangle, TextBox } from 'src/types';
 import { generateId } from 'src/utils';
 import { findNearestUnoccupiedTilesForGroup } from 'src/utils/findNearestUnoccupiedTile';
-import { ClipboardItem, setClipboard, getClipboard } from './clipboard';
+import { ClipboardItem, ClipboardPayload, setClipboard, getClipboard } from './clipboard';
 
 export const useCopyPaste = () => {
   const uiStateApi = useUiStateStoreApi();
@@ -16,7 +16,9 @@ export const useCopyPaste = () => {
     uiStateApi.getState().actions.setNotification({ message, severity });
   };
 
-  const handleCopy = useCallback(() => {
+  // Shared helper: gather the current selection into a clipboard payload.
+  // Returns null if nothing is selected or nothing resolves to canvas items.
+  const buildPayload = useCallback((): { payload: ClipboardPayload; count: number } | null => {
     const uiState = uiStateApi.getState();
     const model = modelStoreApi.getState();
 
@@ -31,21 +33,16 @@ export const useCopyPaste = () => {
       mode.selection?.items?.length
     ) {
       const refs = mode.selection.items;
-      selectedItemIds = refs.filter((r) => r.type === 'ITEM').map((r) => r.id);
-      selectedConnectorIds = refs.filter((r) => r.type === 'CONNECTOR').map((r) => r.id);
-      selectedRectangleIds = refs.filter((r) => r.type === 'RECTANGLE').map((r) => r.id);
-      selectedTextBoxIds = refs.filter((r) => r.type === 'TEXTBOX').map((r) => r.id);
+      selectedItemIds = refs.filter((r: any) => r.type === 'ITEM').map((r: any) => r.id);
+      selectedConnectorIds = refs.filter((r: any) => r.type === 'CONNECTOR').map((r: any) => r.id);
+      selectedRectangleIds = refs.filter((r: any) => r.type === 'RECTANGLE').map((r: any) => r.id);
+      selectedTextBoxIds = refs.filter((r: any) => r.type === 'TEXTBOX').map((r: any) => r.id);
     } else if (uiState.itemControls) {
       const ctrl = uiState.itemControls;
-      if (ctrl.type === 'ITEM') {
-        selectedItemIds = [ctrl.id];
-      } else if (ctrl.type === 'TEXTBOX') {
-        selectedTextBoxIds = [ctrl.id];
-      } else if (ctrl.type === 'RECTANGLE') {
-        selectedRectangleIds = [ctrl.id];
-      } else if (ctrl.type === 'CONNECTOR') {
-        selectedConnectorIds = [ctrl.id];
-      }
+      if (ctrl.type === 'ITEM') selectedItemIds = [ctrl.id];
+      else if (ctrl.type === 'TEXTBOX') selectedTextBoxIds = [ctrl.id];
+      else if (ctrl.type === 'RECTANGLE') selectedRectangleIds = [ctrl.id];
+      else if (ctrl.type === 'CONNECTOR') selectedConnectorIds = [ctrl.id];
     }
 
     if (
@@ -54,7 +51,7 @@ export const useCopyPaste = () => {
       selectedRectangleIds.length === 0 &&
       selectedTextBoxIds.length === 0
     ) {
-      return;
+      return null;
     }
 
     const selectedIdSet = new Set(selectedItemIds);
@@ -92,16 +89,15 @@ export const useCopyPaste = () => {
       selectedTextIdSet.has(tb.id)
     );
 
-    if (
-      clipboardItems.length === 0 &&
-      clipboardConnectors.length === 0 &&
-      clipboardRectangles.length === 0 &&
-      clipboardTextBoxes.length === 0
-    ) {
-      return;
-    }
+    const count =
+      clipboardItems.length +
+      clipboardConnectors.length +
+      clipboardRectangles.length +
+      clipboardTextBoxes.length;
 
-    // Centroid across all pasted element positions
+    if (count === 0) return null;
+
+    // Centroid across all item positions
     const allPoints = [
       ...clipboardItems.map((ci) => ci.viewItem.tile),
       ...clipboardRectangles.map((r) => ({
@@ -118,21 +114,53 @@ export const useCopyPaste = () => {
           }
         : { x: 0, y: 0 };
 
-    setClipboard({
-      items: clipboardItems,
-      connectors: clipboardConnectors,
-      rectangles: clipboardRectangles,
-      textBoxes: clipboardTextBoxes,
-      centroid
-    });
-
-    const totalCount =
-      clipboardItems.length +
-      clipboardConnectors.length +
-      clipboardRectangles.length +
-      clipboardTextBoxes.length;
-    showNotification(`Copied ${totalCount} item${totalCount !== 1 ? 's' : ''}`, 'info');
+    return {
+      payload: {
+        items: clipboardItems,
+        connectors: clipboardConnectors,
+        rectangles: clipboardRectangles,
+        textBoxes: clipboardTextBoxes,
+        centroid
+      },
+      count
+    };
   }, [uiStateApi, modelStoreApi, scene]);
+
+  const handleCopy = useCallback(() => {
+    const result = buildPayload();
+    if (!result) return;
+    setClipboard(result.payload);
+    showNotification(`Copied ${result.count} item${result.count !== 1 ? 's' : ''}`, 'info');
+  }, [buildPayload, uiStateApi]);
+
+  const handleCut = useCallback(() => {
+    const result = buildPayload();
+    if (!result) return;
+
+    setClipboard(result.payload);
+
+    // Delete the cut items — mirrors the Delete key logic in useInteractionManager
+    const uiState = uiStateApi.getState();
+    const mode = uiState.mode;
+
+    if (
+      (mode.type === 'LASSO' || mode.type === 'FREEHAND_LASSO') &&
+      mode.selection?.items?.length
+    ) {
+      scene.deleteSelectedItems(mode.selection.items);
+      uiState.actions.setMode({ type: 'CURSOR', showCursor: true, mousedownItem: null });
+      uiState.actions.setItemControls(null);
+    } else if (uiState.itemControls) {
+      const ctrl = uiState.itemControls;
+      if (ctrl.type === 'ITEM') scene.deleteViewItem(ctrl.id);
+      else if (ctrl.type === 'CONNECTOR') scene.deleteConnector(ctrl.id);
+      else if (ctrl.type === 'TEXTBOX') scene.deleteTextBox(ctrl.id);
+      else if (ctrl.type === 'RECTANGLE') scene.deleteRectangle(ctrl.id);
+      uiState.actions.setItemControls(null);
+    }
+
+    showNotification(`Cut ${result.count} item${result.count !== 1 ? 's' : ''}`, 'success');
+  }, [buildPayload, uiStateApi, scene]);
 
   const handlePaste = useCallback(() => {
     const clipboard = getClipboard();
@@ -250,5 +278,5 @@ export const useCopyPaste = () => {
     showNotification(`Pasted ${pastedCount} item${pastedCount !== 1 ? 's' : ''}`, 'success');
   }, [uiStateApi, scene]);
 
-  return { handleCopy, handlePaste };
+  return { handleCopy, handleCut, handlePaste };
 };

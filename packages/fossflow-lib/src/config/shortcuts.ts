@@ -1,4 +1,5 @@
 export const FIXED_SHORTCUTS = {
+  cut: 'Ctrl+X',
   copy: 'Ctrl+C',
   paste: 'Ctrl+V',
   undo: 'Ctrl+Z',
