@@ -69,12 +69,18 @@ export const Node = memo(({ node, order }: Props) => {
                   <Typography fontWeight={600} fontSize={node.labelFontSize ?? 14} color={node.labelColor || 'text.primary'}>
                     {modelItem.headerLink ? (
                       <a
-                        href={modelItem.headerLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        href="#"
                         data-testid="node-header-link"
-                        style={{ color: 'inherit', textDecoration: 'underline' }}
-                        onClick={(e) => e.stopPropagation()}
+                        style={{ color: 'inherit', textDecoration: 'underline', cursor: 'pointer' }}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          const url = /^https?:\/\//i.test(modelItem.headerLink!)
+                            ? modelItem.headerLink!
+                            : `https://${modelItem.headerLink}`;
+                          window.open(url, '_blank', 'noopener,noreferrer');
+                        }}
                       >
                         {modelItem.name}
                       </a>

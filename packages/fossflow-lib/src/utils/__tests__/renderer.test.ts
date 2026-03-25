@@ -1,7 +1,7 @@
 import { Coords, Size, Scroll } from 'src/types';
 import { CoordsUtils, SizeUtils } from 'src/utils';
 import { PROJECTED_TILE_SIZE, MIN_ZOOM, MAX_ZOOM, ZOOM_INCREMENT } from 'src/config';
-import { getGridSubset, isWithinBounds, screenToIso, incrementZoom, decrementZoom } from '../renderer';
+import { getGridSubset, isWithinBounds, screenToIso, incrementZoom, decrementZoom, getItemAtTile } from '../renderer';
 
 const getRendererSize = (tileSize: Size, zoom: number = 1): Size => {
   const projectedTileSize = SizeUtils.multiply(PROJECTED_TILE_SIZE, zoom);
@@ -205,5 +205,56 @@ describe('incrementZoom / decrementZoom — boundary enforcement', () => {
         : 0;
       expect(decimals).toBeLessThanOrEqual(2);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getItemAtTile() — stacked rectangle selection (Bug fix: z-order hit-test)
+// ---------------------------------------------------------------------------
+describe('getItemAtTile() — stacked rectangle z-order', () => {
+  const emptyScene = { items: [], textBoxes: [], connectors: [], rectangles: [] };
+
+  test('stacked rectangles — returns the last in array (visually topmost)', () => {
+    const scene = {
+      ...emptyScene,
+      rectangles: [
+        { id: 'r-bottom', from: { x: 0, y: 0 }, to: { x: 5, y: 5 } },
+        { id: 'r-top',    from: { x: 0, y: 0 }, to: { x: 5, y: 5 } }
+      ]
+    };
+    const result = getItemAtTile({ tile: { x: 2, y: 2 }, scene } as any);
+    expect(result).toEqual({ type: 'RECTANGLE', id: 'r-top' });
+  });
+
+  test('stacked rectangles — first in array (visually below) is not returned when top covers the same tile', () => {
+    const scene = {
+      ...emptyScene,
+      rectangles: [
+        { id: 'r-bottom', from: { x: 0, y: 0 }, to: { x: 5, y: 5 } },
+        { id: 'r-top',    from: { x: 0, y: 0 }, to: { x: 5, y: 5 } }
+      ]
+    };
+    const result = getItemAtTile({ tile: { x: 2, y: 2 }, scene } as any);
+    expect(result?.id).not.toBe('r-bottom');
+  });
+
+  test('single rectangle — hit-test still works', () => {
+    const scene = {
+      ...emptyScene,
+      rectangles: [{ id: 'solo', from: { x: 1, y: 1 }, to: { x: 4, y: 4 } }]
+    };
+    expect(getItemAtTile({ tile: { x: 2, y: 2 }, scene } as any)).toEqual({ type: 'RECTANGLE', id: 'solo' });
+    expect(getItemAtTile({ tile: { x: 5, y: 5 }, scene } as any)).toBeNull();
+  });
+
+  test('tile outside all rectangles — returns null', () => {
+    const scene = {
+      ...emptyScene,
+      rectangles: [
+        { id: 'r1', from: { x: 0, y: 0 }, to: { x: 3, y: 3 } },
+        { id: 'r2', from: { x: 5, y: 5 }, to: { x: 8, y: 8 } }
+      ]
+    };
+    expect(getItemAtTile({ tile: { x: 4, y: 4 }, scene } as any)).toBeNull();
   });
 });

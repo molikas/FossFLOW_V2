@@ -1294,4 +1294,75 @@ const iconPackManagerProp = useMemo(
 
 ---
 
-*End of document. Last updated: 2026-03-24.*
+---
+
+## Section 11: Bug Fixes — 2026-03-25
+
+### 11a. Node header link opens relative URL in same tab
+
+**Symptom:** Clicking a node link like `www.google.com` navigated to `http://localhost:3000/www.google.com` in the same tab instead of opening `https://www.google.com` in a new tab.
+
+**Root cause (1 — relative URL):** The `href` attribute was set directly from `modelItem.headerLink`. Browsers treat `www.google.com` (no scheme) as a relative URL, appending it to the current origin.
+
+**Root cause (2 — same tab):** The canvas interaction manager registers `mousedown` listeners on the renderer div. These fire before the browser's native anchor navigation and may call `preventDefault`, suppressing the `target="_blank"` behaviour.
+
+**Fix:** Replaced the native anchor navigation with an explicit `window.open` call in the `onClick` handler. URL is normalised: if it does not start with `http://` or `https://`, `https://` is prepended. Added `onMouseDown stopPropagation` to prevent the canvas from intercepting the click.
+
+**Files:** `packages/fossflow-lib/src/components/SceneLayers/Nodes/Node/Node.tsx`
+
+---
+
+### 11b. Rectangle z-order reversed after copy/paste
+
+**Symptom:** Pasting a selection containing multiple rectangles produced a stack with the opposite layering from the original — the rectangle that was visually on top before the paste ended up on the bottom afterwards.
+
+**Root cause:** `createRectangle` uses `Array.unshift` (inserts at the front of the array). `Rectangles.tsx` renders in reverse order (last element = visually on top). Pasting rectangles in their original clipboard order caused `unshift` + reverse-rendering to invert the z-stack.
+
+**Fix:** In `useScene.pasteItems`, rectangles are pasted in reverse clipboard order — `[...payload.rectangles].reverse().forEach(r => createRectangle(r))`. The last `unshift` wins the front position; reverse rendering then places it on top, matching the original order.
+
+**Files:** `packages/fossflow-lib/src/hooks/useScene.ts`
+
+---
+
+### 11c. Stacked rectangles — only first in array selectable by click
+
+**Symptom:** When two or more rectangles occupied the same tile, clicking the tile always selected the first rectangle in the data array, even if a visually higher rectangle was rendered on top of it.
+
+**Root cause:** `getItemAtTile` used `Array.find`, which returns the first match. `Rectangles.tsx` renders in reverse (last = visually on top), so the first in the array was visually at the bottom of the stack.
+
+**Fix:** Changed to `[...scene.rectangles].reverse().find(...)` so the search order matches the render order — the last element (topmost) is checked first.
+
+**Files:** `packages/fossflow-lib/src/utils/renderer.ts`
+
+---
+
+### 11d. Save overwrites current diagram when a different name is entered
+
+**Symptom:** Saving a diagram that was already on disk under a new name (e.g. "SDLC Last" instead of "SDLC") overwrote the original file, leaving only the renamed copy.
+
+**Root cause:** `DiagramManager.handleSave` always called `storage.saveDiagram(currentDiagramId, data)` (overwrite in place) whenever `currentDiagramId` was set, regardless of whether the user had typed a different name.
+
+**Fix:** The entered `saveName` is compared to the current diagram's stored name. An exact match triggers `saveDiagram` (overwrite). Any other name triggers `createDiagram` (new file). The existing "name already exists as a different diagram" confirmation path is unaffected.
+
+**Files:** `packages/fossflow-app/src/components/DiagramManager.tsx`
+
+---
+
+### 11e. Connector tile-based waypoints don't move with lasso drag
+
+**Symptom:** When lasso-selecting a diagram and dragging, item-based connector anchors (endpoints attached to nodes) moved correctly because they follow the node, but tile-based waypoints (manually placed mid-connector points not attached to any node) stayed in their original positions.
+
+**Root cause:** `getItemsInBounds` (Lasso and FreehandLasso) only collected `ITEM`, `RECTANGLE`, and `TEXTBOX` references — it never added `CONNECTOR_ANCHOR` items. The `initialTiles` map built when switching to `DRAG_ITEMS` had no entry for tile anchors. In `DragItems.ts`, the `if (initialTiles[item.id])` guard fell through to the cursor-snap branch, which only fires for single-anchor cursor drags.
+
+Additionally, connector anchor updates ran outside the `scene.transaction()` block, causing each drag frame to push extra history entries.
+
+**Fix (three files):**
+1. **`Lasso.ts` and `FreehandLasso.ts`** — `getItemsInBounds` / `getItemsInFreehandBounds` now iterate `scene.connectors` and push `{ type: 'CONNECTOR_ANCHOR', id: anchor.id }` for every anchor whose `ref.tile` is within the selection bounds. Item-based anchors (`ref.item`) are skipped.
+2. **`Lasso.ts` and `FreehandLasso.ts`** — When switching to `DRAG_ITEMS` (`isDragging = true`), `CONNECTOR_ANCHOR` items now have their initial tile looked up from `connector.anchors[].ref.tile` and recorded in `initialTiles`.
+3. **`DragItems.ts`** — Connector anchor updates moved inside `scene.transaction()`. Group lasso drags now use `CoordsUtils.add(initialTiles[item.id], mouseOffset)` (same offset math as nodes). Single-anchor cursor drags (no `initialTiles` entry) continue to snap to the cursor tile.
+
+**Files:** `packages/fossflow-lib/src/interaction/modes/Lasso.ts`, `FreehandLasso.ts`, `DragItems.ts`
+
+---
+
+*End of document. Last updated: 2026-03-25.*

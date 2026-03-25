@@ -84,7 +84,7 @@ const dragItems = (
 
   const hasOtherUpdates = textBoxUpdates.length > 0 || rectangleUpdates.length > 0;
 
-  if (nodeUpdates || hasOtherUpdates) {
+  if (nodeUpdates || hasOtherUpdates || anchorRefs.length > 0) {
     scene.transaction(() => {
       let currentState: State | undefined;
 
@@ -99,32 +99,35 @@ const dragItems = (
       rectangleUpdates.forEach(({ id, from, to }) => {
         currentState = scene.updateRectangle(id, { from, to }, currentState);
       });
+
+      // Connector anchors: group lasso move uses initial tile + offset;
+      // single-anchor drag snaps to cursor tile (re-anchors to item/anchor/tile there)
+      anchorRefs.forEach((item) => {
+        const connector = getAnchorParent(item.id, scene.connectors);
+        const newConnector = produce(connector, (draft) => {
+          const anchor = getItemByIdOrThrow(connector.anchors, item.id);
+          if (initialTiles[item.id]) {
+            const newTile = CoordsUtils.add(initialTiles[item.id], mouseOffset);
+            draft.anchors[anchor.index] = { ...anchor.value, ref: { tile: newTile } };
+          } else {
+            const itemAtTile = getItemAtTile({ tile, scene });
+            switch (itemAtTile?.type) {
+              case 'ITEM':
+                draft.anchors[anchor.index] = { ...anchor.value, ref: { item: itemAtTile.id } };
+                break;
+              case 'CONNECTOR_ANCHOR':
+                draft.anchors[anchor.index] = { ...anchor.value, ref: { anchor: itemAtTile.id } };
+                break;
+              default:
+                draft.anchors[anchor.index] = { ...anchor.value, ref: { tile } };
+                break;
+            }
+          }
+        });
+        scene.updateConnector(connector.id, newConnector);
+      });
     });
   }
-
-  // Connector anchors use tile-relative logic (unchanged)
-  anchorRefs.forEach((item) => {
-    const connector = getAnchorParent(item.id, scene.connectors);
-
-    const newConnector = produce(connector, (draft) => {
-      const anchor = getItemByIdOrThrow(connector.anchors, item.id);
-      const itemAtTile = getItemAtTile({ tile, scene });
-
-      switch (itemAtTile?.type) {
-        case 'ITEM':
-          draft.anchors[anchor.index] = { ...anchor.value, ref: { item: itemAtTile.id } };
-          break;
-        case 'CONNECTOR_ANCHOR':
-          draft.anchors[anchor.index] = { ...anchor.value, ref: { anchor: itemAtTile.id } };
-          break;
-        default:
-          draft.anchors[anchor.index] = { ...anchor.value, ref: { tile } };
-          break;
-      }
-    });
-
-    scene.updateConnector(connector.id, newConnector);
-  });
 };
 
 export const DragItems: ModeActions = {

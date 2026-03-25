@@ -537,7 +537,8 @@ export const useScene = () => {
           createViewItem(viewItem);
         });
         payload.connectors.forEach((c) => createConnector(c));
-        payload.rectangles.forEach((r) => createRectangle(r));
+        // Paste in reverse so unshift() preserves the original visual z-order
+        ;[...payload.rectangles].reverse().forEach((r) => createRectangle(r));
         payload.textBoxes.forEach((tb) => createTextBox(tb));
       });
     },

@@ -82,12 +82,22 @@ Diagrams are saved to a `diagrams/` folder in the project directory. Data stays 
 
 - **Cut (Ctrl+X):** Cut the selected item(s) to the clipboard. The selection is removed from the canvas and can be pasted with `Ctrl+V`. Works with single-item selection (via item controls panel) and multi-item lasso selection. Cut supports full undo/redo — pressing `Ctrl+Z` after a cut restores the deleted items while the clipboard retains the payload for subsequent pastes.
 
+#### Bug Fixes
+
+- **Node header link:** Clicking a node's URL link now opens it in a new tab. Previously, a bare URL like `www.google.com` was treated as a relative path (`/www.google.com`). Fix: URL is normalised to prepend `https://` if no scheme is present; navigation is handled via `window.open` to guarantee a new tab regardless of how the canvas intercepts the click event.
+- **Rectangle z-order after paste:** Pasting a stack of rectangles now preserves the original visual layering. Previously, `createRectangle` uses `unshift` (inserts at front) while the renderer draws in reverse order (last = top), so pasting in clipboard order reversed the stack. Fix: rectangles are pasted in reverse order so `unshift` + reverse rendering reconstructs the original z-order.
+- **Stacked rectangle hit-testing:** Clicking or lassoing at a tile covered by multiple stacked rectangles now selects the visually topmost one (last in array). Previously, `Array.find` returned the first match (visually below). Fix: `[...rectangles].reverse().find(...)` in `getItemAtTile`.
+- **Save as creates a new file:** Saving a diagram under a different name now creates a new file instead of overwriting the current one. Previously, any save with an existing `currentDiagramId` called `saveDiagram` (overwrite) regardless of the entered name. Fix: the new name is compared to the current diagram's stored name; only an exact match triggers an overwrite.
+- **Connector waypoints move with lasso drag:** Tile-based connector anchors (mid-connector waypoints not attached to a node) now move with the rest of the selection during a lasso or freehand-lasso drag. Previously, only nodes, rectangles, and textboxes were tracked; tile anchors had no entry in `initialTiles` and were ignored. Fix: `getItemsInBounds` (Lasso and FreehandLasso) now collects tile-based anchors; their positions are recorded in `initialTiles` before drag starts; `DragItems` offsets them by `mouseOffset` inside the transaction.
+
 #### Tests
 
-- **`useCopyPaste` suite** (`useCopyPaste.test.ts`, +6 tests, 11 → 17): LASSO payload identical to copy; `deleteSelectedItems` called with correct refs; mode reset to CURSOR after LASSO cut; single-item cut via itemControls deletes via `deleteViewItem`; empty selection — no clipboard write and no deletion; "Cut N items" success notification
+- **`useCopyPaste` suite** (`useCopyPaste.test.ts`, +7 tests, 11 → 18): LASSO payload identical to copy; `deleteSelectedItems` called with correct refs; mode reset to CURSOR after LASSO cut; single-item cut via itemControls deletes via `deleteViewItem`; empty selection — no clipboard write and no deletion; "Cut N items" success notification; rectangle clipboard order forwarded to `pasteItems` correctly
 - **`keyboard.dispatch` suite** (`keyboard.dispatch.test.tsx`, +3 tests, 25 → 28): `Ctrl+X` calls `cut()` exactly once; `Ctrl+X` does NOT trigger copy or paste; bare "x" does not call cut
 - **`shortcuts.test.ts`** (+1 test, 6 → 7): `cut` is `Ctrl+X`; key count updated to 7
-- Test count: 527 → 537, 54 suites, all passing
+- **`renderer.test.ts`** (+4 tests): stacked rectangles return the last in array (topmost); first in array not returned when top covers same tile; single rectangle hit-test works; tile outside all rectangles returns null
+- **`Lasso.modes.test.ts`** (+3 tests): tile-based anchor collected as `CONNECTOR_ANCHOR`, item-based anchor excluded; `isDragging` → `DRAG_ITEMS` records anchor tile in `initialTiles`; item-based anchor not recorded in `initialTiles`
+- Test count: 537 → 545, 54 suites, all passing
 
 ---
 

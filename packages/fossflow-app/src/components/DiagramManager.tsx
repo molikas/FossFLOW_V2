@@ -159,11 +159,14 @@ export const DiagramManager: React.FC<Props> = ({
       }).length;
       console.log(`DiagramManager: Including ${importedCount} imported icons`);
 
-      if (currentDiagramId) {
-        // Update existing
+      const currentDiagram = diagrams.find((d) => d.id === currentDiagramId);
+      const isSameName = currentDiagram?.name === saveName.trim();
+
+      if (currentDiagramId && isSameName) {
+        // Same file, same name: overwrite in place
         await storage.saveDiagram(currentDiagramId, dataToSave);
       } else {
-        // Create new
+        // Different name (save as) or new diagram: always create a new file
         await storage.createDiagram(dataToSave);
       }
 

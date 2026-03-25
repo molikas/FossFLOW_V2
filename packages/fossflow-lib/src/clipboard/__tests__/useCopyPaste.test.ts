@@ -473,6 +473,27 @@ describe('useCopyPaste.handleCut', () => {
     );
   });
 
+  test('18. paste — multiple rectangles forwarded to pasteItems in clipboard order (useScene.pasteItems reverses internally for z-order)', () => {
+    const r1 = { id: 'r1', from: { x: 0, y: 0 }, to: { x: 2, y: 2 } };
+    const r2 = { id: 'r2', from: { x: 1, y: 1 }, to: { x: 3, y: 3 } };
+    _mockClipboard = {
+      items: [], connectors: [], textBoxes: [],
+      rectangles: [r1, r2],
+      centroid: { x: 1, y: 1 }
+    };
+    mockUiState.mouse.position.tile = { x: 1, y: 1 }; // offset = (0,0)
+
+    const { result } = setup();
+    act(() => { result.current.handlePaste(); });
+
+    const payload = mockPasteItems.mock.calls[0][0];
+    // Two rectangles forwarded; IDs remapped but order preserved by useCopyPaste
+    expect(payload.rectangles).toHaveLength(2);
+    // r1 was first in clipboard → first in payload (reversal is useScene.pasteItems responsibility)
+    expect(payload.rectangles[0].from).toEqual(r1.from);
+    expect(payload.rectangles[1].from).toEqual(r2.from);
+  });
+
   test('17. shows "Cut N items" success notification', () => {
     mockModelState.items = [makeModelItem('item-1'), makeModelItem('item-2')];
     mockScene.currentView.items = [makeViewItem('item-1', 0, 0), makeViewItem('item-2', 2, 2)];

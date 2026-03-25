@@ -281,3 +281,113 @@ describe('Lasso.mousemove (real module)', () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Connector anchor collection (Bug fix: tile-based waypoints move with lasso drag)
+// ---------------------------------------------------------------------------
+describe('Lasso connector anchor — selection and DRAG_ITEMS initialTiles', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    const { hasMovedTile } = require('src/utils');
+    (hasMovedTile as jest.Mock).mockReturnValue(true);
+    mockIsWithinBounds.mockReturnValue(true); // all tiles within lasso bounds
+  });
+
+  it('draws selection — tile-based anchor included as CONNECTOR_ANCHOR, item-based excluded', () => {
+    const uiState = makeUiState({
+      mode: { type: 'LASSO', selection: null, isDragging: false },
+      mouse: {
+        position: { tile: { x: 8, y: 8 } },
+        mousedown: { tile: { x: 0, y: 0 }, screen: { x: 0, y: 0 } }
+      }
+    });
+    const scene = {
+      items: [],
+      rectangles: [],
+      textBoxes: [],
+      connectors: [{
+        id: 'c1',
+        anchors: [
+          { id: 'a-item', ref: { item: 'node1' } },        // item-based — NOT collected
+          { id: 'a-tile', ref: { tile: { x: 5, y: 5 } } } // tile-based — SHOULD be collected
+        ]
+      }]
+    };
+    Lasso.mousemove!({ uiState, scene, isRendererInteraction: true } as any);
+
+    const call = uiState.actions.setMode.mock.calls[0][0];
+    const anchorRefs = call.selection.items.filter((i: any) => i.type === 'CONNECTOR_ANCHOR');
+    expect(anchorRefs.map((i: any) => i.id)).toContain('a-tile');
+    expect(anchorRefs.map((i: any) => i.id)).not.toContain('a-item');
+  });
+
+  it('isDragging → DRAG_ITEMS — CONNECTOR_ANCHOR tile recorded in initialTiles', () => {
+    const uiState = makeUiState({
+      mode: {
+        type: 'LASSO',
+        selection: {
+          startTile: { x: 0, y: 0 },
+          endTile: { x: 10, y: 10 },
+          items: [{ type: 'CONNECTOR_ANCHOR', id: 'a-tile' }]
+        },
+        isDragging: true
+      },
+      mouse: {
+        position: { tile: { x: 5, y: 5 } },
+        mousedown: { tile: { x: 3, y: 3 }, screen: { x: 0, y: 0 } }
+      }
+    });
+    const scene = {
+      items: [],
+      rectangles: [],
+      textBoxes: [],
+      connectors: [{
+        id: 'c1',
+        anchors: [{ id: 'a-tile', ref: { tile: { x: 4, y: 6 } } }]
+      }]
+    };
+    Lasso.mousemove!({ uiState, scene, isRendererInteraction: true } as any);
+
+    expect(uiState.actions.setMode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'DRAG_ITEMS',
+        initialTiles: { 'a-tile': { x: 4, y: 6 } }
+      })
+    );
+  });
+
+  it('isDragging → DRAG_ITEMS — anchor with ref.item (not tile) is NOT recorded in initialTiles', () => {
+    const uiState = makeUiState({
+      mode: {
+        type: 'LASSO',
+        selection: {
+          startTile: { x: 0, y: 0 },
+          endTile: { x: 10, y: 10 },
+          items: [{ type: 'CONNECTOR_ANCHOR', id: 'a-item-ref' }]
+        },
+        isDragging: true
+      },
+      mouse: {
+        position: { tile: { x: 5, y: 5 } },
+        mousedown: { tile: { x: 3, y: 3 }, screen: { x: 0, y: 0 } }
+      }
+    });
+    const scene = {
+      items: [],
+      rectangles: [],
+      textBoxes: [],
+      connectors: [{
+        id: 'c1',
+        anchors: [{ id: 'a-item-ref', ref: { item: 'node1' } }] // item-based, no tile
+      }]
+    };
+    Lasso.mousemove!({ uiState, scene, isRendererInteraction: true } as any);
+
+    expect(uiState.actions.setMode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'DRAG_ITEMS',
+        initialTiles: {} // nothing recorded for item-based anchors
+      })
+    );
+  });
+});

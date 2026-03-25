@@ -502,7 +502,8 @@ export const getItemAtTile = ({
     };
   }
 
-  const rectangle = scene.rectangles.find(({ from, to }) => {
+  // Use findLast so visually topmost rectangle (last in array, rendered on top) wins
+  const rectangle = [...scene.rectangles].reverse().find(({ from, to }) => {
     return isWithinBounds(tile, [from, to]);
   });
 

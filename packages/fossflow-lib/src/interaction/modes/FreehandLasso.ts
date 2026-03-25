@@ -42,6 +42,15 @@ const getItemsInFreehandBounds = (
     }
   });
 
+  // Collect tile-based connector anchors (waypoints not attached to a node)
+  scene.connectors.forEach((connector: any) => {
+    connector.anchors.forEach((anchor: any) => {
+      if (anchor.ref?.tile && isPointInPolygon(anchor.ref.tile, pathTiles)) {
+        items.push({ type: 'CONNECTOR_ANCHOR', id: anchor.id });
+      }
+    });
+  });
+
   return items;
 };
 
@@ -62,6 +71,14 @@ export const FreehandLasso: ModeActions = {
           } else if (item.type === 'RECTANGLE') {
             const r = getItemByIdOrThrow(scene.rectangles, item.id).value;
             initialRectangles[item.id] = { from: r.from, to: r.to };
+          } else if (item.type === 'CONNECTOR_ANCHOR') {
+            for (const connector of scene.connectors) {
+              const anchor = connector.anchors.find((a: any) => a.id === item.id);
+              if (anchor?.ref?.tile) {
+                initialTiles[item.id] = anchor.ref.tile;
+                break;
+              }
+            }
           }
         } catch {}
       });
