@@ -103,6 +103,12 @@ Diagrams are saved to a `diagrams/` folder in the project directory.
 - New suites: `IconButton.color.test.tsx`, `viewTabs.titleReadonly.test.ts`, `splashScreen.communityEdition.test.ts`, `languageDropdown.positioning.test.ts`, `saveTracking.isAfterLoad.test.ts`
 - Test count: 545 → 572, 54 → 59 suites, all passing
 
+#### Polish / Console
+
+- **Verbose logging removed:** Operational `console.log` calls stripped from `storageService` and `App` — only errors remain. Reduces console noise in production.
+- **Old-format icon migration:** Diagrams saved before the full-icon-set format was introduced are silently re-saved on first load so subsequent loads no longer re-run the merge path.
+- **aria-hidden focus warning fixed:** MUI context menu was setting `aria-hidden` on its modal root while a descendant still held focus, triggering a browser accessibility warning. Focus is now moved back to the anchor element before the menu closes.
+
 ---
 
 ### 2026-03-25
