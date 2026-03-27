@@ -21,7 +21,12 @@ export const ContextMenu = ({
     <Menu
       open={!!anchorEl}
       anchorEl={anchorEl}
-      onClose={onClose}
+      onClose={() => {
+        // Restore focus to anchor before MUI sets aria-hidden on the modal root,
+        // otherwise the browser warns about aria-hidden on a focused element.
+        if (anchorEl) anchorEl.focus();
+        onClose();
+      }}
       PaperProps={{ 'data-testid': 'context-menu' } as any}
     >
       {menuItems.map((item, index) => {

@@ -49,7 +49,6 @@ class ServerStorage implements StorageService {
       const data = await response.json();
       this.available = data.enabled;
       this.availabilityCheckedAt = Date.now();
-      console.log(`Server storage availability: ${this.available}`);
       return this.available ?? false;
     } catch (error) {
       console.log('Server storage not available:', error);
@@ -60,9 +59,7 @@ class ServerStorage implements StorageService {
   }
 
   async listDiagrams(): Promise<DiagramInfo[]> {
-    console.log(`Fetching diagrams from: ${this.baseUrl}/api/diagrams`);
     const response = await fetch(`${this.baseUrl}/api/diagrams`);
-    console.log(`Response status: ${response.status}`);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -71,8 +68,6 @@ class ServerStorage implements StorageService {
     }
 
     const diagrams = await response.json();
-    console.log(`Received ${diagrams.length} diagrams from server:`, diagrams);
-
     return diagrams.map((d: any) => ({
       ...d,
       lastModified: new Date(d.lastModified)
@@ -80,48 +75,42 @@ class ServerStorage implements StorageService {
   }
 
   async loadDiagram(id: string): Promise<Model> {
-    console.log(`ServerStorage: Loading diagram ${id} from ${this.baseUrl}/api/diagrams/${id}`);
     try {
       const response = await fetch(`${this.baseUrl}/api/diagrams/${id}`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(10000) // 10 second timeout
+        signal: AbortSignal.timeout(10000)
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`ServerStorage: Failed to load diagram ${id}: ${response.status} ${errorText}`);
+        console.error(`Failed to load diagram ${id}: ${response.status} ${errorText}`);
         throw new Error(`Failed to load diagram: ${response.status} ${errorText}`);
       }
 
-      const data = await response.json();
-      console.log(`ServerStorage: Successfully loaded diagram ${id}, items: ${data.items?.length || 0}`);
-      return data;
+      return await response.json();
     } catch (error) {
-      console.error(`ServerStorage: Error loading diagram ${id}:`, error);
+      console.error(`Error loading diagram ${id}:`, error);
       throw error;
     }
   }
 
   async saveDiagram(id: string, data: Model): Promise<void> {
-    console.log(`ServerStorage: Saving diagram ${id}`);
     try {
       const response = await fetch(`${this.baseUrl}/api/diagrams/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
-        signal: AbortSignal.timeout(15000) // 15 second timeout for saves
+        signal: AbortSignal.timeout(15000)
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`ServerStorage: Failed to save diagram ${id}: ${response.status} ${errorText}`);
+        console.error(`Failed to save diagram ${id}: ${response.status} ${errorText}`);
         throw new Error(`Failed to save diagram: ${response.status}`);
       }
-
-      console.log(`ServerStorage: Successfully saved diagram ${id}`);
     } catch (error) {
-      console.error(`ServerStorage: Error saving diagram ${id}:`, error);
+      console.error(`Error saving diagram ${id}:`, error);
       throw error;
     }
   }
@@ -231,11 +220,8 @@ class StorageManager {
       const isDev = process.env.NODE_ENV !== 'production';
 
       if (!isDev && await this.serverStorage.isAvailable()) {
-        console.log('Using server storage');
         this.activeStorage = this.serverStorage;
       } else {
-        if (isDev) console.log('Dev mode: using session storage (server check skipped)');
-        else console.log('Using session storage');
         this.activeStorage = this.sessionStorage;
       }
       return this.activeStorage;

@@ -510,62 +510,24 @@ function EditorPage() {
   };
 
   const handleDiagramManagerLoad = async (id: string, data: any) => {
-    console.log(`App: handleDiagramManagerLoad called for diagram ${id}`);
-
-    /**
-     * Icon Persistence Strategy:
-     *
-     * NEW BEHAVIOR (after this fix):
-     * - Server storage saves ALL icons (default collections + imported custom icons)
-     * - When loading, if we detect default collection icons, use ALL icons from server
-     * - This preserves imported custom icons without data loss
-     *
-     * BACKWARD COMPATIBILITY (for old saves):
-     * - Old format only saved imported icons (collection='imported')
-     * - If no default icons detected, merge imported icons with current defaults
-     * - This ensures old diagrams still load correctly
-     *
-     * DETECTION:
-     * - Check if loaded icons contain any default collection (isoflow, aws, gcp, etc.)
-     * - If yes: New format, use all icons from server
-     * - If no: Old format, merge imported with defaults
-     */
     const loadedIcons = data.icons || [];
-    console.log(`App: Server sent ${loadedIcons.length} icons`);
 
     // Auto-detect and load required icon packs
     await iconPackManager.loadPacksForDiagram(data.items || []);
 
-    // Strategy: Check if server has ALL icons (both default and imported)
-    // Server storage now saves ALL icons, so we should use them directly
-    // For backward compatibility with old saves, we detect and merge
+    // Old format: only imported icons were saved. New format: all icons (default + imported) are saved.
+    // Detect by checking for any default-collection icon in the saved data.
+    const hasDefaultIcons = loadedIcons.some(
+      (icon: any) => icon.collection === 'isoflow' || icon.collection === 'aws' || icon.collection === 'gcp'
+    );
 
     let finalIcons;
-    const hasDefaultIcons = loadedIcons.some((icon: any) => {
-      return (
-        icon.collection === 'isoflow' ||
-        icon.collection === 'aws' ||
-        icon.collection === 'gcp'
-      );
-    });
-
     if (hasDefaultIcons) {
-      // New format: Server saved ALL icons (default + imported)
-      // Use them directly to preserve any custom icon modifications
-      console.log(
-        `App: Using all ${loadedIcons.length} icons from server (includes defaults + imported)`
-      );
       finalIcons = loadedIcons;
     } else {
-      // Old format: Server only saved imported icons
-      // Merge imported icons with currently loaded icon packs
-      const importedIcons = loadedIcons.filter((icon: any) => {
-        return icon.collection === 'imported';
-      });
+      // Old format — merge and silently re-save so subsequent loads skip this path.
+      const importedIcons = loadedIcons.filter((icon: any) => icon.collection === 'imported');
       finalIcons = [...iconPackManager.loadedIcons, ...importedIcons];
-      console.log(
-        `App: Old format detected. Merged ${importedIcons.length} imported icons with ${iconPackManager.loadedIcons.length} defaults = ${finalIcons.length} total`
-      );
     }
 
     const mergedData: DiagramData = {
@@ -584,22 +546,20 @@ function EditorPage() {
       updatedAt: data.lastModified || new Date().toISOString()
     };
 
-    console.log(`App: Setting all state for diagram ${id}`);
-
-    // Use a single batch of state updates to minimize re-render issues
-    // Update diagram data and increment key in the same render cycle
     setDiagramName(newDiagram.name);
     setCurrentDiagram(newDiagram);
     setCurrentModel(mergedData);
     setHasUnsavedChanges(false);
     setLastSaved(new Date(newDiagram.updatedAt));
-    console.log(`App: Loading diagram ${id} via imperative ref`);
     isAfterLoadRef.current = true;
     isoflowRef.current?.load(mergedData);
 
-    console.log(
-      `App: Finished loading diagram ${id}, final icon count: ${finalIcons.length}`
-    );
+    // Silently migrate old-format diagrams to new format so they don't re-migrate on every load.
+    if (!hasDefaultIcons && storage) {
+      storage.saveDiagram(id, mergedData as any).catch(() => {
+        // Non-critical — will retry on next load
+      });
+    }
   };
 
   // i18n
