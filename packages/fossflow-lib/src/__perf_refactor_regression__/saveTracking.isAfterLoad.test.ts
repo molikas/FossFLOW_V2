@@ -3,17 +3,14 @@
  *
  * Problem: every call to isoflowRef.current.load() fires onModelUpdated, which
  * was calling setHasUnsavedChanges(true). This caused a false-positive unsaved
- * state after every programmatic load. The auto-save would then clear the flag
- * 5 seconds later — but any genuine user edits made in those 5 seconds (e.g.
- * adding a view, editing view 2) would also be cleared, making the Save button
- * appear permanently disabled for multi-view changes.
+ * state after every programmatic load.
  *
  * Fix:
  *   1. isAfterLoadRef is set to true before every programmatic load() call.
  *   2. handleModelUpdated returns early (without setting hasUnsavedChanges) when
  *      the ref is true, then resets the ref to false.
- *   3. Auto-save no longer calls setHasUnsavedChanges(false) — it persists data
- *      silently; only an explicit Save clears the indicator.
+ *   3. Auto-save has been removed entirely — only explicit Save clears the flag
+ *      and sets lastSaved. No background timer touches save state.
  *
  * This test reads App.tsx source to pin all three parts of the contract.
  */
@@ -63,9 +60,10 @@ describe('Save tracking — isAfterLoadRef pattern', () => {
     expect(refCheckIdx).toBeLessThan(unsavedSetIdx);
   });
 
-  it('auto-save timer does not call setHasUnsavedChanges(false)', () => {
-    const autoSaveMatch = src.match(/const autoSaveTimer\s*=\s*setTimeout\([\s\S]*?\},\s*5000\)/);
-    expect(autoSaveMatch).not.toBeNull();
-    expect(autoSaveMatch![0]).not.toContain('setHasUnsavedChanges(false)');
+  it('auto-save has been removed — no autoSaveTimer in source', () => {
+    expect(src).not.toContain('autoSaveTimer');
+    // setHasUnsavedChanges(false) is still called on explicit save/load — that is correct.
+    // What must NOT exist is a background timer that silently clears the dirty flag.
+    expect(src).not.toMatch(/setTimeout[\s\S]*?setHasUnsavedChanges\(false\)/);
   });
 });

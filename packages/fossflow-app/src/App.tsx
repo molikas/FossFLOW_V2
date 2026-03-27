@@ -66,7 +66,8 @@ function EditorPage() {
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [currentModel, setCurrentModel] = useState<DiagramData | null>(null); // Store current model state
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [lastAutoSave, setLastAutoSave] = useState<Date | null>(null);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [saveToast, setSaveToast] = useState<string | null>(null);
   const [showStorageManager, setShowStorageManager] = useState(false);
   const [showDiagramManager, setShowDiagramManager] = useState(false);
   const [showSharePopover, setShowSharePopover] = useState(false);
@@ -145,6 +146,7 @@ function EditorPage() {
         setCurrentDiagram(readonlyDiagram);
         setDiagramName(readonlyDiagram.name);
         setCurrentModel(dataWithIcons);
+        setLastSaved(new Date(readonlyDiagram.updatedAt));
         isAfterLoadRef.current = true;
         isoflowRef.current?.load(dataWithIcons);
       } catch (error) {
@@ -157,6 +159,21 @@ function EditorPage() {
 
   const currentModelRef = useRef<DiagramData | null>(null);
   useEffect(() => { currentModelRef.current = currentModel; }, [currentModel]);
+
+  // Format lastSaved timestamp: time only for today, "yesterday" for yesterday, short date for older.
+  const formatSavedAt = (d: Date): string => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today.getTime() - 86400000);
+    const dDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (dDay.getTime() === today.getTime()) return `Saved at ${time}`;
+    if (dDay.getTime() === yesterday.getTime()) return `Saved yesterday at ${time}`;
+    const month = d.toLocaleString([], { month: 'short' });
+    const day = d.getDate();
+    if (d.getFullYear() === now.getFullYear()) return `Saved ${month} ${day} at ${time}`;
+    return `Saved ${month} ${day}, ${d.getFullYear()} at ${time}`;
+  };
 
   // Suppress the spurious onModelUpdated that fires immediately after isoflowRef.current.load().
   // Loading is not a user edit — it should not mark the diagram as having unsaved changes.
@@ -309,7 +326,8 @@ function EditorPage() {
     setCurrentDiagram(newDiagram);
     setShowSaveDialog(false);
     setHasUnsavedChanges(false);
-    setLastAutoSave(new Date());
+    setLastSaved(new Date());
+    setSaveToast(diagramName);
 
     // Save as last opened
     try {
@@ -357,6 +375,7 @@ function EditorPage() {
     setCurrentModel(dataWithIcons);
     setShowLoadDialog(false);
     setHasUnsavedChanges(false);
+    setLastSaved(new Date(diagram.updatedAt));
     isAfterLoadRef.current = true;
     isoflowRef.current?.load(dataWithIcons);
 
@@ -573,6 +592,7 @@ function EditorPage() {
     setCurrentDiagram(newDiagram);
     setCurrentModel(mergedData);
     setHasUnsavedChanges(false);
+    setLastSaved(new Date(newDiagram.updatedAt));
     console.log(`App: Loading diagram ${id} via imperative ref`);
     isAfterLoadRef.current = true;
     isoflowRef.current?.load(mergedData);
@@ -654,7 +674,8 @@ function EditorPage() {
           const data = buildSaveData();
           await storage.saveDiagram(currentDiagram.id, data as any);
           setHasUnsavedChanges(false);
-          setLastAutoSave(new Date());
+          setLastSaved(new Date());
+          setSaveToast(currentDiagram.name);
         } catch (e) {
           console.error('Save failed:', e);
           alert('Failed to save diagram. Please try again.');
@@ -691,7 +712,8 @@ function EditorPage() {
       setCurrentDiagram(saved);
       setDiagramName(name);
       setHasUnsavedChanges(false);
-      setLastAutoSave(new Date());
+      setLastSaved(new Date());
+      setSaveToast(name);
       setShowSaveAsDialog(false);
       setSaveAsName('');
       // Sync canvas title to match the saved name
@@ -746,65 +768,12 @@ function EditorPage() {
     return () => document.removeEventListener('mousedown', handleOutside);
   }, [showSharePopover]);
 
-  // Auto-save functionality
+  // Auto-dismiss save toast after 2.5 seconds
   useEffect(() => {
-    if (!currentModel || !hasUnsavedChanges) return;
-    // Server auto-save requires an existing diagram ID
-    if (serverStorageAvailable && !currentDiagram) return;
-
-    const autoSaveTimer = setTimeout(() => {
-      const importedIcons = (
-        currentModel?.icons ||
-        diagramData.icons ||
-        []
-      ).filter((icon) => {
-        return icon.collection === 'imported';
-      });
-
-      const savedData = {
-        title: diagramName || currentDiagram?.name || 'Untitled Diagram',
-        icons: importedIcons,
-        colors: currentModel.colors || [],
-        items: currentModel.items || [],
-        views: currentModel.views || [],
-        fitToScreen: true
-      };
-
-      // Persist to server when available and diagram is associated
-      if (serverStorageAvailable && storage && currentDiagram) {
-        const updatedDiagram: SavedDiagram = {
-          ...currentDiagram,
-          data: savedData,
-          updatedAt: new Date().toISOString()
-        };
-        setDiagrams((prevDiagrams) =>
-          prevDiagrams.map((d) => d.id === currentDiagram.id ? updatedDiagram : d)
-        );
-        storage.saveDiagram(currentDiagram.id, savedData as any).then(() => {
-          setLastAutoSave(new Date());
-          // Note: hasUnsavedChanges intentionally NOT reset here.
-          // Auto-save is a safety net; only explicit Save clears the unsaved indicator.
-        }).catch((e) => {
-          console.error('Auto-save to server failed:', e);
-        });
-      } else {
-        // Session fallback — saves regardless of whether diagram is associated
-        try {
-          localStorage.setItem('fossflow-last-opened-data', JSON.stringify(savedData));
-          setLastAutoSave(new Date());
-          // Note: hasUnsavedChanges intentionally NOT reset here.
-        } catch (e) {
-          console.error('Auto-save failed:', e);
-          if (e instanceof DOMException && e.name === 'QuotaExceededError') {
-            alert(t('alert.autoSaveFailed'));
-            setShowStorageManager(true);
-          }
-        }
-      }
-    }, 5000);
-
-    return () => clearTimeout(autoSaveTimer);
-  }, [currentModel, hasUnsavedChanges, currentDiagram, diagramName, serverStorageAvailable, storage]);
+    if (!saveToast) return;
+    const timer = setTimeout(() => setSaveToast(null), 2500);
+    return () => clearTimeout(timer);
+  }, [saveToast]);
 
   // Warn before closing if there are unsaved changes
   useEffect(() => {
@@ -908,6 +877,17 @@ function EditorPage() {
         <div className="toolbar-center" />
 
         <div className="toolbar-right">
+          {!isReadonlyUrl && (
+            <span className={`save-status${hasUnsavedChanges ? ' save-status-dirty' : ''}`}>
+              {lastSaved
+                ? `${formatSavedAt(lastSaved)}${hasUnsavedChanges ? ' •' : ''}`
+                : hasUnsavedChanges
+                  ? 'Unsaved'
+                  : ''
+              }
+            </span>
+          )}
+          {!isReadonlyUrl && <div className="toolbar-divider" />}
           <ChangeLanguage />
         </div>
       </div>
@@ -1108,6 +1088,11 @@ function EditorPage() {
       )}
 
       <DiagnosticsOverlay />
+
+      {/* Save confirmation toast */}
+      {saveToast && (
+        <div className="save-toast">✓ {saveToast} saved</div>
+      )}
     </div>
   );
 }

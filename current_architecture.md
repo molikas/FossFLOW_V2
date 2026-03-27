@@ -613,7 +613,7 @@ Touch events are synthesized: `touchstart` → mousedown (button:0), `touchmove`
 | `__perf_refactor_regression__/viewTabs.titleReadonly.test.ts` | 6 | new | VALID — title card read-only contract |
 | `__perf_refactor_regression__/splashScreen.communityEdition.test.ts` | 6 | new | VALID — community edition branding pins |
 | `__perf_refactor_regression__/languageDropdown.positioning.test.ts` | 4 | new | VALID — right:0 anchoring (overflow fix) |
-| `__perf_refactor_regression__/saveTracking.isAfterLoad.test.ts` | 4 | new | VALID — isAfterLoadRef + auto-save flag contract |
+| `__perf_refactor_regression__/saveTracking.isAfterLoad.test.ts` | 5 | new | VALID — isAfterLoadRef contract + auto-save removal |
 
 **Total test count as of 2026-03-27:** 572 tests across 59 suites, all passing.
 
@@ -1401,4 +1401,34 @@ Additionally, connector anchor updates ran outside the `scene.transaction()` blo
 
 ---
 
-*End of document. Last updated: 2026-03-25.*
+---
+
+### 11g. Save status label and toast notification (2026-03-27)
+
+**Feature:** Context-aware last-saved label in the toolbar right section, plus a brief toast on explicit save.
+
+**State in `App.tsx`:**
+- `lastSaved: Date | null` — set from `diagram.updatedAt` on every load; set to `new Date()` on every explicit save. `null` for unsaved new diagrams.
+- `saveToast: string | null` — set to the diagram name on explicit save; cleared after 2.5 s via `useEffect`.
+
+**Label format (`formatSavedAt` helper):**
+| Condition | Display |
+|-----------|---------|
+| Same calendar day | `Saved at 2:34 PM` |
+| Yesterday | `Saved yesterday at 2:34 PM` |
+| This year, older | `Saved Mar 15 at 2:34 PM` |
+| Previous year | `Saved Mar 15, 2024 at 2:34 PM` |
+
+A `•` dot appends to the label when `hasUnsavedChanges` is true. Label is hidden in readonly URL mode.
+
+**Placement:** `toolbar-right` — `[save status label] [divider] [language selector]`. The toolbar-center div is now an empty flex spacer.
+
+**Auto-save removal:** The 5-second auto-save `useEffect` and `setHasUnsavedChanges(false)` call inside it were removed entirely. Save state is now only ever mutated by explicit user action (Save / Save As) or by loading a diagram.
+
+**Toast:** Fixed-position, bottom-center, slides up with `save-toast-in` CSS keyframe animation, `z-index: 9999`, `pointer-events: none`. Dismissed automatically after 2.5 s.
+
+**Files:** `packages/fossflow-app/src/App.tsx`, `packages/fossflow-app/src/App.css`
+
+---
+
+*End of document. Last updated: 2026-03-27.*

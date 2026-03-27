@@ -31,8 +31,8 @@ An "exprimental" community fork of [FossFLOW](https://github.com/stan-smith/Foss
 
 - **Save / Save As** — Save directly to a named file. Save As always prompts for a new name and creates a new file.
 - **Diagrams panel** — Browse, load, and delete all saved diagrams from a single panel. Share any diagram as a read-only link.
-- **Save status indicator** — The Save button is disabled when there are no changes. Any edit to any view re-enables it.
-- **Auto-save** — Changes are persisted automatically in the background. Explicit Save confirms the file is up to date.
+- **Save status indicator** — Shows when the diagram was last saved and whether there are unsaved changes. Displayed in the toolbar right section as `Saved at HH:MM`, `Saved yesterday at HH:MM`, or `Saved Mon DD at HH:MM` for older diagrams. A `•` dot appears when there are pending changes. No auto-save — only explicit Save updates the timestamp.
+- **Save confirmation toast** — A brief `✓ [Name] saved` notification slides up from the bottom on every explicit save.
 - **Share link** — Generates a read-only URL for the current diagram (requires server storage).
 
 ### Performance
@@ -83,7 +83,9 @@ Diagrams are saved to a `diagrams/` folder in the project directory.
 #### Features
 
 - **Toolbar UX overhaul:** 3-section layout (actions left, spacer center, language right). Three focused buttons: **Save** (direct save if associated, Save As for new diagrams), **Diagrams** (load + manage, opens server or session dialog automatically), **Share** (copies read-only URL; disabled when no server storage or no saved diagram).
-- **Save status tracking:** Save button is disabled when there are no unsaved changes and a file is already associated. Enabled immediately on any user edit to any view (including adding views or editing view 2+). Auto-save persists data silently in the background without resetting the indicator — only an explicit Save clears it.
+- **Save status tracking:** Save button is disabled when there are no unsaved changes and a file is already associated. Enabled immediately on any user edit to any view (including adding views or editing view 2+). Auto-save removed entirely — only an explicit Save updates the last-saved timestamp and clears the dirty indicator.
+- **Save status label:** Toolbar right section shows context-aware last-saved time: `Saved at HH:MM` (today), `Saved yesterday at HH:MM`, `Saved Mon DD at HH:MM` (this year), or `Saved Mon DD, YYYY at HH:MM` (older). A `•` dot appends when unsaved changes exist. Positioned before the language selector with a divider.
+- **Save confirmation toast:** Brief `✓ [Name] saved` notification slides up from the bottom-center of the screen on every explicit save, auto-dismisses after 2.5 s.
 - **Diagrams manager:** Merged Load + Storage Manager into a single "Diagrams" button. Manager is load-only (no in-dialog save). Per-row share button copies a read-only URL; shows a green ✓ for 2 seconds after copying.
 - **Dismissible session warning banner:** Amber banner below the toolbar warns when running in session-only storage mode. Dismissed per tab via `sessionStorage`; never shown again in that tab once dismissed.
 - **Community edition splash screen:** Welcome notification updated with community edition branding, fork repository link, and GitHub issues prompt.
