@@ -202,12 +202,12 @@ const locale: LocaleProps = {
     }
   },
   lazyLoadingWelcome: {
-    title: "New Feature: Lazy Loading!",
-    message: "Hey! After popular demand, we have implemented Lazy Loading of icons, so now if you want to enable non-standard icon packs you can enable them in the 'Configuration' section.",
+    title: "Welcome to FossFLOW Community Edition",
+    message: "This is a community-modified fork of FossFLOW with additional features and improvements. Learn more about what's changed and find the source at https://github.com/molikas/FossFLOW_V2 — found a bug or have a feature request? Open an issue on GitHub!",
     configPath: "Click on the Hamburger icon",
     configPath2: "in the top left to access Configuration.",
-    canDisable: "You can disable this behaviour if you wish.",
-    signature: "-Stan"
+    canDisable: "Happy diagramming!",
+    signature: "— FossFLOW Community & Opus"
   },
   viewTabs: {
     addPage: "Add page",
