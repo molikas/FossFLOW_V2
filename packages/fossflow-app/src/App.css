@@ -8,10 +8,68 @@
 .toolbar {
   background-color: #f5f5f5;
   border-bottom: 1px solid #ddd;
-  padding: 10px;
+  padding: 8px 12px;
   display: flex;
-  gap: 10px;
   align-items: center;
+  gap: 0;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.toolbar-center {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.toolbar-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.toolbar-title-unsaved {
+  color: #ff9800;
+}
+
+.session-banner {
+  background: #fff8e1;
+  border-bottom: 1px solid #ffe082;
+  padding: 6px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #795548;
+}
+
+.session-banner-dismiss {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #aaa;
+  font-size: 18px;
+  padding: 0 4px;
+  line-height: 1;
+  margin-left: 12px;
+  flex-shrink: 0;
+}
+
+.session-banner-dismiss:hover {
+  color: #555;
 }
 
 .toolbar button {
@@ -28,11 +86,6 @@
   background-color: #0056b3;
 }
 
-.current-diagram {
-  margin-left: auto;
-  font-size: 14px;
-  color: #666;
-}
 
 .fossflow-container {
   flex: 1;

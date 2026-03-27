@@ -132,10 +132,16 @@
 .action-button.share {
   background: #2196f3;
   color: white;
+  min-width: 36px;
+  padding: 6px 10px;
 }
 
 .action-button.share:hover {
   background: #0b7dda;
+}
+
+.action-button.share.copied {
+  background: #28a745;
 }
 
 .loading {

@@ -22,14 +22,12 @@ export const IconButton = ({
   const theme = useTheme();
   const iconColor = useMemo(() => {
     if (isActive) {
-      return 'grey.200';
+      return 'grey.200'; // light on coloured background
     }
-
     if (disabled) {
-      return 'grey.800';
+      return 'grey.400'; // muted — cannot act
     }
-
-    return 'grey.500';
+    return 'grey.700'; // prominent — can act
   }, [disabled, isActive]);
 
   return (
@@ -41,33 +39,39 @@ export const IconButton = ({
       arrow
       sx={{ bgcolor: 'primary.main' }}
     >
-      <Button
-        variant="text"
-        onClick={onClick}
-        sx={{
-          borderRadius: 0,
-          height: theme.customVars.toolMenu.height,
-          width: theme.customVars.toolMenu.height,
-          maxWidth: '100%',
-          minWidth: 'auto',
-          bgcolor: isActive ? 'primary.light' : undefined,
-          p: 0,
-          m: 0
-        }}
-      >
-        <Box
+      {/* span wrapper lets the Tooltip receive hover even when Button is disabled */}
+      <span style={{ display: 'inline-flex', cursor: disabled ? 'default' : 'pointer' }}>
+        <Button
+          variant="text"
+          onClick={onClick}
+          disabled={disabled}
           sx={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            svg: {
-              color: iconColor
-            }
+            borderRadius: 0,
+            height: theme.customVars.toolMenu.height,
+            width: theme.customVars.toolMenu.height,
+            maxWidth: '100%',
+            minWidth: 'auto',
+            bgcolor: isActive ? 'primary.light' : undefined,
+            p: 0,
+            m: 0,
+            '&.Mui-disabled': { opacity: 1 } // we control opacity via icon color
           }}
         >
-          {Icon}
-        </Box>
-      </Button>
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              svg: {
+                color: iconColor,
+                transition: 'color 0.15s'
+              }
+            }}
+          >
+            {Icon}
+          </Box>
+        </Button>
+      </span>
     </Tooltip>
   );
 };

@@ -82,7 +82,6 @@ export const ViewTabs = () => {
     [editing, switchView]
   );
 
-  const isTitleEditing = editing?.kind === 'title';
   const canDelete = views.length > 1;
 
   const cardBase = {
@@ -109,74 +108,26 @@ export const ViewTabs = () => {
         pointerEvents: 'auto'
       }}
     >
-      {/* Diagram title card */}
+      {/* Diagram title card — read-only; name is managed via Save / file manager */}
       <Card
         sx={{
           ...cardBase,
-          backgroundColor: '#ffffff',
-          '&:hover': isTitleEditing
-            ? { backgroundColor: '#ffffff' }
-            : { backgroundColor: '#f5f5f5' }
+          backgroundColor: '#ffffff'
         }}
       >
-        {isTitleEditing ? (
-          <TextField
-            inputRef={inputRef}
-            value={editingName}
-            onChange={(e) => setEditingName(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onBlur={commitEdit}
-            onClick={(e) => e.stopPropagation()}
-            size="small"
-            variant="standard"
-            sx={{ flexGrow: 1, minWidth: 80, backgroundColor: 'transparent' }}
-            inputProps={{
-              style: { fontSize: '0.875rem', padding: 0, background: 'transparent' }
-            }}
-          />
-        ) : (
-          <Typography
-            variant="body2"
-            noWrap
-            sx={{
-              flexGrow: 1,
-              fontWeight: 600,
-              color: 'text.secondary',
-              fontSize: '0.875rem',
-              lineHeight: 1.5
-            }}
-          >
-            {title}
-          </Typography>
-        )}
-
-        {!isReadonly && (isTitleEditing ? (
-          <Tooltip title={t('renameDiagram')}>
-            <IconButton
-              size="small"
-              onClick={(e) => { e.stopPropagation(); commitEdit(); }}
-              sx={{ ml: 0.5, p: 0.25 }}
-            >
-              <Check sx={{ width: 14, height: 14 }} />
-            </IconButton>
-          </Tooltip>
-        ) : (
-          <Tooltip title={t('renameDiagram')}>
-            <IconButton
-              size="small"
-              onClick={(e) => startEdit({ kind: 'title' }, title, e)}
-              sx={{
-                ml: 0.5,
-                p: 0.25,
-                opacity: 0,
-                '&:hover': { opacity: 1 },
-                '.MuiCard-root:hover &': { opacity: 0.7 }
-              }}
-            >
-              <Edit sx={{ width: 13, height: 13 }} />
-            </IconButton>
-          </Tooltip>
-        ))}
+        <Typography
+          variant="body2"
+          noWrap
+          sx={{
+            flexGrow: 1,
+            fontWeight: 600,
+            color: 'text.secondary',
+            fontSize: '0.875rem',
+            lineHeight: 1.5
+          }}
+        >
+          {title}
+        </Typography>
       </Card>
 
       <ChevronRight sx={{ color: 'text.disabled', width: 18, height: 18, flexShrink: 0 }} />

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DiagramInfo, StorageService } from '../services/storageService';
 import './DiagramManager.css';
 
@@ -6,62 +6,32 @@ interface Props {
   storage: StorageService;
   isServerStorage: boolean;
   onLoadDiagram: (id: string, data: any) => void;
-  onSaveDiagram?: (id: string, name: string) => void;
-  currentDiagramId?: string;
-  currentDiagramData?: any;
   onClose: () => void;
-  defaultMode?: 'save' | 'load';
 }
 
 export const DiagramManager: React.FC<Props> = ({
   storage,
   isServerStorage,
   onLoadDiagram,
-  onSaveDiagram,
-  currentDiagramId,
-  currentDiagramData,
-  onClose,
-  defaultMode = 'load'
+  onClose
 }) => {
   const [diagrams, setDiagrams] = useState<DiagramInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [saveName, setSaveName] = useState('');
-  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
     loadDiagrams();
   }, []);
 
-  // Auto-open save dialog when opened from Save button — only once on initial load
-  const saveDialogShown = useRef(false);
-  useEffect(() => {
-    if (defaultMode === 'save' && !loading && !saveDialogShown.current) {
-      saveDialogShown.current = true;
-      setSaveName(currentDiagramData?.title || currentDiagramData?.name || '');
-      setShowSaveDialog(true);
-    }
-  }, [defaultMode, loading]);
-
   const loadDiagrams = async () => {
     try {
       setLoading(true);
       setError(null);
-
-      console.log(
-        `DiagramManager: Using ${isServerStorage ? 'server' : 'session'} storage`
-      );
-
-      // Load diagram list
-      console.log('DiagramManager: Loading diagram list...');
       const list = await storage.listDiagrams();
-      console.log(`DiagramManager: Loaded ${list.length} diagrams`);
       setDiagrams(list);
     } catch (err) {
-      const errorMsg =
-        err instanceof Error ? err.message : 'Failed to load diagrams';
-      console.error('DiagramManager error:', err);
-      setError(errorMsg);
+      setError(err instanceof Error ? err.message : 'Failed to load diagrams');
     } finally {
       setLoading(false);
     }
@@ -71,137 +41,45 @@ export const DiagramManager: React.FC<Props> = ({
     try {
       setLoading(true);
       setError(null);
-      console.log(`DiagramManager: Loading diagram ${id}...`);
-
       const data = await storage.loadDiagram(id);
-
-      console.log(`DiagramManager: Successfully loaded diagram ${id}`);
       onLoadDiagram(id, data);
       onClose();
     } catch (err) {
-      console.error(`DiagramManager: Failed to load diagram ${id}:`, err);
       setError(err instanceof Error ? err.message : 'Failed to load diagram');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this diagram?')) {
-      return;
-    }
-
+  const handleDelete = async (id: string, name: string) => {
+    if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
     try {
       await storage.deleteDiagram(id);
-      await loadDiagrams(); // Refresh list
+      await loadDiagrams();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete diagram');
     }
   };
 
-  const handleCopyShareLink = (id: string) => {
-    const shareUrl = `${window.location.origin}/display/${id}`;
-    navigator.clipboard
-      .writeText(shareUrl)
-      .then(() => {
-        alert(`Share link copied to clipboard:\n${shareUrl}`);
-      })
-      .catch(() => {
-        const textArea = document.createElement('textarea');
-        textArea.value = shareUrl;
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand('copy');
-
-        // Safely remove the temporary element
-        try {
-          if (textArea.parentNode === document.body) {
-            document.body.removeChild(textArea);
-          }
-        } catch (err) {
-          console.warn('Failed to remove temporary textarea:', err);
-        }
-
-        alert(`Share link copied to clipboard:\n${shareUrl}`);
-      });
-  };
-
-  const handleSave = async () => {
-    if (!saveName.trim()) {
-      setError('Please enter a diagram name');
-      return;
-    }
-
-    try {
-      // Check if a diagram with this name already exists (excluding current diagram)
-      const existingDiagram = diagrams.find((d) => {
-        return d.name === saveName.trim() && d.id !== currentDiagramId;
-      });
-
-      if (existingDiagram) {
-        const confirmOverwrite = window.confirm(
-          `A diagram named "${saveName}" already exists. This will overwrite it. Are you sure you want to continue?`
-        );
-        if (!confirmOverwrite) {
-          return;
-        }
-
-        // Delete the existing diagram first
-        await storage.deleteDiagram(existingDiagram.id);
-      }
-
-      /**
-       * Icon Persistence: Save ALL icons (default + imported)
-       *
-       * currentDiagramData comes from parent's currentModel/diagramData which includes:
-       * - All default icon collections (isoflow, aws, gcp, azure, kubernetes)
-       * - All imported custom icons (collection='imported')
-       *
-       * This ensures when loading, we have the complete icon set and don't lose
-       * any custom imported icons.
-       */
-      const dataToSave = {
-        ...currentDiagramData,
-        name: saveName
-      };
-
-      console.log(
-        `DiagramManager: Saving diagram with ${dataToSave.icons?.length || 0} icons`
-      );
-      const importedCount = (dataToSave.icons || []).filter((icon: any) => {
-        return icon.collection === 'imported';
-      }).length;
-      console.log(`DiagramManager: Including ${importedCount} imported icons`);
-
-      const currentDiagram = diagrams.find((d) => d.id === currentDiagramId);
-      const isSameName = currentDiagram?.name === saveName.trim();
-
-      let savedId: string;
-      if (currentDiagramId && isSameName) {
-        // Same file, same name: overwrite in place
-        await storage.saveDiagram(currentDiagramId, dataToSave);
-        savedId = currentDiagramId;
-      } else {
-        // Different name (save as) or new diagram: always create a new file
-        savedId = await storage.createDiagram(dataToSave);
-      }
-
-      // Notify parent so it can update currentDiagram id/name
-      onSaveDiagram?.(savedId, saveName.trim());
-
-      setShowSaveDialog(false);
-      setSaveName('');
-      await loadDiagrams(); // Refresh list
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save diagram');
-    }
+  const handleShare = (id: string) => {
+    const url = `${window.location.origin}/display/${id}`;
+    navigator.clipboard.writeText(url).catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = url;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    });
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
   };
 
   return (
     <div className="diagram-manager-overlay">
       <div className="diagram-manager">
         <div className="diagram-manager-header">
-          <h2>Diagram Manager</h2>
+          <h2>Open Diagram</h2>
           <button className="close-button" onClick={onClose}>×</button>
         </div>
 
@@ -209,26 +87,9 @@ export const DiagramManager: React.FC<Props> = ({
           <span className={`storage-badge ${isServerStorage ? 'server' : 'local'}`}>
             {isServerStorage ? '🌐 Server Storage' : '💾 Local Storage'}
           </span>
-          {isServerStorage && (
-            <span className="storage-note">
-              Diagrams are saved on the server and available across all devices
-            </span>
-          )}
         </div>
 
         {error && <div className="error-message">{error}</div>}
-
-        <div className="diagram-manager-actions">
-          <button
-            className="action-button primary"
-            onClick={() => {
-              setSaveName(currentDiagramData?.title || currentDiagramData?.name || '');
-              setShowSaveDialog(true);
-            }}
-          >
-            💾 Save Current Diagram
-          </button>
-        </div>
 
         {loading ? (
           <div className="loading">Loading diagrams...</div>
@@ -251,22 +112,24 @@ export const DiagramManager: React.FC<Props> = ({
                   </div>
                   <div className="diagram-actions">
                     <button
-                      className="action-button"
+                      className="action-button primary"
                       onClick={() => handleLoad(diagram.id)}
                       disabled={loading}
                     >
-                      {loading ? 'Loading...' : 'Load'}
+                      Open
                     </button>
-                    <button
-                      className="action-button share"
-                      onClick={() => handleCopyShareLink(diagram.id)}
-                      title="Copy shareable link"
-                    >
-                      Share
-                    </button>
+                    {isServerStorage && (
+                      <button
+                        className={`action-button share${copiedId === diagram.id ? ' copied' : ''}`}
+                        onClick={() => handleShare(diagram.id)}
+                        title="Copy share link"
+                      >
+                        {copiedId === diagram.id ? '✓' : '🔗'}
+                      </button>
+                    )}
                     <button
                       className="action-button danger"
-                      onClick={() => handleDelete(diagram.id)}
+                      onClick={() => handleDelete(diagram.id, diagram.name)}
                       disabled={loading}
                     >
                       Delete
@@ -275,24 +138,6 @@ export const DiagramManager: React.FC<Props> = ({
                 </div>
               ))
             )}
-          </div>
-        )}
-
-        {showSaveDialog && (
-          <div className="save-dialog">
-            <h3>Save Diagram</h3>
-            <input
-              type="text"
-              placeholder="Diagram name"
-              value={saveName}
-              onChange={(e) => setSaveName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-              autoFocus
-            />
-            <div className="dialog-buttons">
-              <button onClick={handleSave}>Save</button>
-              <button onClick={() => setShowSaveDialog(false)}>Cancel</button>
-            </div>
           </div>
         )}
       </div>

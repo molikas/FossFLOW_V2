@@ -69,9 +69,13 @@ function EditorPage() {
   const [lastAutoSave, setLastAutoSave] = useState<Date | null>(null);
   const [showStorageManager, setShowStorageManager] = useState(false);
   const [showDiagramManager, setShowDiagramManager] = useState(false);
-  const [diagramManagerMode, setDiagramManagerMode] = useState<'save' | 'load'>('load');
   const [showSharePopover, setShowSharePopover] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+  const [showSaveAsDialog, setShowSaveAsDialog] = useState(false);
+  const [saveAsName, setSaveAsName] = useState('');
+  const [sessionWarningDismissed, setSessionWarningDismissed] = useState(
+    () => sessionStorage.getItem('foss-session-warning-dismissed') === '1'
+  );
   const serverStorageAvailable = isStorageServer && isStorageInitialized;
   const isReadonlyUrl =
     window.location.pathname.startsWith('/display/') && readonlyDiagramId;
@@ -141,6 +145,7 @@ function EditorPage() {
         setCurrentDiagram(readonlyDiagram);
         setDiagramName(readonlyDiagram.name);
         setCurrentModel(dataWithIcons);
+        isAfterLoadRef.current = true;
         isoflowRef.current?.load(dataWithIcons);
       } catch (error) {
         alert(t('dialog.readOnly.failed'));
@@ -153,6 +158,10 @@ function EditorPage() {
   const currentModelRef = useRef<DiagramData | null>(null);
   useEffect(() => { currentModelRef.current = currentModel; }, [currentModel]);
 
+  // Suppress the spurious onModelUpdated that fires immediately after isoflowRef.current.load().
+  // Loading is not a user edit — it should not mark the diagram as having unsaved changes.
+  const isAfterLoadRef = useRef(false);
+
   // Skip initial mount so StrictMode remount with stale currentModelRef doesn't trigger a spurious load.
   // Only fire when loadedIcons genuinely changes after mount (e.g. user enables an icon pack).
   const iconPackEffectMountedRef = useRef(false);
@@ -164,6 +173,7 @@ function EditorPage() {
     if (!isoflowRef.current || !currentModelRef.current) return;
     const importedIcons = (currentModelRef.current.icons || []).filter((icon: any) => icon.collection === 'imported');
     const mergedIcons = [...iconPackManager.loadedIcons, ...importedIcons];
+    isAfterLoadRef.current = true;
     isoflowRef.current.load({ ...currentModelRef.current, icons: mergedIcons });
   }, [iconPackManager.loadedIcons]);
 
@@ -347,6 +357,7 @@ function EditorPage() {
     setCurrentModel(dataWithIcons);
     setShowLoadDialog(false);
     setHasUnsavedChanges(false);
+    isAfterLoadRef.current = true;
     isoflowRef.current?.load(dataWithIcons);
 
     // Save as last opened (without icons)
@@ -393,6 +404,7 @@ function EditorPage() {
       setDiagramName('');
       setCurrentModel(emptyDiagram);
       setHasUnsavedChanges(false);
+      isAfterLoadRef.current = true;
       isoflowRef.current?.load(emptyDiagram);
 
       // Clear last opened
@@ -402,13 +414,9 @@ function EditorPage() {
   };
 
   const handleModelUpdated = (model: any) => {
-    // Store the current model state whenever it updates
-    // The model from Isoflow contains the COMPLETE state including all icons
-
-    // Simply store the complete model as-is since it has everything
     const updatedModel = {
       title: model.title || diagramName || 'Untitled',
-      icons: model.icons || [], // This already includes ALL icons (default + imported)
+      icons: model.icons || [],
       colors: model.colors || defaultColors,
       items: model.items || [],
       views: model.views || [],
@@ -416,6 +424,12 @@ function EditorPage() {
     };
 
     setCurrentModel(updatedModel);
+
+    // Suppress the first onModelUpdated after a programmatic load — it is not a user edit.
+    if (isAfterLoadRef.current) {
+      isAfterLoadRef.current = false;
+      return;
+    }
 
     if (!isReadonlyUrl) {
       setHasUnsavedChanges(true);
@@ -560,6 +574,7 @@ function EditorPage() {
     setCurrentModel(mergedData);
     setHasUnsavedChanges(false);
     console.log(`App: Loading diagram ${id} via imperative ref`);
+    isAfterLoadRef.current = true;
     isoflowRef.current?.load(mergedData);
 
     console.log(
@@ -615,48 +630,91 @@ function EditorPage() {
     ]
   );
 
-  // Called by DiagramManager after a successful server save
-  const handleDiagramManagerSave = useCallback((id: string, name: string) => {
-    const updatedDiagram = {
-      id,
-      name,
-      data: currentModel || diagramData,
-      createdAt: currentDiagram?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+  // Build save payload from current model state
+  const buildSaveData = useCallback(() => {
+    const importedIcons = (currentModel?.icons || diagramData.icons || []).filter(
+      (icon: any) => icon.collection === 'imported'
+    );
+    return {
+      title: currentModel?.title || diagramName || 'Untitled Diagram',
+      icons: importedIcons,
+      colors: currentModel?.colors || diagramData.colors || [],
+      items: currentModel?.items || diagramData.items || [],
+      views: currentModel?.views || diagramData.views || [],
+      fitToScreen: true
     };
-    setCurrentDiagram(updatedDiagram);
-    setDiagramName(name);
-    setHasUnsavedChanges(false);
-  }, [currentModel, diagramData, currentDiagram]);
+  }, [currentModel, diagramData, diagramName]);
 
   // Toolbar action handlers
-  const handleSaveClick = () => {
-    if (serverStorageAvailable) {
-      setDiagramManagerMode('save');
-      setShowDiagramManager(true);
+  const handleSaveClick = useCallback(async () => {
+    if (serverStorageAvailable && storage) {
+      if (currentDiagram) {
+        // Direct server save — no dialog
+        try {
+          const data = buildSaveData();
+          await storage.saveDiagram(currentDiagram.id, data as any);
+          setHasUnsavedChanges(false);
+          setLastAutoSave(new Date());
+        } catch (e) {
+          console.error('Save failed:', e);
+          alert('Failed to save diagram. Please try again.');
+        }
+      } else {
+        // New diagram — show Save As dialog
+        setSaveAsName(currentModel?.title || 'Untitled Diagram');
+        setShowSaveAsDialog(true);
+      }
     } else {
-      setShowSaveDialog(true);
+      // Session fallback
+      if (currentDiagram) {
+        saveDiagram();
+      } else {
+        setShowSaveDialog(true);
+      }
+    }
+  }, [serverStorageAvailable, storage, currentDiagram, buildSaveData, currentModel]);
+
+  const handleSaveAs = async () => {
+    if (!saveAsName.trim() || !storage) return;
+    try {
+      const name = saveAsName.trim();
+      // Use saveAsName as both storage name and diagram title — keep them in sync
+      const data = { ...buildSaveData(), name, title: name };
+      const id = await storage.createDiagram(data as any);
+      const saved: SavedDiagram = {
+        id,
+        name,
+        data,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      setCurrentDiagram(saved);
+      setDiagramName(name);
+      setHasUnsavedChanges(false);
+      setLastAutoSave(new Date());
+      setShowSaveAsDialog(false);
+      setSaveAsName('');
+      // Sync canvas title to match the saved name
+      if (isoflowRef.current && currentModel) {
+        isAfterLoadRef.current = true;
+        isoflowRef.current.load({ ...currentModel, title: name });
+      }
+    } catch (e) {
+      console.error('Save As failed:', e);
+      alert('Failed to save diagram. Please try again.');
     }
   };
 
-  const handleLoadClick = () => {
+  const handleOpenClick = useCallback(() => {
     if (serverStorageAvailable) {
-      setDiagramManagerMode('load');
       setShowDiagramManager(true);
     } else {
       setShowLoadDialog(true);
     }
-  };
+  }, [serverStorageAvailable]);
 
-  const handleShareClick = () => {
-    if (!serverStorageAvailable) {
-      alert(t('share.requiresServer', 'Sharing requires server storage. Save to server first.'));
-      return;
-    }
-    if (!currentDiagram) {
-      alert(t('share.saveFist', 'Save your diagram first, then you can share it.'));
-      return;
-    }
+  const handleShareClick = useCallback(() => {
+    if (!serverStorageAvailable || !currentDiagram) return;
     const url = `${window.location.origin}/display/${currentDiagram.id}`;
     navigator.clipboard.writeText(url).catch(() => {
       const ta = document.createElement('textarea');
@@ -669,7 +727,7 @@ function EditorPage() {
     setShareCopied(true);
     setShowSharePopover(true);
     setTimeout(() => setShareCopied(false), 2500);
-  };
+  }, [serverStorageAvailable, currentDiagram]);
 
   const handleShareUrlClick = (e: { target: EventTarget | null }) => {
     (e.target as HTMLInputElement).select();
@@ -690,10 +748,11 @@ function EditorPage() {
 
   // Auto-save functionality
   useEffect(() => {
-    if (!currentModel || !hasUnsavedChanges || !currentDiagram) return;
+    if (!currentModel || !hasUnsavedChanges) return;
+    // Server auto-save requires an existing diagram ID
+    if (serverStorageAvailable && !currentDiagram) return;
 
     const autoSaveTimer = setTimeout(() => {
-      // Include imported icons in auto-save
       const importedIcons = (
         currentModel?.icons ||
         diagramData.icons ||
@@ -703,42 +762,37 @@ function EditorPage() {
       });
 
       const savedData = {
-        title: diagramName || currentDiagram.name,
-        icons: importedIcons, // Save imported icons in auto-save
+        title: diagramName || currentDiagram?.name || 'Untitled Diagram',
+        icons: importedIcons,
         colors: currentModel.colors || [],
         items: currentModel.items || [],
         views: currentModel.views || [],
         fitToScreen: true
       };
 
-      const updatedDiagram: SavedDiagram = {
-        ...currentDiagram,
-        data: savedData,
-        updatedAt: new Date().toISOString()
-      };
-
-      setDiagrams((prevDiagrams) => {
-        return prevDiagrams.map((d) => {
-          return d.id === currentDiagram.id ? updatedDiagram : d;
-        });
-      });
-
-      // Persist to server when available, else localStorage
+      // Persist to server when available and diagram is associated
       if (serverStorageAvailable && storage && currentDiagram) {
+        const updatedDiagram: SavedDiagram = {
+          ...currentDiagram,
+          data: savedData,
+          updatedAt: new Date().toISOString()
+        };
+        setDiagrams((prevDiagrams) =>
+          prevDiagrams.map((d) => d.id === currentDiagram.id ? updatedDiagram : d)
+        );
         storage.saveDiagram(currentDiagram.id, savedData as any).then(() => {
           setLastAutoSave(new Date());
-          setHasUnsavedChanges(false);
+          // Note: hasUnsavedChanges intentionally NOT reset here.
+          // Auto-save is a safety net; only explicit Save clears the unsaved indicator.
         }).catch((e) => {
           console.error('Auto-save to server failed:', e);
         });
       } else {
+        // Session fallback — saves regardless of whether diagram is associated
         try {
-          localStorage.setItem(
-            'fossflow-last-opened-data',
-            JSON.stringify(savedData)
-          );
+          localStorage.setItem('fossflow-last-opened-data', JSON.stringify(savedData));
           setLastAutoSave(new Date());
-          setHasUnsavedChanges(false);
+          // Note: hasUnsavedChanges intentionally NOT reset here.
         } catch (e) {
           console.error('Auto-save failed:', e);
           if (e instanceof DOMException && e.name === 'QuotaExceededError') {
@@ -747,11 +801,9 @@ function EditorPage() {
           }
         }
       }
-    }, 5000); // Auto-save after 5 seconds of changes
+    }, 5000);
 
-    return () => {
-      return clearTimeout(autoSaveTimer);
-    };
+    return () => clearTimeout(autoSaveTimer);
   }, [currentModel, hasUnsavedChanges, currentDiagram, diagramName, serverStorageAvailable, storage]);
 
   // Warn before closing if there are unsaved changes
@@ -776,20 +828,13 @@ function EditorPage() {
       // Ctrl+S or Cmd+S for Save
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
-
-        // Quick save if current diagram exists and has unsaved changes
-        if (currentDiagram && hasUnsavedChanges) {
-          saveDiagram();
-        } else {
-          // Otherwise show save dialog
-          setShowSaveDialog(true);
-        }
+        handleSaveClick();
       }
 
-      // Ctrl+O or Cmd+O for Open/Load
+      // Ctrl+O or Cmd+O for Open
       if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
         e.preventDefault();
-        setShowLoadDialog(true);
+        handleOpenClick();
       }
     };
 
@@ -797,87 +842,89 @@ function EditorPage() {
     return () => {
       return window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [currentDiagram, hasUnsavedChanges]);
+  }, [handleSaveClick, handleOpenClick]);
 
   return (
     <div className="App">
       <div className="toolbar">
-        {!isReadonlyUrl && (
-          <>
-            <button className="toolbar-btn" onClick={handleSaveClick} title={t('nav.save', 'Save') + ' (Ctrl+S)'}>
-              💾 {t('nav.save', 'Save')}
-            </button>
-            <button className="toolbar-btn" onClick={handleLoadClick} title={t('nav.load', 'Load') + ' (Ctrl+O)'}>
-              📂 {t('nav.load', 'Load')}
-            </button>
-            <div style={{ position: 'relative' }}>
+        <div className="toolbar-left">
+          {!isReadonlyUrl && (
+            <>
               <button
                 className="toolbar-btn"
-                ref={shareButtonRef}
-                onClick={handleShareClick}
-                title={t('nav.share', 'Share')}
-                disabled={!serverStorageAvailable || !currentDiagram}
-                style={{ opacity: (!serverStorageAvailable || !currentDiagram) ? 0.5 : 1 }}
+                onClick={handleSaveClick}
+                title={t('nav.save', 'Save') + ' (Ctrl+S)'}
+                disabled={!!currentDiagram && !hasUnsavedChanges}
+                style={{ opacity: (!!currentDiagram && !hasUnsavedChanges) ? 0.5 : 1 }}
               >
-                🔗 {t('nav.share', 'Share')}
+                💾 {t('nav.save', 'Save')}
               </button>
-              {showSharePopover && currentDiagram && (
-                <div className="share-popover">
-                  <div className="share-popover-header">
-                    <span>{t('share.title', 'Share Diagram')}</span>
-                    <button className="share-popover-close" onClick={() => setShowSharePopover(false)}>×</button>
+              <button className="toolbar-btn" onClick={handleOpenClick} title={t('nav.load', 'Load') + ' (Ctrl+O)'}>
+                📂 {t('nav.diagrams', 'Diagrams')}
+              </button>
+              <div style={{ position: 'relative' }}>
+                <button
+                  className="toolbar-btn"
+                  ref={shareButtonRef}
+                  onClick={handleShareClick}
+                  title={t('nav.share', 'Share')}
+                  disabled={!serverStorageAvailable || !currentDiagram}
+                  style={{ opacity: (!serverStorageAvailable || !currentDiagram) ? 0.5 : 1 }}
+                >
+                  🔗 {t('nav.share', 'Share')}
+                </button>
+                {showSharePopover && currentDiagram && (
+                  <div className="share-popover">
+                    <div className="share-popover-header">
+                      <span>{t('share.title', 'Share Diagram')}</span>
+                      <button className="share-popover-close" onClick={() => setShowSharePopover(false)}>×</button>
+                    </div>
+                    <p className="share-popover-hint">{t('share.hint', 'Anyone with this link can view the diagram in read-only mode.')}</p>
+                    <div className="share-popover-row">
+                      <input
+                        className="share-popover-url"
+                        type="text"
+                        readOnly
+                        value={`${window.location.origin}/display/${currentDiagram.id}`}
+                        onClick={handleShareUrlClick}
+                      />
+                      <button
+                        className={`share-popover-copy${shareCopied ? ' copied' : ''}`}
+                        onClick={handleShareClick}
+                      >
+                        {shareCopied ? '✓ Copied!' : 'Copy'}
+                      </button>
+                    </div>
                   </div>
-                  <p className="share-popover-hint">{t('share.hint', 'Anyone with this link can view the diagram in read-only mode.')}</p>
-                  <div className="share-popover-row">
-                    <input
-                      className="share-popover-url"
-                      type="text"
-                      readOnly
-                      value={`${window.location.origin}/display/${currentDiagram.id}`}
-                      onClick={handleShareUrlClick}
-                    />
-                    <button
-                      className={`share-popover-copy${shareCopied ? ' copied' : ''}`}
-                      onClick={handleShareClick}
-                    >
-                      {shareCopied ? '✓ Copied!' : 'Copy'}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </>
-        )}
-        {isReadonlyUrl && (
-          <div className="readonly-badge">
-            {t('dialog.readOnly.mode')}
-          </div>
-        )}
-        <ChangeLanguage />
-        <span className="current-diagram">
-          {isReadonlyUrl ? (
-            <span>
-              {t('status.current')}: {diagramName}
-            </span>
-          ) : (
-            <>
-              {currentDiagram
-                ? `${t('status.current')}: ${currentDiagram.name}`
-                : diagramName || t('status.untitled')}
-              {hasUnsavedChanges && (
-                <span style={{ color: '#ff9800', marginLeft: '10px' }}>
-                  • {t('status.modified')}
-                </span>
-              )}
-              {!serverStorageAvailable && (
-                <span style={{ fontSize: '12px', color: '#e53935', marginLeft: '10px', fontWeight: 500 }}>
-                  ({t('status.sessionStorageNote')})
-                </span>
-              )}
+                )}
+              </div>
             </>
           )}
-        </span>
+          {isReadonlyUrl && (
+            <div className="readonly-badge">{t('dialog.readOnly.mode')}</div>
+          )}
+        </div>
+
+        <div className="toolbar-center" />
+
+        <div className="toolbar-right">
+          <ChangeLanguage />
+        </div>
       </div>
+
+      {/* Session storage banner — shown once per session, dismissible */}
+      {!serverStorageAvailable && !isReadonlyUrl && !sessionWarningDismissed && (
+        <div className="session-banner">
+          <span>⚠️ {t('status.sessionStorageNote', 'Session storage only — diagrams will be lost when you close this tab. Use a server backend for persistence.')}</span>
+          <button
+            className="session-banner-dismiss"
+            onClick={() => {
+              setSessionWarningDismissed(true);
+              sessionStorage.setItem('foss-session-warning-dismissed', '1');
+            }}
+          >×</button>
+        </div>
+      )}
 
       <div className="fossflow-container">
         {iconPackManager.isInitialized && frozenInitialDataRef.current ? (
@@ -899,16 +946,6 @@ function EditorPage() {
         <div className="dialog-overlay">
           <div className="dialog">
             <h2>{t('dialog.save.title')}</h2>
-            <div className="session-warning">
-              <strong>⚠️ {t('dialog.save.warningTitle', 'Session storage only')}</strong>
-              <p>{t('dialog.save.warningMessage', 'This diagram is saved in your browser session only and will be lost when you close the tab.')}</p>
-              <button
-                className="export-json-btn"
-                onClick={() => { setShowSaveDialog(false); setShowExportDialog(true); }}
-              >
-                💾 {t('dialog.save.btnExportJson', 'Export as JSON instead (recommended)')}
-              </button>
-            </div>
             <input
               type="text"
               placeholder={t('dialog.save.placeholder')}
@@ -940,10 +977,6 @@ function EditorPage() {
         <div className="dialog-overlay">
           <div className="dialog">
             <h2>{t('dialog.load.title')}</h2>
-            <div className="session-warning">
-              <strong>⚠️ {t('dialog.load.noteTitle', 'Session storage only')}</strong>
-              <p>{t('dialog.load.noteMessage', 'Only diagrams from this browser session are listed. Diagrams from previous sessions are not available here — use JSON export/import for permanent storage.')}</p>
-            </div>
             <div className="diagram-list">
               {diagrams.length === 0 ? (
                 <p>{t('dialog.load.noSavedDiagrams')}</p>
@@ -1040,19 +1073,37 @@ function EditorPage() {
         />
       )}
 
+      {/* Save As Dialog (server — new diagram) */}
+      {showSaveAsDialog && (
+        <div className="dialog-overlay">
+          <div className="dialog">
+            <h2>Save Diagram</h2>
+            <p style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#666' }}>
+              Choose a name to save this diagram.
+            </p>
+            <input
+              type="text"
+              placeholder="File name"
+              value={saveAsName}
+              onChange={(e) => setSaveAsName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSaveAs()}
+              autoFocus
+            />
+            <div className="dialog-buttons">
+              <button onClick={handleSaveAs}>Save</button>
+              <button onClick={() => { setShowSaveAsDialog(false); setSaveAsName(''); }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Diagram Manager */}
       {showDiagramManager && (
         <DiagramManager
           storage={storage!}
           isServerStorage={isStorageServer}
           onLoadDiagram={handleDiagramManagerLoad}
-          onSaveDiagram={handleDiagramManagerSave}
-          currentDiagramId={currentDiagram?.id}
-          currentDiagramData={currentModel || diagramData}
-          defaultMode={diagramManagerMode}
-          onClose={() => {
-            setShowDiagramManager(false);
-          }}
+          onClose={() => setShowDiagramManager(false)}
         />
       )}
 
