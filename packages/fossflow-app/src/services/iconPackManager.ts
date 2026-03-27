@@ -44,11 +44,13 @@ export const saveLazyLoadingPreference = (enabled: boolean): void => {
 
 export const loadEnabledPacks = (): IconPackName[] => {
   const stored = localStorage.getItem(ENABLED_PACKS_KEY);
-  if (!stored) return [];
+  // Default: all packs enabled so AWS/GCP/Azure/K8s icons are available out of the box.
+  // Users can opt individual packs off in Settings → Icon Packs.
+  if (!stored) return ['aws', 'gcp', 'azure', 'kubernetes'];
   try {
     return JSON.parse(stored) as IconPackName[];
   } catch {
-    return [];
+    return ['aws', 'gcp', 'azure', 'kubernetes'];
   }
 };
 
@@ -235,25 +237,27 @@ export const useIconPackManager = (coreIcons: any[]) => {
     }
   }, [packInfo, enabledPacks, loadPack]);
 
+  const [isInitialized, setIsInitialized] = useState(false);
+
   // Initialize: Load enabled packs or all packs depending on lazy loading setting
   useEffect(() => {
     const initialize = async () => {
       if (!lazyLoadingEnabled) {
-        // Load all packs immediately
         await loadAllPacks();
       } else {
-        // Load only enabled packs
         for (const pack of enabledPacks) {
           if (!packInfo[pack].loaded && !packInfo[pack].loading) {
             await loadPack(pack);
           }
         }
       }
+      setIsInitialized(true);
     };
     initialize();
   }, []); // Only run once on mount
 
   return {
+    isInitialized,
     lazyLoadingEnabled,
     enabledPacks,
     packInfo,

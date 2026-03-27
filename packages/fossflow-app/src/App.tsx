@@ -577,6 +577,20 @@ function EditorPage() {
     [iconPackManager.togglePack]
   );
 
+  // Freeze initialData with the full icon set the first time packs finish loading.
+  // Setting a ref during render is synchronous — it happens before <Isoflow> mounts,
+  // so the component always receives the correct icon list on its very first render.
+  const frozenInitialDataRef = useRef<DiagramData | null>(null);
+  if (iconPackManager.isInitialized && frozenInitialDataRef.current === null) {
+    const importedIcons = (diagramData.icons || []).filter(
+      (icon: any) => icon.collection === 'imported'
+    );
+    frozenInitialDataRef.current = {
+      ...diagramData,
+      icons: [...iconPackManager.loadedIcons, ...importedIcons],
+    };
+  }
+
   // Memoize the iconPackManager prop so Isoflow's useEffect doesn't fire on every App render.
   // Without this, the inline object literal is a new reference every render, causing
   // setIconPackManager to update the store on every render, triggering a render cascade.
@@ -799,14 +813,18 @@ function EditorPage() {
       </div>
 
       <div className="fossflow-container">
-        <Isoflow
-          ref={isoflowRef}
-          initialData={diagramData}
-          onModelUpdated={handleModelUpdated}
-          editorMode={isReadonlyUrl ? 'EXPLORABLE_READONLY' : 'EDITABLE'}
-          locale={currentLocale}
-          iconPackManager={iconPackManagerProp}
-        />
+        {iconPackManager.isInitialized && frozenInitialDataRef.current ? (
+          <Isoflow
+            ref={isoflowRef}
+            initialData={frozenInitialDataRef.current}
+            onModelUpdated={handleModelUpdated}
+            editorMode={isReadonlyUrl ? 'EXPLORABLE_READONLY' : 'EDITABLE'}
+            locale={currentLocale}
+            iconPackManager={iconPackManagerProp}
+          />
+        ) : (
+          <div className="loading-screen">Loading icons…</div>
+        )}
       </div>
 
       {/* Save Dialog */}

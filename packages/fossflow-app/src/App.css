@@ -47,6 +47,15 @@
   height: 100%;
 }
 
+.loading-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #888;
+  font-size: 14px;
+}
+
 .dialog-overlay {
   position: fixed;
   top: 0;
