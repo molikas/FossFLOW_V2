@@ -24,6 +24,8 @@ export const ViewTabs = () => {
   const title = useModelStore((state) => state.title);
   const modelActions = useModelStore((state) => state.actions);
   const currentViewId = useUiStateStore((state) => state.view);
+  const editorMode = useUiStateStore((state) => state.editorMode);
+  const isReadonly = editorMode !== 'EDITABLE';
   const { createView, deleteView, updateView, switchView } = useScene();
 
   const [editing, setEditing] = useState<EditingTarget>(null);
@@ -148,7 +150,7 @@ export const ViewTabs = () => {
           </Typography>
         )}
 
-        {isTitleEditing ? (
+        {!isReadonly && (isTitleEditing ? (
           <Tooltip title={t('renameDiagram')}>
             <IconButton
               size="small"
@@ -174,7 +176,7 @@ export const ViewTabs = () => {
               <Edit sx={{ width: 13, height: 13 }} />
             </IconButton>
           </Tooltip>
-        )}
+        ))}
       </Card>
 
       <ChevronRight sx={{ color: 'text.disabled', width: 18, height: 18, flexShrink: 0 }} />
@@ -234,7 +236,7 @@ export const ViewTabs = () => {
                 </Typography>
               )}
 
-              {isViewEditing ? (
+              {!isReadonly && (isViewEditing ? (
                 <Tooltip title={t('renameDiagram')}>
                   <IconButton
                     size="small"
@@ -262,9 +264,9 @@ export const ViewTabs = () => {
                     <Edit sx={{ width: 13, height: 13, color: isActive ? 'white' : 'action' }} />
                   </IconButton>
                 </Tooltip>
-              )}
+              ))}
 
-              {canDelete && !isViewEditing && (
+              {!isReadonly && canDelete && !isViewEditing && (
                 <Tooltip title={t('deletePage')}>
                   <IconButton
                     size="small"
@@ -286,23 +288,25 @@ export const ViewTabs = () => {
         );
       })}
 
-      {/* Add view button */}
-      <Tooltip title={t('addPage')}>
-        <IconButton
-          size="small"
-          onClick={() => createView()}
-          sx={{
-            p: 0.75,
-            backgroundColor: '#ffffff',
-            border: 1,
-            borderColor: 'grey.300',
-            borderRadius: 1,
-            '&:hover': { backgroundColor: '#f5f5f5' }
-          }}
-        >
-          <Add sx={{ width: 16, height: 16 }} />
-        </IconButton>
-      </Tooltip>
+      {/* Add view button — editable mode only */}
+      {!isReadonly && (
+        <Tooltip title={t('addPage')}>
+          <IconButton
+            size="small"
+            onClick={() => createView()}
+            sx={{
+              p: 0.75,
+              backgroundColor: '#ffffff',
+              border: 1,
+              borderColor: 'grey.300',
+              borderRadius: 1,
+              '&:hover': { backgroundColor: '#f5f5f5' }
+            }}
+          >
+            <Add sx={{ width: 16, height: 16 }} />
+          </IconButton>
+        </Tooltip>
+      )}
     </Box>
   );
 };

@@ -52,6 +52,7 @@ function EditorPage() {
   const { readonlyDiagramId } = useParams<{ readonlyDiagramId: string }>();
 
   const isoflowRef = useRef<IsoflowRef>(null);
+  const shareButtonRef = useRef<HTMLButtonElement>(null);
   const { storage, isServerStorage: isStorageServer, isInitialized: isStorageInitialized } = useStorage();
 
   const [diagrams, setDiagrams] = useState<SavedDiagram[]>([]);
@@ -68,6 +69,9 @@ function EditorPage() {
   const [lastAutoSave, setLastAutoSave] = useState<Date | null>(null);
   const [showStorageManager, setShowStorageManager] = useState(false);
   const [showDiagramManager, setShowDiagramManager] = useState(false);
+  const [diagramManagerMode, setDiagramManagerMode] = useState<'save' | 'load'>('load');
+  const [showSharePopover, setShowSharePopover] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
   const serverStorageAvailable = isStorageServer && isStorageInitialized;
   const isReadonlyUrl =
     window.location.pathname.startsWith('/display/') && readonlyDiagramId;
@@ -611,6 +615,79 @@ function EditorPage() {
     ]
   );
 
+  // Called by DiagramManager after a successful server save
+  const handleDiagramManagerSave = useCallback((id: string, name: string) => {
+    const updatedDiagram = {
+      id,
+      name,
+      data: currentModel || diagramData,
+      createdAt: currentDiagram?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    setCurrentDiagram(updatedDiagram);
+    setDiagramName(name);
+    setHasUnsavedChanges(false);
+  }, [currentModel, diagramData, currentDiagram]);
+
+  // Toolbar action handlers
+  const handleSaveClick = () => {
+    if (serverStorageAvailable) {
+      setDiagramManagerMode('save');
+      setShowDiagramManager(true);
+    } else {
+      setShowSaveDialog(true);
+    }
+  };
+
+  const handleLoadClick = () => {
+    if (serverStorageAvailable) {
+      setDiagramManagerMode('load');
+      setShowDiagramManager(true);
+    } else {
+      setShowLoadDialog(true);
+    }
+  };
+
+  const handleShareClick = () => {
+    if (!serverStorageAvailable) {
+      alert(t('share.requiresServer', 'Sharing requires server storage. Save to server first.'));
+      return;
+    }
+    if (!currentDiagram) {
+      alert(t('share.saveFist', 'Save your diagram first, then you can share it.'));
+      return;
+    }
+    const url = `${window.location.origin}/display/${currentDiagram.id}`;
+    navigator.clipboard.writeText(url).catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = url;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    });
+    setShareCopied(true);
+    setShowSharePopover(true);
+    setTimeout(() => setShareCopied(false), 2500);
+  };
+
+  const handleShareUrlClick = (e: { target: EventTarget | null }) => {
+    (e.target as HTMLInputElement).select();
+  };
+
+  // Close share popover on outside click
+  useEffect(() => {
+    if (!showSharePopover) return;
+    const handleOutside = (e: MouseEvent) => {
+      const btn = shareButtonRef.current;
+      if (btn && !btn.parentElement?.contains(e.target as Node)) {
+        setShowSharePopover(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [showSharePopover]);
+
   // Auto-save functionality
   useEffect(() => {
     if (!currentModel || !hasUnsavedChanges || !currentDiagram) return;
@@ -646,19 +723,28 @@ function EditorPage() {
         });
       });
 
-      // Update last opened data
-      try {
-        localStorage.setItem(
-          'fossflow-last-opened-data',
-          JSON.stringify(savedData)
-        );
-        setLastAutoSave(new Date());
-        setHasUnsavedChanges(false);
-      } catch (e) {
-        console.error('Auto-save failed:', e);
-        if (e instanceof DOMException && e.name === 'QuotaExceededError') {
-          alert(t('alert.autoSaveFailed'));
-          setShowStorageManager(true);
+      // Persist to server when available, else localStorage
+      if (serverStorageAvailable && storage && currentDiagram) {
+        storage.saveDiagram(currentDiagram.id, savedData as any).then(() => {
+          setLastAutoSave(new Date());
+          setHasUnsavedChanges(false);
+        }).catch((e) => {
+          console.error('Auto-save to server failed:', e);
+        });
+      } else {
+        try {
+          localStorage.setItem(
+            'fossflow-last-opened-data',
+            JSON.stringify(savedData)
+          );
+          setLastAutoSave(new Date());
+          setHasUnsavedChanges(false);
+        } catch (e) {
+          console.error('Auto-save failed:', e);
+          if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+            alert(t('alert.autoSaveFailed'));
+            setShowStorageManager(true);
+          }
         }
       }
     }, 5000); // Auto-save after 5 seconds of changes
@@ -666,7 +752,7 @@ function EditorPage() {
     return () => {
       return clearTimeout(autoSaveTimer);
     };
-  }, [currentModel, hasUnsavedChanges, currentDiagram, diagramName]);
+  }, [currentModel, hasUnsavedChanges, currentDiagram, diagramName, serverStorageAvailable, storage]);
 
   // Warn before closing if there are unsaved changes
   useEffect(() => {
@@ -718,71 +804,52 @@ function EditorPage() {
       <div className="toolbar">
         {!isReadonlyUrl && (
           <>
-            <button onClick={newDiagram}>{t('nav.newDiagram')}</button>
-            {serverStorageAvailable && (
+            <button className="toolbar-btn" onClick={handleSaveClick} title={t('nav.save', 'Save') + ' (Ctrl+S)'}>
+              💾 {t('nav.save', 'Save')}
+            </button>
+            <button className="toolbar-btn" onClick={handleLoadClick} title={t('nav.load', 'Load') + ' (Ctrl+O)'}>
+              📂 {t('nav.load', 'Load')}
+            </button>
+            <div style={{ position: 'relative' }}>
               <button
-                onClick={() => {
-                  return setShowDiagramManager(true);
-                }}
-                style={{ backgroundColor: '#2196F3', color: 'white' }}
+                className="toolbar-btn"
+                ref={shareButtonRef}
+                onClick={handleShareClick}
+                title={t('nav.share', 'Share')}
+                disabled={!serverStorageAvailable || !currentDiagram}
+                style={{ opacity: (!serverStorageAvailable || !currentDiagram) ? 0.5 : 1 }}
               >
-                🌐 {t('nav.serverStorage')}
+                🔗 {t('nav.share', 'Share')}
               </button>
-            )}
-            <button
-              onClick={() => {
-                return setShowSaveDialog(true);
-              }}
-            >
-              {t('nav.saveSessionOnly')}
-            </button>
-            <button
-              onClick={() => {
-                return setShowLoadDialog(true);
-              }}
-            >
-              {t('nav.loadSessionOnly')}
-            </button>
-            <button
-              onClick={() => {
-                return setShowExportDialog(true);
-              }}
-              style={{ backgroundColor: '#007bff' }}
-            >
-              💾 {t('nav.exportFile')}
-            </button>
-            <button
-              onClick={() => {
-                if (currentDiagram && hasUnsavedChanges) {
-                  saveDiagram();
-                }
-              }}
-              disabled={!currentDiagram || !hasUnsavedChanges}
-              style={{
-                backgroundColor:
-                  currentDiagram && hasUnsavedChanges ? '#ffc107' : '#6c757d',
-                opacity: currentDiagram && hasUnsavedChanges ? 1 : 0.5,
-                cursor:
-                  currentDiagram && hasUnsavedChanges
-                    ? 'pointer'
-                    : 'not-allowed'
-              }}
-              title="Save to current session only"
-            >
-              {t('nav.quickSaveSession')}
-            </button>
+              {showSharePopover && currentDiagram && (
+                <div className="share-popover">
+                  <div className="share-popover-header">
+                    <span>{t('share.title', 'Share Diagram')}</span>
+                    <button className="share-popover-close" onClick={() => setShowSharePopover(false)}>×</button>
+                  </div>
+                  <p className="share-popover-hint">{t('share.hint', 'Anyone with this link can view the diagram in read-only mode.')}</p>
+                  <div className="share-popover-row">
+                    <input
+                      className="share-popover-url"
+                      type="text"
+                      readOnly
+                      value={`${window.location.origin}/display/${currentDiagram.id}`}
+                      onClick={handleShareUrlClick}
+                    />
+                    <button
+                      className={`share-popover-copy${shareCopied ? ' copied' : ''}`}
+                      onClick={handleShareClick}
+                    >
+                      {shareCopied ? '✓ Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </>
         )}
         {isReadonlyUrl && (
-          <div
-            style={{
-              color: 'black',
-              padding: '8px 16px',
-              borderRadius: '4px',
-              fontWeight: 'bold',
-              border: '2px solid #000000'
-            }}
-          >
+          <div className="readonly-badge">
             {t('dialog.readOnly.mode')}
           </div>
         )}
@@ -802,11 +869,11 @@ function EditorPage() {
                   • {t('status.modified')}
                 </span>
               )}
-              <span
-                style={{ fontSize: '12px', color: '#666', marginLeft: '10px' }}
-              >
-                ({t('status.sessionStorageNote')})
-              </span>
+              {!serverStorageAvailable && (
+                <span style={{ fontSize: '12px', color: '#e53935', marginLeft: '10px', fontWeight: 500 }}>
+                  ({t('status.sessionStorageNote')})
+                </span>
+              )}
             </>
           )}
         </span>
@@ -827,28 +894,20 @@ function EditorPage() {
         )}
       </div>
 
-      {/* Save Dialog */}
+      {/* Save Dialog (session-only fallback) */}
       {showSaveDialog && (
         <div className="dialog-overlay">
           <div className="dialog">
             <h2>{t('dialog.save.title')}</h2>
-            <div
-              style={{
-                backgroundColor: '#fff3cd',
-                border: '1px solid #ffeeba',
-                padding: '15px',
-                borderRadius: '4px',
-                marginBottom: '20px'
-              }}
-            >
-              <strong>⚠️ {t('dialog.save.warningTitle')}:</strong>{' '}
-              {t('dialog.save.warningMessage')}
-              <br />
-              <span
-                dangerouslySetInnerHTML={{
-                  __html: t('dialog.save.warningExport')
-                }}
-              />
+            <div className="session-warning">
+              <strong>⚠️ {t('dialog.save.warningTitle', 'Session storage only')}</strong>
+              <p>{t('dialog.save.warningMessage', 'This diagram is saved in your browser session only and will be lost when you close the tab.')}</p>
+              <button
+                className="export-json-btn"
+                onClick={() => { setShowSaveDialog(false); setShowExportDialog(true); }}
+              >
+                💾 {t('dialog.save.btnExportJson', 'Export as JSON instead (recommended)')}
+              </button>
             </div>
             <input
               type="text"
@@ -876,22 +935,14 @@ function EditorPage() {
         </div>
       )}
 
-      {/* Load Dialog */}
+      {/* Load Dialog (session-only fallback) */}
       {showLoadDialog && (
         <div className="dialog-overlay">
           <div className="dialog">
             <h2>{t('dialog.load.title')}</h2>
-            <div
-              style={{
-                backgroundColor: '#fff3cd',
-                border: '1px solid #ffeeba',
-                padding: '15px',
-                borderRadius: '4px',
-                marginBottom: '20px'
-              }}
-            >
-              <strong>⚠️ {t('dialog.load.noteTitle')}:</strong>{' '}
-              {t('dialog.load.noteMessage')}
+            <div className="session-warning">
+              <strong>⚠️ {t('dialog.load.noteTitle', 'Session storage only')}</strong>
+              <p>{t('dialog.load.noteMessage', 'Only diagrams from this browser session are listed. Diagrams from previous sessions are not available here — use JSON export/import for permanent storage.')}</p>
             </div>
             <div className="diagram-list">
               {diagrams.length === 0 ? (
@@ -995,10 +1046,12 @@ function EditorPage() {
           storage={storage!}
           isServerStorage={isStorageServer}
           onLoadDiagram={handleDiagramManagerLoad}
+          onSaveDiagram={handleDiagramManagerSave}
           currentDiagramId={currentDiagram?.id}
           currentDiagramData={currentModel || diagramData}
+          defaultMode={diagramManagerMode}
           onClose={() => {
-            return setShowDiagramManager(false);
+            setShowDiagramManager(false);
           }}
         />
       )}

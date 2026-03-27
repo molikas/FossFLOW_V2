@@ -9,7 +9,6 @@ import {
   Title as TitleIcon,
   Undo as UndoIcon,
   Redo as RedoIcon,
-  Help as HelpIcon,
   HighlightAltOutlined as LassoIcon,
   GestureOutlined as FreehandLassoIcon
 } from '@mui/icons-material';

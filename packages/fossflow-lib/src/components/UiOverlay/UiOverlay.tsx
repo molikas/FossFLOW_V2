@@ -49,7 +49,7 @@ const EDITOR_MODE_MAPPING: EditorModeMapping = {
     'MAIN_MENU',
     'VIEW_TABS'
   ],
-  [EditorModeEnum.EXPLORABLE_READONLY]: ['ZOOM_CONTROLS', 'VIEW_TITLE'],
+  [EditorModeEnum.EXPLORABLE_READONLY]: ['ZOOM_CONTROLS', 'VIEW_TABS'],
   [EditorModeEnum.NON_INTERACTIVE]: []
 };
 
@@ -135,14 +135,15 @@ export const UiOverlay = () => {
             sx={{
               position: 'absolute',
               width: '360px',
+              transform: 'translateX(-100%)',
               overflowY: 'scroll',
               '&::-webkit-scrollbar': {
                 display: 'none'
               }
             }}
             style={{
-              left: appPadding.x,
-              top: appPadding.y * 2 + spacing(2),
+              left: rendererSize.width - appPadding.x,
+              top: 50,
               maxHeight: rendererSize.height - appPadding.y * 6
             }}
           >
@@ -156,11 +157,11 @@ export const UiOverlay = () => {
             onMouseDown={(e) => e.stopPropagation()}
             sx={{
               position: 'absolute',
-              transform: 'translateX(-100%)'
+              transform: 'translateX(-50%)'
             }}
             style={{
-              left: rendererSize.width - appPadding.x,
-              top: appPadding.y
+              left: rendererSize.width / 2,
+              top: 10
             }}
           >
             <ToolMenu />
