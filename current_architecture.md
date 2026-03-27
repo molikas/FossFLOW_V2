@@ -1,8 +1,8 @@
-# FossFLOW (Isoflow) — Current Architecture & Pre-Refactoring Reference
+# FossFLOW Community Edition — Architecture Reference
 
-**Date:** 2026-03-20
-**Codebase root:** `packages/fossflow-lib/src`
-**Purpose:** Comprehensive pre-refactoring reference — feature inventory, architecture map, test audit, gap analysis, lessons learned, and key APIs. Intended as the primary reference for any future architectural changes or major feature additions.
+**Last updated:** 2026-03-27
+**Codebase root:** `packages/fossflow-lib/src` (library) · `packages/fossflow-app/src` (application shell)
+**Purpose:** Living architecture reference — feature inventory, store/reducer/mode architecture, test audit, gap analysis, lessons learned, and key APIs. Update this document whenever significant architectural changes are made.
 
 ---
 
@@ -50,9 +50,10 @@
 | Feature | Source | Entry Point |
 |---|---|---|
 | **Copy** | `clipboard/useCopyPaste.ts` | `Ctrl+C` in `useInteractionManager` keydown handler → `handleCopy()` |
+| **Cut** | `clipboard/useCopyPaste.ts` | `Ctrl+X` in keydown handler → `handleCut()` |
 | **Paste** | `clipboard/useCopyPaste.ts` | `Ctrl+V` in keydown handler → `handlePaste()` |
 
-Copy reads selection from `LASSO`/`FREEHAND_LASSO` mode or single-item `itemControls`. Paste calls `findNearestUnoccupiedTilesForGroup` for collision avoidance, remaps all IDs, detaches anchors pointing outside the paste selection (converting `ref.item` to `ref.tile`), offsets all tile waypoint anchors (`ref.tile`) by the paste offset, and calls `scene.pasteItems()`. After pasting, switches to `CURSOR` mode (`mousedownItem: null`).
+Copy reads selection from `LASSO`/`FREEHAND_LASSO` mode or single-item `itemControls`. Cut calls `handleCopy()` then `deleteSelectedItems()` in a single transaction — the clipboard retains the payload for subsequent pastes, and `Ctrl+Z` restores the deleted items. Paste calls `findNearestUnoccupiedTilesForGroup` for collision avoidance, remaps all IDs, detaches anchors pointing outside the paste selection (converting `ref.item` to `ref.tile`), offsets all tile waypoint anchors (`ref.tile`) by the paste offset, and calls `scene.pasteItems()`. After pasting, switches to `CURSOR` mode (`mousedownItem: null`).
 
 ### History (Undo/Redo)
 
@@ -68,11 +69,13 @@ Both model and scene have **independent** history stacks (past/present/future, m
 | Feature | Source | Entry Point |
 |---|---|---|
 | **Multi-view** | `stores/reducers/view.ts`, `hooks/useScene.ts` → `createView`, `deleteView` | ViewTabs UI |
-| **Rename** | `reducers/view.ts` → `updateView` | ViewTabs inline rename |
+| **Rename page** | `reducers/view.ts` → `updateView` | ViewTabs inline rename (pencil icon, per tab) |
 | **Switch** | `hooks/useView.ts` → `changeView` | ViewTabs click |
 | **Tabs UI** | `components/ViewTabs/ViewTabs.tsx` | Only shown in `EDITABLE` mode |
 
 `createView` does **not** save to history (notable gap). `deleteView` saves to history and auto-switches to `views[0]` if current view is deleted. Cannot delete the last view.
+
+**ViewTabs title card (2026-03-27):** The diagram title shown in the ViewTabs bar is read-only. It is managed exclusively at the file/storage level via Save / Save As in the `fossflow-app` toolbar. Renaming the title inline was removed to keep the name in sync with the stored file name. View tab (page) names remain renameable inline.
 
 ### Model Data
 
@@ -96,7 +99,7 @@ Both model and scene have **independent** history stacks (past/present/future, m
 | Zoom to cursor | `config/zoomSettings.ts` | `true` |
 | Label expand button padding | `config/labelSettings.ts` | `0` |
 | Connector interaction mode | `types/ui.ts` → `UiState.connectorInteractionMode` | `'click'` |
-| Fixed shortcuts | `config/shortcuts.ts` | copy=Ctrl+C, paste=Ctrl+V, undo=Ctrl+Z, redo=Ctrl+Y/Ctrl+Shift+Z, help=F1 |
+| Fixed shortcuts | `config/shortcuts.ts` | cut=Ctrl+X, copy=Ctrl+C, paste=Ctrl+V, undo=Ctrl+Z, redo=Ctrl+Y/Ctrl+Shift+Z, help=F1 |
 
 ### UI Overlays
 
@@ -112,7 +115,7 @@ Both model and scene have **independent** history stacks (past/present/future, m
 | ViewTabs | `ViewTabs` | EDITABLE only |
 | ViewTitle | Typography in `UiOverlay` | EXPLORABLE_READONLY only |
 | Hint tooltips (5 types) | `ConnectorHintTooltip`, `ConnectorEmptySpaceTooltip`, `ConnectorRerouteTooltip`, `ImportHintTooltip`, `LassoHintTooltip` | EDITABLE only |
-| Lazy loading welcome | `LazyLoadingWelcomeNotification` | When `iconPackManager` is provided |
+| Lazy loading welcome | `LazyLoadingWelcomeNotification` | When `iconPackManager` is provided AND `fossflow-lazy-loading-welcome-dismissed` is not `'true'` in localStorage (shown once per user) |
 | Debug utils | `DebugUtils` | `enableDebugTools === true` |
 
 ### Export
@@ -594,6 +597,26 @@ Touch events are synthesized: `touchstart` → mousedown (button:0), `touchmove`
 
 **Total test count as of 2026-03-22:** 514 tests across 54 suites (+7 for transient right-click pan, 2026-03-22).
 
+**New/updated suites — round 4 (2026-03-25, cut/paste + lasso drag):**
+| File | Tests | Change | Classification |
+|---|---|---|---|
+| `clipboard/__tests__/useCopyPaste.test.ts` | 18 | +7 | VALID — cut path, clipboard retention after cut |
+| `__perf_refactor_regression__/keyboard.dispatch.test.tsx` | 28 | +3 | VALID — Ctrl+X dispatch path |
+| `__perf_refactor_regression__/shortcuts.test.ts` | 7 | +1 | VALID — CUT shortcut constant |
+| `utils/__tests__/renderer.test.ts` | 20 | +4 | VALID — lasso drag node-within-selection |
+| `__perf_refactor_regression__/Lasso.modes.test.ts` | 18 | +3 | VALID — mousedownItem guard for group drag |
+
+**New/updated suites — round 5 (2026-03-27, toolbar UX overhaul):**
+| File | Tests | Change | Classification |
+|---|---|---|---|
+| `components/IconButton/__tests__/IconButton.color.test.tsx` | 6 | new | VALID — icon colour logic (was inverted bug) |
+| `__perf_refactor_regression__/viewTabs.titleReadonly.test.ts` | 6 | new | VALID — title card read-only contract |
+| `__perf_refactor_regression__/splashScreen.communityEdition.test.ts` | 6 | new | VALID — community edition branding pins |
+| `__perf_refactor_regression__/languageDropdown.positioning.test.ts` | 4 | new | VALID — right:0 anchoring (overflow fix) |
+| `__perf_refactor_regression__/saveTracking.isAfterLoad.test.ts` | 4 | new | VALID — isAfterLoadRef + auto-save flag contract |
+
+**Total test count as of 2026-03-27:** 572 tests across 59 suites, all passing.
+
 **Full regression suite documentation:** See `regression_tests.md` at repo root — 54 suites listed with production targets, test counts, classifications, coverage notes, and known gaps.
 
 ---
@@ -622,27 +645,28 @@ Touch events are synthesized: `touchstart` → mousedown (button:0), `touchmove`
 - Transaction nesting in `useScene` (separate `transactionInProgress.current`)
 
 **Store action invariants — untested:**
-- `modelStore.undo()` and `redo()` with real Model data (not mocked)
 - `sceneStore.undo()` and `redo()`
-- History overflow at 50 entries — oldest entry is dropped
 - `saveToHistoryBeforeChange` inside transaction: should NOT save if `transactionInProgress.current`
 - `setEditorMode` side effect: must reset mode via `getStartingMode()`
 - `resetUiState`: must zero scroll, zoom, mode, itemControls
 
-**Clipboard correctness — untested:**
-- `handleCopy` with LASSO selection
-- `handleCopy` with single `itemControls` selection
-- `handleCopy` centroid calculation
-- `handlePaste` ID remapping
-- `handlePaste` anchor detachment for out-of-selection items
-- `handlePaste` with connector-only selection (centroid = 0,0 bug)
-- `handlePaste` collision avoidance
+**Clipboard correctness:**
+- `handleCopy` with LASSO selection — **now covered** in `useCopyPaste.test.ts`
+- `handleCopy` with single `itemControls` selection — **now covered** in `useCopyPaste.test.ts`
+- `handleCopy` centroid calculation — **now covered** in `useCopyPaste.test.ts`
+- `handlePaste` ID remapping — **now covered** in `useCopyPaste.test.ts`
+- `handlePaste` anchor detachment for out-of-selection items — **now covered** in `useCopyPaste.test.ts`
+- `handleCut` path and clipboard retention after cut — **now covered** in `useCopyPaste.test.ts` (round 4)
+- `handlePaste` with connector-only selection (centroid = 0,0 bug) — still untested
+- `handlePaste` collision avoidance — still untested
 
 **History checkpoints — untested:**
 - That `createView` does NOT create a checkpoint
 - That `transaction()` saves exactly one checkpoint for N operations
 - That undo after paste restores the pre-paste state completely
 - Model and scene history staying in sync across operations
+- `modelStore.undo()` and `redo()` with real Model data — **now covered** in `useHistory.realStore.test.tsx`
+- History overflow at 50 entries — **now covered** in `useHistory.realStore.test.tsx`
 
 ### Medium Gaps
 
@@ -764,8 +788,8 @@ delete draft.model.items[modelItem.index];
 ```
 Creates a **sparse array** (`[item0, undefined, item2]`). `model.items.length` includes holes. `forEach`/`map` skip holes but `find()` works. Subtle bugs possible if code assumes `length === item count`. All other reducers use `splice`.
 
-**`createModelItem` calls `updateModelItem` redundantly:**
-The item is pushed then immediately overwritten via `updateModelItem`. A double-write with no effect but wastes an Immer draft creation.
+**`createModelItem` double-write ✅ FIXED (2026-03-20):**
+The redundant `updateModelItem` call inside `createModelItem` was removed. The item is now written once when pushed to the draft.
 
 **Connector path with empty tiles:**
 `syncConnector` wraps `getConnectorPath` in a try/catch and creates an empty path on error. Connectors with empty paths are not deleted — they remain as "ghost" connectors that are invisible/zero-size and hard to discover or delete.
@@ -783,7 +807,7 @@ Unlike all other coordinate calculations which use `rendererSize` from the store
 No `ModeActions` handler for it in the `modes` map in `useInteractionManager`. The keydown effect early-returns if `modeType === 'INTERACTIONS_DISABLED'`. Window event listeners are not registered. This mode is purely an opt-out flag.
 
 **ViewTabs and EXPLORABLE_READONLY:**
-`VIEW_TABS` only shown in `EDITABLE` mode. Users cannot switch views in `EXPLORABLE_READONLY` mode.
+`VIEW_TABS` only shown in `EDITABLE` mode. Users cannot switch views in `EXPLORABLE_READONLY` mode. In `EDITABLE` mode, the title card in ViewTabs is read-only (2026-03-27) — diagram name is managed at the file level via Save / Save As. Page (view tab) names are still renameable inline.
 
 **`setIsMainMenuOpen` clears `itemControls`:**
 Opening the main menu automatically closes any open item controls panel. May be surprising if the user has unsaved property edits.

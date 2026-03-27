@@ -1,4 +1,4 @@
-A personal fork of [FossFLOW](https://github.com/stan-smith/FossFLOW) focused on UX polish, performance, and editing quality. All code is AI-assisted with manual review and testing.
+A community fork of [FossFLOW](https://github.com/stan-smith/FossFLOW) with expanded editing features, file management, and performance improvements. Source and issue tracker: [github.com/molikas/FossFLOW_V2](https://github.com/molikas/FossFLOW_V2).
 
 **Performance highlight:** On a real 85-node / 54-connector diagram, idle FPS improved from 5–18 to a consistent 60 fps after fixing two root-cause render bugs. See the [Performance section](#performance) below.
 
@@ -26,7 +26,14 @@ A personal fork of [FossFLOW](https://github.com/stan-smith/FossFLOW) focused on
 
 - **Right-click to pan** — Right-click drag pans the canvas; release to resume the active tool.
 - **Default zoom 90%** — Opens with a little breathing room.
-- **Context menu** — Right-click on empty canvas to quickly add a node or rectangle.
+
+### File management
+
+- **Save / Save As** — Save directly to a named file. Save As always prompts for a new name and creates a new file.
+- **Diagrams panel** — Browse, load, and delete all saved diagrams from a single panel. Share any diagram as a read-only link.
+- **Save status indicator** — The Save button is disabled when there are no changes. Any edit to any view re-enables it.
+- **Auto-save** — Changes are persisted automatically in the background. Explicit Save confirms the file is up to date.
+- **Share link** — Generates a read-only URL for the current diagram (requires server storage).
 
 ### Performance
 
@@ -44,9 +51,10 @@ Measured on an 85-node / 54-connector diagram:
 ### Quality-of-life
 
 - Editing a node no longer adds an empty description block to its canvas label.
-- Language dropdown opens on click, not hover.
+- Language selector stays on screen — dropdown anchors to the right edge of the button.
 - Lasso hint auto-dismisses after first use.
 - Help dialog (`F1` / `?`) documents all keyboard shortcuts.
+- Session-only storage shows a dismissible warning banner.
 
 ---
 
@@ -69,6 +77,31 @@ Diagrams are saved to a `diagrams/` folder in the project directory.
 ---
 
 ## [Unreleased]
+
+### 2026-03-27
+
+#### Features
+
+- **Toolbar UX overhaul:** 3-section layout (actions left, spacer center, language right). Three focused buttons: **Save** (direct save if associated, Save As for new diagrams), **Diagrams** (load + manage, opens server or session dialog automatically), **Share** (copies read-only URL; disabled when no server storage or no saved diagram).
+- **Save status tracking:** Save button is disabled when there are no unsaved changes and a file is already associated. Enabled immediately on any user edit to any view (including adding views or editing view 2+). Auto-save persists data silently in the background without resetting the indicator — only an explicit Save clears it.
+- **Diagrams manager:** Merged Load + Storage Manager into a single "Diagrams" button. Manager is load-only (no in-dialog save). Per-row share button copies a read-only URL; shows a green ✓ for 2 seconds after copying.
+- **Dismissible session warning banner:** Amber banner below the toolbar warns when running in session-only storage mode. Dismissed per tab via `sessionStorage`; never shown again in that tab once dismissed.
+- **Community edition splash screen:** Welcome notification updated with community edition branding, fork repository link, and GitHub issues prompt.
+
+#### Bug Fixes
+
+- **Duplicate diagram title removed:** Title was shown in both the toolbar center and the ViewTabs bar at the bottom. Toolbar center title removed — ViewTabs is the single source.
+- **Multi-view save tracking:** Changes to any view (including creating a new view, adding nodes to view 2+) now correctly enable the Save button. Root cause: `isoflowRef.current.load()` triggered `onModelUpdated` → `hasUnsavedChanges=true`, and then auto-save reset it 5 seconds later, masking changes. Fixed with `isAfterLoadRef` pattern — suppresses the first post-load callback — and removing `setHasUnsavedChanges(false)` from auto-save.
+- **Undo/redo icon colors:** Were inverted — disabled state appeared dark/prominent, enabled state appeared light/muted. Fixed to industry norm: enabled=`grey.700` (dark, prominent), disabled=`grey.400` (muted), active=`grey.200` (light on coloured background).
+- **Diagram title rename from canvas disabled:** ViewTabs title card is now read-only. The diagram name is managed at the file level via Save/Save As. Page (view tab) names remain renameable inline.
+- **Language dropdown off-screen:** Dropdown was anchored `left:0`, extending off the right edge of the viewport. Fixed to `right:0` so it opens leftward and stays fully visible.
+
+#### Tests
+
+- New suites: `IconButton.color.test.tsx`, `viewTabs.titleReadonly.test.ts`, `splashScreen.communityEdition.test.ts`, `languageDropdown.positioning.test.ts`, `saveTracking.isAfterLoad.test.ts`
+- Test count: 545 → 572, 54 → 59 suites, all passing
+
+---
 
 ### 2026-03-25
 
