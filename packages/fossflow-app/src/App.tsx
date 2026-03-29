@@ -13,13 +13,15 @@ import {
   Chip,
   Alert,
   IconButton,
-  Box
+  Box,
+  Tooltip
 } from '@mui/material';
 import {
   SaveOutlined as SaveIcon,
   FolderOpenOutlined as FolderIcon,
   LinkOutlined as LinkIcon,
-  Close as CloseIcon
+  Close as CloseIcon,
+  VisibilityOutlined as PreviewIcon
 } from '@mui/icons-material';
 import {
   DiagramData,
@@ -877,6 +879,18 @@ function EditorPage() {
                   </Stack>
                 </Stack>
               </Popover>
+              <Tooltip title={!serverStorageAvailable || !currentDiagram ? 'Save first to preview' : 'Preview in view-only mode'}>
+                <span>
+                  <IconButton
+                    size="small"
+                    onClick={() => window.open(`/display/${currentDiagram!.id}`, '_blank')}
+                    disabled={!serverStorageAvailable || !currentDiagram}
+                    sx={{ ml: 0.25 }}
+                  >
+                    <PreviewIcon fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
             </>
           )}
           {isReadonlyUrl && (

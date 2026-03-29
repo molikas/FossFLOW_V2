@@ -27,12 +27,13 @@ export const Pan: ModeActions = {
 
     setWindowCursor('grabbing');
   },
-  mouseup: ({ uiState, scene }) => {
+  mouseup: ({ uiState, scene, model }) => {
     if (uiState.mode.type !== 'PAN') return;
     setWindowCursor('grab');
     // Note: Mode switching is now handled by usePanHandlers
 
-    // In read-only mode, a left-click on a node opens the NoteDrawer
+    // In read-only mode, a left-click on a node opens the panel —
+    // but only if the node has a caption or notes worth showing.
     if (uiState.editorMode === 'EXPLORABLE_READONLY') {
       const mousedownTile = uiState.mouse.mousedown?.tile;
       const currentTile = uiState.mouse.position.tile;
@@ -42,7 +43,15 @@ export const Pan: ModeActions = {
       ) {
         const item = getItemAtTile({ tile: currentTile, scene });
         if (item?.type === 'ITEM') {
-          uiState.actions.setItemControls({ type: 'ITEM', id: item.id });
+          const modelItem = model.items.find((i) => i.id === item.id);
+          const hasContent =
+            (!!modelItem?.description && modelItem.description.replace(/<[^>]*>/g, '').trim() !== '') ||
+            (!!modelItem?.notes && modelItem.notes.replace(/<[^>]*>/g, '').trim() !== '');
+          if (hasContent) {
+            uiState.actions.setItemControls({ type: 'ITEM', id: item.id });
+          } else {
+            uiState.actions.setItemControls(null);
+          }
         } else {
           uiState.actions.setItemControls(null);
         }

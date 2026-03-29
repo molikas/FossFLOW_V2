@@ -5,9 +5,11 @@ import {
   Tab,
   IconButton,
   Tooltip,
-  Typography
+  Typography,
+  Divider,
+  Stack
 } from '@mui/material';
-import { Close as CloseIcon } from '@mui/icons-material';
+import { Close as CloseIcon, OpenInNew as OpenInNewIcon } from '@mui/icons-material';
 import { ModelItem, ViewItem } from 'src/types';
 import { useModelItem } from 'src/hooks/useModelItem';
 import { useScene } from 'src/hooks/useScene';
@@ -23,9 +25,6 @@ const TAB_DETAILS = 0;
 const TAB_STYLE = 1;
 const TAB_NOTES = 2;
 
-// readonly mode only has Details + Notes
-const TAB_READONLY_DETAILS = 0;
-const TAB_READONLY_NOTES = 1;
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -113,13 +112,16 @@ export const NodePanel = ({ viewItem, readOnly }: Props) => {
   const iconUrl = icon.url || '';
 
   if (readOnly) {
+    const hasCaption =
+      !!modelItem.description && modelItem.description.replace(/<[^>]*>/g, '').trim() !== '';
+
     return (
       <Box
         onMouseDown={(e) => e.stopPropagation()}
         onContextMenu={(e) => e.stopPropagation()}
         sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: 'background.paper' }}
       >
-        {/* Header: name row */}
+        {/* Header */}
         <Box
           sx={{
             display: 'flex',
@@ -127,7 +129,9 @@ export const NodePanel = ({ viewItem, readOnly }: Props) => {
             gap: 1,
             px: 1.5,
             pt: 1,
-            pb: 0.5,
+            pb: 1,
+            borderBottom: '1px solid',
+            borderColor: 'divider',
             flexShrink: 0
           }}
         >
@@ -141,54 +145,55 @@ export const NodePanel = ({ viewItem, readOnly }: Props) => {
           >
             {modelItem.name || '—'}
           </Typography>
-          <Tooltip title="Close">
-            <IconButton size="small" onClick={handleClose} sx={{ p: 0.5 }}>
-              <CloseIcon sx={{ fontSize: 15 }} />
-            </IconButton>
-          </Tooltip>
-        </Box>
-        {/* Tab bar */}
-        <Box sx={{ borderBottom: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
-          <Tabs
-            value={activeTab}
-            onChange={(_, v) => setActiveTab(v)}
-            sx={{
-              minHeight: 32,
-              '& .MuiTab-root': { minHeight: 32, fontSize: '0.72rem', py: 0.5, px: 1.5 }
-            }}
-          >
-            <Tab label="Details" value={TAB_READONLY_DETAILS} />
-            <Tab
-              label={hasNotes ? 'Notes ●' : 'Notes'}
-              value={TAB_READONLY_NOTES}
-              sx={{ color: hasNotes ? 'primary.main' : undefined }}
-            />
-          </Tabs>
-        </Box>
-
-        <TabPanel value={activeTab} index={TAB_READONLY_DETAILS}>
-          <NodeInfoTab
-            node={viewItem}
-            readOnly
-            onModelItemUpdated={onModelUpdate}
-            nameRef={nameRef}
-            linkRef={linkRef}
-            showLink={showLink}
-            onShowLinkChange={setShowLink}
-          />
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={TAB_READONLY_NOTES}>
-          <Box sx={{ p: 2 }}>
-            {hasNotes ? (
-              <RichTextEditor value={modelItem.notes} readOnly height={300} />
-            ) : (
-              <Typography variant="body2" color="text.disabled" sx={{ fontStyle: 'italic' }}>
-                No notes for this node.
-              </Typography>
+          <Stack direction="row" spacing={0}>
+            {modelItem.headerLink && (
+              <Tooltip title="Open link">
+                <IconButton
+                  size="small"
+                  component="a"
+                  href={
+                    /^https?:\/\//i.test(modelItem.headerLink)
+                      ? modelItem.headerLink
+                      : `https://${modelItem.headerLink}`
+                  }
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={{ p: 0.5 }}
+                >
+                  <OpenInNewIcon sx={{ fontSize: 15 }} />
+                </IconButton>
+              </Tooltip>
             )}
-          </Box>
-        </TabPanel>
+            <Tooltip title="Close">
+              <IconButton size="small" onClick={handleClose} sx={{ p: 0.5 }}>
+                <CloseIcon sx={{ fontSize: 15 }} />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        </Box>
+
+        {/* Scrollable body — caption then notes, no tabs */}
+        <Box sx={{ overflowY: 'auto', flex: 1 }}>
+          {hasCaption && (
+            <Box sx={{ px: 2, pt: 2, pb: 1 }}>
+              <Typography variant="caption" fontWeight={700} color="text.secondary"
+                sx={{ textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', mb: 1 }}>
+                Caption
+              </Typography>
+              <RichTextEditor value={modelItem.description} readOnly />
+            </Box>
+          )}
+          {hasCaption && hasNotes && <Divider sx={{ mx: 2 }} />}
+          {hasNotes && (
+            <Box sx={{ px: 2, pt: 2, pb: 2 }}>
+              <Typography variant="caption" fontWeight={700} color="text.secondary"
+                sx={{ textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', mb: 1 }}>
+                Notes
+              </Typography>
+              <RichTextEditor value={modelItem.notes} readOnly />
+            </Box>
+          )}
+        </Box>
       </Box>
     );
   }
