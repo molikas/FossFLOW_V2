@@ -79,7 +79,7 @@ Both model and scene have **independent** history stacks (past/present/future, m
 
 ### Model Data
 
-- **Items (nodes)**: `ModelItem` (model layer: id, name, icon) + `ViewItem` (view layer: id, tile, labelHeight). Always a pair.
+- **Items (nodes)**: `ModelItem` (model layer: id, name, description?, notes?, headerLink?, icon?) + `ViewItem` (view layer: id, tile, labelHeight, labelFontSize, labelColor). Always a pair. `description` is the **Caption** — short rich-text shown on the canvas below the node name (Zod max 50,000 chars). `notes` is private documentation shown only in the panel — no max length. Both are HTML strings from Quill. Old diagrams without either field load fine (both are `.optional()` in the schema).
 - **Connectors**: `Connector` (anchors array, color, style, lineType, labels, showArrow). Scene layer stores computed `path` (tiles + bounding rect).
 - **Rectangles**: `Rectangle` (from, to tile coords, color, customColor). Pure model — no scene data.
 - **TextBoxes**: `TextBox` (tile, content, fontSize, orientation). Scene stores computed `size`.
@@ -108,7 +108,10 @@ Both model and scene have **independent** history stacks (past/present/future, m
 | Dialogs (Export/Help/Settings) | `ExportImageDialog`, `HelpDialog`, `SettingsDialog` | `uiState.dialog === 'EXPORT_IMAGE'/'HELP'/'SETTINGS'` |
 | Notification snackbar | `NotificationSnackbar` | `uiState.notification !== null` |
 | Context menu | `ContextMenuManager` + `ContextMenu` | `uiState.contextMenu !== null` (currently only `EMPTY` type opens menu) |
-| Item controls panel | `ItemControlsManager` | `uiState.itemControls !== null` (EDITABLE only) |
+| Item controls panel | `ItemControlsManager` → `NodePanel` (Details/Style/Notes tabs) | `uiState.itemControls !== null`; EDITABLE and EXPLORABLE_READONLY; Style tab hidden in read-only |
+| Floating action bar | `NodeActionBar` (inside SceneLayer, `getTilePosition` origin TOP) | EDITABLE + `itemControls.type === 'ITEM'` + mode ≠ `DRAG_ITEMS`; 5 buttons: Style, Edit name, Link, Notes, Delete |
+| Note indicator dot | 14 px blue dot in `Node.tsx` at icon top-right | `modelItem.notes` non-empty |
+| Quick add popover | `QuickAddNodePopover` (MUI Popover at cursor) | EDITABLE; fires on `canvasEmptyDblClick` custom event from dblclick on renderer |
 | ToolMenu | `ToolMenu` | EDITABLE mode only |
 | MainMenu | `MainMenu` | EDITABLE mode only |
 | ZoomControls | `ZoomControls` | EDITABLE + EXPLORABLE_READONLY |
@@ -130,8 +133,8 @@ Both model and scene have **independent** history stacks (past/present/future, m
 
 | Mode | Interactions |
 |---|---|
-| `EDITABLE` | All modes active; ToolMenu, MainMenu, ItemControls, ViewTabs shown |
-| `EXPLORABLE_READONLY` | Pan+Zoom only; no editing tools; ViewTitle shown |
+| `EDITABLE` | All modes active; ToolMenu, MainMenu, ItemControls (Details/Style/Notes), ViewTabs, NodeActionBar shown |
+| `EXPLORABLE_READONLY` | Pan+Zoom only; no editing tools; ItemControls shown read-only (Details+Notes); ViewTabs shown |
 | `NON_INTERACTIVE` | No interactions; no UI tools (`INTERACTIONS_DISABLED` mode) |
 
 Starting mode determined by `getStartingMode()` in `utils`.
@@ -512,6 +515,23 @@ containerRef Box (position:absolute, full size, z-index:0)
 **`stopPropagation` points (must be maintained):**
 1. **`ControlsContainer.tsx`**: `onMouseDown={e => e.stopPropagation()}` — prevents ItemControls panel clicks reaching window listener.
 2. **ToolMenu Box wrapper** (in `UiOverlay.tsx`): `onMouseDown={(e) => e.stopPropagation()}` — prevents toolbar button clicks reaching window listener.
+3. **`NodePanel.tsx`**: `onMouseDown={e => e.stopPropagation()}` + `onContextMenu={e => e.stopPropagation()}` — panel floats over canvas; without these all clicks would pass through to the interaction manager.
+4. **`NodeActionBar.tsx`**: `onMouseDown={e => e.stopPropagation()}` — action bar pill sits inside SceneLayer at canvas coordinates; stops clicks propagating to canvas mousedown handler.
+
+**`nodePanel` custom-event bus (action bar → panel):**
+
+`NodeActionBar` dispatches `window.CustomEvent('nodePanel', { detail: action })`. `NodePanel` listens for these while mounted (edit mode only). Actions:
+
+| `detail` value | Effect in NodePanel |
+|---|---|
+| `'focusName'` | Switch to Details tab, focus + select the name field |
+| `'focusLink'` | Switch to Details tab, show link field, focus it |
+| `'scrollToAppearance'` | Switch to Style tab |
+| `'focusNotes'` | Switch to Notes tab |
+
+**`canvasEmptyDblClick` custom event (interaction manager → QuickAddNodePopover):**
+
+`useInteractionManager` fires `window.CustomEvent('canvasEmptyDblClick', { detail: { tile, screenX, screenY } })` on `dblclick` when in EDITABLE + CURSOR mode and the click lands on an empty tile. `QuickAddNodePopover` listens and opens a Popover at `{top: screenY, left: screenX}`.
 
 **Touch event handling:**
 Touch events are synthesized: `touchstart` → mousedown (button:0), `touchmove` → mousemove, `touchend` → mouseup with `clientX:0, clientY:0`. The zeroed-out coordinates on `touchend` are problematic: the "mouse position" on release is wrong for touch interactions.
@@ -618,7 +638,16 @@ Touch events are synthesized: `touchstart` → mousedown (button:0), `touchmove`
 
 **Total test count as of 2026-03-27:** 572 tests across 59 suites, all passing.
 
-**Full regression suite documentation:** See `regression_tests.md` at repo root — 54 suites listed with production targets, test counts, classifications, coverage notes, and known gaps.
+**New/updated suites — round 6 (2026-03-29, node panel redesign + aria fixes):**
+| File | Tests | Change | Classification |
+|---|---|---|---|
+| `__perf_refactor_regression__/dragStart.prevention.test.ts` | 3 | new | VALID — `dragstart` handler scoped to `rendererEl`, not `window` |
+| `__perf_refactor_regression__/Lasso.modes.test.ts` | 18 | updated | VALID — corrected lasso `mousedown` no-op on fresh click |
+| `__perf_refactor_regression__/toolMenu.propagation.test.tsx` | updated | — | VALID — reflects corrected lasso behaviour |
+
+**Total test count as of 2026-03-29:** 575 tests across 60 suites, all passing.
+
+**Full regression suite documentation:** See `regression_tests.md` at repo root — suites listed with production targets, test counts, classifications, coverage notes, and known gaps.
 
 ---
 
@@ -698,7 +727,19 @@ Touch events are synthesized: `touchstart` → mousedown (button:0), `touchmove`
 
 ---
 
-### 2. The ToolMenu Click Propagation Bug (most recent, 2026-03-20)
+### 2. Quill Requires an Explicit Pixel Height — CSS Flex-Grow Does Not Work
+
+**What happens:** Attempting to make a Quill editor fill its flex parent by setting `flex: 1` or `height: 'auto'` on the `.ql-container` element results in the editor collapsing to a single line (just the `<p><br></p>` element height).
+
+**Root cause:** Quill reads the container's `offsetHeight` during initialization and caches it. If the container has no computed pixel height at mount time (e.g., because it relies on flex stretch from an ancestor), Quill sees `height: 0` and renders accordingly. Subsequent CSS changes do not re-trigger Quill's layout pass.
+
+**How fixed:** Always pass an explicit `height` in pixels to `RichTextEditor`. For the Notes tab (full-panel editor) `height={300}` is used. For the Caption field (compact, signals brevity) `height={80}` is used. The `RichTextEditor` component's default is `height={120}`.
+
+**Why non-obvious:** The editor renders exactly one line of content — it appears "working" until you type more than one line and notice the overflow is clipped. The real tell is that `ql-container` has `height: auto` with no computed pixel value in DevTools.
+
+---
+
+### 3. The ToolMenu Click Propagation Bug (most recent, 2026-03-20)
 
 **Full chain of events:**
 1. User is in LASSO mode. Clicks "Select" button in ToolMenu.
@@ -717,7 +758,7 @@ Touch events are synthesized: `touchstart` → mousedown (button:0), `touchmove`
 
 ---
 
-### 3. The `mousedownHandled` Flag — Context Menu Spurious Opening
+### 4. The `mousedownHandled` Flag — Context Menu Spurious Opening
 
 **Problem:** When `setMode({type:'CURSOR'})` is called externally (after placing an icon, after Connector finalized, after Escape), cursor mode is entered without a preceding mousedown. Without `mousedownHandled`, the first subsequent mouseup would satisfy `!hasMoved && !mousedownItem` and open the context menu.
 
@@ -727,7 +768,7 @@ Touch events are synthesized: `touchstart` → mousedown (button:0), `touchmove`
 
 ---
 
-### 4. The `setMode` + ContextMenu Interaction (regression chain)
+### 5. The `setMode` + ContextMenu Interaction (regression chain)
 
 During the fix for the spurious context menu, several attempts created regressions:
 
@@ -739,7 +780,7 @@ During the fix for the spurious context menu, several attempts created regressio
 
 ---
 
-### 5. The `isRendererInteraction` Check — What It Really Checks
+### 6. The `isRendererInteraction` Check — What It Really Checks
 
 `rendererRef.current` is the **transparent interaction div** — the `<Box ref={interactionsRef}>` at the end of `Renderer.tsx` with no content, no explicit pointer-events, full-width/height. It sits **below** the Nodes SceneLayer in DOM order.
 
@@ -747,7 +788,7 @@ When a user clicks on a Node, the DOM event target is the Node's HTML element (a
 
 ---
 
-### 6. Zustand Context Pattern — Testing Implications
+### 7. Zustand Context Pattern — Testing Implications
 
 FossFLOW ships as a library with multiple independent instances possible. The context pattern (`createStore` inside `useRef` inside Provider) gives each mounted `<Isoflow>` tree its own private store instance.
 
@@ -758,13 +799,13 @@ FossFLOW ships as a library with multiple independent instances possible. The co
 
 ---
 
-### 7. The `reducerTypeRef` Pattern — Subtle Timing
+### 8. The `reducerTypeRef` Pattern — Subtle Timing
 
 `reducerTypeRef.current` tracks the mode type from the **last processed event** as a plain `useRef`. `processMouseUpdate` reads `uiState = uiStateApi.getState()` at its start — the state as of the moment the function executes. If a previous event handler called `setMode()` (synchronous Zustand update), a subsequent call to `processMouseUpdate` sees the new mode type from `getState()`, while `reducerTypeRef.current` still has the old value. This correctly detects the transition. The `baseState` passed to `entry()` contains the post-transition `uiState`, which is what the entry handler expects.
 
 ---
 
-### 8. The Pan Handler Bypass Path
+### 9. The Pan Handler Bypass Path
 
 `usePanHandlers.handleMouseDown` returns `true` for pan-triggering gestures, bypassing `processMouseUpdate` entirely. This means:
 1. No mode entry/exit detection for these events.
@@ -775,7 +816,7 @@ The first frame of a pan gesture has `mouse.mousedown` correctly set (from the `
 
 ---
 
-### 9. Dev Server + Lib Build Dependency
+### 10. Dev Server + Lib Build Dependency
 
 **The problem:** The consumer app imports from the lib's **built** output (`dist/`), not TypeScript sources directly. Editing `packages/fossflow-lib/src/` is NOT immediately visible in the dev server. `npm run build:lib` must be run before changes are reflected. Hot-reload does NOT work for library changes.
 

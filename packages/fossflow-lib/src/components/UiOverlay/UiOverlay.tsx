@@ -27,6 +27,8 @@ import { LazyLoadingWelcomeNotification } from '../LazyLoadingWelcomeNotificatio
 import { NotificationSnackbar } from '../NotificationSnackbar/NotificationSnackbar';
 import { CoordsUtils, getTilePosition } from 'src/utils';
 import { ViewTabs } from 'src/components/ViewTabs/ViewTabs';
+import { QuickAddNodePopover } from 'src/components/QuickAddNodePopover/QuickAddNodePopover';
+import { NodeActionBar } from 'src/components/NodeActionBar/NodeActionBar';
 
 const ToolsEnum = {
   MAIN_MENU: 'MAIN_MENU',
@@ -49,7 +51,7 @@ const EDITOR_MODE_MAPPING: EditorModeMapping = {
     'MAIN_MENU',
     'VIEW_TABS'
   ],
-  [EditorModeEnum.EXPLORABLE_READONLY]: ['ZOOM_CONTROLS', 'VIEW_TABS'],
+  [EditorModeEnum.EXPLORABLE_READONLY]: ['ITEM_CONTROLS', 'ZOOM_CONTROLS', 'VIEW_TABS'],
   [EditorModeEnum.NON_INTERACTIVE]: []
 };
 
@@ -134,20 +136,24 @@ export const UiOverlay = () => {
           <UiElement
             sx={{
               position: 'absolute',
-              width: '360px',
+              width: '300px',
               transform: 'translateX(-100%)',
-              overflowY: 'scroll',
-              '&::-webkit-scrollbar': {
-                display: 'none'
-              }
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              '@keyframes panelSlideIn': {
+                from: { opacity: 0, transform: 'translateX(calc(-100% + 16px))' },
+                to:   { opacity: 1, transform: 'translateX(-100%)' }
+              },
+              animation: 'panelSlideIn 0.15s ease-out'
             }}
             style={{
               left: rendererSize.width - appPadding.x,
-              top: 50,
-              maxHeight: rendererSize.height - appPadding.y * 6
+              top: appPadding.y,
+              height: rendererSize.height - appPadding.y * 2
             }}
           >
-            <ItemControlsManager />
+            <ItemControlsManager readOnly={editorMode === EditorModeEnum.EXPLORABLE_READONLY} />
           </UiElement>
         )}
 
@@ -296,6 +302,9 @@ export const UiOverlay = () => {
 
       <NotificationSnackbar />
 
+      {/* Double-click empty canvas → place node at cursor */}
+      {editorMode === EditorModeEnum.EDITABLE && <QuickAddNodePopover />}
+
       <SceneLayer>
         {contextMenu && (
           <Box
@@ -308,6 +317,13 @@ export const UiOverlay = () => {
           />
         )}
         <ContextMenuManager anchorEl={contextMenu && contextMenu.type === "EMPTY" ? contextMenuAnchorRef.current : null} />
+
+        {/* Floating action bar — edit mode only, hidden while dragging */}
+        {editorMode === EditorModeEnum.EDITABLE &&
+          itemControls?.type === 'ITEM' &&
+          mode.type !== 'DRAG_ITEMS' && (
+            <NodeActionBar id={itemControls.id} />
+          )}
       </SceneLayer>
     </>
   );

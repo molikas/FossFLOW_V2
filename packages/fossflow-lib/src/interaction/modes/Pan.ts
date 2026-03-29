@@ -1,5 +1,5 @@
 import { produce } from 'immer';
-import { CoordsUtils, setWindowCursor } from 'src/utils';
+import { CoordsUtils, setWindowCursor, getItemAtTile } from 'src/utils';
 import { ModeActions } from 'src/types';
 
 export const Pan: ModeActions = {
@@ -27,9 +27,26 @@ export const Pan: ModeActions = {
 
     setWindowCursor('grabbing');
   },
-  mouseup: ({ uiState }) => {
+  mouseup: ({ uiState, scene }) => {
     if (uiState.mode.type !== 'PAN') return;
     setWindowCursor('grab');
     // Note: Mode switching is now handled by usePanHandlers
+
+    // In read-only mode, a left-click on a node opens the NoteDrawer
+    if (uiState.editorMode === 'EXPLORABLE_READONLY') {
+      const mousedownTile = uiState.mouse.mousedown?.tile;
+      const currentTile = uiState.mouse.position.tile;
+      if (
+        mousedownTile &&
+        CoordsUtils.isEqual(mousedownTile, currentTile)
+      ) {
+        const item = getItemAtTile({ tile: currentTile, scene });
+        if (item?.type === 'ITEM') {
+          uiState.actions.setItemControls({ type: 'ITEM', id: item.id });
+        } else {
+          uiState.actions.setItemControls(null);
+        }
+      }
+    }
   }
 };

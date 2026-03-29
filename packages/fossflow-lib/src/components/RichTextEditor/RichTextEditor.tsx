@@ -78,7 +78,7 @@ export const RichTextEditor = ({
             border: 'none',
             pt: 0,
             px: 0,
-            pb: 1 // Add padding below toolbar to prevent overlap, might remove or make configurable at some point
+            pb: 1
           },
           '.ql-toolbar.ql-snow + .ql-container.ql-snow': {
             border: '1px solid',
@@ -93,12 +93,12 @@ export const RichTextEditor = ({
             ...styles
           },
           '.ql-editor': {
-            whiteSpace: 'pre-wrap', // Preserve multiple spaces and tabs
-            padding: '12px 15px', // Add consistent padding to prevent text overlap with tooltips
-            ...(readOnly ? { p: 0 } : {}) // readOnly overrides padding: no padding on canvas labels
+            whiteSpace: 'pre-wrap',
+            padding: '12px 15px',
+            ...(readOnly ? { p: 0 } : {})
           },
           '.ql-tooltip': {
-            zIndex: 1000 // Ensure tooltips appear above content but don't obscure text
+            zIndex: 1000
           }
         }}
       >

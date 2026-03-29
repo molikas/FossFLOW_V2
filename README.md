@@ -17,8 +17,14 @@ An "exprimental" community fork of [FossFLOW](https://github.com/stan-smith/Foss
 
 ### Nodes and text
 
+- **Node panel — Details / Style / Notes tabs** — Selecting a node opens a 300 px side panel with three tabs. *Details*: name, caption (short text shown on the canvas below the node name), and optional link. *Style*: icon picker, icon size, label font/color/height. *Notes*: full-height rich-text editor for private documentation — never shown on the canvas itself.
+- **Caption vs Notes** — "Caption" is canvas-visible text (subtitle under the node name). "Notes" is hidden documentation only accessible in the panel. Both fields are rich-text (Quill), stored separately in the model.
+- **Floating action bar** — When a node is selected in edit mode a compact pill bar appears above the node on the canvas with five icon buttons: Style, Edit name, Link, Notes (opens the Notes tab), Delete.
+- **Note indicator dot** — Nodes with non-empty Notes show a small blue dot at the top-right of their icon on the canvas.
+- **Read-only node panel** — In `EXPLORABLE_READONLY` mode, clicking a node opens the same panel in read-only form (Details + Notes tabs, no Style tab, no editing).
+- **Double-click to place node** — Double-clicking empty canvas opens a compact icon-picker popover at the cursor; selecting an icon places the node and immediately opens its Details tab for naming.
 - **Clickable node links** — Attach a URL to any node; its label becomes a clickable link in the diagram.
-- **Node label font size and color** — Adjust font size and text color from the node settings panel.
+- **Node label font size and color** — Adjust font size and text color from the Style tab.
 - **Text box rich text and color** — Text boxes support bold, italic, bullet lists, headers, and more. Text color is adjustable. The box auto-expands to fit its content.
 - **Connector label styling** — Per-label font size (8–24 px), text color, and position control. The color section is clearly labelled "Line Color" to distinguish it from label color.
 
@@ -114,10 +120,25 @@ Diagrams are saved to a `diagrams/` folder in the project directory.
 
 ### 2026-03-29
 
+#### Features
+
+- **Node panel — 3-tab redesign (Details / Style / Notes):** Replaced single-scroll accordion panel with a clean tab layout. *Details* tab: Name field, Caption (short rich-text shown on canvas), optional link. *Style* tab: Icon picker (inline, no mode switch), icon size slider, label font size/color/height. *Notes* tab: full-height rich-text editor (Quill, ~14 lines). Edit mode shows all three tabs; read-only mode shows Details + Notes only. Panel is 300 px wide.
+- **Caption vs Notes naming:** The former "Description" field is now called **Caption** (signals that it appears visually on the canvas under the node name). The **Notes** field is private documentation shown only in the panel. Both are HTML-based rich text stored separately in `ModelItem`.
+- **`notes` field on nodes:** `ModelItem` carries an optional `notes` rich-text field (HTML string, no max length) backed by the Zod schema. Backwards-compatible — old diagrams without `notes` load fine.
+- **Notes tab sizing:** Notes editor fills the full tab height (~300 px / ~14 lines); Caption editor is compact (80 px / ~3 lines) to signal brevity.
+- **Floating action bar:** When a node is selected in editable mode, a compact pill bar appears above the node on the isometric canvas with five icon buttons: Style (opens Style tab), Edit name (focuses name field in Details), Link (toggle/focus link), Notes (opens Notes tab; lights up primary when notes exist), Delete. Bar tracks the node as it scrolls and zooms.
+- **Note indicator dot:** Nodes with non-empty Notes show a small blue dot at the top-right of their icon on the canvas.
+- **Read-only node panel:** In `EXPLORABLE_READONLY` mode, clicking a node opens the panel in read-only form — name + icon in header, Details tab (caption, link), Notes tab (read-only Quill). No editing controls, no Style tab, no delete.
+- **Double-click to place node:** Double-clicking empty canvas in editable mode opens a compact icon-picker popover at the cursor. Selecting an icon places a new node on that tile and immediately opens its Details tab for naming.
+- **MUI toolbar:** Toolbar in `fossflow-app` fully rewritten with MUI components — `Button`, `Divider`, `Chip`, `Popover`, `Alert`, `Typography`. Custom Bootstrap-era CSS classes removed from `App.css`.
+- **Toolbar button hierarchy:** Save is `variant="contained"` (primary, blue). Diagrams and Share are `variant="outlined"` — consistent secondary actions. Eliminates the former gray-blob `contained color="inherit"` style on the Diagrams button.
+- **Theme density:** MUI theme tightened (`spacing: 6`, `fontSize: 14`, `borderRadius: 6`, global `size: 'small'` defaults for Button, TextField, Slider). Section padding reduced across all control panels.
+
 #### Bug Fixes
 
-- **Lasso tool reverted to pointer on first click:** Activating the lasso tool and clicking on the canvas immediately reset the mode to CURSOR before any drag could begin. The `mousedown` handler was switching modes when there was no existing selection; it now does nothing on a fresh click and lets `mousemove` build the selection box. Clicking outside an existing selection clears it and stays in lasso mode.
-- **Sporadic canvas drag — ghost image bug:** Dragging nodes or multi-selections would occasionally cause the entire canvas to slide as a browser ghost image instead of moving items. Root cause: the browser fired `dragstart` on SVG icons and `<img>` elements, hijacking `mousemove` events before `DRAG_ITEMS` mode could respond. Fixed by calling `preventDefault()` on `dragstart` events on the renderer container element (not `window`, to avoid affecting toolbar or dialog drag-and-drop).
+- **Lasso tool reverted to pointer on first click:** Activating the lasso tool and clicking on the canvas immediately reset the mode to CURSOR before any drag could begin. Fixed: `mousedown` with no existing selection is now a no-op; `mousemove` builds the selection box. Clicking outside an existing selection clears it and stays in lasso mode.
+- **Sporadic canvas drag — ghost image bug:** Dragging nodes or multi-selections would occasionally cause the entire canvas to slide as a browser ghost image. Root cause: browser `dragstart` on SVG icons and `<img>` elements hijacked `mousemove` events. Fixed by calling `preventDefault()` on `dragstart` on the renderer container element (not `window`).
+- **aria-hidden focus warnings:** `MainMenu` and `QuickAddNodePopover` were triggering browser accessibility warnings ("Blocked aria-hidden on an element because its descendant retained focus") when closing. Fixed: `MainMenu.onClose` restores focus to the anchor button before hiding; `QuickAddNodePopover.handleClose` blurs the active element before unmounting. Same pattern already used in `ContextMenu`.
 
 #### Tests
 

@@ -509,6 +509,22 @@ export const useInteractionManager = () => {
 
     const onDragStart = (e: DragEvent) => e.preventDefault();
 
+    const onDblClick = (e: MouseEvent) => {
+      if (!rendererRef.current) return;
+      const uiState = uiStateApi.getState();
+      if (uiState.editorMode !== 'EDITABLE') return;
+      if (uiState.mode.type !== 'CURSOR') return;
+      const tile = uiState.mouse.position.tile;
+      const item = getItemAtTile({ tile, scene });
+      if (!item) {
+        window.dispatchEvent(
+          new CustomEvent('canvasEmptyDblClick', {
+            detail: { tile, screenX: e.clientX, screenY: e.clientY }
+          })
+        );
+      }
+    };
+
     el.addEventListener('mousemove', onMouseEvent);
     el.addEventListener('mousedown', onMouseEvent);
     el.addEventListener('mouseup', onMouseEvent);
@@ -518,6 +534,7 @@ export const useInteractionManager = () => {
     el.addEventListener('touchend', onTouchEnd);
     rendererEl?.addEventListener('wheel', onScroll, { passive: true });
     rendererEl?.addEventListener('dragstart', onDragStart);
+    rendererEl?.addEventListener('dblclick', onDblClick);
 
     return () => {
       el.removeEventListener('mousemove', onMouseEvent);
@@ -529,6 +546,7 @@ export const useInteractionManager = () => {
       el.removeEventListener('touchend', onTouchEnd);
       rendererEl?.removeEventListener('wheel', onScroll);
       rendererEl?.removeEventListener('dragstart', onDragStart);
+      rendererEl?.removeEventListener('dblclick', onDblClick);
       cleanup();
     };
   }, [
@@ -539,6 +557,7 @@ export const useInteractionManager = () => {
     rendererEl,
     rendererSize,
     uiStateApi,
+    scene,
     cleanup
   ]);
 

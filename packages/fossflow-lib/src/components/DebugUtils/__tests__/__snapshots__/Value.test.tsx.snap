@@ -3,10 +3,10 @@
 exports[`Value matches snapshot 1`] = `
 <DocumentFragment>
   <div
-    class="MuiBox-root css-1xrtkr"
+    class="MuiBox-root css-15potm4"
   >
     <p
-      class="MuiTypography-root MuiTypography-body2 css-1788z1s-MuiTypography-root"
+      class="MuiTypography-root MuiTypography-body2 css-qg16d9-MuiTypography-root"
     >
       Snapshot Value
     </p>

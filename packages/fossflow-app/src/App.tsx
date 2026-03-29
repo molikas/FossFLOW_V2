@@ -4,6 +4,24 @@ import { flattenCollections } from '@isoflow/isopacks/dist/utils';
 import isoflowIsopack from '@isoflow/isopacks/dist/isoflow';
 import { useTranslation } from 'react-i18next';
 import {
+  Button,
+  Divider,
+  Popover,
+  Stack,
+  TextField,
+  Typography,
+  Chip,
+  Alert,
+  IconButton,
+  Box
+} from '@mui/material';
+import {
+  SaveOutlined as SaveIcon,
+  FolderOpenOutlined as FolderIcon,
+  LinkOutlined as LinkIcon,
+  Close as CloseIcon
+} from '@mui/icons-material';
+import {
   DiagramData,
   mergeDiagramData,
   extractSavableData
@@ -775,95 +793,136 @@ function EditorPage() {
 
   return (
     <div className="App">
-      <div className="toolbar">
-        <div className="toolbar-left">
+      <Box
+        className="toolbar"
+        sx={{
+          bgcolor: 'background.paper',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          px: 1.5,
+          py: 0.75,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0
+        }}
+      >
+        <Box className="toolbar-left" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
           {!isReadonlyUrl && (
             <>
-              <button
-                className="toolbar-btn"
+              <Button
+                variant="contained"
+                size="small"
+                startIcon={<SaveIcon />}
                 onClick={handleSaveClick}
                 title={t('nav.save', 'Save') + ' (Ctrl+S)'}
                 disabled={!!currentDiagram && !hasUnsavedChanges}
-                style={{ opacity: (!!currentDiagram && !hasUnsavedChanges) ? 0.5 : 1 }}
               >
-                💾 {t('nav.save', 'Save')}
-              </button>
-              <button className="toolbar-btn" onClick={handleOpenClick} title={t('nav.load', 'Load') + ' (Ctrl+O)'}>
-                📂 {t('nav.diagrams', 'Diagrams')}
-              </button>
-              <div style={{ position: 'relative' }}>
-                <button
-                  className="toolbar-btn"
-                  ref={shareButtonRef}
-                  onClick={handleShareClick}
-                  title={t('nav.share', 'Share')}
-                  disabled={!serverStorageAvailable || !currentDiagram}
-                  style={{ opacity: (!serverStorageAvailable || !currentDiagram) ? 0.5 : 1 }}
-                >
-                  🔗 {t('nav.share', 'Share')}
-                </button>
-                {showSharePopover && currentDiagram && (
-                  <div className="share-popover">
-                    <div className="share-popover-header">
-                      <span>{t('share.title', 'Share Diagram')}</span>
-                      <button className="share-popover-close" onClick={() => setShowSharePopover(false)}>×</button>
-                    </div>
-                    <p className="share-popover-hint">{t('share.hint', 'Anyone with this link can view the diagram in read-only mode.')}</p>
-                    <div className="share-popover-row">
-                      <input
-                        className="share-popover-url"
-                        type="text"
-                        readOnly
-                        value={`${window.location.origin}/display/${currentDiagram.id}`}
-                        onClick={handleShareUrlClick}
-                      />
-                      <button
-                        className={`share-popover-copy${shareCopied ? ' copied' : ''}`}
-                        onClick={handleShareClick}
-                      >
-                        {shareCopied ? '✓ Copied!' : 'Copy'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
+                {t('nav.save', 'Save')}
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<FolderIcon />}
+                onClick={handleOpenClick}
+                title={t('nav.load', 'Load') + ' (Ctrl+O)'}
+              >
+                {t('nav.diagrams', 'Diagrams')}
+              </Button>
+              <Button
+                ref={shareButtonRef}
+                variant="outlined"
+                size="small"
+                startIcon={<LinkIcon />}
+                onClick={handleShareClick}
+                title={t('nav.share', 'Share')}
+                disabled={!serverStorageAvailable || !currentDiagram}
+              >
+                {t('nav.share', 'Share')}
+              </Button>
+              <Popover
+                open={showSharePopover && !!currentDiagram}
+                anchorEl={shareButtonRef.current}
+                onClose={() => setShowSharePopover(false)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+                PaperProps={{ sx: { p: 2, width: 380, mt: 0.5 } }}
+              >
+                <Stack spacing={1.5}>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center">
+                    <Typography variant="subtitle2">{t('share.title', 'Share Diagram')}</Typography>
+                    <IconButton size="small" onClick={() => setShowSharePopover(false)}>
+                      <CloseIcon />
+                    </IconButton>
+                  </Stack>
+                  <Typography variant="body2" color="text.secondary">
+                    {t('share.hint', 'Anyone with this link can view the diagram in read-only mode.')}
+                  </Typography>
+                  <Stack direction="row" spacing={1}>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      value={currentDiagram ? `${window.location.origin}/display/${currentDiagram.id}` : ''}
+                      inputProps={{ readOnly: true, style: { fontFamily: 'monospace', fontSize: 12 } }}
+                      onClick={handleShareUrlClick}
+                    />
+                    <Button
+                      variant={shareCopied ? 'contained' : 'outlined'}
+                      color={shareCopied ? 'success' : 'primary'}
+                      size="small"
+                      onClick={handleShareClick}
+                      sx={{ whiteSpace: 'nowrap', minWidth: 80 }}
+                    >
+                      {shareCopied ? '✓ Copied!' : 'Copy'}
+                    </Button>
+                  </Stack>
+                </Stack>
+              </Popover>
             </>
           )}
           {isReadonlyUrl && (
-            <div className="readonly-badge">{t('dialog.readOnly.mode')}</div>
+            <Chip label={t('dialog.readOnly.mode')} variant="outlined" size="small" />
           )}
-        </div>
+        </Box>
 
-        <div className="toolbar-center" />
+        <Box className="toolbar-center" sx={{ flex: 1 }} />
 
-        <div className="toolbar-right">
+        <Box className="toolbar-right" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
           {!isReadonlyUrl && (
-            <span className={`save-status${hasUnsavedChanges ? ' save-status-dirty' : ''}`}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: hasUnsavedChanges ? 'text.primary' : 'text.secondary',
+                whiteSpace: 'nowrap',
+                userSelect: 'none'
+              }}
+            >
               {lastSaved
                 ? `${formatSavedAt(lastSaved)}${hasUnsavedChanges ? ' •' : ''}`
                 : hasUnsavedChanges
                   ? 'Unsaved'
                   : ''
               }
-            </span>
+            </Typography>
           )}
-          {!isReadonlyUrl && <div className="toolbar-divider" />}
+          {!isReadonlyUrl && (
+            <Divider orientation="vertical" flexItem sx={{ mx: 0.25 }} />
+          )}
           <ChangeLanguage />
-        </div>
-      </div>
+        </Box>
+      </Box>
 
       {/* Session storage banner — shown once per session, dismissible */}
       {!serverStorageAvailable && !isReadonlyUrl && !sessionWarningDismissed && (
-        <div className="session-banner">
-          <span>⚠️ {t('status.sessionStorageNote', 'Session storage only — diagrams will be lost when you close this tab. Use a server backend for persistence.')}</span>
-          <button
-            className="session-banner-dismiss"
-            onClick={() => {
-              setSessionWarningDismissed(true);
-              sessionStorage.setItem('foss-session-warning-dismissed', '1');
-            }}
-          >×</button>
-        </div>
+        <Alert
+          severity="warning"
+          onClose={() => {
+            setSessionWarningDismissed(true);
+            sessionStorage.setItem('foss-session-warning-dismissed', '1');
+          }}
+          sx={{ borderRadius: 0, py: 0.5, fontSize: 12 }}
+        >
+          {t('status.sessionStorageNote', 'Session storage only — diagrams will be lost when you close this tab. Use a server backend for persistence.')}
+        </Alert>
       )}
 
       <div className="fossflow-container">

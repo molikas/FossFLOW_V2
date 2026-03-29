@@ -52,6 +52,10 @@ const createShadows = () => {
 export const themeConfig: ThemeOptions = {
   customVars,
   shadows: createShadows(),
+  spacing: 6,
+  shape: {
+    borderRadius: 6
+  },
   transitions: {
     duration: {
       shortest: 50,
@@ -64,22 +68,23 @@ export const themeConfig: ThemeOptions = {
     }
   },
   typography: {
+    fontSize: 14,
     h2: {
-      fontSize: '4em',
+      fontSize: '2.5rem',
       fontStyle: 'bold',
       lineHeight: 1.2
     },
     h5: {
-      fontSize: '1.3em',
+      fontSize: '1.15rem',
       lineHeight: 1.2
     },
     body1: {
-      fontSize: '0.85em',
-      lineHeight: 1.2
+      fontSize: '0.875rem',
+      lineHeight: 1.4
     },
     body2: {
-      fontSize: '0.75em',
-      lineHeight: 1.2
+      fontSize: '0.8125rem',
+      lineHeight: 1.4
     }
   },
   palette: {
@@ -111,6 +116,7 @@ export const themeConfig: ThemeOptions = {
       defaultProps: {
         disableElevation: true,
         variant: 'contained',
+        size: 'small',
         disableRipple: true,
         disableTouchRipple: true
       },
@@ -118,6 +124,22 @@ export const themeConfig: ThemeOptions = {
         root: {
           textTransform: 'none'
         }
+      }
+    },
+    MuiTextField: {
+      defaultProps: {
+        variant: 'outlined',
+        size: 'small'
+      },
+      styleOverrides: {
+        root: {
+          '.MuiInputBase-input': {}
+        }
+      }
+    },
+    MuiSlider: {
+      defaultProps: {
+        size: 'small'
       }
     },
     MuiSvgIcon: {
@@ -128,16 +150,6 @@ export const themeConfig: ThemeOptions = {
         root: {
           width: 17,
           height: 17
-        }
-      }
-    },
-    MuiTextField: {
-      defaultProps: {
-        variant: 'outlined'
-      },
-      styleOverrides: {
-        root: {
-          '.MuiInputBase-input': {}
         }
       }
     }

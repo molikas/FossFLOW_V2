@@ -102,10 +102,30 @@ export const Node = memo(({ node, order }: Props) => {
               pointerEvents: 'none',
               display: 'flex',
               justifyContent: 'center',
-              alignItems: 'center'
+              alignItems: 'center',
+              position: 'relative'
             }}
           >
             {iconComponent}
+            {modelItem.notes && modelItem.notes.replace(/<[^>]*>/g, '').trim() && (
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: -6,
+                  right: -6,
+                  width: 14,
+                  height: 14,
+                  borderRadius: '50%',
+                  bgcolor: '#1565c0',
+                  border: '2px solid #fff',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.35)',
+                  pointerEvents: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              />
+            )}
           </Box>
         )}
       </Box>

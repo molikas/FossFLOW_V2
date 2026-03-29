@@ -160,6 +160,9 @@ export const MainMenu = () => {
         anchorEl={anchorEl}
         open={isMainMenuOpen}
         onClose={() => {
+          // Restore focus to anchor before MUI sets aria-hidden on the modal root,
+          // otherwise the browser warns about aria-hidden on a focused element.
+          if (anchorEl) anchorEl.focus();
           uiStateActions.setIsMainMenuOpen(false);
         }}
         elevation={0}

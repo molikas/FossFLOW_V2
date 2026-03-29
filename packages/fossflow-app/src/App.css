@@ -5,85 +5,10 @@
   overflow: hidden;
 }
 
+/* toolbar layout — background/border handled by MUI Box sx props in App.tsx */
 .toolbar {
-  background-color: #f5f5f5;
-  border-bottom: 1px solid #ddd;
-  padding: 8px 12px;
   display: flex;
   align-items: center;
-  gap: 0;
-}
-
-.toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.toolbar-center {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.toolbar-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #333;
-}
-
-.toolbar-title-unsaved {
-  color: #ff9800;
-}
-
-.session-banner {
-  background: #fff8e1;
-  border-bottom: 1px solid #ffe082;
-  padding: 6px 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 13px;
-  color: #795548;
-}
-
-.session-banner-dismiss {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: #aaa;
-  font-size: 18px;
-  padding: 0 4px;
-  line-height: 1;
-  margin-left: 12px;
-  flex-shrink: 0;
-}
-
-.session-banner-dismiss:hover {
-  color: #555;
-}
-
-.toolbar button {
-  padding: 8px 16px;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-.toolbar button:hover {
-  background-color: #0056b3;
 }
 
 
@@ -232,119 +157,7 @@
   background-color: #c82333;
 }
 
-/* Toolbar buttons */
-.toolbar-btn {
-  padding: 8px 14px;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.toolbar-btn:hover {
-  background-color: #0056b3;
-}
-
-.toolbar-btn:disabled {
-  cursor: not-allowed;
-}
-
-.toolbar-btn-icon {
-  padding: 6px 10px;
-  font-size: 16px;
-  min-width: 32px;
-}
-
-.toolbar-divider {
-  width: 1px;
-  height: 24px;
-  background-color: #ddd;
-  margin: 0 4px;
-}
-
-/* Readonly badge */
-.readonly-badge {
-  padding: 6px 14px;
-  border: 2px solid #000;
-  border-radius: 4px;
-  font-weight: bold;
-  font-size: 14px;
-}
-
-/* Share popover */
-.share-popover {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  z-index: 2000;
-  background: white;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-  padding: 16px;
-  min-width: 380px;
-}
-
-.share-popover-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-  font-weight: 600;
-  font-size: 15px;
-}
-
-.share-popover-close {
-  background: none;
-  border: none;
-  font-size: 20px;
-  cursor: pointer;
-  padding: 0 4px;
-  line-height: 1;
-  color: #666;
-}
-
-.share-popover-hint {
-  font-size: 13px;
-  color: #666;
-  margin: 0 0 12px;
-}
-
-.share-popover-row {
-  display: flex;
-  gap: 8px;
-}
-
-.share-popover-url {
-  flex: 1;
-  padding: 8px 10px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 13px;
-  font-family: monospace;
-  background: #f9f9f9;
-}
-
-.share-popover-copy {
-  padding: 8px 14px;
-  background: #007bff;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 13px;
-  white-space: nowrap;
-  transition: background 0.2s;
-}
-
-.share-popover-copy.copied {
-  background: #28a745;
-}
+/* Toolbar buttons, divider, badge, share popover — now handled by MUI components in App.tsx */
 
 /* Session-only warning (red) */
 .session-warning {
@@ -383,18 +196,7 @@
   background-color: #218838;
 }
 
-/* Save status label (toolbar center) */
-.save-status {
-  font-size: 13px;
-  color: #888;
-  font-weight: 400;
-  white-space: nowrap;
-  user-select: none;
-}
-
-.save-status-dirty {
-  color: #555;
-}
+/* Save status — now handled by MUI Typography sx in App.tsx */
 
 /* Save confirmation toast */
 .save-toast {

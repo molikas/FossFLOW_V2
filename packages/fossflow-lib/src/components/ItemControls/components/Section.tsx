@@ -11,8 +11,8 @@ export const Section = ({ children, sx, title }: Props) => {
   return (
     <Box
       sx={{
-        pt: 3,
-        px: 3,
+        pt: 1.5,
+        px: 2,
         ...sx
       }}
     >

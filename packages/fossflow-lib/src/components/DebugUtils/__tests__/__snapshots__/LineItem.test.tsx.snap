@@ -3,13 +3,13 @@
 exports[`LineItem matches snapshot 1`] = `
 <DocumentFragment>
   <div
-    class="MuiBox-root css-1at3ae4"
+    class="MuiBox-root css-hcu7q7"
   >
     <div
       class="MuiBox-root css-v7v99c"
     >
       <p
-        class="MuiTypography-root MuiTypography-body1 css-b9d4f8-MuiTypography-root"
+        class="MuiTypography-root MuiTypography-body1 css-usvsv9-MuiTypography-root"
       >
         Snapshot Title
       </p>
@@ -18,10 +18,10 @@ exports[`LineItem matches snapshot 1`] = `
       class="MuiBox-root css-i9gxme"
     >
       <div
-        class="MuiBox-root css-1xrtkr"
+        class="MuiBox-root css-15potm4"
       >
         <p
-          class="MuiTypography-root MuiTypography-body2 css-1788z1s-MuiTypography-root"
+          class="MuiTypography-root MuiTypography-body2 css-qg16d9-MuiTypography-root"
         >
           Snapshot Value
         </p>

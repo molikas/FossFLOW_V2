@@ -1,153 +1,120 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Box, Stack, Button, IconButton as MUIIconButton } from '@mui/material';
-import {
-  ChevronRight as ChevronRightIcon,
-  ChevronLeft as ChevronLeftIcon,
-  Close as CloseIcon
-} from '@mui/icons-material';
-import { useIconCategories } from 'src/hooks/useIconCategories';
-import { useIcon } from 'src/hooks/useIcon';
+import { Box, Tabs, Tab, Button } from '@mui/material';
+import { Close as CloseIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { useScene } from 'src/hooks/useScene';
 import { useViewItem } from 'src/hooks/useViewItem';
 import { useUiStateStore } from 'src/stores/uiStateStore';
 import { useModelItem } from 'src/hooks/useModelItem';
+import { useIcon } from 'src/hooks/useIcon';
 import { ControlsContainer } from '../components/ControlsContainer';
-import { Icons } from '../IconSelectionControls/Icons';
-import { NodeSettings } from './NodeSettings/NodeSettings';
-import { Section } from '../components/Section';
-import { QuickIconSelector } from './QuickIconSelector';
+import { NodeInfoTab } from './NodeInfoTab/NodeInfoTab';
+import { NodeStyleTab } from './NodeStyleTab/NodeStyleTab';
 
 interface Props {
   id: string;
+  readOnly?: boolean;
 }
 
-const ModeOptions = {
-  SETTINGS: 'SETTINGS',
-  CHANGE_ICON: 'CHANGE_ICON'
-} as const;
-
-type Mode = keyof typeof ModeOptions;
-
-export const NodeControls = ({ id }: Props) => {
-  const [mode, setMode] = useState<Mode>('SETTINGS');
+export const NodeControls = ({ id, readOnly }: Props) => {
+  const [tab, setTab] = useState(0);
+  const [showLink, setShowLink] = useState(false);
   const { updateModelItem, updateViewItem, deleteViewItem } = useScene();
-  const uiStateActions = useUiStateStore((state) => {
-    return state.actions;
-  });
+  const uiStateActions = useUiStateStore((state) => state.actions);
   const viewItem = useViewItem(id);
   const modelItem = useModelItem(id);
-  const { iconCategories } = useIconCategories();
   const { icon } = useIcon(modelItem?.icon || '');
 
-  const onSwitchMode = useCallback((newMode: Mode) => {
-    setMode(newMode);
-  }, []);
-
-  // Listen for quick icon change event (triggered by 'i' hotkey)
+  // 'i' hotkey → jump to Style tab (icon picker) — only in editable mode
   useEffect(() => {
-    const handleQuickIconChange = () => {
-      setMode('CHANGE_ICON');
-    };
-
+    if (readOnly) return;
+    const handleQuickIconChange = () => setTab(1);
     window.addEventListener('quickIconChange', handleQuickIconChange);
-    return () => {
-      window.removeEventListener('quickIconChange', handleQuickIconChange);
-    };
-  }, []);
+    return () => window.removeEventListener('quickIconChange', handleQuickIconChange);
+  }, [readOnly]);
 
-  // If items don't exist, return null (component will unmount)
-  if (!viewItem || !modelItem) {
-    return null;
-  }
+  const handleClose = useCallback(() => {
+    uiStateActions.setItemControls(null);
+  }, [uiStateActions]);
+
+  const handleDelete = useCallback(() => {
+    uiStateActions.setItemControls(null);
+    deleteViewItem(viewItem!.id);
+  }, [uiStateActions, deleteViewItem, viewItem]);
+
+  if (!viewItem || !modelItem) return null;
 
   return (
     <ControlsContainer>
+      {/* Header: tabs + close */}
       <Box
         sx={{
-          bgcolor: (theme) => {
-            return theme.customVars.customPalette.diagramBg;
-          },
-          position: 'relative'
+          display: 'flex',
+          alignItems: 'center',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          pr: 0.5
         }}
       >
-        {/* Close button */}
-        <MUIIconButton
-          aria-label="Close"
-          onClick={() => {
-            return uiStateActions.setItemControls(null);
-          }}
-          sx={{
-            position: 'absolute',
-            top: 8,
-            right: 8,
-            zIndex: 2
-          }}
-          size="small"
+        <Tabs
+          value={tab}
+          onChange={(_, v) => setTab(v)}
+          sx={{ flex: 1, minHeight: 36 }}
+          TabIndicatorProps={{ style: { height: 2 } }}
         >
-          <CloseIcon />
-        </MUIIconButton>
-        <Section sx={{ py: 2 }}>
-          <Stack
-            direction="row"
-            spacing={2}
-            alignItems="flex-end"
-            justifyContent="space-between"
+          <Tab label="Info" sx={{ minHeight: 36, py: 0, fontSize: 13 }} />
+          {!readOnly && <Tab label="Style" sx={{ minHeight: 36, py: 0, fontSize: 13 }} />}
+        </Tabs>
+        {!readOnly && (
+          <Button
+            size="small"
+            color="error"
+            variant="text"
+            startIcon={<DeleteIcon sx={{ width: 14, height: 14 }} />}
+            onClick={handleDelete}
+            sx={{ fontSize: 11, px: 1, minWidth: 0, whiteSpace: 'nowrap' }}
           >
-            <Box
-              component="img"
-              src={icon.url}
-              sx={{ width: 70, height: 70 }}
-            />
-            {mode === 'SETTINGS' && (
-              <Button
-                endIcon={<ChevronRightIcon />}
-                onClick={() => {
-                  onSwitchMode('CHANGE_ICON');
-                }}
-                variant="text"
-              >
-                Update icon
-              </Button>
-            )}
-            {mode === 'CHANGE_ICON' && (
-              <Button
-                startIcon={<ChevronLeftIcon />}
-                onClick={() => {
-                  onSwitchMode('SETTINGS');
-                }}
-                variant="text"
-              >
-                Settings
-              </Button>
-            )}
-          </Stack>
-        </Section>
+            Delete
+          </Button>
+        )}
+        <Box
+          component="button"
+          onClick={handleClose}
+          aria-label="Close"
+          sx={{
+            ml: 0.5,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 24,
+            height: 24,
+            border: 'none',
+            background: 'none',
+            cursor: 'pointer',
+            borderRadius: 1,
+            color: 'text.secondary',
+            '&:hover': { bgcolor: 'action.hover' }
+          }}
+        >
+          <CloseIcon sx={{ width: 16, height: 16 }} />
+        </Box>
       </Box>
-      {mode === 'SETTINGS' && (
-        <NodeSettings
-          key={viewItem.id}
+
+      {/* Tab panels */}
+      {tab === 0 && (
+        <NodeInfoTab
           node={viewItem}
-          onModelItemUpdated={(updates) => {
-            updateModelItem(viewItem.id, updates);
-          }}
-          onViewItemUpdated={(updates) => {
-            updateViewItem(viewItem.id, updates);
-          }}
-          onDeleted={() => {
-            uiStateActions.setItemControls(null);
-            deleteViewItem(viewItem.id);
-          }}
+          readOnly={readOnly}
+          onModelItemUpdated={(updates) => updateModelItem(viewItem.id, updates)}
+          showLink={showLink}
+          onShowLinkChange={setShowLink}
         />
       )}
-      {mode === 'CHANGE_ICON' && (
-        <QuickIconSelector
-          currentIconId={modelItem.icon}
-          onIconSelected={(_icon) => {
-            updateModelItem(viewItem.id, { icon: _icon.id });
-          }}
-          onClose={() => {
-            onSwitchMode('SETTINGS');
-          }}
+      {tab === 1 && !readOnly && (
+        <NodeStyleTab
+          node={viewItem}
+          iconUrl={icon.url}
+          onModelItemUpdated={(updates) => updateModelItem(viewItem.id, updates)}
+          onViewItemUpdated={(updates) => updateViewItem(viewItem.id, updates)}
         />
       )}
     </ControlsContainer>
