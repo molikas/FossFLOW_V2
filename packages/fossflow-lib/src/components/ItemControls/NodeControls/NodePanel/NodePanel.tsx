@@ -81,7 +81,7 @@ export const NodePanel = ({ viewItem, readOnly }: Props) => {
           setActiveTab(TAB_STYLE);
           break;
         case 'focusNotes':
-          setActiveTab(readOnly ? TAB_READONLY_NOTES : TAB_NOTES);
+          setActiveTab(TAB_NOTES);
           break;
       }
     };
