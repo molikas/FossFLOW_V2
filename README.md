@@ -53,6 +53,7 @@ Measured on an 85-node / 54-connector diagram:
 - Editing a node no longer adds an empty description block to its canvas label.
 - Language selector stays on screen — dropdown anchors to the right edge of the button.
 - Lasso hint auto-dismisses after first use.
+- Lasso tool activates correctly on first canvas click — no longer reverts to pointer before drawing the selection box.
 - Help dialog (`F1` / `?`) documents all keyboard shortcuts.
 - Session-only storage shows a dismissible warning banner.
 
@@ -108,6 +109,21 @@ Diagrams are saved to a `diagrams/` folder in the project directory.
 - **Verbose logging removed:** Operational `console.log` calls stripped from `storageService` and `App` — only errors remain. Reduces console noise in production.
 - **Old-format icon migration:** Diagrams saved before the full-icon-set format was introduced are silently re-saved on first load so subsequent loads no longer re-run the merge path.
 - **aria-hidden focus warning fixed:** MUI context menu was setting `aria-hidden` on its modal root while a descendant still held focus, triggering a browser accessibility warning. Focus is now moved back to the anchor element before the menu closes.
+
+---
+
+### 2026-03-29
+
+#### Bug Fixes
+
+- **Lasso tool reverted to pointer on first click:** Activating the lasso tool and clicking on the canvas immediately reset the mode to CURSOR before any drag could begin. The `mousedown` handler was switching modes when there was no existing selection; it now does nothing on a fresh click and lets `mousemove` build the selection box. Clicking outside an existing selection clears it and stays in lasso mode.
+- **Sporadic canvas drag — ghost image bug:** Dragging nodes or multi-selections would occasionally cause the entire canvas to slide as a browser ghost image instead of moving items. Root cause: the browser fired `dragstart` on SVG icons and `<img>` elements, hijacking `mousemove` events before `DRAG_ITEMS` mode could respond. Fixed by calling `preventDefault()` on `dragstart` events on the renderer container element (not `window`, to avoid affecting toolbar or dialog drag-and-drop).
+
+#### Tests
+
+- New suite: `dragStart.prevention.test.ts` — pins `dragstart` handler on `rendererEl`, not `window`, and verifies cleanup.
+- Updated: `Lasso.modes.test.ts`, `toolMenu.propagation.test.tsx` — reflect corrected lasso `mousedown` behaviour.
+- Test count: 572 → 575, 59 → 60 suites, all passing.
 
 ---
 

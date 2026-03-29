@@ -139,16 +139,21 @@ export const Lasso: ModeActions = {
       }
     }
 
-    // Clicked outside selection (or no selection).
-    // Only reset to cursor for genuine canvas interactions — clicks on UI panels etc.
-    // should leave the lasso mode/selection unchanged.
+    // Clicked outside an existing selection — clear it and start a new drag.
+    // If there's no selection yet, do nothing: mousemove will build the selection box.
+    // Only act on genuine canvas interactions; UI panel clicks leave lasso mode unchanged.
     if (!isRendererInteraction) return;
 
-    uiState.actions.setMode({
-      type: 'CURSOR',
-      showCursor: true,
-      mousedownItem: null
-    });
+    if (uiState.mode.selection) {
+      // Clear the old selection so the next drag starts fresh
+      uiState.actions.setMode({
+        type: 'LASSO',
+        showCursor: true,
+        selection: null,
+        isDragging: false
+      });
+    }
+    // No selection yet — do nothing, let mousemove handle the drag
   },
 
   mouseup: ({ uiState }) => {

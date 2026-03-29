@@ -75,15 +75,13 @@ describe('Lasso.mousedown (real module)', () => {
     expect(uiState.actions.setMode).not.toHaveBeenCalled();
   });
 
-  it('switches to CURSOR when clicked outside selection (no selection)', () => {
+  it('does nothing when clicked on canvas with no existing selection (lets mousemove build the box)', () => {
     const uiState = makeUiState();
     callMousedown(uiState, true);
-    expect(uiState.actions.setMode).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'CURSOR' })
-    );
+    expect(uiState.actions.setMode).not.toHaveBeenCalled();
   });
 
-  it('switches to CURSOR when clicked outside existing selection bounds', () => {
+  it('resets to empty LASSO (clears selection) when clicked outside existing selection bounds', () => {
     mockIsWithinBounds.mockReturnValue(false);
     const uiState = makeUiState({
       mode: {
@@ -94,6 +92,9 @@ describe('Lasso.mousedown (real module)', () => {
     });
     callMousedown(uiState, true);
     expect(uiState.actions.setMode).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'LASSO', selection: null })
+    );
+    expect(uiState.actions.setMode).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: 'CURSOR' })
     );
   });
@@ -185,13 +186,12 @@ describe('Lasso.mouseup (real module)', () => {
       }
     });
     callMouseup(uiState);
+    expect(uiState.actions.setMode).toHaveBeenCalledWith(
+      expect.objectContaining({ isDragging: false })
+    );
     // Should NOT switch to CURSOR
     expect(uiState.actions.setMode).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: 'CURSOR' })
-    );
-    // Should call setMode with isDragging: false
-    expect(uiState.actions.setMode).toHaveBeenCalledWith(
-      expect.objectContaining({ isDragging: false })
     );
   });
 });

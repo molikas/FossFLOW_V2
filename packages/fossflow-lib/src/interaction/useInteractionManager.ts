@@ -507,6 +507,8 @@ export const useInteractionManager = () => {
       }
     };
 
+    const onDragStart = (e: DragEvent) => e.preventDefault();
+
     el.addEventListener('mousemove', onMouseEvent);
     el.addEventListener('mousedown', onMouseEvent);
     el.addEventListener('mouseup', onMouseEvent);
@@ -515,6 +517,7 @@ export const useInteractionManager = () => {
     el.addEventListener('touchmove', onTouchMove);
     el.addEventListener('touchend', onTouchEnd);
     rendererEl?.addEventListener('wheel', onScroll, { passive: true });
+    rendererEl?.addEventListener('dragstart', onDragStart);
 
     return () => {
       el.removeEventListener('mousemove', onMouseEvent);
@@ -525,6 +528,7 @@ export const useInteractionManager = () => {
       el.removeEventListener('touchmove', onTouchMove);
       el.removeEventListener('touchend', onTouchEnd);
       rendererEl?.removeEventListener('wheel', onScroll);
+      rendererEl?.removeEventListener('dragstart', onDragStart);
       cleanup();
     };
   }, [

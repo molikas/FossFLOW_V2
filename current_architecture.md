@@ -1,6 +1,6 @@
 # FossFLOW Community Edition — Architecture Reference
 
-**Last updated:** 2026-03-27
+**Last updated:** 2026-03-29
 **Codebase root:** `packages/fossflow-lib/src` (library) · `packages/fossflow-app/src` (application shell)
 **Purpose:** Living architecture reference — feature inventory, store/reducer/mode architecture, test audit, gap analysis, lessons learned, and key APIs. Update this document whenever significant architectural changes are made.
 
@@ -36,7 +36,7 @@
 |---|---|---|---|---|
 | **Cursor / Select** | `interaction/modes/Cursor.ts` | `useInteractionManager` → `Cursor` mode entry | Reads `uiState.mouse`, `uiState.mode.mousedownItem`, `mousedownHandled`; writes `itemControls`, `contextMenu`, mode transitions | `mousedownHandled` flag distinguishes toolbar clicks (no mousedown fired) from genuine empty-canvas clicks — see Section 5 |
 | **Pan** | `interaction/modes/Pan.ts`, `interaction/usePanHandlers.ts` | `usePanHandlers` short-circuits `onMouseEvent` before `processMouseUpdate` | Reads `mouse.delta.screen`, writes `scroll.position`; uses `isPanningRef`, `panMethodRef` | Has a **bypass path** in `onMouseEvent` — middle/right/ctrl/alt/emptyArea clicks call `startPan()` directly and return early without going through `processMouseUpdate` |
-| **Lasso** | `interaction/modes/Lasso.ts` | Mode dispatch in `processMouseUpdate` | Reads `mouse.mousedown`, `mouse.position.tile`, `uiState.mode.selection`; writes mode with selection bounds + items array | `mousedown` within-selection check runs regardless of `isRendererInteraction` — clicking on a node element inside the selection correctly sets `isDragging=true`; only the "exit to CURSOR" path requires `isRendererInteraction`; `mouseup` guard (`!mouse.mousedown`) prevents toolbar-click stray events |
+| **Lasso** | `interaction/modes/Lasso.ts` | Mode dispatch in `processMouseUpdate` | Reads `mouse.mousedown`, `mouse.position.tile`, `uiState.mode.selection`; writes mode with selection bounds + items array | `mousedown` with no selection is a no-op — lets `mousemove` build the box; clicking outside an existing selection clears it and stays in LASSO (does NOT exit to CURSOR); `mouseup` with items stays in LASSO, without items exits to CURSOR; `mouseup` guard (`!mouse.mousedown`) prevents toolbar-click stray events |
 | **Freehand Lasso** | `interaction/modes/FreehandLasso.ts` | Mode dispatch in `processMouseUpdate` | Reads `mouse.position.screen`, writes `mode.path` (screen coords); on mouseup converts path to tiles via `screenToIso`, runs `isPointInPolygon` | Same `isRendererInteraction` fix as Lasso — within-selection check runs for all clicks; only new-path start and outside-selection clear require renderer interaction; uses `rendererEl.getBoundingClientRect()` at mouseup, not `rendererSize` |
 | **Drag Items** | `interaction/modes/DragItems.ts` | Transitioned to from Cursor.mousemove when mousedown + moved tile | Reads `mode.items`, `mode.initialTiles`, `mode.initialRectangles`, `mouse.position.tile`, `mouse.mousedown.tile`; uses **absolute positioning** (`initialTile + mouseOffset`); calls `scene.transaction()` wrapping updateViewItem, updateTextBox, updateRectangle | Guard: `mouseOffset != zero()` (replaces stale `hasMovedTile`); node collision = stay-at-last-valid (occupied-tile check only, no nearest-search); `not-allowed` cursor only when node dragged over another node; sets `renderer.style.userSelect = 'none'` on entry |
 | **Connector** | `interaction/modes/Connector.ts` | ToolMenu / hotkey → `setMode({type:'CONNECTOR'})` | Reads `connectorInteractionMode`; two sub-flows: click mode (first-click creates+stores `startAnchor`, second-click finalises) vs. drag mode (mousedown creates, mousemove updates anchor[1], mouseup finalises) | Entry calls `setWindowCursor('crosshair')`; Escape in `useInteractionManager` handles in-progress connection cleanup |
@@ -506,6 +506,7 @@ containerRef Box (position:absolute, full size, z-index:0)
 - `contextmenu` → `onContextMenu` (just calls `e.preventDefault()`)
 - `touchstart/touchmove/touchend` → synthesized mouse events → `onMouseEvent`
 - `rendererEl.wheel` → zoom handler (passive listener on container, not window)
+- `rendererEl.dragstart` → `e.preventDefault()` (scoped to canvas only — prevents browser native drag hijacking custom DRAG_ITEMS logic when mousedown lands on an SVG icon or `<img>` node)
 - `window.keydown` → hotkeys + mode switches
 
 **`stopPropagation` points (must be maintained):**

@@ -96,12 +96,10 @@ describe('Lasso.mousedown — isRendererInteraction guard (fix B, real module)',
     expect(uiState.actions.setMode).not.toHaveBeenCalled();
   });
 
-  it('switches to CURSOR when isRendererInteraction is true (canvas click, no selection)', () => {
+  it('does nothing on canvas click with no selection (lets mousemove build the box)', () => {
     const uiState = makeUiState();
     Lasso.mousedown!({ uiState, scene: { items: [], rectangles: [], textBoxes: [] }, isRendererInteraction: true } as any);
-    expect(uiState.actions.setMode).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'CURSOR' })
-    );
+    expect(uiState.actions.setMode).not.toHaveBeenCalled();
   });
 
   it('is a no-op when mode type is not LASSO even with renderer interaction', () => {
