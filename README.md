@@ -65,6 +65,45 @@ Measured on an 85-node / 54-connector diagram:
 
 ---
 
+## Code Coverage
+
+Coverage is built into the Jest test suite via Istanbul (bundled with `ts-jest`). No extra tooling needed.
+
+```bash
+# Run with HTML + LCOV + text summary
+npm test --workspace=packages/fossflow-lib -- --coverage
+```
+
+Reports land in `packages/fossflow-lib/coverage/`:
+- **`lcov-report/index.html`** — browseable line/branch/function view per file
+- **`lcov.info`** — LCOV format, integrates with VS Code Coverage Gutters extension and CI tools (Codecov, Coveralls)
+- **`coverage-summary.json`** — machine-readable totals
+
+Current thresholds (set in `jest.config.ts`): 10% global minimum for branches, functions, lines, and statements — intentionally low to avoid blocking CI while coverage grows. Raise as suites are added.
+
+### Branch coverage accuracy
+
+By default Jest uses Babel to instrument code (Istanbul-v8 fallback). For more accurate **branch coverage** (including TypeScript type narrowing paths), add to `jest.config.ts`:
+
+```ts
+coverageProvider: 'v8'
+```
+
+V8 coverage uses the Node.js runtime's native coverage counters, which catches paths that Babel misses.
+
+### Other tools evaluated
+
+| Tool | Purpose | Status |
+|------|---------|--------|
+| **ESLint** (`eslint.config.mjs`) | Lint + hooks rules | Configured, reports to `reports/eslint.txt` |
+| **Knip** | Dead code / unused exports / unlisted deps | Configured, reports to `reports/knip.txt` |
+| **npm audit** | CVE scanning | Available via `npm audit`; report in `reports/audit.txt` |
+| **Jest `--coverage`** | Line/branch/function/statement coverage | Configured in `jest.config.ts` |
+| **SonarQube / SonarCloud** | Comprehensive quality gate (complexity, duplication, security hotspots) | Not yet set up — would require CI pipeline integration |
+| **Codecov** | CI coverage trend tracking + PR annotations | Not yet set up — add after a baseline coverage run |
+
+---
+
 ## Getting Started
 
 Requires [Docker Desktop](https://www.docker.com/get-started/) and [Git](https://git-scm.com/downloads). No Node.js needed.
@@ -84,6 +123,20 @@ Diagrams are saved to a `diagrams/` folder in the project directory.
 ---
 
 ## [Unreleased]
+
+### 2026-03-30
+
+#### Code Quality & Security
+
+- **Static analysis pipeline established:** ESLint (flat config, v10), Knip (dead code / unused exports), and `npm audit` are now configured and running at root. Reports output to `reports/` to keep console noise minimal.
+- **Conditional hooks bug fixed (Connector.tsx):** `useIsoProjection` and 7 `useMemo` calls were invoked after an early `if (!color) return null` guard — a React Rules of Hooks violation causing latent state-corruption risk. All hooks are now called unconditionally before any early return.
+- **Stale closure fixed (useCopyPaste):** `showNotification` was a plain function re-created each render, causing `handleCopy`, `handleCut`, and `handlePaste` callbacks to close over a stale reference. Wrapped in `useCallback([uiStateApi])`.
+- **CVE patches:** `npm audit fix` resolved a path-to-regexp ReDoS (high) and a yaml stack-overflow (moderate). Quill XSS (high) documented as accepted risk — fixing requires a breaking downgrade of `react-quill-new`.
+- **14 dead files removed:** Knip identified and confirmed unreferenced: `EditorPage.tsx`, `minimalIcons.ts`, `usePersistedDiagram.ts`, `NodeControls.tsx`, `NodeSettings.tsx`, `Header.tsx`, `useWindowUtils.ts`, `RichTextEditor/index.ts`, `index-docker.tsx`, `service-worker.js`, and 4 stale docs-config files.
+- **Unused imports cleaned up:** Removed `Slider`, `Typography`, `Divider`, `FormControlLabel`, `CoordsUtils`, `IconPackName`, `mergeDiagramData`, `extractSavableData` from their respective files. Unused local vars prefixed `_` per ESLint convention.
+- **Debug logging removed:** Operational `console.log` calls stripped from `useInitialDataManager` — only errors remain.
+- **Locale type completeness fixed:** `addNodeGroupAction` / `addNodeGroupShortcut` / `addNodeGroupDescription` added to `LocaleProps` type and all 11 non-English locale files (English placeholder text).
+- **Code coverage infrastructure:** Jest already configured with Istanbul (via `ts-jest`) — line, branch, function, and statement coverage available via `npm test -- --coverage`. HTML report output to `packages/fossflow-lib/coverage/`. Thresholds currently set at 10% global minimums. See [Code Coverage](#code-coverage) below.
 
 ### 2026-03-29
 

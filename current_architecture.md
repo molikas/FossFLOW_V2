@@ -1,6 +1,6 @@
 # FossFLOW Community Edition — Architecture Reference
 
-**Last updated:** 2026-03-29 (rev 3)
+**Last updated:** 2026-03-30 (rev 4)
 **Codebase root:** `packages/fossflow-lib/src` (library) · `packages/fossflow-app/src` (application shell)
 **Purpose:** Living architecture reference — feature inventory, store/reducer/mode architecture, test audit, gap analysis, lessons learned, and key APIs. Update this document whenever significant architectural changes are made.
 
@@ -25,6 +25,7 @@
 5. [Lessons Learned](#5-lessons-learned)
 6. [Key APIs for Regression Coverage](#6-key-apis-for-regression-coverage)
 7. [Known Runtime Issues & Limitations](#7-known-runtime-issues--limitations)
+8. [Code Quality Infrastructure](#8-code-quality-infrastructure)
 
 ---
 
@@ -1474,4 +1475,71 @@ A `•` dot appends to the label when `hasUnsavedChanges` is true. Label is hidd
 
 ---
 
-*End of document. Last updated: 2026-03-27.*
+---
+
+## 8. Code Quality Infrastructure
+
+**Established 2026-03-30.**
+
+### 8a. Static Analysis Stack
+
+| Tool | Config | Run | Report |
+|------|--------|-----|--------|
+| **ESLint v10** | `eslint.config.mjs` (flat config) | `npx eslint packages/fossflow-lib/src packages/fossflow-app/src` | `reports/eslint.txt` |
+| **Knip v6** | `knip.json` | `npx knip` | `reports/knip.txt` |
+| **npm audit** | — | `npm audit` | `reports/audit.txt` |
+| **Jest coverage** | `jest.config.ts` → `collectCoverageFrom`, `coverageThreshold` | `npm test --workspace=packages/fossflow-lib -- --coverage` | `packages/fossflow-lib/coverage/` |
+
+**ESLint rules in force (both packages):**
+- `react-hooks/rules-of-hooks`: error — catches conditional hook calls
+- `react-hooks/exhaustive-deps`: warn — stale closure risk in effects/callbacks
+- `@typescript-eslint/no-explicit-any`: warn
+- `@typescript-eslint/no-unused-vars`: warn (allows `_`-prefixed exceptions)
+- `no-console`: warn (allows `console.error` and `console.warn`)
+
+**Knip scope:** covers both `fossflow-lib` and `fossflow-app`. Tracks unused files, unused exports, unused devDependencies, and unlisted (undeclared) dependencies.
+
+### 8b. Coverage Configuration
+
+Coverage is configured in `packages/fossflow-lib/jest.config.ts`:
+
+```ts
+collectCoverageFrom: [
+  'src/**/*.{ts,tsx}',
+  '!src/**/*.d.ts',
+  '!src/**/*.test.{ts,tsx}',
+  '!src/**/__tests__/**',
+  '!src/types/**',
+  '!src/index.ts'
+],
+coverageThreshold: { global: { branches: 10, functions: 10, lines: 10, statements: 10 } },
+coverageReporters: ['json', 'lcov', 'text', 'html']
+```
+
+Reporters: HTML (browseable), LCOV (for VS Code Coverage Gutters / Codecov), JSON summary.
+
+To get V8-native branch coverage (more accurate than Babel instrumentation for TypeScript):
+```ts
+coverageProvider: 'v8'
+```
+
+### 8c. Known Bugs Fixed by ESLint Run (2026-03-30)
+
+**Connector.tsx — conditional hooks (critical):**
+
+`useIsoProjection` + 7× `useMemo` were called after `if (!color) return null`. React's hook call order was broken when `color` resolved to `undefined` — a real state-corruption bug, not a lint pedantry. Fixed by moving all hook calls above the guard.
+
+**useCopyPaste.ts — stale closure:**
+
+`showNotification` was a plain function re-created on every render. The three `useCallback` hooks (`handleCopy`, `handleCut`, `handlePaste`) that close over it captured a stale reference whenever `uiStateApi` changed. Fixed by wrapping in `useCallback([uiStateApi])`.
+
+### 8d. Accepted Risk / Not Fixed
+
+| Issue | Reason |
+|-------|--------|
+| Quill XSS (CVE, high) | `npm audit fix --force` would downgrade `react-quill-new` to 3.7.0 — a breaking change. Risk is limited to HTML export feature; internal use only. |
+| `exhaustive-deps` warnings (13 remaining) | Reviewed individually — deps are covered by explicit sub-path entries or are intentional load-once effects (e.g., `t` from the locale store, `navigate` from react-router are both stable references). |
+| `no-explicit-any` (112 warnings) | Widespread in storage service, model loading, and scene APIs where the data shape is runtime-validated by Zod. Addressing requires deep schema type propagation — deferred. |
+| `newDiagram` function in App.tsx | Defined but not wired to any button — likely a future "New" menu item placeholder. Left in place rather than deleted. |
+
+*End of document. Last updated: 2026-03-30.*
