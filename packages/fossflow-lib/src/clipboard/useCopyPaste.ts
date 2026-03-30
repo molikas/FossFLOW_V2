@@ -12,9 +12,9 @@ export const useCopyPaste = () => {
   const modelStoreApi = useModelStoreApi();
   const scene = useScene();
 
-  const showNotification = (message: string, severity: 'info' | 'success' | 'warning') => {
+  const showNotification = useCallback((message: string, severity: 'info' | 'success' | 'warning') => {
     uiStateApi.getState().actions.setNotification({ message, severity });
-  };
+  }, [uiStateApi]);
 
   // Shared helper: gather the current selection into a clipboard payload.
   // Returns null if nothing is selected or nothing resolves to canvas items.

@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { Stack, Divider, Chip } from '@mui/material';
+import { Stack, Chip } from '@mui/material';
 import {
   PanToolOutlined as PanToolIcon,
   NearMeOutlined as NearMeIcon,

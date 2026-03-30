@@ -40,7 +40,7 @@ const escapeRegex = (str: string): string => {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 };
 
-export const QuickIconSelector = ({ onIconSelected, onClose, currentIconId }: Props) => {
+export const QuickIconSelector = ({ onIconSelected, onClose, currentIconId: _currentIconId }: Props) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [hoveredIndex, setHoveredIndex] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -65,7 +65,7 @@ export const QuickIconSelector = ({ onIconSelected, onClose, currentIconId }: Pr
       const escapedSearch = escapeRegex(searchTerm);
       const regex = new RegExp(escapedSearch, 'gi');
       return icons.filter(icon => regex.test(icon.name));
-    } catch (e) {
+    } catch (_e) {
       // If regex still fails somehow, fall back to simple includes
       const lowerSearch = searchTerm.toLowerCase();
       return icons.filter(icon => icon.name.toLowerCase().includes(lowerSearch));

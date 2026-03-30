@@ -24,9 +24,7 @@ import {
   VisibilityOutlined as PreviewIcon
 } from '@mui/icons-material';
 import {
-  DiagramData,
-  mergeDiagramData,
-  extractSavableData
+  DiagramData
 } from './diagramUtils';
 import { StorageManager } from './StorageManager';
 import { DiagramManager } from './components/DiagramManager';
@@ -35,7 +33,7 @@ import { useStorage } from './services/storageService';
 import type { IsoflowRef } from 'fossflow';
 import ChangeLanguage from './components/ChangeLanguage';
 import { allLocales } from 'fossflow';
-import { useIconPackManager, IconPackName } from './services/iconPackManager';
+import { useIconPackManager } from './services/iconPackManager';
 import './App.css';
 import { BrowserRouter, Route, Routes, useParams } from 'react-router-dom';
 
@@ -113,7 +111,7 @@ function EditorPage() {
     { id: 'gray', value: '#666666' }
   ];
 
-  const [diagramData, setDiagramData] = useState<DiagramData>(() => {
+  const [diagramData, _setDiagramData] = useState<DiagramData>(() => {
     // Initialize with last opened data if available
     const lastOpenedData = localStorage.getItem('fossflow-last-opened-data');
     if (lastOpenedData) {
@@ -169,7 +167,7 @@ function EditorPage() {
         setLastSaved(new Date(readonlyDiagram.updatedAt));
         isAfterLoadRef.current = true;
         isoflowRef.current?.load(dataWithIcons);
-      } catch (error) {
+      } catch (_error) {
         alert(t('dialog.readOnly.failed'));
         window.location.href = '/';
       }

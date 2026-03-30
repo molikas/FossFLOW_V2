@@ -22,12 +22,6 @@ import { DialogTypeEnum } from 'src/types/ui';
 import { FIXED_SHORTCUTS } from 'src/config/shortcuts';
 import { useTranslation } from 'src/stores/localeStore';
 
-interface ShortcutItem {
-  action: string;
-  shortcut: string;
-  description: string;
-}
-
 export const HelpDialog = () => {
   const { t } = useTranslation('helpDialog');
   

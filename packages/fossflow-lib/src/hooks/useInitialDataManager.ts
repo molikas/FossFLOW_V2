@@ -27,7 +27,6 @@ export const useInitialDataManager = () => {
     (_initialData: InitialData) => {
       if (!_initialData) return;
 
-      console.log('[useInitialDataManager] loading:', _initialData.title, 'views:', _initialData.views?.length);
       setIsReady(false);
 
       try {
@@ -138,7 +137,6 @@ export const useInitialDataManager = () => {
 
         uiStateActions.setIconCategoriesState(categoriesState);
 
-        console.log('[useInitialDataManager] load complete, isReady=true');
         setIsReady(true);
 
       } catch (err) {

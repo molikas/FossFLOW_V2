@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { Stack, Alert, IconButton as MUIIconButton, Box, Button, FormControlLabel, Checkbox, Typography, Slider } from '@mui/material';
+import { Stack, Alert, IconButton as MUIIconButton, Box, Button, FormControlLabel, Checkbox, Typography } from '@mui/material';
 import { ControlsContainer } from 'src/components/ItemControls/components/ControlsContainer';
 import { useUiStateStore } from 'src/stores/uiStateStore';
 import { useModelStore } from 'src/stores/modelStore';
@@ -27,7 +27,7 @@ export const IconSelectionControls = () => {
   const { iconCategories } = useIconCategories();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [treatAsIsometric, setTreatAsIsometric] = useState(true);
-  const [iconScale, setIconScale] = useState(100);
+  const [iconScale, _setIconScale] = useState(100);
   const [showAlert, setShowAlert] = useState(() => {
     // Check localStorage to see if user has dismissed the alert
     return localStorage.getItem('fossflow-show-drag-hint') !== 'false';

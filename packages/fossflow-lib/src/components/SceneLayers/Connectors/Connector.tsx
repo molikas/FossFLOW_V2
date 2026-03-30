@@ -26,11 +26,8 @@ export const Connector = memo(({ connector, currentView, isSelected }: Props) =>
   const color = connector.customColor
     ? { value: connector.customColor }
     : predefinedColor;
-    
-  if (!color) {
-    return null;
-  }
 
+  // All hooks must be called unconditionally before any early return (Rules of Hooks)
   const { css, pxSize } = useIsoProjection({
     ...connector.path.rectangle
   });
@@ -158,6 +155,10 @@ export const Connector = memo(({ connector, currentView, isSelected }: Props) =>
         return 'none';
     }
   }, [connector.style, connectorWidthPx]);
+
+  if (!color) {
+    return null;
+  }
 
   const lineType = connector.lineType || 'SINGLE';
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, IconButton as MUIIconButton, FormControlLabel, Switch, Typography } from '@mui/material';
+import { Box, IconButton as MUIIconButton, FormControlLabel, Switch } from '@mui/material';
 import { useRectangle } from 'src/hooks/useRectangle';
 import { ColorSelector } from 'src/components/ColorSelector/ColorSelector';
 import { CustomColorInput } from 'src/components/ColorSelector/CustomColorInput';

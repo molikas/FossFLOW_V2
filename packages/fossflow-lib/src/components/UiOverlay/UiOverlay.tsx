@@ -25,7 +25,7 @@ import { ImportHintTooltip } from '../ImportHintTooltip/ImportHintTooltip';
 import { LassoHintTooltip } from '../LassoHintTooltip/LassoHintTooltip';
 import { LazyLoadingWelcomeNotification } from '../LazyLoadingWelcomeNotification/LazyLoadingWelcomeNotification';
 import { NotificationSnackbar } from '../NotificationSnackbar/NotificationSnackbar';
-import { CoordsUtils, getTilePosition } from 'src/utils';
+import { getTilePosition } from 'src/utils';
 import { ViewTabs } from 'src/components/ViewTabs/ViewTabs';
 import { QuickAddNodePopover } from 'src/components/QuickAddNodePopover/QuickAddNodePopover';
 import { NodeActionBar } from 'src/components/NodeActionBar/NodeActionBar';

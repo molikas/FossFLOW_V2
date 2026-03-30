@@ -60,6 +60,9 @@ export interface LocaleProps {
     deselectAction: string;
     deselectShortcut: string;
     deselectDescription: string;
+    addNodeGroupAction: string;
+    addNodeGroupShortcut: string;
+    addNodeGroupDescription: string;
     deleteSelectedAction: string;
     deleteSelectedShortcut: string;
     deleteSelectedDescription: string;

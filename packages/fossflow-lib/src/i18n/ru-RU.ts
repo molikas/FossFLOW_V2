@@ -53,6 +53,9 @@ const locale: LocaleProps = {
     deselectAction: "Deselect",
     deselectShortcut: "Left-click (empty area)",
     deselectDescription: "Deselect the current selection and return to select mode",
+    addNodeGroupAction: "Add Node / Group",
+    addNodeGroupShortcut: "Double-click (empty area)",
+    addNodeGroupDescription: "Opens the Add popover at the cursor: pick an icon to place a node, or click Group to add a background area for visually grouping nodes",
     // Mouse interactions
     selectToolAction: "Инструмент выделения",
     selectToolShortcut: "Нажать кнопку Выделить",
