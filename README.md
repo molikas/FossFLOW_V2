@@ -128,25 +128,30 @@ Diagrams are saved to a `diagrams/` folder in the project directory.
 - **Notes tab sizing:** Notes editor fills the full tab height (~300 px / ~14 lines); Caption editor is compact (80 px / ~3 lines) to signal brevity.
 - **Floating action bar:** When a node is selected in editable mode, a compact pill bar appears above the node on the isometric canvas with five icon buttons: Style (opens Style tab), Edit name (focuses name field in Details), Link (toggle/focus link), Notes (opens Notes tab; lights up primary when notes exist), Delete. Bar tracks the node as it scrolls and zooms.
 - **Note indicator dot:** Nodes with non-empty Notes show a small blue dot at the top-right of their icon on the canvas.
-- **Read-only node panel — single-scroll:** In `EXPLORABLE_READONLY` mode, clicking a node opens a single-scroll panel (no tabs) showing the node icon + name + optional link in the header, then **Caption** and **Notes** sections only when non-empty, separated by a divider. Nodes with neither caption nor notes are not clickable — the panel stays closed.
-- **Preview button:** Eye icon in the toolbar (edit mode only) opens the current diagram in a new browser tab at `/display/{id}` — instant view-only preview without leaving the editor. Disabled with tooltip "Save first to preview" when the diagram has not yet been saved.
-- **Double-click to add node or group:** Double-clicking empty canvas opens a compact "Add" popover at the cursor. A **Group** button at the top creates a background rectangle for visually grouping nodes. Below it, an icon picker lets you place a node — selecting an icon places it and opens its Details tab for naming. Single left-click on empty canvas now just deselects (no context menu).
+- **Read-only node panel — single-scroll:** In `EXPLORABLE_READONLY` mode, clicking a node opens a single-scroll panel (no tabs): header with node icon + name + optional link button, then **Caption** and **Notes** sections only when non-empty. Nodes with neither caption nor notes are not clickable — the panel stays closed.
+- **Save & Preview button:** Eye icon in the toolbar (edit mode only). If there are unsaved changes, silently saves first (shows the save toast), then opens `/display/{id}` in a new browser tab. Tooltip adapts: *"Save & Preview"* when dirty, *"Preview"* when already saved, *"Save first to preview"* when no diagram exists yet.
+- **Double-click to add node or group:** Double-clicking empty canvas opens a compact "Add" popover at the cursor. A **Group** button at the top creates a background rectangle for visually grouping nodes. Below it, an icon picker lets you place a node — selecting an icon places it and opens its Details tab for naming. Single left-click on empty canvas now just deselects (no context menu, no ambiguity).
+- **Help dialog updated:** "Add Node / Group — Double-click (empty area)" entry added to the shortcuts table so the double-click gesture is discoverable.
 - **MUI toolbar:** Toolbar in `fossflow-app` fully rewritten with MUI components — `Button`, `Divider`, `Chip`, `Popover`, `Alert`, `Typography`. Custom Bootstrap-era CSS classes removed from `App.css`.
-- **Toolbar button hierarchy:** Save is `variant="contained"` (primary, blue). Diagrams and Share are `variant="outlined"` — consistent secondary actions. Eliminates the former gray-blob `contained color="inherit"` style on the Diagrams button.
+- **Toolbar button hierarchy:** Save is `variant="contained"` (primary, blue). Diagrams and Share are `variant="outlined"` — consistent secondary actions.
 - **Theme density:** MUI theme tightened (`spacing: 6`, `fontSize: 14`, `borderRadius: 6`, global `size: 'small'` defaults for Button, TextField, Slider). Section padding reduced across all control panels.
 
 #### Bug Fixes
 
-- **Lasso tool reverted to pointer on first click:** Activating the lasso tool and clicking on the canvas immediately reset the mode to CURSOR before any drag could begin. Fixed: `mousedown` with no existing selection is now a no-op; `mousemove` builds the selection box. Clicking outside an existing selection clears it and stays in lasso mode.
-- **Sporadic canvas drag — ghost image bug:** Dragging nodes or multi-selections would occasionally cause the entire canvas to slide as a browser ghost image. Root cause: browser `dragstart` on SVG icons and `<img>` elements hijacked `mousemove` events. Fixed by calling `preventDefault()` on `dragstart` on the renderer container element (not `window`).
-- **aria-hidden focus warnings:** `MainMenu` and `QuickAddNodePopover` were triggering browser accessibility warnings ("Blocked aria-hidden on an element because its descendant retained focus") when closing. Fixed: `MainMenu.onClose` restores focus to the anchor button before hiding; `QuickAddNodePopover.handleClose` blurs the active element before unmounting. Same pattern already used in `ContextMenu`.
+- **Double-click inconsistency:** Single left-click on empty canvas previously opened a context menu, which conflicted with double-click. Timer-based disambiguation was unreliable. Fixed by removing the context menu from left-click entirely — single click deselects, double-click adds.
+- **Lasso tool reverted to pointer on first click:** Fixed: `mousedown` with no existing selection is now a no-op; `mousemove` builds the selection box. Clicking outside an existing selection clears it and stays in lasso mode.
+- **Sporadic canvas drag — ghost image bug:** Root cause: browser `dragstart` on SVG/`<img>` elements hijacked `mousemove`. Fixed by calling `preventDefault()` on `dragstart` on the renderer container.
+- **aria-hidden focus warnings:** `MainMenu` and `QuickAddNodePopover` were triggering browser accessibility warnings on close. Fixed by restoring/blurring focus before the modal hides.
+- **Build error (TAB_READONLY_NOTES):** Stale constant reference from read-only tab removal caused a TypeScript build failure. Removed.
+- **Pan.ts — model not destructured:** `mouseup` handler referenced `model.items` without destructuring `model`. Fixed.
 
 #### Tests
 
-- New suite: `dragStart.prevention.test.ts` — pins `dragstart` handler on `rendererEl`, not `window`, and verifies cleanup.
-- New suite: `quickAdd.groupButton.test.ts` — contracts for Group rectangle creation (color selection, tile args, guard against empty colors) and node placement (tile, empty name, shared id, icon id). 10 tests.
-- Updated: `Lasso.modes.test.ts`, `toolMenu.propagation.test.tsx` — reflect corrected lasso `mousedown` behaviour.
-- Updated: `Cursor.modes.test.ts` — single left-click on empty canvas now asserts `setItemControls(null)` is called and `setContextMenu` is NOT called (context menu removed from left-click).
+- New suite: `dragStart.prevention.test.ts` — pins `dragstart` handler on `rendererEl`, not `window`.
+- New suite: `quickAdd.groupButton.test.ts` — 10 tests covering Group rectangle creation args and node placement contracts.
+- Updated: `Cursor.modes.test.ts` — left-click on empty canvas asserts `setItemControls(null)` and `setContextMenu` NOT called.
+- Updated: `Lasso.modes.test.ts`, `toolMenu.propagation.test.tsx` — corrected lasso `mousedown` behaviour.
+- Updated: `saveTracking.isAfterLoad.test.ts` — tightened auto-save regex to avoid cross-function false positives.
 - Test count: 572 → 585, 59 → 61 suites, all passing.
 
 ---

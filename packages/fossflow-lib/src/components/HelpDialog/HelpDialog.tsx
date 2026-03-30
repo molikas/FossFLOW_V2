@@ -96,6 +96,11 @@ export const HelpDialog = () => {
       description: t('deselectDescription')
     },
     {
+      action: t('addNodeGroupAction'),
+      shortcut: t('addNodeGroupShortcut'),
+      description: t('addNodeGroupDescription')
+    },
+    {
       action: t('deleteSelectedAction'),
       shortcut: t('deleteSelectedShortcut'),
       description: t('deleteSelectedDescription')

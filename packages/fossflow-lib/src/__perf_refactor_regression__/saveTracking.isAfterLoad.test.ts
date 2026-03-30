@@ -62,8 +62,10 @@ describe('Save tracking — isAfterLoadRef pattern', () => {
 
   it('auto-save has been removed — no autoSaveTimer in source', () => {
     expect(src).not.toContain('autoSaveTimer');
-    // setHasUnsavedChanges(false) is still called on explicit save/load — that is correct.
-    // What must NOT exist is a background timer that silently clears the dirty flag.
-    expect(src).not.toMatch(/setTimeout[\s\S]*?setHasUnsavedChanges\(false\)/);
+    // setHasUnsavedChanges(false) is correct in explicit save handlers and preview.
+    // What must NOT exist is a setTimeout whose arrow-function callback calls it —
+    // that would be a background timer silently clearing the dirty flag.
+    // Match: setTimeout(<whitespace>(<whitespace>)<whitespace>=><whitespace>{?<whitespace>setHasUnsavedChanges(false)
+    expect(src).not.toMatch(/setTimeout\s*\(\s*\(\s*\)\s*=>\s*\{?\s*setHasUnsavedChanges\s*\(\s*false\s*\)/);
   });
 });

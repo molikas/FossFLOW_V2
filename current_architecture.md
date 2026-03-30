@@ -1,6 +1,6 @@
 # FossFLOW Community Edition — Architecture Reference
 
-**Last updated:** 2026-03-29 (rev 2)
+**Last updated:** 2026-03-29 (rev 3)
 **Codebase root:** `packages/fossflow-lib/src` (library) · `packages/fossflow-app/src` (application shell)
 **Purpose:** Living architecture reference — feature inventory, store/reducer/mode architecture, test audit, gap analysis, lessons learned, and key APIs. Update this document whenever significant architectural changes are made.
 
@@ -112,7 +112,7 @@ Both model and scene have **independent** history stacks (past/present/future, m
 | Floating action bar | `NodeActionBar` (inside SceneLayer, `getTilePosition` origin TOP) | EDITABLE + `itemControls.type === 'ITEM'` + mode ≠ `DRAG_ITEMS`; 5 buttons: Style, Edit name, Link, Notes, Delete |
 | Note indicator dot | 14 px blue dot in `Node.tsx` at icon top-right | `modelItem.notes` non-empty |
 | Quick add popover | `QuickAddNodePopover` (MUI Popover at cursor) | EDITABLE; fires on `canvasEmptyDblClick` from dblclick on empty canvas; has **Group** button (creates background rectangle) + icon picker (places node) |
-| Preview button | `IconButton` in `fossflow-app` toolbar | EDITABLE + server storage + saved diagram; opens `/display/{id}` in new tab |
+| Preview button | `IconButton` in `fossflow-app` toolbar | EDITABLE + server storage + saved diagram; if `hasUnsavedChanges`, saves first (same path as explicit Save), shows toast, then opens `/display/{id}` in new tab; tooltip: *"Save & Preview"* / *"Preview"* / *"Save first to preview"* |
 | ToolMenu | `ToolMenu` | EDITABLE mode only |
 | MainMenu | `MainMenu` | EDITABLE mode only |
 | ZoomControls | `ZoomControls` | EDITABLE + EXPLORABLE_READONLY |

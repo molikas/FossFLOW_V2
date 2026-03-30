@@ -735,6 +735,24 @@ function EditorPage() {
     (e.target as HTMLInputElement).select();
   };
 
+  const handlePreviewClick = useCallback(async () => {
+    if (!serverStorageAvailable || !currentDiagram || !storage) return;
+    if (hasUnsavedChanges) {
+      try {
+        const data = buildSaveData();
+        await storage.saveDiagram(currentDiagram.id, data as any);
+        setHasUnsavedChanges(false);
+        setLastSaved(new Date());
+        setSaveToast(currentDiagram.name);
+      } catch (e) {
+        console.error('Save before preview failed:', e);
+        alert('Failed to save before preview. Please try again.');
+        return;
+      }
+    }
+    window.open(`/display/${currentDiagram.id}`, '_blank');
+  }, [serverStorageAvailable, currentDiagram, storage, hasUnsavedChanges, buildSaveData]);
+
   // Close share popover on outside click
   useEffect(() => {
     if (!showSharePopover) return;
@@ -879,11 +897,11 @@ function EditorPage() {
                   </Stack>
                 </Stack>
               </Popover>
-              <Tooltip title={!serverStorageAvailable || !currentDiagram ? 'Save first to preview' : 'Preview in view-only mode'}>
+              <Tooltip title={!serverStorageAvailable || !currentDiagram ? 'Save first to preview' : hasUnsavedChanges ? 'Save & Preview' : 'Preview'}>
                 <span>
                   <IconButton
                     size="small"
-                    onClick={() => window.open(`/display/${currentDiagram!.id}`, '_blank')}
+                    onClick={handlePreviewClick}
                     disabled={!serverStorageAvailable || !currentDiagram}
                     sx={{ ml: 0.25 }}
                   >
