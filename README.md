@@ -85,39 +85,6 @@ Diagrams are saved to a `diagrams/` folder in the project directory.
 
 ## [Unreleased]
 
-### 2026-03-27
-
-#### Features
-
-- **Toolbar UX overhaul:** 3-section layout (actions left, spacer center, language right). Three focused buttons: **Save** (direct save if associated, Save As for new diagrams), **Diagrams** (load + manage, opens server or session dialog automatically), **Share** (copies read-only URL; disabled when no server storage or no saved diagram).
-- **Save status tracking:** Save button is disabled when there are no unsaved changes and a file is already associated. Enabled immediately on any user edit to any view (including adding views or editing view 2+). Auto-save removed entirely — only an explicit Save updates the last-saved timestamp and clears the dirty indicator.
-- **Save status label:** Toolbar right section shows context-aware last-saved time: `Saved at HH:MM` (today), `Saved yesterday at HH:MM`, `Saved Mon DD at HH:MM` (this year), or `Saved Mon DD, YYYY at HH:MM` (older). A `•` dot appends when unsaved changes exist. Positioned before the language selector with a divider.
-- **Save confirmation toast:** Brief `✓ [Name] saved` notification slides up from the bottom-center of the screen on every explicit save, auto-dismisses after 2.5 s.
-- **Diagrams manager:** Merged Load + Storage Manager into a single "Diagrams" button. Manager is load-only (no in-dialog save). Per-row share button copies a read-only URL; shows a green ✓ for 2 seconds after copying.
-- **Dismissible session warning banner:** Amber banner below the toolbar warns when running in session-only storage mode. Dismissed per tab via `sessionStorage`; never shown again in that tab once dismissed.
-- **Community edition splash screen:** Welcome notification updated with community edition branding, fork repository link, and GitHub issues prompt.
-
-#### Bug Fixes
-
-- **Duplicate diagram title removed:** Title was shown in both the toolbar center and the ViewTabs bar at the bottom. Toolbar center title removed — ViewTabs is the single source.
-- **Multi-view save tracking:** Changes to any view (including creating a new view, adding nodes to view 2+) now correctly enable the Save button. Root cause: `isoflowRef.current.load()` triggered `onModelUpdated` → `hasUnsavedChanges=true`, and then auto-save reset it 5 seconds later, masking changes. Fixed with `isAfterLoadRef` pattern — suppresses the first post-load callback — and removing `setHasUnsavedChanges(false)` from auto-save.
-- **Undo/redo icon colors:** Were inverted — disabled state appeared dark/prominent, enabled state appeared light/muted. Fixed to industry norm: enabled=`grey.700` (dark, prominent), disabled=`grey.400` (muted), active=`grey.200` (light on coloured background).
-- **Diagram title rename from canvas disabled:** ViewTabs title card is now read-only. The diagram name is managed at the file level via Save/Save As. Page (view tab) names remain renameable inline.
-- **Language dropdown off-screen:** Dropdown was anchored `left:0`, extending off the right edge of the viewport. Fixed to `right:0` so it opens leftward and stays fully visible.
-
-#### Tests
-
-- New suites: `IconButton.color.test.tsx`, `viewTabs.titleReadonly.test.ts`, `splashScreen.communityEdition.test.ts`, `languageDropdown.positioning.test.ts`, `saveTracking.isAfterLoad.test.ts`
-- Test count: 545 → 572, 54 → 59 suites, all passing
-
-#### Polish / Console
-
-- **Verbose logging removed:** Operational `console.log` calls stripped from `storageService` and `App` — only errors remain. Reduces console noise in production.
-- **Old-format icon migration:** Diagrams saved before the full-icon-set format was introduced are silently re-saved on first load so subsequent loads no longer re-run the merge path.
-- **aria-hidden focus warning fixed:** MUI context menu was setting `aria-hidden` on its modal root while a descendant still held focus, triggering a browser accessibility warning. Focus is now moved back to the anchor element before the menu closes.
-
----
-
 ### 2026-03-29
 
 #### Features
@@ -153,6 +120,39 @@ Diagrams are saved to a `diagrams/` folder in the project directory.
 - Updated: `Lasso.modes.test.ts`, `toolMenu.propagation.test.tsx` — corrected lasso `mousedown` behaviour.
 - Updated: `saveTracking.isAfterLoad.test.ts` — tightened auto-save regex to avoid cross-function false positives.
 - Test count: 572 → 585, 59 → 61 suites, all passing.
+
+---
+
+### 2026-03-27
+
+#### Features
+
+- **Toolbar UX overhaul:** 3-section layout (actions left, spacer center, language right). Three focused buttons: **Save** (direct save if associated, Save As for new diagrams), **Diagrams** (load + manage, opens server or session dialog automatically), **Share** (copies read-only URL; disabled when no server storage or no saved diagram).
+- **Save status tracking:** Save button is disabled when there are no unsaved changes and a file is already associated. Enabled immediately on any user edit to any view (including adding views or editing view 2+). Auto-save removed entirely — only an explicit Save updates the last-saved timestamp and clears the dirty indicator.
+- **Save status label:** Toolbar right section shows context-aware last-saved time: `Saved at HH:MM` (today), `Saved yesterday at HH:MM`, `Saved Mon DD at HH:MM` (this year), or `Saved Mon DD, YYYY at HH:MM` (older). A `•` dot appends when unsaved changes exist. Positioned before the language selector with a divider.
+- **Save confirmation toast:** Brief `✓ [Name] saved` notification slides up from the bottom-center of the screen on every explicit save, auto-dismisses after 2.5 s.
+- **Diagrams manager:** Merged Load + Storage Manager into a single "Diagrams" button. Manager is load-only (no in-dialog save). Per-row share button copies a read-only URL; shows a green ✓ for 2 seconds after copying.
+- **Dismissible session warning banner:** Amber banner below the toolbar warns when running in session-only storage mode. Dismissed per tab via `sessionStorage`; never shown again in that tab once dismissed.
+- **Community edition splash screen:** Welcome notification updated with community edition branding, fork repository link, and GitHub issues prompt.
+
+#### Bug Fixes
+
+- **Duplicate diagram title removed:** Title was shown in both the toolbar center and the ViewTabs bar at the bottom. Toolbar center title removed — ViewTabs is the single source.
+- **Multi-view save tracking:** Changes to any view (including creating a new view, adding nodes to view 2+) now correctly enable the Save button. Root cause: `isoflowRef.current.load()` triggered `onModelUpdated` → `hasUnsavedChanges=true`, and then auto-save reset it 5 seconds later, masking changes. Fixed with `isAfterLoadRef` pattern — suppresses the first post-load callback — and removing `setHasUnsavedChanges(false)` from auto-save.
+- **Undo/redo icon colors:** Were inverted — disabled state appeared dark/prominent, enabled state appeared light/muted. Fixed to industry norm: enabled=`grey.700` (dark, prominent), disabled=`grey.400` (muted), active=`grey.200` (light on coloured background).
+- **Diagram title rename from canvas disabled:** ViewTabs title card is now read-only. The diagram name is managed at the file level via Save/Save As. Page (view tab) names remain renameable inline.
+- **Language dropdown off-screen:** Dropdown was anchored `left:0`, extending off the right edge of the viewport. Fixed to `right:0` so it opens leftward and stays fully visible.
+
+#### Tests
+
+- New suites: `IconButton.color.test.tsx`, `viewTabs.titleReadonly.test.ts`, `splashScreen.communityEdition.test.ts`, `languageDropdown.positioning.test.ts`, `saveTracking.isAfterLoad.test.ts`
+- Test count: 545 → 572, 54 → 59 suites, all passing
+
+#### Polish / Console
+
+- **Verbose logging removed:** Operational `console.log` calls stripped from `storageService` and `App` — only errors remain. Reduces console noise in production.
+- **Old-format icon migration:** Diagrams saved before the full-icon-set format was introduced are silently re-saved on first load so subsequent loads no longer re-run the merge path.
+- **aria-hidden focus warning fixed:** MUI context menu was setting `aria-hidden` on its modal root while a descendant still held focus, triggering a browser accessibility warning. Focus is now moved back to the anchor element before the menu closes.
 
 ---
 
