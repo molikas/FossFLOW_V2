@@ -209,12 +209,9 @@ export const Cursor: ModeActions = {
         });
       }
     } else if (!hasMoved && uiState.mode.mousedownHandled) {
-      // Plain left-click on empty canvas — show context menu (add node / rectangle)
+      // Plain left-click on empty canvas — just deselect.
+      // Adding items is handled by double-click (QuickAddNodePopover).
       uiState.actions.setItemControls(null);
-      uiState.actions.setContextMenu({
-        type: 'EMPTY',
-        tile: uiState.mouse.position.tile
-      });
     } else {
       uiState.actions.setItemControls(null);
     }

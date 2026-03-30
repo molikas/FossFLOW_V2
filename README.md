@@ -21,8 +21,8 @@ An "exprimental" community fork of [FossFLOW](https://github.com/stan-smith/Foss
 - **Caption vs Notes** — "Caption" is canvas-visible text (subtitle under the node name). "Notes" is hidden documentation only accessible in the panel. Both fields are rich-text (Quill), stored separately in the model.
 - **Floating action bar** — When a node is selected in edit mode a compact pill bar appears above the node on the canvas with five icon buttons: Style, Edit name, Link, Notes (opens the Notes tab), Delete.
 - **Note indicator dot** — Nodes with non-empty Notes show a small blue dot at the top-right of their icon on the canvas.
-- **Read-only node panel** — In `EXPLORABLE_READONLY` mode, clicking a node opens the same panel in read-only form (Details + Notes tabs, no Style tab, no editing).
-- **Double-click to place node** — Double-clicking empty canvas opens a compact icon-picker popover at the cursor; selecting an icon places the node and immediately opens its Details tab for naming.
+- **Read-only node panel** — In `EXPLORABLE_READONLY` mode, clicking a node opens a single-scroll panel showing **Caption** and **Notes** sections (only when non-empty). Header shows the node icon, name, and optional link button. Nodes with no caption and no notes are not clickable at all — the panel stays closed.
+- **Double-click to place node or group** — Double-clicking empty canvas opens a compact "Add" popover at the cursor. A **Group** button at the top creates a background rectangle (used to visually group nodes). Below it, an icon picker lets you place a node — selecting an icon places it and immediately opens its Details tab for naming. Single left-click on empty canvas just deselects; no context menu.
 - **Clickable node links** — Attach a URL to any node; its label becomes a clickable link in the diagram.
 - **Node label font size and color** — Adjust font size and text color from the Style tab.
 - **Text box rich text and color** — Text boxes support bold, italic, bullet lists, headers, and more. Text color is adjustable. The box auto-expands to fit its content.
@@ -122,14 +122,15 @@ Diagrams are saved to a `diagrams/` folder in the project directory.
 
 #### Features
 
-- **Node panel — 3-tab redesign (Details / Style / Notes):** Replaced single-scroll accordion panel with a clean tab layout. *Details* tab: Name field, Caption (short rich-text shown on canvas), optional link. *Style* tab: Icon picker (inline, no mode switch), icon size slider, label font size/color/height. *Notes* tab: full-height rich-text editor (Quill, ~14 lines). Edit mode shows all three tabs; read-only mode shows Details + Notes only. Panel is 300 px wide.
+- **Node panel — 3-tab redesign (Details / Style / Notes):** Replaced single-scroll accordion panel with a clean tab layout. *Details* tab: Name field, Caption (short rich-text shown on canvas), optional link. *Style* tab: Icon picker (inline, no mode switch), icon size slider, label font size/color/height. *Notes* tab: full-height rich-text editor (Quill, ~14 lines). Edit mode shows all three tabs; read-only mode shows a single-scroll panel (no tabs). Panel is 300 px wide.
 - **Caption vs Notes naming:** The former "Description" field is now called **Caption** (signals that it appears visually on the canvas under the node name). The **Notes** field is private documentation shown only in the panel. Both are HTML-based rich text stored separately in `ModelItem`.
 - **`notes` field on nodes:** `ModelItem` carries an optional `notes` rich-text field (HTML string, no max length) backed by the Zod schema. Backwards-compatible — old diagrams without `notes` load fine.
 - **Notes tab sizing:** Notes editor fills the full tab height (~300 px / ~14 lines); Caption editor is compact (80 px / ~3 lines) to signal brevity.
 - **Floating action bar:** When a node is selected in editable mode, a compact pill bar appears above the node on the isometric canvas with five icon buttons: Style (opens Style tab), Edit name (focuses name field in Details), Link (toggle/focus link), Notes (opens Notes tab; lights up primary when notes exist), Delete. Bar tracks the node as it scrolls and zooms.
 - **Note indicator dot:** Nodes with non-empty Notes show a small blue dot at the top-right of their icon on the canvas.
-- **Read-only node panel:** In `EXPLORABLE_READONLY` mode, clicking a node opens the panel in read-only form — name + icon in header, Details tab (caption, link), Notes tab (read-only Quill). No editing controls, no Style tab, no delete.
-- **Double-click to place node:** Double-clicking empty canvas in editable mode opens a compact icon-picker popover at the cursor. Selecting an icon places a new node on that tile and immediately opens its Details tab for naming.
+- **Read-only node panel — single-scroll:** In `EXPLORABLE_READONLY` mode, clicking a node opens a single-scroll panel (no tabs) showing the node icon + name + optional link in the header, then **Caption** and **Notes** sections only when non-empty, separated by a divider. Nodes with neither caption nor notes are not clickable — the panel stays closed.
+- **Preview button:** Eye icon in the toolbar (edit mode only) opens the current diagram in a new browser tab at `/display/{id}` — instant view-only preview without leaving the editor. Disabled with tooltip "Save first to preview" when the diagram has not yet been saved.
+- **Double-click to add node or group:** Double-clicking empty canvas opens a compact "Add" popover at the cursor. A **Group** button at the top creates a background rectangle for visually grouping nodes. Below it, an icon picker lets you place a node — selecting an icon places it and opens its Details tab for naming. Single left-click on empty canvas now just deselects (no context menu).
 - **MUI toolbar:** Toolbar in `fossflow-app` fully rewritten with MUI components — `Button`, `Divider`, `Chip`, `Popover`, `Alert`, `Typography`. Custom Bootstrap-era CSS classes removed from `App.css`.
 - **Toolbar button hierarchy:** Save is `variant="contained"` (primary, blue). Diagrams and Share are `variant="outlined"` — consistent secondary actions. Eliminates the former gray-blob `contained color="inherit"` style on the Diagrams button.
 - **Theme density:** MUI theme tightened (`spacing: 6`, `fontSize: 14`, `borderRadius: 6`, global `size: 'small'` defaults for Button, TextField, Slider). Section padding reduced across all control panels.
@@ -143,8 +144,10 @@ Diagrams are saved to a `diagrams/` folder in the project directory.
 #### Tests
 
 - New suite: `dragStart.prevention.test.ts` — pins `dragstart` handler on `rendererEl`, not `window`, and verifies cleanup.
+- New suite: `quickAdd.groupButton.test.ts` — contracts for Group rectangle creation (color selection, tile args, guard against empty colors) and node placement (tile, empty name, shared id, icon id). 10 tests.
 - Updated: `Lasso.modes.test.ts`, `toolMenu.propagation.test.tsx` — reflect corrected lasso `mousedown` behaviour.
-- Test count: 572 → 575, 59 → 60 suites, all passing.
+- Updated: `Cursor.modes.test.ts` — single left-click on empty canvas now asserts `setItemControls(null)` is called and `setContextMenu` is NOT called (context menu removed from left-click).
+- Test count: 572 → 585, 59 → 61 suites, all passing.
 
 ---
 

@@ -1,6 +1,6 @@
 # FossFLOW Community Edition — Architecture Reference
 
-**Last updated:** 2026-03-29
+**Last updated:** 2026-03-29 (rev 2)
 **Codebase root:** `packages/fossflow-lib/src` (library) · `packages/fossflow-app/src` (application shell)
 **Purpose:** Living architecture reference — feature inventory, store/reducer/mode architecture, test audit, gap analysis, lessons learned, and key APIs. Update this document whenever significant architectural changes are made.
 
@@ -34,7 +34,7 @@
 
 | Feature | Source | Entry Point | Key Data | Gotchas |
 |---|---|---|---|---|
-| **Cursor / Select** | `interaction/modes/Cursor.ts` | `useInteractionManager` → `Cursor` mode entry | Reads `uiState.mouse`, `uiState.mode.mousedownItem`, `mousedownHandled`; writes `itemControls`, `contextMenu`, mode transitions | `mousedownHandled` flag distinguishes toolbar clicks (no mousedown fired) from genuine empty-canvas clicks — see Section 5 |
+| **Cursor / Select** | `interaction/modes/Cursor.ts` | `useInteractionManager` → `Cursor` mode entry | Reads `uiState.mouse`, `uiState.mode.mousedownItem`, `mousedownHandled`; writes `itemControls`, mode transitions | `mousedownHandled` flag distinguishes toolbar clicks from genuine empty-canvas clicks. Left-click on empty canvas calls `setItemControls(null)` only — **no context menu**. Adding items is via double-click popover. |
 | **Pan** | `interaction/modes/Pan.ts`, `interaction/usePanHandlers.ts` | `usePanHandlers` short-circuits `onMouseEvent` before `processMouseUpdate` | Reads `mouse.delta.screen`, writes `scroll.position`; uses `isPanningRef`, `panMethodRef` | Has a **bypass path** in `onMouseEvent` — middle/right/ctrl/alt/emptyArea clicks call `startPan()` directly and return early without going through `processMouseUpdate` |
 | **Lasso** | `interaction/modes/Lasso.ts` | Mode dispatch in `processMouseUpdate` | Reads `mouse.mousedown`, `mouse.position.tile`, `uiState.mode.selection`; writes mode with selection bounds + items array | `mousedown` with no selection is a no-op — lets `mousemove` build the box; clicking outside an existing selection clears it and stays in LASSO (does NOT exit to CURSOR); `mouseup` with items stays in LASSO, without items exits to CURSOR; `mouseup` guard (`!mouse.mousedown`) prevents toolbar-click stray events |
 | **Freehand Lasso** | `interaction/modes/FreehandLasso.ts` | Mode dispatch in `processMouseUpdate` | Reads `mouse.position.screen`, writes `mode.path` (screen coords); on mouseup converts path to tiles via `screenToIso`, runs `isPointInPolygon` | Same `isRendererInteraction` fix as Lasso — within-selection check runs for all clicks; only new-path start and outside-selection clear require renderer interaction; uses `rendererEl.getBoundingClientRect()` at mouseup, not `rendererSize` |
@@ -107,11 +107,12 @@ Both model and scene have **independent** history stacks (past/present/future, m
 |---|---|---|
 | Dialogs (Export/Help/Settings) | `ExportImageDialog`, `HelpDialog`, `SettingsDialog` | `uiState.dialog === 'EXPORT_IMAGE'/'HELP'/'SETTINGS'` |
 | Notification snackbar | `NotificationSnackbar` | `uiState.notification !== null` |
-| Context menu | `ContextMenuManager` + `ContextMenu` | `uiState.contextMenu !== null` (currently only `EMPTY` type opens menu) |
-| Item controls panel | `ItemControlsManager` → `NodePanel` (Details/Style/Notes tabs) | `uiState.itemControls !== null`; EDITABLE and EXPLORABLE_READONLY; Style tab hidden in read-only |
+| Context menu | `ContextMenuManager` + `ContextMenu` | `uiState.contextMenu !== null` (`EMPTY` type); **no longer triggered by left-click** — reserved for future right-click binding. Add Node / Add Rectangle moved to double-click popover. |
+| Item controls panel | `ItemControlsManager` → `NodePanel` | `uiState.itemControls !== null`; EDITABLE: 3-tab layout (Details/Style/Notes); EXPLORABLE_READONLY: single-scroll panel (Caption + Notes sections when non-empty, header with icon/name/link) |
 | Floating action bar | `NodeActionBar` (inside SceneLayer, `getTilePosition` origin TOP) | EDITABLE + `itemControls.type === 'ITEM'` + mode ≠ `DRAG_ITEMS`; 5 buttons: Style, Edit name, Link, Notes, Delete |
 | Note indicator dot | 14 px blue dot in `Node.tsx` at icon top-right | `modelItem.notes` non-empty |
-| Quick add popover | `QuickAddNodePopover` (MUI Popover at cursor) | EDITABLE; fires on `canvasEmptyDblClick` custom event from dblclick on renderer |
+| Quick add popover | `QuickAddNodePopover` (MUI Popover at cursor) | EDITABLE; fires on `canvasEmptyDblClick` from dblclick on empty canvas; has **Group** button (creates background rectangle) + icon picker (places node) |
+| Preview button | `IconButton` in `fossflow-app` toolbar | EDITABLE + server storage + saved diagram; opens `/display/{id}` in new tab |
 | ToolMenu | `ToolMenu` | EDITABLE mode only |
 | MainMenu | `MainMenu` | EDITABLE mode only |
 | ZoomControls | `ZoomControls` | EDITABLE + EXPLORABLE_READONLY |
@@ -133,8 +134,8 @@ Both model and scene have **independent** history stacks (past/present/future, m
 
 | Mode | Interactions |
 |---|---|
-| `EDITABLE` | All modes active; ToolMenu, MainMenu, ItemControls (Details/Style/Notes), ViewTabs, NodeActionBar shown |
-| `EXPLORABLE_READONLY` | Pan+Zoom only; no editing tools; ItemControls shown read-only (Details+Notes); ViewTabs shown |
+| `EDITABLE` | All modes active; ToolMenu, MainMenu, ItemControls (Details/Style/Notes tabs), ViewTabs, NodeActionBar, double-click popover shown |
+| `EXPLORABLE_READONLY` | Pan+Zoom only; no editing tools; clicking a node with caption or notes opens single-scroll read-only panel (Caption + Notes sections); nodes with neither caption nor notes are not clickable; ViewTabs shown |
 | `NON_INTERACTIVE` | No interactions; no UI tools (`INTERACTIONS_DISABLED` mode) |
 
 Starting mode determined by `getStartingMode()` in `utils`.

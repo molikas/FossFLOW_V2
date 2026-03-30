@@ -186,7 +186,7 @@ describe('Cursor.mouseup (real module)', () => {
     expect(uiState.actions.setItemControls).toHaveBeenCalledWith({ type: 'RECTANGLE', id: 'rect1' });
   });
 
-  it('opens context menu when mousedownHandled=true, no item, no movement', () => {
+  it('deselects (setItemControls null) on left-click empty canvas — no context menu, no event', () => {
     const uiState = makeUiState({
       mode: {
         type: 'CURSOR',
@@ -200,10 +200,12 @@ describe('Cursor.mouseup (real module)', () => {
         delta: null
       }
     });
+    const dispatchSpy = jest.spyOn(window, 'dispatchEvent');
     callMouseup(uiState);
-    expect(uiState.actions.setContextMenu).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'EMPTY', tile: { x: 3, y: 4 } })
-    );
+    expect(uiState.actions.setItemControls).toHaveBeenCalledWith(null);
+    expect(uiState.actions.setContextMenu).not.toHaveBeenCalled();
+    expect(dispatchSpy).not.toHaveBeenCalled();
+    dispatchSpy.mockRestore();
   });
 
   it('does NOT open context menu when mousedownHandled is false/undefined (external setMode)', () => {

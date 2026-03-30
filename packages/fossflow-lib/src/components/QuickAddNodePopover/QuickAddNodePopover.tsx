@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Popover, Box, Typography } from '@mui/material';
+import { Popover, Box, Typography, Button, Divider } from '@mui/material';
+import { CropLandscapeOutlined as RectangleIcon } from '@mui/icons-material';
 import { Coords } from 'src/types';
 import { useScene } from 'src/hooks/useScene';
 import { useModelStore } from 'src/stores/modelStore';
@@ -19,6 +20,7 @@ export const QuickAddNodePopover = () => {
   const [targetTile, setTargetTile] = useState<Coords | null>(null);
   const scene = useScene();
   const icons = useModelStore((state) => state.icons);
+  const colors = useModelStore((state) => state.colors);
   const uiStateActions = useUiStateStore((state) => state.actions);
 
   useEffect(() => {
@@ -64,6 +66,17 @@ export const QuickAddNodePopover = () => {
     [targetTile, scene, uiStateActions, handleClose]
   );
 
+  const handleAddRectangle = useCallback(() => {
+    if (!targetTile || colors.length === 0) return;
+    scene.createRectangle({
+      id: generateId(),
+      color: colors[0].id,
+      from: targetTile,
+      to: targetTile
+    });
+    handleClose();
+  }, [targetTile, colors, scene, handleClose]);
+
   if (!anchorPosition || icons.length === 0) return null;
 
   return (
@@ -76,9 +89,22 @@ export const QuickAddNodePopover = () => {
     >
       <Box sx={{ px: 2, pt: 1.5, pb: 0.5, borderBottom: '1px solid', borderColor: 'divider' }}>
         <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
-          Add Node
+          Add
         </Typography>
       </Box>
+      <Box sx={{ px: 1.5, pt: 1, pb: 0.5 }}>
+        <Button
+          fullWidth
+          size="small"
+          variant="outlined"
+          startIcon={<RectangleIcon />}
+          onClick={handleAddRectangle}
+          sx={{ justifyContent: 'flex-start', textTransform: 'none' }}
+        >
+          Group
+        </Button>
+      </Box>
+      <Divider sx={{ mx: 1.5, mt: 0.5 }} />
       <Box sx={{ overflowY: 'auto', flex: 1 }}>
         <QuickIconSelector
           onIconSelected={handleIconSelected}
