@@ -22,3 +22,5 @@ stage/
 overlay/
 .claude
 diagrams/
+# Static analysis reports
+reports/
