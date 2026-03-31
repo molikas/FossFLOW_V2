@@ -1,12 +1,17 @@
 import React, { createContext, useRef, useContext } from 'react';
 import { createStore } from 'zustand';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
+import { enablePatches, produceWithPatches, applyPatches, Patch } from 'immer';
 import { SceneStore, Scene } from 'src/types';
 
+// enablePatches() is idempotent — safe to call in multiple modules.
+enablePatches();
+
+type HistoryEntry = { patches: Patch[]; inversePatches: Patch[] };
+
 export interface SceneHistoryState {
-  past: Scene[];
-  present: Scene;
-  future: Scene[];
+  past: HistoryEntry[];
+  future: HistoryEntry[];
   maxHistorySize: number;
 }
 
@@ -26,68 +31,47 @@ export interface SceneStoreWithHistory extends Omit<SceneStore, 'actions'> {
 
 const MAX_HISTORY_SIZE = 50;
 
-const createSceneHistoryState = (initialScene: Scene): SceneHistoryState => {
-  return {
-    past: [],
-    present: initialScene,
-    future: [],
-    maxHistorySize: MAX_HISTORY_SIZE
-  };
-};
+const createSceneHistoryState = (): SceneHistoryState => ({
+  past: [],
+  future: [],
+  maxHistorySize: MAX_HISTORY_SIZE
+});
 
-const extractSceneData = (state: SceneStoreWithHistory): Scene => {
-  return {
-    connectors: state.connectors,
-    textBoxes: state.textBoxes
-  };
-};
+const extractSceneData = (state: SceneStoreWithHistory): Scene => ({
+  connectors: state.connectors,
+  textBoxes: state.textBoxes
+});
 
 const initialState = () => {
   return createStore<SceneStoreWithHistory>((set, get) => {
-    const initialScene: Scene = {
-      connectors: {},
-      textBoxes: {}
-    };
+    const initialScene: Scene = { connectors: {}, textBoxes: {} };
+
+    let pendingPre: Scene | null = null;
 
     const saveToHistory = () => {
-      set((state) => {
-        const currentScene = extractSceneData(state);
-        const newPast = [...state.history.past, currentScene];
-
-        // Limit history size
-        if (newPast.length > state.history.maxHistorySize) {
-          newPast.shift();
-        }
-
-        return {
-          ...state,
-          history: {
-            ...state.history,
-            past: newPast,
-            present: currentScene,
-            future: []
-          }
-        };
-      });
+      pendingPre = extractSceneData(get());
     };
 
     const undo = (): boolean => {
       const { history } = get();
       if (history.past.length === 0) return false;
 
-      const previous = history.past[history.past.length - 1];
+      const entry = history.past[history.past.length - 1];
       const newPast = history.past.slice(0, history.past.length - 1);
 
       set((state) => {
-        // Capture the actual live state (not stale history.present)
         const currentScene = extractSceneData(state);
+        const [, redoPatches, redoInverse] = produceWithPatches(
+          currentScene,
+          (draft: Scene) => { Object.assign(draft, applyPatches(currentScene, entry.inversePatches)); }
+        );
+        const previousScene = applyPatches(currentScene, entry.inversePatches);
         return {
-          ...previous,
+          ...previousScene,
           history: {
             ...state.history,
             past: newPast,
-            present: previous,
-            future: [currentScene, ...state.history.future]
+            future: [{ patches: redoPatches, inversePatches: redoInverse }, ...state.history.future]
           }
         };
       });
@@ -99,18 +83,21 @@ const initialState = () => {
       const { history } = get();
       if (history.future.length === 0) return false;
 
-      const next = history.future[0];
+      const entry = history.future[0];
       const newFuture = history.future.slice(1);
 
       set((state) => {
-        // Capture the actual live state (not stale history.present)
         const currentScene = extractSceneData(state);
+        const [, undoPatches, undoInverse] = produceWithPatches(
+          currentScene,
+          (draft: Scene) => { Object.assign(draft, applyPatches(currentScene, entry.patches)); }
+        );
+        const nextScene = applyPatches(currentScene, entry.patches);
         return {
-          ...next,
+          ...nextScene,
           history: {
             ...state.history,
-            past: [...state.history.past, currentScene],
-            present: next,
+            past: [...state.history.past, { patches: undoPatches, inversePatches: undoInverse }],
             future: newFuture
           }
         };
@@ -119,37 +106,49 @@ const initialState = () => {
       return true;
     };
 
-    const canUndo = () => {
-      return get().history.past.length > 0;
-    };
-    const canRedo = () => {
-      return get().history.future.length > 0;
-    };
+    const canUndo = () => get().history.past.length > 0;
+    const canRedo = () => get().history.future.length > 0;
 
     const clearHistory = () => {
-      const currentState = get();
-      const currentScene = extractSceneData(currentState);
-
-      set((state) => {
-        return {
-          ...state,
-          history: createSceneHistoryState(currentScene)
-        };
-      });
+      pendingPre = null;
+      set((state) => ({ ...state, history: createSceneHistoryState() }));
     };
 
     return {
       ...initialScene,
-      history: createSceneHistoryState(initialScene),
+      history: createSceneHistoryState(),
       actions: {
         get,
         set: (updates: Partial<Scene>, skipHistory = false) => {
           if (!skipHistory) {
             saveToHistory();
           }
-          set((state) => {
-            return { ...state, ...updates };
-          });
+
+          if (pendingPre !== null) {
+            const pre = pendingPre;
+            pendingPre = null;
+            set((state) => {
+              const next: Scene = { ...extractSceneData(state), ...updates };
+              const [, patches, inversePatches] = produceWithPatches(pre, (draft: Scene) => {
+                Object.assign(draft, next);
+              });
+
+              const newPast = [...state.history.past, { patches, inversePatches }];
+              if (newPast.length > state.history.maxHistorySize) newPast.shift();
+
+              return {
+                ...state,
+                ...next,
+                history: {
+                  ...state.history,
+                  past: newPast,
+                  future: []
+                }
+              };
+            });
+          } else {
+            set((state) => ({ ...state, ...updates }));
+          }
         },
         undo,
         redo,
@@ -162,9 +161,7 @@ const initialState = () => {
   });
 };
 
-const SceneContext = createContext<ReturnType<typeof initialState> | null>(
-  null
-);
+const SceneContext = createContext<ReturnType<typeof initialState> | null>(null);
 
 interface ProviderProps {
   children: React.ReactNode;
@@ -189,21 +186,12 @@ export function useSceneStore<T>(
   equalityFn?: (left: T, right: T) => boolean
 ) {
   const store = useContext(SceneContext);
-
-  if (store === null) {
-    throw new Error('Missing provider in the tree');
-  }
-
-  const value = useStoreWithEqualityFn(store, selector, equalityFn);
-  return value;
+  if (store === null) throw new Error('Missing provider in the tree');
+  return useStoreWithEqualityFn(store, selector, equalityFn);
 }
 
 export function useSceneStoreApi() {
   const store = useContext(SceneContext);
-
-  if (store === null) {
-    throw new Error('Missing provider in the tree');
-  }
-
+  if (store === null) throw new Error('Missing provider in the tree');
   return store;
 }

@@ -81,7 +81,8 @@ export const updateConnector = (
 
 export const createConnector = (
   newConnector: Connector,
-  { state, viewId }: ViewReducerContext
+  { state, viewId }: ViewReducerContext,
+  skipPathfinding = false
 ): State => {
   const newState = produce(state, (draft) => {
     const view = getItemByIdOrThrow(draft.model.views, viewId);
@@ -93,13 +94,19 @@ export const createConnector = (
       draft.model.views[view.index].connectors?.unshift(newConnector);
     }
 
-    const stateAfterSync = syncConnector(newConnector.id, {
-      viewId,
-      state: draft
-    });
-
-    draft.model = stateAfterSync.model;
-    draft.scene = stateAfterSync.scene;
+    if (skipPathfinding) {
+      // Store a provisional empty path — will be computed asynchronously after paste.
+      draft.scene.connectors[newConnector.id] = {
+        path: { tiles: [], rectangle: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } } }
+      };
+    } else {
+      const stateAfterSync = syncConnector(newConnector.id, {
+        viewId,
+        state: draft
+      });
+      draft.model = stateAfterSync.model;
+      draft.scene = stateAfterSync.scene;
+    }
   });
 
   return newState;

@@ -1,3 +1,3 @@
 export { view } from './view';
 export * from './modelItem';
-export { syncConnector } from './connector';
+export { syncConnector, createConnector as createConnectorReducer } from './connector';

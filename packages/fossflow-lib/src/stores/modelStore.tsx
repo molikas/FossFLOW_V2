@@ -1,13 +1,20 @@
 import React, { createContext, useRef, useContext } from 'react';
 import { createStore } from 'zustand';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
+import { enablePatches, produceWithPatches, applyPatches, Patch } from 'immer';
 import { ModelStore, Model } from 'src/types';
 import { INITIAL_DATA } from 'src/config';
 
+// Enable Immer patch support — must be called once before any produce() call.
+enablePatches();
+
+type HistoryEntry = { patches: Patch[]; inversePatches: Patch[] };
+
 export interface HistoryState {
-  past: Model[];
-  present: Model;
-  future: Model[];
+  // Each entry is a diff pair rather than a full Model snapshot.
+  // Reduces memory from O(N * history_size) to O(diff_size * history_size).
+  past: HistoryEntry[];
+  future: HistoryEntry[];
   maxHistorySize: number;
 }
 
@@ -27,70 +34,56 @@ export interface ModelStoreWithHistory extends Omit<ModelStore, 'actions'> {
 
 const MAX_HISTORY_SIZE = 50;
 
-const createHistoryState = (initialModel: Model): HistoryState => {
-  return {
-    past: [],
-    present: initialModel,
-    future: [],
-    maxHistorySize: MAX_HISTORY_SIZE
-  };
-};
+const createHistoryState = (): HistoryState => ({
+  past: [],
+  future: [],
+  maxHistorySize: MAX_HISTORY_SIZE
+});
 
-const extractModelData = (state: ModelStoreWithHistory): Model => {
-  return {
-    version: state.version,
-    title: state.title,
-    description: state.description,
-    colors: state.colors,
-    icons: state.icons,
-    items: state.items,
-    views: state.views
-  };
-};
+const extractModelData = (state: ModelStoreWithHistory): Model => ({
+  version: state.version,
+  title: state.title,
+  description: state.description,
+  colors: state.colors,
+  icons: state.icons,
+  items: state.items,
+  views: state.views
+});
 
 const initialState = () => {
   return createStore<ModelStoreWithHistory>((set, get) => {
     const initialModel = { ...INITIAL_DATA };
 
+    // Holds the pre-mutation snapshot captured by saveToHistory().
+    // The matching set() call (skipHistory=true) will compute patches relative to it.
+    let pendingPre: Model | null = null;
+
     const saveToHistory = () => {
-      set((state) => {
-        const currentModel = extractModelData(state);
-        const newPast = [...state.history.past, currentModel];
-
-        // Limit history size to prevent memory issues
-        if (newPast.length > state.history.maxHistorySize) {
-          newPast.shift();
-        }
-
-        return {
-          ...state,
-          history: {
-            ...state.history,
-            past: newPast,
-            present: currentModel,
-            future: [] // Clear future when new action is performed
-          }
-        };
-      });
+      // Capture the current model so the subsequent set() call can compute the diff.
+      pendingPre = extractModelData(get());
     };
 
     const undo = (): boolean => {
       const { history } = get();
       if (history.past.length === 0) return false;
 
-      const previous = history.past[history.past.length - 1];
+      const entry = history.past[history.past.length - 1];
       const newPast = history.past.slice(0, history.past.length - 1);
 
       set((state) => {
-        // Capture the actual live state (not stale history.present)
         const currentModel = extractModelData(state);
+        // Build forward patches to redo from current→before (for the future stack).
+        const [, redoPatches, redoInverse] = produceWithPatches(
+          currentModel,
+          (draft: Model) => { Object.assign(draft, applyPatches(currentModel, entry.inversePatches)); }
+        );
+        const previousModel = applyPatches(currentModel, entry.inversePatches);
         return {
-          ...previous,
+          ...previousModel,
           history: {
             ...state.history,
             past: newPast,
-            present: previous,
-            future: [currentModel, ...state.history.future]
+            future: [{ patches: redoPatches, inversePatches: redoInverse }, ...state.history.future]
           }
         };
       });
@@ -102,18 +95,22 @@ const initialState = () => {
       const { history } = get();
       if (history.future.length === 0) return false;
 
-      const next = history.future[0];
+      const entry = history.future[0];
       const newFuture = history.future.slice(1);
 
       set((state) => {
-        // Capture the actual live state (not stale history.present)
         const currentModel = extractModelData(state);
+        // Build inverse patches to undo back (for the past stack).
+        const [, undoPatches, undoInverse] = produceWithPatches(
+          currentModel,
+          (draft: Model) => { Object.assign(draft, applyPatches(currentModel, entry.patches)); }
+        );
+        const nextModel = applyPatches(currentModel, entry.patches);
         return {
-          ...next,
+          ...nextModel,
           history: {
             ...state.history,
-            past: [...state.history.past, currentModel],
-            present: next,
+            past: [...state.history.past, { patches: undoPatches, inversePatches: undoInverse }],
             future: newFuture
           }
         };
@@ -122,37 +119,52 @@ const initialState = () => {
       return true;
     };
 
-    const canUndo = () => {
-      return get().history.past.length > 0;
-    };
-    const canRedo = () => {
-      return get().history.future.length > 0;
-    };
+    const canUndo = () => get().history.past.length > 0;
+    const canRedo = () => get().history.future.length > 0;
 
     const clearHistory = () => {
-      const currentState = get();
-      const currentModel = extractModelData(currentState);
-
-      set((state) => {
-        return {
-          ...state,
-          history: createHistoryState(currentModel)
-        };
-      });
+      pendingPre = null;
+      set((state) => ({ ...state, history: createHistoryState() }));
     };
 
     return {
       ...initialModel,
-      history: createHistoryState(initialModel),
+      history: createHistoryState(),
       actions: {
         get,
         set: (updates: Partial<Model>, skipHistory = false) => {
           if (!skipHistory) {
+            // Direct call without a prior saveToHistory — save a snapshot-based entry.
             saveToHistory();
           }
-          set((state) => {
-            return { ...state, ...updates };
-          });
+
+          if (pendingPre !== null) {
+            // We have a pre-state — compute patches instead of storing a full snapshot.
+            const pre = pendingPre;
+            pendingPre = null;
+            set((state) => {
+              const next: Model = { ...extractModelData(state), ...updates };
+              const [, patches, inversePatches] = produceWithPatches(pre, (draft: Model) => {
+                Object.assign(draft, next);
+              });
+
+              const newPast = [...state.history.past, { patches, inversePatches }];
+              if (newPast.length > state.history.maxHistorySize) newPast.shift();
+
+              return {
+                ...state,
+                ...next,
+                history: {
+                  ...state.history,
+                  past: newPast,
+                  future: [] // new action clears redo stack
+                }
+              };
+            });
+          } else {
+            // No pending pre — just apply the update without touching history.
+            set((state) => ({ ...state, ...updates }));
+          }
         },
         undo,
         redo,
@@ -165,9 +177,7 @@ const initialState = () => {
   });
 };
 
-const ModelContext = createContext<ReturnType<typeof initialState> | null>(
-  null
-);
+const ModelContext = createContext<ReturnType<typeof initialState> | null>(null);
 
 interface ProviderProps {
   children: React.ReactNode;
@@ -192,21 +202,12 @@ export function useModelStore<T>(
   equalityFn?: (left: T, right: T) => boolean
 ) {
   const store = useContext(ModelContext);
-
-  if (store === null) {
-    throw new Error('Missing provider in the tree');
-  }
-
-  const value = useStoreWithEqualityFn(store, selector, equalityFn);
-  return value;
+  if (store === null) throw new Error('Missing provider in the tree');
+  return useStoreWithEqualityFn(store, selector, equalityFn);
 }
 
 export function useModelStoreApi() {
   const store = useContext(ModelContext);
-
-  if (store === null) {
-    throw new Error('Missing provider in the tree');
-  }
-
+  if (store === null) throw new Error('Missing provider in the tree');
   return store;
 }

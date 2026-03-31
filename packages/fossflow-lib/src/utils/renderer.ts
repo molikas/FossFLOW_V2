@@ -446,13 +446,32 @@ interface GetItemAtTile {
   scene: ReturnType<typeof useScene>;
 }
 
+// WeakMap-based spatial index: one Map<"x,y", id> per unique scene.items array reference.
+// Building the index is O(N) once; lookups are O(1). GC'd when items array is replaced.
+const itemTileIndexCache = new WeakMap<
+  ReturnType<typeof useScene>['items'],
+  Map<string, string>
+>();
+
+const getItemTileIndex = (
+  items: ReturnType<typeof useScene>['items']
+): Map<string, string> => {
+  if (!itemTileIndexCache.has(items)) {
+    itemTileIndexCache.set(
+      items,
+      new Map(items.map((item) => [`${item.tile.x},${item.tile.y}`, item.id]))
+    );
+  }
+  return itemTileIndexCache.get(items)!;
+};
+
 export const getItemAtTile = ({
   tile,
   scene
 }: GetItemAtTile): ItemReference | null => {
-  const viewItem = scene.items.find((item) => {
-    return CoordsUtils.isEqual(item.tile, tile);
-  });
+  const tileIndex = getItemTileIndex(scene.items);
+  const itemId = tileIndex.get(`${tile.x},${tile.y}`);
+  const viewItem = itemId ? scene.items.find((i) => i.id === itemId) : undefined;
 
   if (viewItem) {
     return {

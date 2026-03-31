@@ -14,7 +14,7 @@ import { useUiStateStore } from 'src/stores/uiStateStore';
 import { useModelStore, useModelStoreApi } from 'src/stores/modelStore';
 import { useSceneStore, useSceneStoreApi } from 'src/stores/sceneStore';
 import * as reducers from 'src/stores/reducers';
-import type { State } from 'src/stores/reducers/types';
+import type { State, ViewReducerContext } from 'src/stores/reducers/types';
 import { generateId, getItemByIdOrThrow } from 'src/utils';
 import { useView } from 'src/hooks/useView';
 import {
@@ -49,6 +49,8 @@ export const useScene = () => {
     );
   const currentViewId = useUiStateStore((state) => state.view);
   const transactionInProgress = useRef(false);
+  // Accumulated state during a transaction — flushed to the stores in a single write at the end.
+  const pendingStateRef = useRef<State | null>(null);
 
   const modelStoreApi = useModelStoreApi();
   const sceneStoreApi = useSceneStoreApi();
@@ -123,6 +125,11 @@ export const useScene = () => {
   }, [currentView.textBoxes, sceneTextBoxes]);
 
   const getState = useCallback((): State => {
+    // Inside a transaction, return the accumulated (not-yet-flushed) state so that
+    // each successive operation in the batch sees the results of prior operations.
+    if (transactionInProgress.current && pendingStateRef.current) {
+      return pendingStateRef.current;
+    }
     const model = modelStoreApi.getState();
     const scene = sceneStoreApi.getState();
     return {
@@ -144,6 +151,12 @@ export const useScene = () => {
 
   const setState = useCallback(
     (newState: State) => {
+      // Inside a transaction, buffer into the ref instead of writing to the stores.
+      // The transaction flush will push a single combined setState to both stores.
+      if (transactionInProgress.current) {
+        pendingStateRef.current = newState;
+        return;
+      }
       modelStoreApi.getState().actions.set(newState.model, true);
       sceneStoreApi.getState().actions.set(newState.scene, true);
     },
@@ -394,38 +407,62 @@ export const useScene = () => {
   const transaction = useCallback(
     (operations: () => void) => {
       if (transactionInProgress.current) {
+        // Already inside a transaction — just run the operations; the outer transaction
+        // will handle history save and the single-flush at the end.
         operations();
         return;
       }
 
       saveToHistoryBeforeChange();
+      // Snapshot the current store state into the pending buffer so that getState()
+      // inside operations() sees a consistent, accumulated view.
+      pendingStateRef.current = (() => {
+        const model = modelStoreApi.getState();
+        const scene = sceneStoreApi.getState();
+        return {
+          model: {
+            version: model.version,
+            title: model.title,
+            description: model.description,
+            colors: model.colors,
+            icons: model.icons,
+            items: model.items,
+            views: model.views
+          },
+          scene: {
+            connectors: scene.connectors,
+            textBoxes: scene.textBoxes
+          }
+        };
+      })();
       transactionInProgress.current = true;
 
       try {
         operations();
+        // Flush the final accumulated state in a SINGLE write to each store,
+        // producing exactly two Zustand setState calls total instead of 2×N.
+        if (pendingStateRef.current) {
+          modelStoreApi.getState().actions.set(pendingStateRef.current.model, true);
+          sceneStoreApi.getState().actions.set(pendingStateRef.current.scene, true);
+        }
       } finally {
+        pendingStateRef.current = null;
         transactionInProgress.current = false;
       }
     },
-    [saveToHistoryBeforeChange]
+    [saveToHistoryBeforeChange, modelStoreApi, sceneStoreApi]
   );
 
   const placeIcon = useCallback(
     (params: { modelItem: ModelItem; viewItem: ViewItem }) => {
-      saveToHistoryBeforeChange();
-      transactionInProgress.current = true;
-
-      try {
+      transaction(() => {
         const stateAfterModelItem = createModelItem(params.modelItem);
-
         if (stateAfterModelItem) {
           createViewItem(params.viewItem, stateAfterModelItem);
         }
-      } finally {
-        transactionInProgress.current = false;
-      }
+      });
     },
-    [createModelItem, createViewItem, saveToHistoryBeforeChange]
+    [transaction, createModelItem, createViewItem]
   );
 
   const switchView = useCallback(
@@ -527,22 +564,70 @@ export const useScene = () => {
     [currentViewId, transaction, deleteViewItem, deleteConnector, deleteTextBox, deleteRectangle, getState]
   );
 
+  // Compute connector paths asynchronously after paste — processes them in rAF batches
+  // so the main thread stays responsive while paths are built.
+  const computePathsAsync = useCallback(
+    (connectorIds: string[]) => {
+      if (!currentViewId || connectorIds.length === 0) return;
+
+      const BATCH_SIZE = 5;
+      let offset = 0;
+
+      const processNextBatch = () => {
+        const batch = connectorIds.slice(offset, offset + BATCH_SIZE);
+        if (batch.length === 0) return;
+        offset += BATCH_SIZE;
+
+        const ctx: ViewReducerContext = { viewId: currentViewId, state: getState() };
+        let currentState = ctx.state;
+        for (const id of batch) {
+          try {
+            currentState = reducers.syncConnector(id, { viewId: currentViewId, state: currentState });
+          } catch {
+            // connector may have been deleted before the batch ran
+          }
+        }
+        // Write the batch of computed paths in a single setState call.
+        sceneStoreApi.getState().actions.set(currentState.scene, true);
+
+        if (offset < connectorIds.length) {
+          requestAnimationFrame(processNextBatch);
+        }
+      };
+
+      requestAnimationFrame(processNextBatch);
+    },
+    [currentViewId, getState, sceneStoreApi]
+  );
+
   const pasteItems = useCallback(
     (payload: PastePayload) => {
       if (!currentViewId) return;
+
+      const viewId = currentViewId;
 
       transaction(() => {
         payload.items.forEach(({ modelItem, viewItem }) => {
           createModelItem(modelItem);
           createViewItem(viewItem);
         });
-        payload.connectors.forEach((c) => createConnector(c));
-        // Paste in reverse so unshift() preserves the original visual z-order
+
+        // Create connectors with provisional empty paths during the transaction
+        // so the single batched setState flush is cheap (no A* per connector).
+        payload.connectors.forEach((c) => {
+          const ctx: ViewReducerContext = { viewId, state: getState() };
+          const newState = reducers.createConnectorReducer(c, ctx, /* skipPathfinding */ true);
+          setState(newState);
+        });
+
         ;[...payload.rectangles].reverse().forEach((r) => createRectangle(r));
         payload.textBoxes.forEach((tb) => createTextBox(tb));
       });
+
+      // After the transaction flushes to the stores, compute paths asynchronously.
+      computePathsAsync(payload.connectors.map((c) => c.id));
     },
-    [currentViewId, transaction, createModelItem, createViewItem, createConnector, createRectangle, createTextBox]
+    [currentViewId, transaction, createModelItem, createViewItem, getState, setState, computePathsAsync, createRectangle, createTextBox]
   );
 
   return {
