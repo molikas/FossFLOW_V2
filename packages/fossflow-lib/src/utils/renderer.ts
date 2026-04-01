@@ -503,7 +503,8 @@ export const getItemAtTile = ({
     };
   }
 
-  const connector = scene.connectors.find((con) => {
+  const connector = scene.hitConnectors.find((con) => {
+    if (!con.path?.tiles) return false;
     return con.path.tiles.find((pathTile) => {
       const globalPathTile = connectorPathTileToGlobal(
         pathTile,

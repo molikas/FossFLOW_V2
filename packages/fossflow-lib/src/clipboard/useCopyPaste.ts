@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, startTransition } from 'react';
 import { useUiStateStoreApi } from 'src/stores/uiStateStore';
 import { useModelStoreApi } from 'src/stores/modelStore';
 import { useScene } from 'src/hooks/useScene';
@@ -258,12 +258,35 @@ export const useCopyPaste = () => {
       tile: { x: tb.tile.x + offset.x, y: tb.tile.y + offset.y }
     }));
 
-    // Paste everything in a single undo step
-    scene.pasteItems({
-      items: newItems,
-      connectors: newConnectors,
-      rectangles: newRectangles,
-      textBoxes: newTextBoxes
+    const pastedCount =
+      newItems.length + newConnectors.length + newRectangles.length + newTextBoxes.length;
+    const LARGE_PASTE_THRESHOLD = 500;
+    const isLargePaste = newConnectors.length >= LARGE_PASTE_THRESHOLD;
+
+    // Build the progress callback — only used for large pastes.
+    const onPathProgress = isLargePaste
+      ? (done: number, total: number) => {
+          if (done >= total) {
+            showNotification(`Pasted ${pastedCount} item${pastedCount !== 1 ? 's' : ''}`, 'success');
+          } else {
+            const pct = Math.round((done / total) * 100);
+            showNotification(`Pasting… routing connectors (${pct}%)`, 'info');
+          }
+        }
+      : undefined;
+
+    // Wrap the store write in startTransition so React can deprioritize the resulting
+    // render and remain responsive to user input during large paste operations.
+    startTransition(() => {
+      scene.pasteItems(
+        {
+          items: newItems,
+          connectors: newConnectors,
+          rectangles: newRectangles,
+          textBoxes: newTextBoxes
+        },
+        onPathProgress
+      );
     });
 
     uiState.actions.setMode({
@@ -273,9 +296,11 @@ export const useCopyPaste = () => {
     });
     uiState.actions.setItemControls(null);
 
-    const pastedCount =
-      newItems.length + newConnectors.length + newRectangles.length + newTextBoxes.length;
-    showNotification(`Pasted ${pastedCount} item${pastedCount !== 1 ? 's' : ''}`, 'success');
+    if (!isLargePaste) {
+      showNotification(`Pasted ${pastedCount} item${pastedCount !== 1 ? 's' : ''}`, 'success');
+    } else {
+      showNotification('Pasting… routing connectors (0%)', 'info');
+    }
   }, [uiStateApi, scene]);
 
   return { handleCopy, handleCut, handlePaste };

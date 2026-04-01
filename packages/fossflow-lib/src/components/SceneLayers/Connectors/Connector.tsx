@@ -1,6 +1,6 @@
 import React, { useMemo, memo } from 'react';
 import { useTheme, Box } from '@mui/material';
-import { UNPROJECTED_TILE_SIZE } from 'src/config';
+import { UNPROJECTED_TILE_SIZE, CONNECTOR_DEFAULTS } from 'src/config';
 import {
   getAnchorTile,
   getColorVariant,
@@ -9,64 +9,83 @@ import {
 import { Circle } from 'src/components/Circle/Circle';
 import { Svg } from 'src/components/Svg/Svg';
 import { useIsoProjection } from 'src/hooks/useIsoProjection';
-import { useScene } from 'src/hooks/useScene';
+import type { useScene } from 'src/hooks/useScene';
 import { useColor } from 'src/hooks/useColor';
+import { useSceneStore } from 'src/stores/sceneStore';
+import { Connector as ConnectorType } from 'src/types';
 
 interface Props {
-  connector: ReturnType<typeof useScene>['connectors'][0];
+  connector: ConnectorType;
   currentView: ReturnType<typeof useScene>['currentView'];
   isSelected?: boolean;
 }
 
 export const Connector = memo(({ connector, currentView, isSelected }: Props) => {
   const theme = useTheme();
-  const predefinedColor = useColor(connector.color);
 
-  // Use custom color if provided, otherwise use predefined color
-  const color = connector.customColor
-    ? { value: connector.customColor }
+  // Subscribe only to this connector's scene path — O(1) per path write instead of O(N).
+  const scenePath = useSceneStore(
+    (state) => state.connectors[connector.id]?.path,
+    (a, b) => a === b
+  );
+
+  // Merge model connector with defaults and scene path.
+  const merged = useMemo(() => ({
+    ...CONNECTOR_DEFAULTS,
+    ...connector,
+    ...(scenePath ? { path: scenePath } : {})
+  }), [connector, scenePath]);
+
+  const predefinedColor = useColor(merged.color);
+
+  const color = merged.customColor
+    ? { value: merged.customColor }
     : predefinedColor;
 
-  // All hooks must be called unconditionally before any early return (Rules of Hooks)
-  const { css, pxSize } = useIsoProjection({
-    ...connector.path.rectangle
-  });
+  // Skip rendering if path isn't computed yet (deferred async pathfinding).
+  const connectorPath = merged.path?.tiles?.length ? merged.path : null;
+  const hasTiles = Boolean(connectorPath);
 
-  const drawOffset = useMemo(() => {
-    return {
-      x: UNPROJECTED_TILE_SIZE / 2,
-      y: UNPROJECTED_TILE_SIZE / 2
-    };
-  }, []);
+  // All hooks must be called unconditionally before any early return.
+  const { css, pxSize } = useIsoProjection(
+    connectorPath
+      ? connectorPath.rectangle
+      : { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }
+  );
+
+  const drawOffset = useMemo(() => ({
+    x: UNPROJECTED_TILE_SIZE / 2,
+    y: UNPROJECTED_TILE_SIZE / 2
+  }), []);
 
   const connectorWidthPx = useMemo(() => {
-    return (UNPROJECTED_TILE_SIZE / 100) * connector.width;
-  }, [connector.width]);
+    return (UNPROJECTED_TILE_SIZE / 100) * merged.width;
+  }, [merged.width]);
 
   const pathString = useMemo(() => {
-    return connector.path.tiles.reduce((acc, tile) => {
+    if (!hasTiles) return '';
+    return connectorPath!.tiles.reduce((acc: string, tile) => {
       return `${acc} ${tile.x * UNPROJECTED_TILE_SIZE + drawOffset.x},${
         tile.y * UNPROJECTED_TILE_SIZE + drawOffset.y
       }`;
     }, '');
-  }, [connector.path.tiles, drawOffset]);
+  }, [connectorPath?.tiles, drawOffset, hasTiles]);
 
-  // Create offset paths for double lines
   const offsetPaths = useMemo(() => {
-    if (!connector.lineType || connector.lineType === 'SINGLE') return null;
-    
-    const tiles = connector.path.tiles;
+    if (!hasTiles) return null;
+    if (!merged.lineType || merged.lineType === 'SINGLE') return null;
+
+    const tiles = connectorPath!.tiles;
     if (tiles.length < 2) return null;
-    
-    const offset = connectorWidthPx * 3; // Larger spacing between double lines for visibility
+
+    const offset = connectorWidthPx * 3;
     const path1Points: string[] = [];
     const path2Points: string[] = [];
-    
+
     for (let i = 0; i < tiles.length; i++) {
       const curr = tiles[i];
       let dx = 0, dy = 0;
-      
-      // Calculate perpendicular offset based on line direction
+
       if (i > 0 && i < tiles.length - 1) {
         const prev = tiles[i - 1];
         const next = tiles[i + 1];
@@ -74,17 +93,12 @@ export const Connector = memo(({ connector, currentView, isSelected }: Props) =>
         const dy1 = curr.y - prev.y;
         const dx2 = next.x - curr.x;
         const dy2 = next.y - curr.y;
-        
-        // Average direction for smooth corners
         const avgDx = (dx1 + dx2) / 2;
         const avgDy = (dy1 + dy2) / 2;
         const len = Math.sqrt(avgDx * avgDx + avgDy * avgDy) || 1;
-        
-        // Perpendicular vector
         dx = -avgDy / len;
         dy = avgDx / len;
       } else if (i === 0 && tiles.length > 1) {
-        // Start point
         const next = tiles[1];
         const dirX = next.x - curr.x;
         const dirY = next.y - curr.y;
@@ -92,7 +106,6 @@ export const Connector = memo(({ connector, currentView, isSelected }: Props) =>
         dx = -dirY / len;
         dy = dirX / len;
       } else if (i === tiles.length - 1 && tiles.length > 1) {
-        // End point
         const prev = tiles[i - 1];
         const dirX = curr.x - prev.x;
         const dirY = curr.y - prev.y;
@@ -100,52 +113,40 @@ export const Connector = memo(({ connector, currentView, isSelected }: Props) =>
         dx = -dirY / len;
         dy = dirX / len;
       }
-      
+
       const x = curr.x * UNPROJECTED_TILE_SIZE + drawOffset.x;
       const y = curr.y * UNPROJECTED_TILE_SIZE + drawOffset.y;
-      
+
       path1Points.push(`${x + dx * offset},${y + dy * offset}`);
       path2Points.push(`${x - dx * offset},${y - dy * offset}`);
     }
-    
-    return {
-      path1: path1Points.join(' '),
-      path2: path2Points.join(' ')
-    };
-  }, [connector.path.tiles, connector.lineType, connectorWidthPx, drawOffset]);
+
+    return { path1: path1Points.join(' '), path2: path2Points.join(' ') };
+  }, [connectorPath?.tiles, merged.lineType, connectorWidthPx, drawOffset, hasTiles]);
 
   const anchorPositions = useMemo(() => {
-    if (!isSelected) return [];
-
-    return connector.anchors.map((anchor) => {
+    if (!isSelected || !hasTiles) return [];
+    return merged.anchors.map((anchor) => {
       const position = getAnchorTile(anchor, currentView);
-
       return {
         id: anchor.id,
         x:
-          (connector.path.rectangle.from.x - position.x) *
-            UNPROJECTED_TILE_SIZE +
+          (connectorPath!.rectangle.from.x - position.x) * UNPROJECTED_TILE_SIZE +
           drawOffset.x,
         y:
-          (connector.path.rectangle.from.y - position.y) *
-            UNPROJECTED_TILE_SIZE +
+          (connectorPath!.rectangle.from.y - position.y) * UNPROJECTED_TILE_SIZE +
           drawOffset.y
       };
     });
-  }, [
-    currentView,
-    connector.path.rectangle,
-    connector.anchors,
-    drawOffset,
-    isSelected
-  ]);
+  }, [currentView, connectorPath?.rectangle, merged.anchors, drawOffset, isSelected, hasTiles]);
 
   const directionIcon = useMemo(() => {
-    return getConnectorDirectionIcon(connector.path.tiles);
-  }, [connector.path.tiles]);
+    if (!hasTiles) return null;
+    return getConnectorDirectionIcon(connectorPath!.tiles);
+  }, [connectorPath?.tiles, hasTiles]);
 
   const strokeDashArray = useMemo(() => {
-    switch (connector.style) {
+    switch (merged.style) {
       case 'DASHED':
         return `${connectorWidthPx * 2}, ${connectorWidthPx * 2}`;
       case 'DOTTED':
@@ -154,23 +155,19 @@ export const Connector = memo(({ connector, currentView, isSelected }: Props) =>
       default:
         return 'none';
     }
-  }, [connector.style, connectorWidthPx]);
+  }, [merged.style, connectorWidthPx]);
 
-  if (!color) {
+  // Don't render until path is available or if color is missing.
+  if (!color || !hasTiles) {
     return null;
   }
 
-  const lineType = connector.lineType || 'SINGLE';
+  const lineType = merged.lineType || 'SINGLE';
 
   return (
     <Box data-testid="connector-path" style={css}>
       <Svg
-        style={{
-          // TODO: The original x coordinates of each tile seems to be calculated wrongly.
-          // They are mirrored along the x-axis.  The hack below fixes this, but we should
-          // try to fix this issue at the root of the problem (might have further implications).
-          transform: 'scale(-1, 1)'
-        }}
+        style={{ transform: 'scale(-1, 1)' }}
         viewboxSize={pxSize}
       >
         {lineType === 'SINGLE' ? (
@@ -197,7 +194,6 @@ export const Connector = memo(({ connector, currentView, isSelected }: Props) =>
           </>
         ) : offsetPaths ? (
           <>
-            {/* First line of double */}
             <polyline
               points={offsetPaths.path1}
               stroke={theme.palette.common.white}
@@ -217,7 +213,6 @@ export const Connector = memo(({ connector, currentView, isSelected }: Props) =>
               strokeDasharray={strokeDashArray}
               fill="none"
             />
-            {/* Second line of double */}
             <polyline
               points={offsetPaths.path2}
               stroke={theme.palette.common.white}
@@ -240,43 +235,32 @@ export const Connector = memo(({ connector, currentView, isSelected }: Props) =>
           </>
         ) : null}
 
-        {/* Circle for port-channel representation */}
-        {lineType === 'DOUBLE_WITH_CIRCLE' && connector.path.tiles.length >= 2 && (() => {
-          const midIndex = Math.floor(connector.path.tiles.length / 2);
-          const midTile = connector.path.tiles[midIndex];
+        {lineType === 'DOUBLE_WITH_CIRCLE' && connectorPath!.tiles.length >= 2 && (() => {
+          const midIndex = Math.floor(connectorPath!.tiles.length / 2);
+          const midTile = connectorPath!.tiles[midIndex];
           const x = midTile.x * UNPROJECTED_TILE_SIZE + drawOffset.x;
           const y = midTile.y * UNPROJECTED_TILE_SIZE + drawOffset.y;
-          
-          // Calculate rotation based on line direction at middle point
+
           let rotation = 0;
-          if (midIndex > 0 && midIndex < connector.path.tiles.length - 1) {
-            const prevTile = connector.path.tiles[midIndex - 1];
-            const nextTile = connector.path.tiles[midIndex + 1];
+          if (midIndex > 0 && midIndex < connectorPath!.tiles.length - 1) {
+            const prevTile = connectorPath!.tiles[midIndex - 1];
+            const nextTile = connectorPath!.tiles[midIndex + 1];
             const dx = nextTile.x - prevTile.x;
             const dy = nextTile.y - prevTile.y;
             rotation = Math.atan2(dy, dx) * (180 / Math.PI);
           }
-          
-          // Increased size to encompass both lines with the spacing
-          const circleRadiusX = connectorWidthPx * 5; // Wider to cover both lines
-          const circleRadiusY = connectorWidthPx * 4; // Height to encompass both lines
-          
+
+          const circleRadiusX = connectorWidthPx * 5;
+          const circleRadiusY = connectorWidthPx * 4;
+
           return (
             <g transform={`translate(${x}, ${y}) rotate(${rotation})`}>
-              <ellipse
-                cx={0}
-                cy={0}
-                rx={circleRadiusX}
-                ry={circleRadiusY}
+              <ellipse cx={0} cy={0} rx={circleRadiusX} ry={circleRadiusY}
                 fill="none"
                 stroke={getColorVariant(color.value, 'dark', { grade: 1 })}
                 strokeWidth={connectorWidthPx * 0.8}
               />
-              <ellipse
-                cx={0}
-                cy={0}
-                rx={circleRadiusX}
-                ry={circleRadiusY}
+              <ellipse cx={0} cy={0} rx={circleRadiusX} ry={circleRadiusY}
                 fill="none"
                 stroke={theme.palette.common.white}
                 strokeWidth={connectorWidthPx * 1.2}
@@ -286,27 +270,14 @@ export const Connector = memo(({ connector, currentView, isSelected }: Props) =>
           );
         })()}
 
-        {anchorPositions.map((anchor) => {
-          return (
-            <g key={anchor.id}>
-              <Circle
-                tile={anchor}
-                radius={18}
-                fill={theme.palette.common.white}
-                fillOpacity={0.7}
-              />
-              <Circle
-                tile={anchor}
-                radius={12}
-                stroke={theme.palette.common.black}
-                fill={theme.palette.common.white}
-                strokeWidth={6}
-              />
-            </g>
-          );
-        })}
+        {anchorPositions.map((anchor) => (
+          <g key={anchor.id}>
+            <Circle tile={anchor} radius={18} fill={theme.palette.common.white} fillOpacity={0.7} />
+            <Circle tile={anchor} radius={12} stroke={theme.palette.common.black} fill={theme.palette.common.white} strokeWidth={6} />
+          </g>
+        ))}
 
-        {directionIcon && connector.showArrow !== false && (
+        {directionIcon && merged.showArrow !== false && (
           <g transform={`translate(${directionIcon.x}, ${directionIcon.y})`}>
             <g transform={`rotate(${directionIcon.rotation})`}>
               <polygon

@@ -1,10 +1,11 @@
 import React, { useMemo, memo } from 'react';
-import type { useScene } from 'src/hooks/useScene';
+import { Connector as ConnectorType } from 'src/types';
 import { useUiStateStore } from 'src/stores/uiStateStore';
+import type { useScene } from 'src/hooks/useScene';
 import { Connector } from './Connector';
 
 interface Props {
-  connectors: ReturnType<typeof useScene>['connectors'];
+  connectors: ConnectorType[];
   currentView: ReturnType<typeof useScene>['currentView'];
 }
 

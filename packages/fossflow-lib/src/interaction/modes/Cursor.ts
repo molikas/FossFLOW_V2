@@ -48,7 +48,8 @@ const getAnchor = (
   tile: Coords,
   scene: ReturnType<typeof useScene>
 ) => {
-  const connector = getItemByIdOrThrow(scene.connectors, connectorId).value;
+  // hitConnectors includes merged scene path data needed for getAnchorOrdering.
+  const connector = getItemByIdOrThrow(scene.hitConnectors, connectorId).value;
   const anchor = getAnchorAtTile(tile, connector.anchors);
 
   if (!anchor) {

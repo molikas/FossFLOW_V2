@@ -1,6 +1,6 @@
 # FossFLOW Community Edition — Architecture Reference
 
-**Last updated:** 2026-03-30 (rev 4)
+**Last updated:** 2026-03-31 (rev 5)
 **Codebase root:** `packages/fossflow-lib/src` (library) · `packages/fossflow-app/src` (application shell)
 **Purpose:** Living architecture reference — feature inventory, store/reducer/mode architecture, test audit, gap analysis, lessons learned, and key APIs. Update this document whenever significant architectural changes are made.
 
@@ -194,18 +194,18 @@ Same context pattern. Stores `Model` fields inline plus a `history: HistoryState
 
 **Model fields (persistent — serialized/loaded):** `version`, `title`, `description`, `colors`, `icons`, `items`, `views`
 
-**HistoryState:** `{ past: Model[], present: Model, future: Model[], maxHistorySize: 50 }`
+**HistoryState (2026-03-31):** `{ past: HistoryEntry[], future: HistoryEntry[], maxHistorySize: 50 }` where `HistoryEntry = { patches: Patch[]; inversePatches: Patch[] }`. Immer `enablePatches()` is called at module level. History stores **diffs** (patch pairs), not full snapshots — O(diff_size × 50) instead of O(model_size × 50).
 
 **Actions:**
-- `set(updates, skipHistory?)`: if `skipHistory` is false, calls `saveToHistory()` first. This is the **primary mutation path**.
-- `saveToHistory()`: pushes current snapshot to `past`, clears `future`, trims to 50.
-- `undo()`: pops last from `past`, pushes current live state to `future`, restores previous.
-- `redo()`: pops first from `future`, pushes current live state to `past`, restores next.
-- **Critical subtlety**: Both `undo`/`redo` capture the **live state** (`extractModelData(state)`) inside the Zustand `set()` callback, not the stale `history.present`. This ensures the undo target is the actual current state.
+- `set(updates, skipHistory?)`: if `skipHistory` is false, calls `saveToHistory()` first (captures `pendingPre`). On the next `set()` with a pending pre-state, computes `produceWithPatches(pre, draft => Object.assign(draft, next))` and stores the `{ patches, inversePatches }` pair.
+- `saveToHistory()`: captures current model as `pendingPre = extractModelData(get())`. The subsequent `set()` call uses this snapshot to compute diffs.
+- `undo()`: applies `entry.inversePatches` to current model to get previous state; pushes the **original entry** to the future stack (so redo can re-apply `entry.patches`).
+- `redo()`: applies `entry.patches` to current model to get next state; pushes the **original entry** back to the past stack.
+- **Key invariant**: undo/redo pass the original patch entry through the stacks unchanged. No recomputation. The patches from the initial mutation are used throughout the undo/redo cycle.
 
 #### SceneStore (`stores/sceneStore.tsx`)
 
-Same structure as ModelStore but stores `Scene` = `{ connectors: {[id]: SceneConnector}, textBoxes: {[id]: SceneTextBox} }`. Scene data is **derived/computed** (connector paths from pathfinder, textbox sizes from content). Scene has its own independent history stack (also 50 entries).
+Same structure as ModelStore (including patch-pair history) but stores `Scene` = `{ connectors: {[id]: SceneConnector}, textBoxes: {[id]: SceneTextBox} }`. Scene data is **derived/computed** (connector paths from pathfinder, textbox sizes from content). Scene has its own independent history stack (also 50 entries). Async path writes from `computePathsAsync` use `skipHistory=true` — they only update the scene slice, never touch history.
 
 ---
 
@@ -334,7 +334,7 @@ All methods that mutate call `saveToHistoryBeforeChange()` first, unless inside 
 | `createViewItem(viewItem, currentState?)` | Yes (unless in transaction) | |
 | `updateViewItem(id, updates, currentState?)` | Yes (unless in transaction) | If `tile` changed, cascades connector sync; then `validateView` — **throws on validation failure** |
 | `deleteViewItem(id)` | Yes | Cascades: removes connected connectors from model + scene |
-| `createConnector(connector)` | Yes | Calls `syncConnector` |
+| `createConnector(connector)` | Yes | Calls `syncConnector`. Accepts `skipPathfinding=true` for async paste — stores provisional empty path, defers routing to `computePathsAsync`. |
 | `updateConnector(id, updates)` | Yes | Calls `syncConnector` if anchors changed |
 | `deleteConnector(id)` | Yes | |
 | `createTextBox(textBox)` | Yes | Calls `syncTextBox` |
@@ -344,7 +344,7 @@ All methods that mutate call `saveToHistoryBeforeChange()` first, unless inside 
 | `updateRectangle(id, updates, currentState?)` | Yes (unless in transaction) | |
 | `deleteRectangle(id)` | Yes | |
 | `deleteSelectedItems(items)` | Yes (single checkpoint) | Wraps in `transaction()` |
-| `pasteItems(payload)` | Yes (single checkpoint) | Wraps in `transaction()` |
+| `pasteItems(payload, onPathProgress?)` | Yes (single checkpoint) | Wraps in `transaction()`. Connector paths computed asynchronously via `computePathsAsync` (rAF-batched, 25 connectors/frame). `onPathProgress(done, total)` called after each batch. |
 | `transaction(fn)` | Yes (one checkpoint before fn) | Guards `transactionInProgress.current` |
 | `placeIcon({modelItem, viewItem})` | Yes (single checkpoint) | Wraps in `transaction()` |
 | `createView(partial?)` | **No** | Notable gap — creating a view is not undoable |
@@ -442,9 +442,11 @@ Rectangle center = { x: round((r.from.x + r.to.x) / 2), y: round((r.from.y + r.t
 
 ### 2g. History System
 
-**Dual-store history**: Model store and Scene store each maintain independent `{ past: T[], present: T, future: T[], maxHistorySize: 50 }`. The `useHistory` hook coordinates them.
+**Dual-store history**: Model store and Scene store each maintain independent `{ past: HistoryEntry[], future: HistoryEntry[], maxHistorySize: 50 }` where each entry is an Immer patch pair (`{ patches, inversePatches }`). The `useHistory` hook coordinates them.
 
 **A checkpoint** = one call to `saveToHistoryBeforeChange()` in `useScene`, which calls both `modelStoreApi.getState().actions.saveToHistory()` and `sceneStoreApi.getState().actions.saveToHistory()`. `transaction()` ensures only one checkpoint for N operations.
+
+**Patch flow**: `saveToHistory()` captures `pendingPre = extractModelData(get())`. The next `set()` call with this pending pre-state runs `produceWithPatches(pre, draft => Object.assign(draft, next))` and stores `{ patches, inversePatches }`. `undo()` applies `inversePatches` and pushes the **original entry** to future. `redo()` applies `patches` and pushes the **original entry** back to past. No recomputation in undo/redo.
 
 **Undo semantics**: `useHistory.undo()` calls `modelActions.undo()` if `canUndo()` and `sceneActions.undo()` if `canUndo()`. These may diverge if one store has more entries (no cross-store synchronization check).
 
@@ -553,6 +555,70 @@ Touch events are synthesized: `touchstart` → mousedown (button:0), `touchmove`
 
 ---
 
+### 2k. Performance Architecture (2026-03-31)
+
+Nine targeted fixes applied to eliminate render hotspots and unblock large-diagram paste. All measured with the in-app DiagnosticsOverlay.
+
+#### O(1) item lookup — WeakMap index cache
+
+`useModelItem` and `getItemAtTile` build a `Map<id, item>` once per unique array reference using a module-level `WeakMap<items[], Map<id, item>>`. Cost: O(N) on the first call with a new array; O(1) on every subsequent call with the same reference. The WeakMap entry is GC'd automatically when the array is no longer referenced.
+
+#### `findNearestUnoccupiedTile` — single occupied-set pass
+
+Rewrote the ring-search helper to build a `Set<"x,y">` of occupied tiles **once**, then check membership in O(1) per candidate position. Eliminates the O(N) `getItemAtTile` call that was previously called inside every ring step.
+
+#### Zustand transaction batching
+
+`scene.transaction(fn)` now buffers all intermediate states in `pendingStateRef`, then flushes as two `setState` calls at the end — one for model, one for scene. Before: 2 × N Zustand `setState` calls for N operations. After: 2 `setState` calls regardless of N.
+
+#### Viewport culling
+
+`Renderer.tsx` computes tile-space visible bounds via `uiStateApi.subscribe()` without triggering React re-renders. The subscriber fires only when scroll/zoom/rendererSize changes, and only updates React state when the coarse tile range actually changes (equality check before `setCoarseBounds`). `visibleItems` and `visibleConnectors` are filtered in `useMemo` — off-screen elements are never rendered.
+
+#### Immer patch-pair history
+
+`modelStore` and `sceneStore` history stacks store Immer `{ patches, inversePatches }` pairs instead of full model snapshots. Memory: O(diff_size × 50) vs O(model_size × 50). Undo/redo apply/invert the stored diff — no full snapshot swap. The original entry is passed through the undo/redo cycle unchanged (no recomputation).
+
+#### Async A* pathfinding
+
+On paste, connector routing is dequeued from the synchronous transaction into `computePathsAsync`:
+
+```
+pasteItems(payload) {
+  transaction(() => {
+    // create all items, rectangles, textboxes
+    // create each connector with skipPathfinding=true (provisional empty path)
+  });
+  computePathsAsync(connectorIds, onProgress?);
+}
+```
+
+`computePathsAsync` chains `requestAnimationFrame` batches of 25 connectors. Each batch runs A* for 25 connectors, writes results directly to sceneStore (`skipHistory=true`), yields to the browser, then schedules the next batch. At 2264 connectors: 91 batches, each ≤100 ms. The rAF yield between batches prevents continuous blocking — Chrome's "page is unresponsive" threshold (30 s) is never reached.
+
+#### Per-connector sceneStore subscription (Fix A)
+
+The `connectors` list from `useScene` is now **raw view connectors** — no merging, no defaults. The `hitConnectors` list merges scene path data and is used only for interaction/hit-testing. Each `<Connector>` component subscribes only to its own path slice:
+
+```ts
+useSceneStore((s) => s.connectors[connector.id]?.path, (a, b) => a === b)
+```
+
+When `computePathsAsync` writes a path for connector X, only the `<Connector id=X>` component re-renders. All other N-1 connectors remain stable. CONNECTOR_DEFAULTS are merged locally inside each component rather than at list construction time.
+
+#### A* LRU path cache (Fix B)
+
+`pathfinder.ts` caches A* results in a `Map<string, Coords[]>` (max 2 000 entries, keyed by `"from.x,from.y→to.x,to.y@W×H"`). Evicts the oldest entry on capacity hit. Repeated paste of the same topology resolves in microseconds.
+
+#### `startTransition` on paste (Fix C)
+
+`useCopyPaste.handlePaste` wraps `scene.pasteItems` in React's `startTransition`. The store write is deprioritised — React can interrupt the resulting render to handle user input (scrolling, zooming) between renders.
+
+#### Progress notifications
+
+For pastes with ≥ 500 connectors, `useCopyPaste` passes an `onPathProgress(done, total)` callback to `pasteItems`. The callback fires after each rAF batch and updates a toast: `"Pasting… routing connectors (X%)"`. On completion: `"Pasted N items"`.
+
+---
+
 ## 3. Test Audit
 
 ### Summary Table
@@ -648,6 +714,22 @@ Touch events are synthesized: `touchstart` → mousedown (button:0), `touchmove`
 | `__perf_refactor_regression__/toolMenu.propagation.test.tsx` | updated | — | VALID — reflects corrected lasso behaviour |
 
 **Total test count as of 2026-03-29:** 575 tests across 60 suites, all passing.
+
+**New/updated suites — round 7 (2026-03-30, code quality + static analysis):**
+| File | Tests | Change | Classification |
+|---|---|---|---|
+| `__perf_refactor_regression__/quickAdd.groupButton.test.ts` | 10 | new | VALID — Group rectangle creation and node placement contracts |
+| `__perf_refactor_regression__/dragStart.prevention.test.ts` | 3 | updated | VALID — `dragstart` on `rendererEl` not window |
+
+**New/updated suites — round 8 (2026-03-31, performance optimizations):**
+| File | Tests | Change | Classification |
+|---|---|---|---|
+| `utils/__tests__/renderer.test.ts` | updated | +`hitConnectors` in mock | VALID — `getItemAtTile` now reads `hitConnectors` |
+| `hooks/__tests__/useHistory.realStore.test.tsx` | 7 | fixed | VALID — redo round-trip test unblocked by patch-pair history fix |
+| `__perf_refactor_regression__/useScene.listShape.test.tsx` | updated | tests updated | VALID — DEFAULTS merging moved to component; tests now check `hitConnectors` |
+| `__perf_refactor_regression__/useScene.referenceStability.test.tsx` | updated | tests updated | VALID — `hitConnectors` (not `connectors`) updates on sceneStore change |
+
+**Total test count as of 2026-03-31:** 683 tests across 68 suites, all passing. Global statement coverage ~32%.
 
 **Full regression suite documentation:** See `regression_tests.md` at repo root — suites listed with production targets, test counts, classifications, coverage notes, and known gaps.
 

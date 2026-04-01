@@ -18,7 +18,6 @@ import type { State, ViewReducerContext } from 'src/stores/reducers/types';
 import { generateId, getItemByIdOrThrow } from 'src/utils';
 import { useView } from 'src/hooks/useView';
 import {
-  CONNECTOR_DEFAULTS,
   RECTANGLE_DEFAULTS,
   TEXTBOX_DEFAULTS,
   VIEW_DEFAULTS
@@ -39,12 +38,12 @@ export const useScene = () => {
       }),
       shallow
     );
+  // NOTE: sceneConnectors is used ONLY for hit-testing and interaction (getItemAtTile, Cursor).
+  // Rendering (connectorsList) uses raw view connectors — each <Connector> fetches its own
+  // path via useSceneStore. This prevents O(N) re-merge on every async path write (Fix A).
   const { connectors: sceneConnectors, textBoxes: sceneTextBoxes } =
     useSceneStore(
-      (state) => ({
-        connectors: state.connectors,
-        textBoxes: state.textBoxes
-      }),
+      (state) => ({ connectors: state.connectors, textBoxes: state.textBoxes }),
       shallow
     );
   const currentViewId = useUiStateStore((state) => state.view);
@@ -91,15 +90,18 @@ export const useScene = () => {
     return colors ?? [];
   }, [colors]);
 
+  // Raw view connectors for RENDERING — no scene path merge here.
+  // Each <Connector> subscribes to its own path via useSceneStore (Fix A).
   const connectorsList = useMemo(() => {
+    return currentView.connectors ?? [];
+  }, [currentView.connectors]);
+
+  // Merged connectors for HIT-TESTING and interaction (getItemAtTile, lasso, etc.).
+  // Subscribes to sceneConnectors so interaction always sees current paths.
+  const hitConnectorsList = useMemo(() => {
     return (currentView.connectors ?? []).map((connector) => {
       const sceneConnector = sceneConnectors?.[connector.id];
-
-      return {
-        ...CONNECTOR_DEFAULTS,
-        ...connector,
-        ...sceneConnector
-      };
+      return { ...connector, ...sceneConnector };
     });
   }, [currentView.connectors, sceneConnectors]);
 
@@ -566,11 +568,18 @@ export const useScene = () => {
 
   // Compute connector paths asynchronously after paste — processes them in rAF batches
   // so the main thread stays responsive while paths are built.
+  // Batch size 25: ~87 frames for 2160 connectors (vs. 432 at batch=5).
+  // Since each <Connector> subscribes to its own path (Fix A), each sceneStore write
+  // only triggers re-renders for that batch of connectors, not all N.
   const computePathsAsync = useCallback(
-    (connectorIds: string[]) => {
+    (
+      connectorIds: string[],
+      onProgress?: (done: number, total: number) => void
+    ) => {
       if (!currentViewId || connectorIds.length === 0) return;
 
-      const BATCH_SIZE = 5;
+      const BATCH_SIZE = 25;
+      const total = connectorIds.length;
       let offset = 0;
 
       const processNextBatch = () => {
@@ -578,8 +587,24 @@ export const useScene = () => {
         if (batch.length === 0) return;
         offset += BATCH_SIZE;
 
-        const ctx: ViewReducerContext = { viewId: currentViewId, state: getState() };
-        let currentState = ctx.state;
+        // Read the current scene state directly (getState() may read stale model during a
+        // parallel transaction — use sceneStoreApi directly for the scene slice).
+        const sceneState = sceneStoreApi.getState();
+        const modelState = modelStoreApi.getState();
+        const fullState: State = {
+          model: {
+            version: modelState.version,
+            title: modelState.title,
+            description: modelState.description,
+            colors: modelState.colors,
+            icons: modelState.icons,
+            items: modelState.items,
+            views: modelState.views
+          },
+          scene: { connectors: sceneState.connectors, textBoxes: sceneState.textBoxes }
+        };
+
+        let currentState = fullState;
         for (const id of batch) {
           try {
             currentState = reducers.syncConnector(id, { viewId: currentViewId, state: currentState });
@@ -587,21 +612,26 @@ export const useScene = () => {
             // connector may have been deleted before the batch ran
           }
         }
-        // Write the batch of computed paths in a single setState call.
+        // Write only the scene slice — skipHistory=true so no history entry is created.
         sceneStoreApi.getState().actions.set(currentState.scene, true);
 
-        if (offset < connectorIds.length) {
+        onProgress?.(Math.min(offset, total), total);
+
+        if (offset < total) {
           requestAnimationFrame(processNextBatch);
         }
       };
 
       requestAnimationFrame(processNextBatch);
     },
-    [currentViewId, getState, sceneStoreApi]
+    [currentViewId, sceneStoreApi, modelStoreApi]
   );
 
   const pasteItems = useCallback(
-    (payload: PastePayload) => {
+    (
+      payload: PastePayload,
+      onPathProgress?: (done: number, total: number) => void
+    ) => {
       if (!currentViewId) return;
 
       const viewId = currentViewId;
@@ -625,7 +655,7 @@ export const useScene = () => {
       });
 
       // After the transaction flushes to the stores, compute paths asynchronously.
-      computePathsAsync(payload.connectors.map((c) => c.id));
+      computePathsAsync(payload.connectors.map((c) => c.id), onPathProgress);
     },
     [currentViewId, transaction, createModelItem, createViewItem, getState, setState, computePathsAsync, createRectangle, createTextBox]
   );
@@ -633,6 +663,9 @@ export const useScene = () => {
   return {
     items: itemsList,
     connectors: connectorsList,
+    // hitConnectors: merged with scene paths — for getItemAtTile, lasso, interaction modes.
+    // NOT used for rendering (each <Connector> subscribes to its own path).
+    hitConnectors: hitConnectorsList,
     colors: colorsList,
     rectangles: rectanglesList,
     textBoxes: textBoxesList,

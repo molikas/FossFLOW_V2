@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { getItemById } from 'src/utils';
 import { useScene } from 'src/hooks/useScene';
 
+// Returns the raw view connector (model data only, no scene path merge).
 export const useConnector = (id: string) => {
   const { connectors } = useScene();
 

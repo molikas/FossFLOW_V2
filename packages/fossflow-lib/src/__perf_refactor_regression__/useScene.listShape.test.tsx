@@ -119,21 +119,22 @@ describe('useScene list shape — C-2 regression', () => {
       ]
     };
 
-    it('entry includes all CONNECTOR_DEFAULTS fields', () => {
+    it('hitConnectors entry includes model connector fields and scene data (CONNECTOR_DEFAULTS now applied per-component)', () => {
       setupMocks({ connectors: [modelConnector] });
       const { result } = renderHook(() => useScene());
-      const entry = result.current.connectors[0];
-
-      (Object.keys(CONNECTOR_DEFAULTS) as Array<keyof typeof CONNECTOR_DEFAULTS>).forEach((key) => {
-        expect(entry).toHaveProperty(key);
-      });
+      // hitConnectors merges scene path/width data onto the raw connector.
+      // CONNECTOR_DEFAULTS are no longer merged at the list level — each <Connector>
+      // component applies them locally so the list stays lightweight.
+      const entry = result.current.hitConnectors[0];
+      expect(entry).toHaveProperty('id', 'c1');
+      expect(entry).toHaveProperty('anchors');
     });
 
     it('model data overrides CONNECTOR_DEFAULTS', () => {
       const custom = { ...modelConnector, width: 99, style: 'DASHED' as const };
       setupMocks({ connectors: [custom] });
       const { result } = renderHook(() => useScene());
-      const entry = result.current.connectors[0];
+      const entry = result.current.hitConnectors[0];
       expect(entry.width).toBe(99);
       expect(entry.style).toBe('DASHED');
     });
@@ -144,7 +145,8 @@ describe('useScene list shape — C-2 regression', () => {
         { connectors: { c1: { width: 42 } } }
       );
       const { result } = renderHook(() => useScene());
-      expect(result.current.connectors[0].width).toBe(42);
+      // Scene data merging happens in hitConnectors.
+      expect(result.current.hitConnectors[0].width).toBe(42);
     });
 
     it('connector id is preserved', () => {

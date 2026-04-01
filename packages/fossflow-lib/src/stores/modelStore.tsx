@@ -72,18 +72,14 @@ const initialState = () => {
 
       set((state) => {
         const currentModel = extractModelData(state);
-        // Build forward patches to redo from current→before (for the future stack).
-        const [, redoPatches, redoInverse] = produceWithPatches(
-          currentModel,
-          (draft: Model) => { Object.assign(draft, applyPatches(currentModel, entry.inversePatches)); }
-        );
         const previousModel = applyPatches(currentModel, entry.inversePatches);
         return {
           ...previousModel,
           history: {
             ...state.history,
             past: newPast,
-            future: [{ patches: redoPatches, inversePatches: redoInverse }, ...state.history.future]
+            // Push original entry to future so redo can re-apply the forward patches.
+            future: [entry, ...state.history.future]
           }
         };
       });
@@ -100,17 +96,13 @@ const initialState = () => {
 
       set((state) => {
         const currentModel = extractModelData(state);
-        // Build inverse patches to undo back (for the past stack).
-        const [, undoPatches, undoInverse] = produceWithPatches(
-          currentModel,
-          (draft: Model) => { Object.assign(draft, applyPatches(currentModel, entry.patches)); }
-        );
         const nextModel = applyPatches(currentModel, entry.patches);
         return {
           ...nextModel,
           history: {
             ...state.history,
-            past: [...state.history.past, { patches: undoPatches, inversePatches: undoInverse }],
+            // Push original entry back to past so undo can re-apply the inverse patches.
+            past: [...state.history.past, entry],
             future: newFuture
           }
         };

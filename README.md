@@ -43,7 +43,7 @@ An "exprimental" community fork of [FossFLOW](https://github.com/stan-smith/Foss
 
 ### Performance
 
-Measured on an 85-node / 54-connector diagram:
+**Idle / editing (85-node / 54-connector diagram):**
 
 | Metric | Before | After |
 |--------|--------|-------|
@@ -53,6 +53,16 @@ Measured on an 85-node / 54-connector diagram:
 | Long task rate (idle) | 6.4 / sec | ~0 / sec |
 | Long task rate (editing) | 6–10 / sec | ~1.6 / sec |
 | Diagram load recovery | Permanently degraded | Recovers to 60 fps within 1 s |
+
+**Paste performance (2026-03-31 session — measured with DiagnosticsOverlay):**
+
+| Scenario | Before (sync paste) | After (async paste) |
+|----------|--------------------|--------------------|
+| ~113 nodes / 441 connectors | FPS drops to 5, hard freeze | 60 fps maintained, no freeze |
+| ~280 nodes / 1132 connectors | Short hard freeze, instant 60fps recovery | Negligible initial delay, 9 s background routing |
+| ~560 nodes / 2264 connectors | 30+ s main-thread block ("page unresponsive") | rAF yields prevent tab kill; routing completes in ~90 batches |
+
+*How it works:* The async path (Fix 6) dequeues A* pathfinding out of the paste transaction into `requestAnimationFrame` batches of 25 connectors each. Each connector appears routed as its batch completes. The browser stays responsive between batches, eliminating the main-thread block that triggered Chrome's "page is unresponsive" dialog. A* results are cached (LRU, 2 000 entries) so repeated paste of the same topology is instant. For the "1k node" edge case the routing window is still noticeable (~9 s), but the tab stays alive and a progress toast counts completion percentage.
 
 ### Quality-of-life
 
@@ -67,40 +77,11 @@ Measured on an 85-node / 54-connector diagram:
 
 ## Code Coverage
 
-Coverage is built into the Jest test suite via Istanbul (bundled with `ts-jest`). No extra tooling needed.
-
 ```bash
-# Run with HTML + LCOV + text summary
 npm test --workspace=packages/fossflow-lib -- --coverage
 ```
 
-Reports land in `packages/fossflow-lib/coverage/`:
-- **`lcov-report/index.html`** — browseable line/branch/function view per file
-- **`lcov.info`** — LCOV format, integrates with VS Code Coverage Gutters extension and CI tools (Codecov, Coveralls)
-- **`coverage-summary.json`** — machine-readable totals
-
-Current thresholds (set in `jest.config.ts`): 10% global minimum for branches, functions, lines, and statements — intentionally low to avoid blocking CI while coverage grows. Raise as suites are added.
-
-### Branch coverage accuracy
-
-By default Jest uses Babel to instrument code (Istanbul-v8 fallback). For more accurate **branch coverage** (including TypeScript type narrowing paths), add to `jest.config.ts`:
-
-```ts
-coverageProvider: 'v8'
-```
-
-V8 coverage uses the Node.js runtime's native coverage counters, which catches paths that Babel misses.
-
-### Other tools evaluated
-
-| Tool | Purpose | Status |
-|------|---------|--------|
-| **ESLint** (`eslint.config.mjs`) | Lint + hooks rules | Configured, reports to `reports/eslint.txt` |
-| **Knip** | Dead code / unused exports / unlisted deps | Configured, reports to `reports/knip.txt` |
-| **npm audit** | CVE scanning | Available via `npm audit`; report in `reports/audit.txt` |
-| **Jest `--coverage`** | Line/branch/function/statement coverage | Configured in `jest.config.ts` |
-| **SonarQube / SonarCloud** | Comprehensive quality gate (complexity, duplication, security hotspots) | Not yet set up — would require CI pipeline integration |
-| **Codecov** | CI coverage trend tracking + PR annotations | Not yet set up — add after a baseline coverage run |
+HTML report: `packages/fossflow-lib/coverage/lcov-report/index.html`. Current global statement coverage ~32%. Thresholds set at 10% global minimum — intentionally low while the suite grows. Additional static analysis tools (ESLint, Knip, `npm audit`) output to `reports/`.
 
 ---
 
@@ -123,6 +104,34 @@ Diagrams are saved to a `diagrams/` folder in the project directory.
 ---
 
 ## [Unreleased]
+
+### 2026-03-31
+
+#### Performance
+
+Nine targeted optimizations, all measured with the in-app DiagnosticsOverlay:
+
+**History (Fix 5 — committed)**
+- `modelStore` and `sceneStore` history switched from full-snapshot arrays to Immer `produceWithPatches` patch pairs. Memory for a 50-entry undo stack drops from O(N × 50 × model_size) to O(50 × diff_size). Undo/redo now apply/invert the stored diff rather than swapping full snapshots — correct, deterministic round-trips.
+
+**Paste (Fix 6 + A/B/C)**
+- **Async A\* pathfinding (Fix 6):** Connector routing dequeued out of the paste transaction into `requestAnimationFrame` batches of 25 connectors each. Eliminates the main-thread block that caused Chrome's "page is unresponsive" dialog at ~1 000 + connectors. Each connector appears as its batch completes; a progress toast shows routing % for pastes ≥ 500 connectors.
+- **Per-connector sceneStore subscription (Fix A):** Each `<Connector>` component subscribes only to its own path slice (`state.connectors[id]?.path`) with reference equality. Async path writes re-render only the one connector that just received its route — not all N. Raw view connectors passed to the renderer; merged (`hitConnectors`) used only for interaction/hit-testing.
+- **A\* LRU cache (Fix B):** Path results cached in a 2 000-entry `Map` keyed by `from,to,gridSize`. Repeated paste of the same topology resolves instantly without re-running A\*.
+- **`startTransition` on paste (Fix C):** Wrap `scene.pasteItems` in React's `startTransition` so the resulting render is deprioritised — UI stays responsive to input during the initial store write.
+
+**Other fixes (committed)**
+- **WeakMap item index (Fix 1):** `useModelItem` and `getItemAtTile` build a `Map<id, item>` once per unique array reference via a module-level `WeakMap` — O(1) lookup, GC'd automatically.
+- **`findNearestUnoccupiedTile` rewrite (Fix 2):** Builds a `Set<"x,y">` of occupied tiles once; eliminates the O(N) `getItemAtTile` call inside every ring step.
+- **Zustand transaction batching (Fix 3):** `scene.transaction()` buffers intermediate states in a `pendingStateRef`, flushes as two `setState` calls at the end instead of 2 × N writes.
+- **Viewport culling (Fix 4):** `Renderer.tsx` computes tile-space bounds via `storeApi.subscribe()` (no React re-renders on pan/zoom unless the visible tile range actually changes). Items and connectors outside the viewport are filtered before render.
+
+**Outcome:** On an ~113-node / 441-connector paste, FPS stays at 60 (previously froze to 5). On ~280-node / 1 132-connector paste, routing completes in ~9 s in background with no freeze (previously a hard main-thread block). The "page is unresponsive" threshold is no longer reached because rAF yields between batches.
+
+#### Tests
+
+- Fixed 4 test failures introduced by the performance refactors: `renderer.test.ts` mock updated for `hitConnectors`, `useHistory.realStore.test.tsx` redo round-trip fixed (patch store now uses original entry instead of recomputing patches), `useScene.listShape.test.tsx` and `useScene.referenceStability.test.tsx` updated to reflect that DEFAULTS merging moved from the list into the `<Connector>` component, and that `hitConnectors` (not `connectors`) updates on scene store changes.
+- Test count: 683 tests, 68 suites, all passing.
 
 ### 2026-03-30
 

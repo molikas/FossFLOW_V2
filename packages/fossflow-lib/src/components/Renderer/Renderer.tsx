@@ -67,7 +67,7 @@ export const Renderer = ({ showGrid, backgroundColor }: RendererProps) => {
   const showCursor = useUiStateStore((state) => state.mode.showCursor);
   const uiStateActions = useUiStateStore((state) => state.actions);
   const { setInteractionsElement } = useInteractionManager();
-  const { items, rectangles, connectors, textBoxes, currentView } = useScene();
+  const { items, rectangles, connectors, hitConnectors, textBoxes, currentView } = useScene();
 
   // Tile-space visible bounds — updated by the store subscriber (no React renders on pan/zoom
   // unless the tile range actually changes). Coarse equality means re-renders only fire when
@@ -115,18 +115,23 @@ export const Renderer = ({ showGrid, backgroundColor }: RendererProps) => {
   const visibleConnectors = useMemo(() => {
     const { minX, maxX, minY, maxY } = coarseBounds;
     if (minX === -Infinity) return connectors;
-    return connectors.filter((connector) => {
-      // connector.path may be undefined on the first render pass before pathfinding runs
-      if (!connector.path?.rectangle) return true;
-      const { from, to } = connector.path.rectangle;
-      // Connector bounding box (from/to may be swapped — take the union)
-      const cMinX = Math.min(from.x, to.x);
-      const cMaxX = Math.max(from.x, to.x);
-      const cMinY = Math.min(from.y, to.y);
-      const cMaxY = Math.max(from.y, to.y);
-      return cMaxX >= minX && cMinX <= maxX && cMaxY >= minY && cMinY <= maxY;
-    });
-  }, [connectors, coarseBounds]);
+    // Use hitConnectors (which carry path data) to cull off-screen connectors,
+    // then return the corresponding raw connectors for rendering.
+    const visibleIds = new Set(
+      hitConnectors
+        .filter((connector) => {
+          if (!connector.path?.rectangle) return true;
+          const { from, to } = connector.path.rectangle;
+          const cMinX = Math.min(from.x, to.x);
+          const cMaxX = Math.max(from.x, to.x);
+          const cMinY = Math.min(from.y, to.y);
+          const cMaxY = Math.max(from.y, to.y);
+          return cMaxX >= minX && cMinX <= maxX && cMaxY >= minY && cMinY <= maxY;
+        })
+        .map((c) => c.id)
+    );
+    return connectors.filter((c) => visibleIds.has(c.id));
+  }, [connectors, hitConnectors, coarseBounds]);
 
   return (
     <Box

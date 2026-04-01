@@ -212,7 +212,7 @@ describe('incrementZoom / decrementZoom — boundary enforcement', () => {
 // getItemAtTile() — stacked rectangle selection (Bug fix: z-order hit-test)
 // ---------------------------------------------------------------------------
 describe('getItemAtTile() — stacked rectangle z-order', () => {
-  const emptyScene = { items: [], textBoxes: [], connectors: [], rectangles: [] };
+  const emptyScene = { items: [], textBoxes: [], connectors: [], hitConnectors: [], rectangles: [] };
 
   test('stacked rectangles — returns the last in array (visually topmost)', () => {
     const scene = {

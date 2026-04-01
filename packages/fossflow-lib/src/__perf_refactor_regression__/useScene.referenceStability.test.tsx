@@ -162,9 +162,10 @@ describe('useScene reference stability — C-2 regression', () => {
     expect(result.current.connectors).toHaveLength(0);
   });
 
-  it('connectors reference CHANGES when scene connector data is updated', () => {
+  it('hitConnectors reference CHANGES when scene connector data is updated', () => {
     const { result, rerender } = renderHook(() => useScene());
-    const ref1 = result.current.connectors;
+    // hitConnectors merges scene path data; it should update when sceneStore changes.
+    const ref1 = result.current.hitConnectors;
 
     act(() => {
       sceneState = { ...sceneState, connectors: { c1: { width: 20 } } };
@@ -174,7 +175,7 @@ describe('useScene reference stability — C-2 regression', () => {
     });
 
     rerender();
-    expect(result.current.connectors).not.toBe(ref1);
+    expect(result.current.hitConnectors).not.toBe(ref1);
   });
 
   it('items reference is stable when connectors change', () => {

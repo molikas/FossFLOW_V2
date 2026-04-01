@@ -1,9 +1,9 @@
 import React, { memo, useMemo } from 'react';
-import { useScene } from 'src/hooks/useScene';
+import { Connector } from 'src/types';
 import { ConnectorLabel } from './ConnectorLabel';
 
 interface Props {
-  connectors: ReturnType<typeof useScene>['connectors'];
+  connectors: Connector[];
 }
 
 export const ConnectorLabels = memo(({ connectors }: Props) => {
