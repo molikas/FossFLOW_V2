@@ -1,33 +1,15 @@
-export interface PanSettings {
-  // Mouse pan options
-  middleClickPan: boolean;
-  rightClickPan: boolean;
-  ctrlClickPan: boolean;
-  altClickPan: boolean;
-  emptyAreaClickPan: boolean;
-  
-  // Keyboard pan options
-  arrowKeysPan: boolean;
-  wasdPan: boolean;
-  ijklPan: boolean;
-  
-  // Pan speed
-  keyboardPanSpeed: number;
-}
+// Re-export type from canonical location for backwards compatibility.
+export type { PanSettings } from 'src/types/settings';
+import type { PanSettings } from 'src/types/settings';
 
 export const DEFAULT_PAN_SETTINGS: PanSettings = {
-  // Mouse options - start with common defaults
   middleClickPan: true,
   rightClickPan: true,
   ctrlClickPan: false,
   altClickPan: false,
   emptyAreaClickPan: false,
-  
-  // Keyboard options
   arrowKeysPan: true,
   wasdPan: false,
   ijklPan: false,
-  
-  // Pan speed (pixels per key press)
   keyboardPanSpeed: 20
 };

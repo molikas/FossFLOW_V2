@@ -1,10 +1,7 @@
 import { Coords, Size, EditorModeEnum, MainMenuOptions } from './common';
 import { Icon } from './model';
 import { ItemReference } from './scene';
-import { HotkeyProfile } from 'src/config/hotkeys';
-import { PanSettings } from 'src/config/panSettings';
-import { ZoomSettings } from 'src/config/zoomSettings';
-import { LabelSettings } from 'src/config/labelSettings';
+import { HotkeyProfile, PanSettings, ZoomSettings, LabelSettings } from './settings';
 import { IconPackManagerProps } from './isoflowProps';
 
 interface AddItemControls {

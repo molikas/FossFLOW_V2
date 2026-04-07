@@ -1,7 +1,6 @@
 import { produce } from 'immer';
 import { ModeActions, Coords, ItemReference } from 'src/types';
 import { useScene } from 'src/hooks/useScene';
-import type { State } from 'src/stores/reducers/types';
 import {
   getItemByIdOrThrow,
   CoordsUtils,
@@ -86,18 +85,16 @@ const dragItems = (
 
   if (nodeUpdates || hasOtherUpdates || anchorRefs.length > 0) {
     scene.transaction(() => {
-      let currentState: State | undefined;
-
       nodeUpdates?.forEach(({ id, tile: newTile }) => {
-        currentState = scene.updateViewItem(id, { tile: newTile }, currentState);
+        scene.updateViewItem(id, { tile: newTile });
       });
 
       textBoxUpdates.forEach(({ id, tile: newTile }) => {
-        currentState = scene.updateTextBox(id, { tile: newTile }, currentState);
+        scene.updateTextBox(id, { tile: newTile });
       });
 
       rectangleUpdates.forEach(({ id, from, to }) => {
-        currentState = scene.updateRectangle(id, { from, to }, currentState);
+        scene.updateRectangle(id, { from, to });
       });
 
       // Connector anchors: group lasso move uses initial tile + offset;

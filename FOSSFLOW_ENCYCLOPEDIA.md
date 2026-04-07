@@ -1,6 +1,6 @@
 # FossFLOW Codebase Encyclopedia
 
-**Last Updated**: March 2026
+**Last Updated**: April 2026
 **Original Created**: August 14, 2025 (commit 94bf3c0)
 **Major Updates**: Connector anchor drag-to-reconnect UX (RECONNECT_ANCHOR mode, glass-morphism anchor overlay), transient right-click pan, node header links, description persistence fix, performance improvements, and service worker overhaul — plus 79+ prior commits including backend storage, i18n, lasso tools, and connector enhancements
 
@@ -94,14 +94,16 @@ fossflow-monorepo/
 
 ```typescript
 <ThemeProvider>
-  <LocaleProvider>    // i18n support (NEW)
-    <ModelProvider>     // Core data model
-      <SceneProvider>   // Visual state
-        <UiStateProvider> // UI interaction state
-          <App>
-            <Renderer />   // Canvas rendering
-            <UiOverlay />  // UI controls
-          </App>
+  <LocaleProvider>         // i18n support
+    <ModelProvider>        // Core data model
+      <SceneProvider>      // Visual state
+        <UiStateProvider>  // UI interaction state
+          <ClipboardProvider>  // Instance-scoped clipboard (2026-04-07)
+            <App>
+              <Renderer />   // Canvas rendering
+              <UiOverlay />  // UI controls
+            </App>
+          </ClipboardProvider>
         </UiStateProvider>
       </SceneProvider>
     </ModelProvider>
@@ -247,9 +249,12 @@ Response: { success: boolean }
 - Advanced pan control settings
 - Connector creation mode toggle
 - i18n locale state
+- Settings persistence (2026-04-07): `hotkeyProfile`, `panSettings`, `zoomSettings`, `labelSettings`, `connectorInteractionMode`, `expandLabels` are loaded from `localStorage` on init via `loadPersistedSettings()`. `Isoflow.tsx` saves them back on change via `savePersistedSettings()`.
+
+**Settings types**: Canonical home is `types/settings.ts` — `HotkeyProfile`, `PanSettings`, `ZoomSettings`, `LabelSettings`. Config files (`config/hotkeys.ts` etc.) re-export from `types/settings.ts` for backwards compatibility.
 
 **Location**: `/packages/fossflow-lib/src/stores/uiStateStore.tsx`
-**Types**: `/packages/fossflow-lib/src/types/ui.ts`
+**Types**: `/packages/fossflow-lib/src/types/ui.ts`, `/packages/fossflow-lib/src/types/settings.ts`
 
 ## Application Architecture (fossflow-app)
 
@@ -532,16 +537,34 @@ The FossFLOW application is a Progressive Web App (PWA) built with RSBuild that 
 ## Configuration System
 
 **Added**: August 2025 (commits ef258df, 83c9b3a)
+**Refactored**: April 2026 — settings types extracted to `types/settings.ts`; `config/persistedSettings.ts` added for localStorage persistence.
 
 ### Overview
 
-The configuration system provides type-safe, centralized settings for hotkeys, pan controls, and zoom behavior.
+The configuration system provides type-safe, centralized settings for hotkeys, pan controls, and zoom behavior. Settings types are now declared in `types/settings.ts` and re-exported from the config files for backwards compatibility.
 
 **Location**: `/packages/fossflow-lib/src/config/`
 
+### Settings Types (`types/settings.ts`) **[NEW 2026-04]**
+
+Canonical home for all settings type declarations. Config files re-export from here.
+
+```typescript
+export type HotkeyProfile = 'qwerty' | 'smnrct' | 'none';
+export interface PanSettings { middleClickPan: boolean; rightClickPan: boolean; ... }
+export interface ZoomSettings { zoomToCursor: boolean; }
+export interface LabelSettings { expandButtonPadding: number; }
+```
+
+### Settings Persistence (`config/persistedSettings.ts`) **[NEW 2026-04]**
+
+Thin localStorage wrapper. `loadPersistedSettings()` is called at `UiStateProvider` init. `savePersistedSettings()` is called from `Isoflow.tsx` whenever persistable fields change. Errors are silently swallowed — safe for SSR and private-mode browsing.
+
+Key: `'fossflow_user_settings'`. Persists: `hotkeyProfile`, `panSettings`, `zoomSettings`, `labelSettings`, `connectorInteractionMode`, `expandLabels`.
+
 ### Hotkey Configuration (`hotkeys.ts`)
 
-**Purpose**: Define keyboard shortcuts for tools
+**Purpose**: Define keyboard shortcuts for tools — re-exports `HotkeyProfile` from `types/settings`
 
 **Types**:
 ```typescript
@@ -819,7 +842,9 @@ npm run dev:backend
 #### 2. Hooks Directory (`packages/fossflow-lib/src/hooks/`)
 
 **Common Hooks**:
-- `useScene.ts`: Merged scene data
+- `useScene.ts`: Thin 13-line combiner — merges `useSceneData` + `useSceneActions` into one unified API. Callers unchanged. **(Split 2026-04)**
+- `useSceneData.ts`: Pure read selectors — `currentView`, `items`, `colors`, `connectors`, `hitConnectors`, `rectangles`, `textBoxes`. No write operations. **(NEW 2026-04)**
+- `useSceneActions.ts`: All write operations + `transaction()` machinery + `computePathsAsync` + `pasteItems`. `getState()` is transaction-aware — returns `pendingStateRef` inside a transaction so chained actions see each other's intermediate writes. **(NEW 2026-04)**
 - `useModelItem.ts`: Individual item access (returns `ModelItem | null`)
 - `useViewItem.ts`: View item access (returns `ViewItem | null`)
 - `useConnector.ts`: Connector management (returns `Connector | null`)
@@ -829,9 +854,9 @@ npm run dev:backend
 - `useColor.ts`: Color access (returns `Color | null`)
 - `useIsoProjection.ts`: Coordinate conversion
 - `useDiagramUtils.ts`: Diagram operations
-- `useHistory.ts`: Undo/redo transaction system **[NEW]**
+- `useHistory.ts`: Undo/redo transaction system
 
-**Important**: All item access hooks now return `null` instead of throwing when items don't exist, preventing React unmount errors.
+**Important**: All item access hooks return `null` instead of throwing when items don't exist, preventing React unmount errors.
 
 #### 3. Interaction System (`packages/fossflow-lib/src/interaction/`)
 
@@ -872,21 +897,21 @@ npm run dev:backend
 **Key Utilities**:
 - `CoordsUtils.ts`: Coordinate calculations
 - `SizeUtils.ts`: Size computations
-- `renderer.ts`: Rendering helpers
+- `isoMath.ts`: All pure isometric coordinate math — `screenToIso`, `getTilePosition`, `isoToScreen`, `sortByPosition`, `getBoundingBox`, `getBoundingBoxSize`, `getConnectorPath`, `connectorPathTileToGlobal`, `getTextBoxDimensions`, zoom helpers, anchor helpers. **(Split from renderer.ts, 2026-04)**
+- `hitDetection.ts`: WeakMap spatial index (`itemTileIndexCache`) and `getItemAtTile` — O(1) tile hit testing. **(Split from renderer.ts, 2026-04)**
+- `renderer.ts`: Screen-space helpers — `getMouse`, `getProjectBounds`, `getVisualBounds`, `getUnprojectedBounds`, `getFitToViewParams`. Barrel re-exports `isoMath.ts` and `hitDetection.ts` so existing `import { X } from 'src/utils/renderer'` call sites work unchanged. **(Slimmed from 866 → ~210 lines, 2026-04)**
 - `model.ts`: Model manipulation
-- `pathfinder.ts`: Connector routing
-- `connectorLabels.ts`: Label migration and positioning **[NEW]**
-- `common.ts`: Common helpers
-  - `getItemById`: Null-safe item access (prevents errors)
+- `pathfinder.ts`: Connector routing (A* pathfinding, LRU cache)
+- `connectorLabels.ts`: Label migration and positioning
+- `common.ts`: Common helpers — `getItemById`, `clamp`, `generateId`, etc.
 
 #### 5. Type System (`packages/fossflow-lib/src/types/`)
 
 **Core Types**:
 - `model.ts`: Business data types
-  - Updated: `ConnectorLabel` interface (commit d5e02ea)
-- `scene.ts`: Visual state types
-- `ui.ts`: Interface types
-  - Updated: Hotkey, pan, locale state
+- `scene.ts`: Visual state types — `SceneConnector` now includes `unroutable?: boolean` flag
+- `ui.ts`: Interface types — imports settings types from `./settings`
+- `settings.ts`: Settings types — `HotkeyProfile`, `PanSettings`, `ZoomSettings`, `LabelSettings`. Canonical location; config files re-export from here. **(NEW 2026-04)**
 - `common.ts`: Shared types
 - `interactions.ts`: Interaction types
 - `isoflowProps.ts`: Component prop types

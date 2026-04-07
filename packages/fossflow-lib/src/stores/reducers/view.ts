@@ -141,14 +141,17 @@ export const view = ({ action, payload, ctx }: ViewReducerParams) => {
       throw new Error('Invalid action.');
   }
 
-  switch (action) {
-    case 'SYNC_SCENE':
-    case 'DELETE_VIEW':
-      return newState;
-    default:
-      return updateViewTimestamp({
-        state: newState,
-        viewId: ctx.viewId
-      });
+  const TIMESTAMPED_ACTIONS = new Set([
+    'CREATE_VIEW', 'UPDATE_VIEW',
+    'CREATE_VIEWITEM', 'UPDATE_VIEWITEM', 'DELETE_VIEWITEM',
+    'CREATE_CONNECTOR', 'UPDATE_CONNECTOR', 'DELETE_CONNECTOR',
+    'CREATE_TEXTBOX', 'UPDATE_TEXTBOX', 'DELETE_TEXTBOX',
+    'CREATE_RECTANGLE', 'UPDATE_RECTANGLE', 'DELETE_RECTANGLE'
+  ]);
+
+  if (TIMESTAMPED_ACTIONS.has(action)) {
+    return updateViewTimestamp({ state: newState, viewId: ctx.viewId });
   }
+
+  return newState;
 };

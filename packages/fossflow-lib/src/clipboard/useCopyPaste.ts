@@ -5,12 +5,14 @@ import { useScene } from 'src/hooks/useScene';
 import { Connector, Rectangle, TextBox } from 'src/types';
 import { generateId } from 'src/utils';
 import { findNearestUnoccupiedTilesForGroup } from 'src/utils/findNearestUnoccupiedTile';
-import { ClipboardItem, ClipboardPayload, setClipboard, getClipboard } from './clipboard';
+import { ClipboardItem, ClipboardPayload } from './clipboard';
+import { useClipboard } from './ClipboardContext';
 
 export const useCopyPaste = () => {
   const uiStateApi = useUiStateStoreApi();
   const modelStoreApi = useModelStoreApi();
   const scene = useScene();
+  const clipboard = useClipboard();
 
   const showNotification = useCallback((message: string, severity: 'info' | 'success' | 'warning') => {
     uiStateApi.getState().actions.setNotification({ message, severity });
@@ -129,15 +131,15 @@ export const useCopyPaste = () => {
   const handleCopy = useCallback(() => {
     const result = buildPayload();
     if (!result) return;
-    setClipboard(result.payload);
+    clipboard.set(result.payload);
     showNotification(`Copied ${result.count} item${result.count !== 1 ? 's' : ''}`, 'info');
-  }, [buildPayload, uiStateApi]);
+  }, [buildPayload, uiStateApi, clipboard]);
 
   const handleCut = useCallback(() => {
     const result = buildPayload();
     if (!result) return;
 
-    setClipboard(result.payload);
+    clipboard.set(result.payload);
 
     // Delete the cut items — mirrors the Delete key logic in useInteractionManager
     const uiState = uiStateApi.getState();
@@ -160,11 +162,11 @@ export const useCopyPaste = () => {
     }
 
     showNotification(`Cut ${result.count} item${result.count !== 1 ? 's' : ''}`, 'success');
-  }, [buildPayload, uiStateApi, scene]);
+  }, [buildPayload, uiStateApi, scene, clipboard]);
 
   const handlePaste = useCallback(() => {
-    const clipboard = getClipboard();
-    if (!clipboard) {
+    const clipboardData = clipboard.get();
+    if (!clipboardData) {
       showNotification('Nothing to paste', 'warning');
       return;
     }
@@ -173,12 +175,12 @@ export const useCopyPaste = () => {
     const mouseTile = uiState.mouse.position.tile;
 
     const offset = {
-      x: mouseTile.x - clipboard.centroid.x,
-      y: mouseTile.y - clipboard.centroid.y
+      x: mouseTile.x - clipboardData.centroid.x,
+      y: mouseTile.y - clipboardData.centroid.y
     };
 
     // Target tiles for items (before collision avoidance)
-    const targetItems = clipboard.items.map((ci) => ({
+    const targetItems = clipboardData.items.map((ci) => ({
       id: ci.viewItem.id,
       targetTile: {
         x: ci.viewItem.tile.x + offset.x,
@@ -195,13 +197,13 @@ export const useCopyPaste = () => {
 
     // New IDs map (old id -> new id)
     const idMap = new Map<string, string>();
-    clipboard.items.forEach((ci) => idMap.set(ci.viewItem.id, generateId()));
-    clipboard.connectors.forEach((c) => idMap.set(c.id, generateId()));
-    clipboard.rectangles.forEach((r) => idMap.set(r.id, generateId()));
-    clipboard.textBoxes.forEach((tb) => idMap.set(tb.id, generateId()));
+    clipboardData.items.forEach((ci) => idMap.set(ci.viewItem.id, generateId()));
+    clipboardData.connectors.forEach((c) => idMap.set(c.id, generateId()));
+    clipboardData.rectangles.forEach((r) => idMap.set(r.id, generateId()));
+    clipboardData.textBoxes.forEach((tb) => idMap.set(tb.id, generateId()));
 
     // Build remapped items
-    const newItems: ClipboardItem[] = clipboard.items.map((ci, i) => {
+    const newItems: ClipboardItem[] = clipboardData.items.map((ci, i) => {
       const newId = idMap.get(ci.viewItem.id)!;
       return {
         modelItem: { ...ci.modelItem, id: newId },
@@ -211,7 +213,7 @@ export const useCopyPaste = () => {
 
     // Build a map of original item id -> pasted tile (for detach-to-tile conversion)
     const originalTileMap = new Map<string, { x: number; y: number }>();
-    clipboard.items.forEach((ci) => {
+    clipboardData.items.forEach((ci) => {
       originalTileMap.set(ci.viewItem.id, ci.viewItem.tile);
     });
     // Also include existing scene items so detached anchors can use their current tile
@@ -220,7 +222,7 @@ export const useCopyPaste = () => {
     }
 
     // Remap connector anchors — remap known items, detach anchors pointing at items not in clipboard
-    const newConnectors: Connector[] = clipboard.connectors.map((c) => ({
+    const newConnectors: Connector[] = clipboardData.connectors.map((c) => ({
       ...c,
       id: idMap.get(c.id) ?? generateId(),
       anchors: c.anchors.map((anchor) => {
@@ -244,7 +246,7 @@ export const useCopyPaste = () => {
     }));
 
     // Offset rectangles
-    const newRectangles: Rectangle[] = clipboard.rectangles.map((r) => ({
+    const newRectangles: Rectangle[] = clipboardData.rectangles.map((r) => ({
       ...r,
       id: idMap.get(r.id) ?? generateId(),
       from: { x: r.from.x + offset.x, y: r.from.y + offset.y },
@@ -252,7 +254,7 @@ export const useCopyPaste = () => {
     }));
 
     // Offset text boxes
-    const newTextBoxes: TextBox[] = clipboard.textBoxes.map((tb) => ({
+    const newTextBoxes: TextBox[] = clipboardData.textBoxes.map((tb) => ({
       ...tb,
       id: idMap.get(tb.id) ?? generateId(),
       tile: { x: tb.tile.x + offset.x, y: tb.tile.y + offset.y }
@@ -301,7 +303,7 @@ export const useCopyPaste = () => {
     } else {
       showNotification('Pasting… routing connectors (0%)', 'info');
     }
-  }, [uiStateApi, scene]);
+  }, [uiStateApi, scene, clipboard]);
 
   return { handleCopy, handleCut, handlePaste };
 };

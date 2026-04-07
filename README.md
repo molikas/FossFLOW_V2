@@ -112,6 +112,43 @@ Diagrams are saved to a `diagrams/` folder in the project directory.
 
 ## [Unreleased]
 
+### 2026-04-07
+
+#### Architecture Refactoring
+
+Six-phase structural cleanup targeting maintainability, security, and DX — no feature changes, no library changes. All 392 tests pass; production source has zero TypeScript errors.
+
+**Phase 1 — Security + observability**
+- `window.__fossflow__` store reference is now gated behind the `enableDebugTools` prop — no longer leaked in production builds.
+- Unroutable connectors are now visible: a dashed-red indicator renders on the canvas when `syncConnector` fails, and `console.warn` is emitted. Previously they were silent zero-size ghost connectors with no feedback path. `SceneConnector` type now carries `unroutable?: boolean`.
+
+**Phase 2 — Canonical settings types**
+- `types/settings.ts` is now the single source of truth for `HotkeyProfile`, `PanSettings`, `ZoomSettings`, `LabelSettings`. Config files re-export from there. `ConnectorInteractionMode` is now properly typed throughout (was `string` in `PersistedSettings`).
+
+**Phase 3 — Split `renderer.ts` (866 → ~210 lines)**
+- `utils/isoMath.ts` (~280 lines): all pure coordinate math — `screenToIso`, `getTilePosition`, `getBoundingBox`, `getConnectorPath`, `getTextBoxDimensions`, etc.
+- `utils/hitDetection.ts` (~77 lines): WeakMap spatial index + `getItemAtTile`.
+- `utils/renderer.ts` (~210 lines): screen-space helpers + barrel re-exports. Existing `import { X } from 'src/utils/renderer'` call sites unchanged.
+
+**Phase 4 — Split `useScene.ts` (697 → 13 lines)**
+- `hooks/useSceneData.ts`: pure read selectors — `currentView`, `items`, `colors`, `connectors`, `hitConnectors`, `rectangles`, `textBoxes`.
+- `hooks/useSceneActions.ts`: all write operations, `transaction()` machinery, `computePathsAsync`, `pasteItems`. `getState()` is transaction-aware — returns `pendingStateRef` inside a transaction, removing the need for the old `currentState?` parameter threading anti-pattern.
+- `hooks/useScene.ts`: 13-line combiner, unchanged external API.
+
+**Phase 5 — Clipboard context**
+- `clipboard/ClipboardContext.tsx`: `ClipboardProvider` + `useClipboard()` hook. Each mounted `<Isoflow>` instance gets its own clipboard — no cross-instance bleed, no test-order interference.
+- `useCopyPaste.ts` updated to use `useClipboard()` instead of the module-level singleton.
+- `Isoflow.tsx` wraps the app with `<ClipboardProvider>`.
+
+**Phase 6 — Settings persistence**
+- `config/persistedSettings.ts`: `loadPersistedSettings()` / `savePersistedSettings()` backed by `localStorage`. SSR-safe (errors silently swallowed).
+- `UiStateProvider` hydrates `hotkeyProfile`, `panSettings`, `zoomSettings`, `labelSettings`, `connectorInteractionMode`, and `expandLabels` from localStorage on mount.
+- User preferences now survive page reload without any manual save action.
+
+**Architecture health score: 4.9 → 7.4 / 10** (see `current_architecture.md` Section 10 for the full breakdown).
+
+---
+
 ### 2026-04-06
 
 #### Internationalisation — complete UI localisation

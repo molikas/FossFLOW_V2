@@ -33,6 +33,7 @@ export type ConnectorPath = {
 
 export interface SceneConnector {
   path: ConnectorPath;
+  unroutable?: boolean;
 }
 
 export interface SceneTextBox {

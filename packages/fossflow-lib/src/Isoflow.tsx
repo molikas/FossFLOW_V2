@@ -13,7 +13,9 @@ import { Renderer } from 'src/components/Renderer/Renderer';
 import { UiOverlay } from 'src/components/UiOverlay/UiOverlay';
 import { UiStateProvider, useUiStateStore, useUiStateStoreApi } from 'src/stores/uiStateStore';
 import { INITIAL_DATA, MAIN_MENU_OPTIONS } from 'src/config';
+import { savePersistedSettings } from 'src/config/persistedSettings';
 import { useInitialDataManager } from 'src/hooks/useInitialDataManager';
+import { ClipboardProvider } from 'src/clipboard/ClipboardContext';
 import enUS from 'src/i18n/en-US';
 
 const App = forwardRef<IsoflowRef, IsoflowProps>(({
@@ -31,6 +33,17 @@ const App = forwardRef<IsoflowRef, IsoflowProps>(({
   const uiStateActions = useUiStateStore((state) => {
     return state.actions;
   });
+  const persistableSettings = useUiStateStore(
+    (state) => ({
+      hotkeyProfile: state.hotkeyProfile,
+      panSettings: state.panSettings,
+      zoomSettings: state.zoomSettings,
+      labelSettings: state.labelSettings,
+      connectorInteractionMode: state.connectorInteractionMode,
+      expandLabels: state.expandLabels
+    }),
+    shallow
+  );
   const initialDataManager = useInitialDataManager();
   // Use shallow equality so that history-only store writes (saveToHistory updating
   // history.past) do not produce a new model reference and fire onModelUpdated.
@@ -47,11 +60,12 @@ const App = forwardRef<IsoflowRef, IsoflowProps>(({
   const modelStore = useModelStoreApi();
   const sceneStore = useSceneStoreApi();
   useEffect(() => {
+    if (!enableDebugTools) return;
     (window as any).__fossflow__ = { ui: uiStore, model: modelStore, scene: sceneStore };
     return () => { delete (window as any).__fossflow__; };
   // Store instances are stable (created once in Provider via useRef)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [enableDebugTools]);
 
   const { load } = initialDataManager;
 
@@ -106,6 +120,12 @@ const App = forwardRef<IsoflowRef, IsoflowProps>(({
     uiStateActions.setEnableDebugTools(enableDebugTools);
   }, [enableDebugTools, uiStateActions]);
 
+  // Persist user preferences to localStorage whenever they change.
+  // Uses shallow equality on the selector above so this only fires on real changes.
+  useEffect(() => {
+    savePersistedSettings(persistableSettings);
+  }, [persistableSettings]);
+
   useEffect(() => {
     if (renderer?.expandLabels !== undefined) {
       uiStateActions.setExpandLabels(renderer.expandLabels);
@@ -144,7 +164,9 @@ export const Isoflow = forwardRef<IsoflowRef, IsoflowProps>((props, ref) => {
         <ModelProvider>
           <SceneProvider>
             <UiStateProvider>
-              <App {...props} ref={ref} />
+              <ClipboardProvider>
+                <App {...props} ref={ref} />
+              </ClipboardProvider>
             </UiStateProvider>
           </SceneProvider>
         </ModelProvider>

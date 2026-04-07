@@ -20,11 +20,13 @@ interface Props {
 export const Connector = memo(({ connector, currentView }: Props) => {
   const theme = useTheme();
 
-  // Subscribe only to this connector's scene path — O(1) per path write instead of O(N).
-  const scenePath = useSceneStore(
-    (state) => state.connectors[connector.id]?.path,
+  // Subscribe only to this connector's scene data — O(1) per path write instead of O(N).
+  const sceneConnector = useSceneStore(
+    (state) => state.connectors[connector.id],
     (a, b) => a === b
   );
+  const scenePath = sceneConnector?.path;
+  const isUnroutable = sceneConnector?.unroutable === true;
 
   // Merge model connector with defaults and scene path.
   const merged = useMemo(() => ({
@@ -139,8 +141,29 @@ export const Connector = memo(({ connector, currentView }: Props) => {
   }, [merged.style, connectorWidthPx]);
 
   // Don't render until path is available or if color is missing.
-  if (!color || !hasTiles) {
+  // Exception: unroutable connectors render as a visible error indicator.
+  if (!color || (!hasTiles && !isUnroutable)) {
     return null;
+  }
+
+  if (isUnroutable) {
+    return (
+      <Box
+        data-testid="connector-unroutable"
+        title="This connector could not be routed. Try moving the connected nodes."
+        sx={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          width: 40,
+          height: 8,
+          transform: 'translate(-50%,-50%)',
+          border: '2px dashed #e53935',
+          borderRadius: 1,
+          opacity: 0.8
+        }}
+      />
+    );
   }
 
   const lineType = merged.lineType || 'SINGLE';

@@ -1,9 +1,7 @@
-export interface ZoomSettings {
-  // Zoom behavior
-  zoomToCursor: boolean;
-}
+// Re-export type from canonical location for backwards compatibility.
+export type { ZoomSettings } from 'src/types/settings';
+import type { ZoomSettings } from 'src/types/settings';
 
 export const DEFAULT_ZOOM_SETTINGS: ZoomSettings = {
-  // Default to zoom-to-cursor for better UX
   zoomToCursor: true
 };

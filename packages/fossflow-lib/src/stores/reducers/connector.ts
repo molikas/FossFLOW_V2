@@ -35,15 +35,16 @@ export const syncConnector = (
 
       draft.scene.connectors[connector.value.id] = { path };
     } catch (error) {
-      // Even if we can't get the path, keep the connector with an empty path
-      draft.scene.connectors[connector.value.id] = { 
-        path: { 
-          tiles: [], 
-          rectangle: { 
-            from: { x: 0, y: 0 }, 
-            to: { x: 0, y: 0 } 
-          } 
-        } 
+      console.warn(`[fossflow] connector ${connector.value.id} could not be routed`, error);
+      draft.scene.connectors[connector.value.id] = {
+        path: {
+          tiles: [],
+          rectangle: {
+            from: { x: 0, y: 0 },
+            to: { x: 0, y: 0 }
+          }
+        },
+        unroutable: true
       };
     }
   });

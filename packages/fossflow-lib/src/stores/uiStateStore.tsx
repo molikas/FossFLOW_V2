@@ -13,8 +13,12 @@ import { DEFAULT_HOTKEY_PROFILE, HotkeyProfile } from 'src/config/hotkeys';
 import { DEFAULT_PAN_SETTINGS } from 'src/config/panSettings';
 import { DEFAULT_ZOOM_SETTINGS } from 'src/config/zoomSettings';
 import { DEFAULT_LABEL_SETTINGS } from 'src/config/labelSettings';
+import { loadPersistedSettings } from 'src/config/persistedSettings';
 
 const initialState = () => {
+  // Load any previously saved user preferences — fall back to defaults if absent/corrupt.
+  const persisted = loadPersistedSettings();
+
   return createStore<UiStateStore>((set, get) => {
     return {
       zoom: INITIAL_UI_STATE.zoom,
@@ -36,12 +40,12 @@ const initialState = () => {
       },
       itemControls: null,
       enableDebugTools: false,
-      hotkeyProfile: DEFAULT_HOTKEY_PROFILE,
-      panSettings: DEFAULT_PAN_SETTINGS,
-      zoomSettings: DEFAULT_ZOOM_SETTINGS,
-      labelSettings: DEFAULT_LABEL_SETTINGS,
-      connectorInteractionMode: 'click', // Default to click mode
-      expandLabels: false, // Default to collapsed labels
+      hotkeyProfile: persisted?.hotkeyProfile ?? DEFAULT_HOTKEY_PROFILE,
+      panSettings: persisted?.panSettings ?? DEFAULT_PAN_SETTINGS,
+      zoomSettings: persisted?.zoomSettings ?? DEFAULT_ZOOM_SETTINGS,
+      labelSettings: persisted?.labelSettings ?? DEFAULT_LABEL_SETTINGS,
+      connectorInteractionMode: persisted?.connectorInteractionMode ?? 'click',
+      expandLabels: persisted?.expandLabels ?? false,
       iconPackManager: null, // Will be set by Isoflow if provided
       notification: null,
 

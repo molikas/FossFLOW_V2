@@ -25,16 +25,18 @@ import { renderHook, act } from '@testing-library/react';
 import { useCopyPaste } from '../useCopyPaste';
 
 // ---------------------------------------------------------------------------
-// Mock clipboard module — gives us full control over getClipboard/setClipboard
+// Mock clipboard context — gives us full control over get/set/has
 // ---------------------------------------------------------------------------
 const mockSetClipboard = jest.fn();
 let _mockClipboard: any = null;
 const mockGetClipboard = jest.fn(() => _mockClipboard);
 
-jest.mock('../clipboard', () => ({
-  setClipboard: (...args: any[]) => mockSetClipboard(...args),
-  getClipboard: () => mockGetClipboard(),
-  hasClipboard: () => _mockClipboard !== null
+jest.mock('../ClipboardContext', () => ({
+  useClipboard: () => ({
+    get: () => mockGetClipboard(),
+    set: (...args: any[]) => mockSetClipboard(...args),
+    has: () => _mockClipboard !== null
+  })
 }));
 
 // ---------------------------------------------------------------------------
