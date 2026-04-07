@@ -12,6 +12,7 @@ import { TextBoxes } from 'src/components/SceneLayers/TextBoxes/TextBoxes';
 import { SizeIndicator } from 'src/components/DebugUtils/SizeIndicator';
 import { SceneLayer } from 'src/components/SceneLayer/SceneLayer';
 import { TransformControlsManager } from 'src/components/TransformControlsManager/TransformControlsManager';
+import { ConnectorAnchorOverlay } from 'src/components/ConnectorAnchorOverlay/ConnectorAnchorOverlay';
 import { Lasso } from 'src/components/Lasso/Lasso';
 import { FreehandLasso } from 'src/components/FreehandLasso/FreehandLasso';
 import { useScene } from 'src/hooks/useScene';
@@ -200,6 +201,9 @@ export const Renderer = ({ showGrid, backgroundColor }: RendererProps) => {
       />
       <SceneLayer>
         <Nodes nodes={visibleItems} />
+      </SceneLayer>
+      <SceneLayer>
+        <ConnectorAnchorOverlay />
       </SceneLayer>
       <SceneLayer>
         <TransformControlsManager />

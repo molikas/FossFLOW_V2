@@ -70,6 +70,8 @@ export interface ConnectorMode {
     itemId?: string;
   };
   isConnecting?: boolean;
+  // When true, completing a connection returns to CURSOR mode instead of staying in CONNECTOR
+  returnToCursor?: boolean;
 }
 
 export interface DrawRectangleMode {
@@ -122,6 +124,14 @@ export interface FreehandLassoMode {
   isDragging: boolean;
 }
 
+export interface ReconnectAnchorMode {
+  type: 'RECONNECT_ANCHOR';
+  showCursor: boolean;
+  connectorId: string;
+  anchorId: string;
+  anchorIndex: number;
+}
+
 export type Mode =
   | InteractionsDisabled
   | CursorMode
@@ -133,7 +143,8 @@ export type Mode =
   | DragItemsMode
   | TextBoxMode
   | LassoMode
-  | FreehandLassoMode;
+  | FreehandLassoMode
+  | ReconnectAnchorMode;
 // End mode types
 
 export interface Scroll {

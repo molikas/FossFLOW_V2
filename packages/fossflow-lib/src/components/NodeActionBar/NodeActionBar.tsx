@@ -5,9 +5,10 @@ import {
   EditOutlined as EditIcon,
   LinkOutlined as LinkIcon,
   StickyNote2Outlined as NotesIcon,
-  DeleteOutlined as DeleteIcon
+  DeleteOutlined as DeleteIcon,
+  CallMadeOutlined as ConnectorIcon
 } from '@mui/icons-material';
-import { getTilePosition } from 'src/utils';
+import { getTilePosition, generateId } from 'src/utils';
 import { useViewItem } from 'src/hooks/useViewItem';
 import { useModelItem } from 'src/hooks/useModelItem';
 import { useScene } from 'src/hooks/useScene';
@@ -25,13 +26,34 @@ export const NodeActionBar = ({ id }: Props) => {
   const { t } = useTranslation('nodeActionBar');
   const viewItem = useViewItem(id);
   const modelItem = useModelItem(id);
-  const { deleteViewItem } = useScene();
+  const { deleteViewItem, createConnector, colors } = useScene();
   const uiStateActions = useUiStateStore((state) => state.actions);
 
   const handleDelete = useCallback(() => {
     uiStateActions.setItemControls(null);
     deleteViewItem(id);
   }, [uiStateActions, deleteViewItem, id]);
+
+  const handleStartConnector = useCallback(() => {
+    const newConnector = {
+      id: generateId(),
+      color: colors[0]?.id ?? '',
+      anchors: [
+        { id: generateId(), ref: { item: id } },
+        { id: generateId(), ref: { item: id } }
+      ]
+    };
+    createConnector(newConnector);
+    uiStateActions.setItemControls(null);
+    uiStateActions.setMode({
+      type: 'CONNECTOR',
+      showCursor: true,
+      id: newConnector.id,
+      startAnchor: { itemId: id },
+      isConnecting: true,
+      returnToCursor: true
+    });
+  }, [id, colors, createConnector, uiStateActions]);
 
   if (!viewItem || !modelItem) return null;
 
@@ -109,6 +131,16 @@ export const NodeActionBar = ({ id }: Props) => {
             sx={{ p: 0.75 }}
           >
             <NotesIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        </Tooltip>
+
+        <Tooltip title={t('startConnector')} placement="top">
+          <IconButton
+            size="small"
+            onClick={handleStartConnector}
+            sx={{ p: 0.75 }}
+          >
+            <ConnectorIcon sx={{ fontSize: 16 }} />
           </IconButton>
         </Tooltip>
 

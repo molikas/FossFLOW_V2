@@ -2,7 +2,7 @@
 
 **Last Updated**: March 2026
 **Original Created**: August 14, 2025 (commit 94bf3c0)
-**Major Updates**: Transient right-click pan, node header links, description persistence fix, performance improvements, and service worker overhaul — plus 79+ prior commits including backend storage, i18n, lasso tools, and connector enhancements
+**Major Updates**: Connector anchor drag-to-reconnect UX (RECONNECT_ANCHOR mode, glass-morphism anchor overlay), transient right-click pan, node header links, description persistence fix, performance improvements, and service worker overhaul — plus 79+ prior commits including backend storage, i18n, lasso tools, and connector enhancements
 
 ---
 
@@ -338,6 +338,24 @@ The FossFLOW application is a Progressive Web App (PWA) built with RSBuild that 
   - Multiple line types (solid, dashed, dotted)
   - Bidirectional arrows
   - Click/drag creation modes
+- **Updated (2026-04)**: Anchor circle rendering removed from `Connector.tsx` — circles are now exclusively handled by `ConnectorAnchorOverlay` (HTML layer above nodes).
+
+#### ConnectorAnchorOverlay (`/ConnectorAnchorOverlay/`) **[NEW 2026-04]**
+**Purpose**: Renders draggable anchor handles for the selected connector above all canvas layers, including node icons.
+
+**Key File**: `ConnectorAnchorOverlay.tsx`
+
+**Design**:
+- Glass-morphism circles: `rgba(255,255,255,0.82)` background, `backdrop-filter: blur(4px)`, soft border and shadow
+- Accent color `#a5b8f3` (matches app palette)
+- Source endpoint: filled dot; Target endpoint: hollow ring; Waypoints: small square
+- Active reconnect state: CSS keyframe pulse animation (`fossflow-anchor-pulse`)
+
+**Positioning**:
+- Node-attached endpoints: positioned at the last path tile before entering the node icon (`connectorPathTileToGlobal`), not at the node center — so handles are always visible above the icon
+- Free-floating and waypoint anchors: positioned with `getAnchorTile` + `getTilePosition`
+
+**Layer order**: Rendered in a `SceneLayer` immediately after the Nodes layer in `Renderer.tsx`, ensuring handles are always visible above icons.
 
 #### ConnectorLabels (`/ConnectorLabels/`) **[NEW]**
 **Added**: August 2025 (commit d5e02ea)
@@ -424,6 +442,7 @@ The FossFLOW application is a Progressive Web App (PWA) built with RSBuild that 
     - Enhanced with multiple labels support (commit d5e02ea)
     - Line type selection (solid, dashed, dotted)
     - Arrow direction controls
+    - **Updated (2026-04)**: "Detach source" and "Detach target" buttons removed — endpoint reconnection is now handled by clicking and dragging anchor handles on the canvas (`RECONNECT_ANCHOR` mode).
   - `/RectangleControls/`: Rectangle properties
   - `/TextBoxControls/`: Text properties
   - `/IconSelectionControls/`: Icon picker
@@ -820,12 +839,19 @@ npm run dev:backend
 
 **Interaction Modes** (`/modes/`):
 - `Cursor.ts`: Selection mode
+  - Updated (2026-04): Detects endpoint anchor clicks on selected connectors and enters `RECONNECT_ANCHOR` mode. Shows `grab` cursor on hover over any anchor of a selected connector. Uses `getAnchorHitTile` helper which resolves the junction path tile (not the node center) for node-attached endpoints.
 - `Pan.ts`: Canvas panning
 - `PlaceIcon.ts`: Icon placement
   - Updated: Nearest unoccupied tile placement (commit f5ebad6)
 - `Connector.ts`: Drawing connections
   - Major update: Click/drag modes (commits d78ccdb, ea0bce0, 5ff21cc)
+  - Updated (2026-04): Respects `returnToCursor` flag — when set, finalizing a connector returns to `CURSOR` mode instead of staying in `CONNECTOR` mode (used by NodeActionBar "Start connector" button).
 - `DragItems.ts`: Moving elements
+- `ReconnectAnchor.ts`: Connector anchor repositioning **[NEW 2026-04]**
+  - Entered when user clicks an endpoint/waypoint anchor of a selected connector.
+  - `entry`/`exit`: sets `crosshair`/`default` cursor.
+  - `mousemove`: live preview — re-routes the dragged anchor to the current tile, snapping to `ref.item` when hovering a node, `ref.tile` otherwise.
+  - `mouseup`: finalizes; returns to `CURSOR` mode keeping the connector selected.
 - `Rectangle/`: Rectangle tools
 - `TextBox.ts`: Text editing
 - `Lasso.ts`: Rectangle lasso selection **[NEW]**
@@ -941,6 +967,8 @@ transaction(() => {
 **Connector drawing?** → `/src/components/SceneLayers/Connectors/`
 **Connector labels?** → `/src/components/SceneLayers/ConnectorLabels/` **[NEW]**
 **Connector creation mode?** → `/src/interaction/modes/Connector.ts` + `/src/components/ConnectorSettings/` **[NEW]**
+**Connector anchor handles / reconnect?** → `/src/components/ConnectorAnchorOverlay/ConnectorAnchorOverlay.tsx` + `/src/interaction/modes/ReconnectAnchor.ts` **[NEW]**
+**Start connector from node?** → `/src/components/NodeActionBar/NodeActionBar.tsx` (Start connector button) + `ConnectorMode.returnToCursor`
 **Lasso selection?** → `/src/components/Lasso/`, `/src/components/FreehandLasso/` **[NEW]**
 **Zoom behavior?** → `/src/stores/uiStateStore.tsx` + `/src/components/ZoomControls/`
 **Grid display?** → `/src/components/Grid/`

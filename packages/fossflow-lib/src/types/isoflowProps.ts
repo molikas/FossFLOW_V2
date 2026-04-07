@@ -282,6 +282,7 @@ export interface LocaleProps {
     addLink: string;
     editNotes: string;
     addNotes: string;
+    startConnector: string;
     delete: string;
   };
   quickAddNodePopover: {

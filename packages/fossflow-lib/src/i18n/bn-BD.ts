@@ -275,6 +275,7 @@ const locale: LocaleProps = {
     addLink: "লিঙ্ক যোগ করুন",
     editNotes: "নোট সম্পাদনা করুন",
     addNotes: "নোট যোগ করুন",
+    startConnector: "Start connector",
     delete: "মুছুন"
   },
   quickAddNodePopover: {

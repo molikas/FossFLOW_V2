@@ -275,6 +275,7 @@ const locale: LocaleProps = {
     addLink: "Dodaj link",
     editNotes: "Edytuj notatki",
     addNotes: "Dodaj notatki",
+    startConnector: "Start connector",
     delete: "Usuń"
   },
   quickAddNodePopover: {

@@ -275,6 +275,7 @@ const locale: LocaleProps = {
     addLink: "添加链接",
     editNotes: "编辑备注",
     addNotes: "添加备注",
+    startConnector: "Start connector",
     delete: "删除"
   },
   quickAddNodePopover: {

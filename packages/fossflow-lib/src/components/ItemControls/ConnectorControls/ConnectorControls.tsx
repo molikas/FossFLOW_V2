@@ -7,6 +7,7 @@ import {
 } from 'src/types';
 import {
   Box,
+  Button,
   Slider,
   Select,
   MenuItem,
@@ -15,7 +16,6 @@ import {
   FormControlLabel,
   Switch,
   Typography,
-  Button,
   Paper
 } from '@mui/material';
 import { useConnector } from 'src/hooks/useConnector';

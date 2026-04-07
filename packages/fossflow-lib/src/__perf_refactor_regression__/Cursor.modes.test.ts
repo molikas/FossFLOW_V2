@@ -33,8 +33,10 @@ jest.mock('src/utils', () => ({
     isEqual: (a: any, b: any) => a.x === b.x && a.y === b.y,
     subtract: (a: any, b: any) => ({ x: a.x - b.x, y: a.y - b.y })
   },
-  getAnchorTile: jest.fn(() => ({ x: 0, y: 0 })),
-  connectorPathTileToGlobal: jest.fn(() => ({ x: 0, y: 0 })),
+  // getAnchorTile returns the anchor's item tile or the tile ref directly
+  getAnchorTile: jest.fn((anchor: any) => anchor.ref?.tile ?? { x: 0, y: 0 }),
+  // connectorPathTileToGlobal returns the path tile as-is for test simplicity
+  connectorPathTileToGlobal: jest.fn((tile: any) => tile),
   setWindowCursor: jest.fn()
 }));
 
@@ -57,6 +59,7 @@ function makeUiState(overrides: any = {}) {
       mousedown: null,
       delta: null
     },
+    itemControls: overrides.itemControls ?? null,
     actions: overrides.actions ?? {
       setMode: jest.fn(),
       setItemControls: jest.fn(),
@@ -65,8 +68,15 @@ function makeUiState(overrides: any = {}) {
   };
 }
 
-function makeScene(items: any[] = []) {
-  return { connectors: [], items, rectangles: [], textBoxes: [] };
+function makeScene(items: any[] = [], hitConnectors: any[] = []) {
+  return {
+    connectors: [],
+    items,
+    rectangles: [],
+    textBoxes: [],
+    hitConnectors,
+    currentView: { items, connectors: [] }
+  };
 }
 
 function callMousedown(uiState: any, isRendererInteraction: boolean) {
@@ -383,6 +393,133 @@ describe('Cursor.mousemove (real module)', () => {
     callMousemove(uiState);
     expect(uiState.actions.setMode).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'LASSO' })
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P2: endpoint anchor click → RECONNECT_ANCHOR mode
+// ---------------------------------------------------------------------------
+describe('Cursor.mousedown — connector endpoint click enters RECONNECT_ANCHOR', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetItemAtTile.mockReturnValue(null);
+  });
+
+  // Build a minimal hitConnector whose first anchor's hit tile matches the click position.
+  // connectorPathTileToGlobal is mocked to return the tile as-is, so path.tiles[0] === hit tile.
+  function makeHitConnector(id: string, anchorTile: { x: number; y: number }) {
+    return {
+      id,
+      anchors: [
+        { id: 'a-src', ref: { item: 'node-A' } },  // endpoint — ref.item set
+        { id: 'a-tgt', ref: { item: 'node-B' } }   // endpoint
+      ],
+      path: {
+        tiles: [anchorTile, { x: anchorTile.x + 3, y: anchorTile.y }],
+        rectangle: { from: anchorTile, to: { x: anchorTile.x + 3, y: anchorTile.y } }
+      }
+    };
+  }
+
+  it('enters RECONNECT_ANCHOR when clicking the source endpoint of a selected connector', () => {
+    const anchorTile = { x: 5, y: 5 };
+    const hitConnector = makeHitConnector('conn-X', anchorTile);
+    const uiState = makeUiState({
+      mouse: {
+        position: { tile: anchorTile, screen: { x: 50, y: 50 } },
+        mousedown: null,
+        delta: null
+      },
+      itemControls: { type: 'CONNECTOR', id: 'conn-X' }
+    });
+    const scene = makeScene([], [hitConnector]);
+
+    Cursor.mousedown!({ uiState, scene, isRendererInteraction: true } as any);
+
+    expect(uiState.actions.setMode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'RECONNECT_ANCHOR',
+        connectorId: 'conn-X',
+        anchorId: 'a-src',
+        anchorIndex: 0
+      })
+    );
+  });
+
+  it('enters RECONNECT_ANCHOR when clicking the target endpoint of a selected connector', () => {
+    const srcTile = { x: 2, y: 2 };
+    const tgtTile = { x: 8, y: 8 };
+    const hitConnector = {
+      id: 'conn-Y',
+      anchors: [
+        { id: 'a-src', ref: { item: 'node-A' } },
+        { id: 'a-tgt', ref: { item: 'node-B' } }
+      ],
+      path: {
+        tiles: [srcTile, tgtTile],
+        rectangle: { from: srcTile, to: tgtTile }
+      }
+    };
+    const uiState = makeUiState({
+      mouse: {
+        position: { tile: tgtTile, screen: { x: 80, y: 80 } },
+        mousedown: null,
+        delta: null
+      },
+      itemControls: { type: 'CONNECTOR', id: 'conn-Y' }
+    });
+    const scene = makeScene([], [hitConnector]);
+
+    Cursor.mousedown!({ uiState, scene, isRendererInteraction: true } as any);
+
+    expect(uiState.actions.setMode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'RECONNECT_ANCHOR',
+        connectorId: 'conn-Y',
+        anchorId: 'a-tgt'
+      })
+    );
+  });
+
+  it('falls through to normal item hit-detection when no connector is selected', () => {
+    mockGetItemAtTile.mockReturnValue({ type: 'ITEM', id: 'some-node' });
+    const uiState = makeUiState({
+      mouse: {
+        position: { tile: { x: 5, y: 5 }, screen: { x: 50, y: 50 } },
+        mousedown: null,
+        delta: null
+      }
+      // itemControls: null — no connector selected
+    });
+
+    Cursor.mousedown!({ uiState, scene: makeScene(), isRendererInteraction: true } as any);
+
+    expect(uiState.actions.setMode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mousedownItem: { type: 'ITEM', id: 'some-node' }
+      })
+    );
+  });
+
+  it('falls through to normal hit-detection when click is not on any anchor tile', () => {
+    mockGetItemAtTile.mockReturnValue(null);
+    const anchorTile = { x: 5, y: 5 };
+    const hitConnector = makeHitConnector('conn-Z', anchorTile);
+    const uiState = makeUiState({
+      mouse: {
+        position: { tile: { x: 9, y: 9 }, screen: { x: 90, y: 90 } },
+        mousedown: null,
+        delta: null
+      },
+      itemControls: { type: 'CONNECTOR', id: 'conn-Z' }
+    });
+    const scene = makeScene([], [hitConnector]);
+
+    Cursor.mousedown!({ uiState, scene, isRendererInteraction: true } as any);
+
+    expect(uiState.actions.setMode).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'RECONNECT_ANCHOR' })
     );
   });
 });

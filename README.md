@@ -19,7 +19,7 @@ An "experimental" community fork of [FossFLOW](https://github.com/stan-smith/Fos
 
 - **Node panel — Details / Style / Notes tabs** — Selecting a node opens a 300 px side panel with three tabs. *Details*: name, caption (short text shown on the canvas below the node name), and optional link. *Style*: icon picker, icon size, label font/color/height. *Notes*: full-height rich-text editor for private documentation — never shown on the canvas itself.
 - **Caption vs Notes** — "Caption" is canvas-visible text (subtitle under the node name). "Notes" is hidden documentation only accessible in the panel. Both fields are rich-text (Quill), stored separately in the model.
-- **Floating action bar** — When a node is selected in edit mode a compact pill bar appears above the node on the canvas with five icon buttons: Style, Edit name, Link, Notes (opens the Notes tab), Delete.
+- **Floating action bar** — When a node is selected in edit mode a compact pill bar appears above the node on the canvas with six icon buttons: Style, Edit name, Link, Notes (opens the Notes tab), **Start connector** (draws a new connector from this node and returns to the selector after connecting), Delete.
 - **Note indicator dot** — Nodes with non-empty Notes show a small blue dot at the top-right of their icon on the canvas.
 - **Read-only node panel** — In `EXPLORABLE_READONLY` mode, clicking a node opens a single-scroll panel showing **Caption** and **Notes** sections (only when non-empty). Header shows the node icon, name, and optional link button. Nodes with no caption and no notes are not clickable at all — the panel stays closed.
 - **Double-click to place node or group** — Double-clicking empty canvas opens a compact "Add" popover at the cursor. A **Group** button at the top creates a background rectangle (used to visually group nodes). Below it, an icon picker lets you place a node — selecting an icon places it and immediately opens its Details tab for naming. Single left-click on empty canvas just deselects; no context menu.
@@ -27,6 +27,7 @@ An "experimental" community fork of [FossFLOW](https://github.com/stan-smith/Fos
 - **Node label font size and color** — Adjust font size and text color from the Style tab.
 - **Text box rich text and color** — Text boxes support bold, italic, bullet lists, headers, and more. Text color is adjustable. The box auto-expands to fit its content.
 - **Connector label styling** — Per-label font size (8–24 px), text color, and position control. The color section is clearly labelled "Line Color" to distinguish it from label color.
+- **Connector anchor handles** — Selecting a connector shows glass-morphism anchor circles at each endpoint and waypoint (source = filled dot, target = hollow ring). Click any handle to enter reconnect mode; move the mouse to live-preview the new route, then click to finalize. Endpoint handles are always visible above node icons.
 
 ### Canvas and navigation
 

@@ -2,11 +2,9 @@ import React, { useMemo, memo } from 'react';
 import { useTheme, Box } from '@mui/material';
 import { UNPROJECTED_TILE_SIZE, CONNECTOR_DEFAULTS } from 'src/config';
 import {
-  getAnchorTile,
   getColorVariant,
   getConnectorDirectionIcon
 } from 'src/utils';
-import { Circle } from 'src/components/Circle/Circle';
 import { Svg } from 'src/components/Svg/Svg';
 import { useIsoProjection } from 'src/hooks/useIsoProjection';
 import type { useScene } from 'src/hooks/useScene';
@@ -17,10 +15,9 @@ import { Connector as ConnectorType } from 'src/types';
 interface Props {
   connector: ConnectorType;
   currentView: ReturnType<typeof useScene>['currentView'];
-  isSelected?: boolean;
 }
 
-export const Connector = memo(({ connector, currentView, isSelected }: Props) => {
+export const Connector = memo(({ connector, currentView }: Props) => {
   const theme = useTheme();
 
   // Subscribe only to this connector's scene path — O(1) per path write instead of O(N).
@@ -123,22 +120,6 @@ export const Connector = memo(({ connector, currentView, isSelected }: Props) =>
 
     return { path1: path1Points.join(' '), path2: path2Points.join(' ') };
   }, [connectorPath?.tiles, merged.lineType, connectorWidthPx, drawOffset, hasTiles]);
-
-  const anchorPositions = useMemo(() => {
-    if (!isSelected || !hasTiles) return [];
-    return merged.anchors.map((anchor) => {
-      const position = getAnchorTile(anchor, currentView);
-      return {
-        id: anchor.id,
-        x:
-          (connectorPath!.rectangle.from.x - position.x) * UNPROJECTED_TILE_SIZE +
-          drawOffset.x,
-        y:
-          (connectorPath!.rectangle.from.y - position.y) * UNPROJECTED_TILE_SIZE +
-          drawOffset.y
-      };
-    });
-  }, [currentView, connectorPath?.rectangle, merged.anchors, drawOffset, isSelected, hasTiles]);
 
   const directionIcon = useMemo(() => {
     if (!hasTiles) return null;
@@ -269,13 +250,6 @@ export const Connector = memo(({ connector, currentView, isSelected }: Props) =>
             </g>
           );
         })()}
-
-        {anchorPositions.map((anchor) => (
-          <g key={anchor.id}>
-            <Circle tile={anchor} radius={18} fill={theme.palette.common.white} fillOpacity={0.7} />
-            <Circle tile={anchor} radius={12} stroke={theme.palette.common.black} fill={theme.palette.common.white} strokeWidth={6} />
-          </g>
-        ))}
 
         {directionIcon && merged.showArrow !== false && (
           <g transform={`translate(${directionIcon.x}, ${directionIcon.y})`}>

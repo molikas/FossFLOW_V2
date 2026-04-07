@@ -19,6 +19,7 @@ import { PlaceIcon } from './modes/PlaceIcon';
 import { TextBox } from './modes/TextBox';
 import { Lasso } from './modes/Lasso';
 import { FreehandLasso } from './modes/FreehandLasso';
+import { ReconnectAnchor } from './modes/ReconnectAnchor';
 import { usePanHandlers } from './usePanHandlers';
 import { useRAFThrottle } from './useRAFThrottle';
 import { useCopyPaste } from 'src/clipboard/useCopyPaste';
@@ -33,7 +34,8 @@ const modes: { [k in string]: ModeActions } = {
   PLACE_ICON: PlaceIcon,
   TEXTBOX: TextBox,
   LASSO: Lasso,
-  FREEHAND_LASSO: FreehandLasso
+  FREEHAND_LASSO: FreehandLasso,
+  RECONNECT_ANCHOR: ReconnectAnchor
 };
 
 const getModeFunction = (mode: ModeActions, e: SlimMouseEvent) => {

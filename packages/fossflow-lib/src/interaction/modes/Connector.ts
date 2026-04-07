@@ -141,17 +141,17 @@ export const Connector: ModeActions = {
 
           scene.updateConnector(currentMode.id, newConnector);
 
-          // Don't delete connectors to empty space - they're valid
-          // Only validate minimum path length will be handled by the update
-
-          // Reset for next connection
-          uiState.actions.setMode({
-            type: 'CONNECTOR',
-            showCursor: true,
-            id: null,
-            startAnchor: undefined,
-            isConnecting: false
-          });
+          if (currentMode.returnToCursor) {
+            uiState.actions.setMode({ type: 'CURSOR', showCursor: true, mousedownItem: null });
+          } else {
+            uiState.actions.setMode({
+              type: 'CONNECTOR',
+              showCursor: true,
+              id: null,
+              startAnchor: undefined,
+              isConnecting: false
+            });
+          }
         }
       }
     } else {
