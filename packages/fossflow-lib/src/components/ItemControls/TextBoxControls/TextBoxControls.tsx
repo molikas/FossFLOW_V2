@@ -20,12 +20,14 @@ import { ControlsContainer } from '../components/ControlsContainer';
 import { Section } from '../components/Section';
 import { DeleteButton } from '../components/DeleteButton';
 import { LabelColorPicker } from '../components/LabelColorPicker';
+import { useTranslation } from 'src/stores/localeStore';
 
 interface Props {
   id: string;
 }
 
 export const TextBoxControls = ({ id }: Props) => {
+  const { t } = useTranslation('textBoxControls');
   const uiStateActions = useUiStateStore((state) => {
     return state.actions;
   });
@@ -42,7 +44,7 @@ export const TextBoxControls = ({ id }: Props) => {
       <Box sx={{ position: 'relative', paddingTop: '24px' }}>
         {/* Close button */}
         <MUIIconButton
-          aria-label="Close"
+          aria-label={t('close')}
           onClick={() => {
             return uiStateActions.setItemControls(null);
           }}
@@ -56,7 +58,7 @@ export const TextBoxControls = ({ id }: Props) => {
         >
           <CloseIcon />
         </MUIIconButton>
-        <Section title="Text">
+        <Section title={t('text')}>
           <RichTextEditor
             value={textBox.content}
             onChange={(html) => {
@@ -65,7 +67,7 @@ export const TextBoxControls = ({ id }: Props) => {
             height={120}
           />
         </Section>
-        <Section title="Text size">
+        <Section title={t('textSize')}>
           <Slider
             marks
             step={0.15}
@@ -77,13 +79,13 @@ export const TextBoxControls = ({ id }: Props) => {
             }}
           />
         </Section>
-        <Section title="Text color">
+        <Section title={t('textColor')}>
           <LabelColorPicker
             value={textBox.color}
             onChange={(color) => updateTextBox(textBox.id, { color })}
           />
         </Section>
-        <Section title="Alignment">
+        <Section title={t('alignment')}>
           <ToggleButtonGroup
             value={textBox.orientation}
             exclusive

@@ -1,12 +1,14 @@
 import React from 'react';
 import { DeleteOutlined as DeleteIcon } from '@mui/icons-material';
 import { Button } from '@mui/material';
+import { useTranslation } from 'src/stores/localeStore';
 
 interface Props {
   onClick: () => void;
 }
 
 export const DeleteButton = ({ onClick }: Props) => {
+  const { t } = useTranslation('deleteButton');
   return (
     <Button
       color="error"
@@ -15,7 +17,7 @@ export const DeleteButton = ({ onClick }: Props) => {
       startIcon={<DeleteIcon color="error" />}
       onClick={onClick}
     >
-      Delete
+      {t('delete')}
     </Button>
   );
 };

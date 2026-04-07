@@ -12,6 +12,7 @@ import { useViewItem } from 'src/hooks/useViewItem';
 import { useModelItem } from 'src/hooks/useModelItem';
 import { useScene } from 'src/hooks/useScene';
 import { useUiStateStore } from 'src/stores/uiStateStore';
+import { useTranslation } from 'src/stores/localeStore';
 
 const dispatch = (action: string) =>
   window.dispatchEvent(new CustomEvent('nodePanel', { detail: action }));
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export const NodeActionBar = ({ id }: Props) => {
+  const { t } = useTranslation('nodeActionBar');
   const viewItem = useViewItem(id);
   const modelItem = useModelItem(id);
   const { deleteViewItem } = useScene();
@@ -62,7 +64,7 @@ export const NodeActionBar = ({ id }: Props) => {
           bgcolor: 'background.paper'
         }}
       >
-        <Tooltip title="Style" placement="top">
+        <Tooltip title={t('style')} placement="top">
           <IconButton
             size="small"
             onClick={() => dispatch('scrollToAppearance')}
@@ -72,7 +74,7 @@ export const NodeActionBar = ({ id }: Props) => {
           </IconButton>
         </Tooltip>
 
-        <Tooltip title="Edit name" placement="top">
+        <Tooltip title={t('editName')} placement="top">
           <IconButton
             size="small"
             onClick={() => dispatch('focusName')}
@@ -83,7 +85,7 @@ export const NodeActionBar = ({ id }: Props) => {
         </Tooltip>
 
         <Tooltip
-          title={modelItem.headerLink ? 'Edit link' : 'Add link'}
+          title={modelItem.headerLink ? t('editLink') : t('addLink')}
           placement="top"
         >
           <IconButton
@@ -97,7 +99,7 @@ export const NodeActionBar = ({ id }: Props) => {
         </Tooltip>
 
         <Tooltip
-          title={hasNotes ? 'Edit notes' : 'Add notes'}
+          title={hasNotes ? t('editNotes') : t('addNotes')}
           placement="top"
         >
           <IconButton
@@ -110,7 +112,7 @@ export const NodeActionBar = ({ id }: Props) => {
           </IconButton>
         </Tooltip>
 
-        <Tooltip title="Delete" placement="top">
+        <Tooltip title={t('delete')} placement="top">
           <IconButton
             size="small"
             onClick={handleDelete}

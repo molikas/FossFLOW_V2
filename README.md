@@ -1,4 +1,4 @@
-An "exprimental" community fork of [FossFLOW](https://github.com/stan-smith/FossFLOW) with expanded editing features, file management, and performance improvements. Source and issue tracker: [github.com/molikas/FossFLOW_V2](https://github.com/molikas/FossFLOW_V2).
+An "experimental" community fork of [FossFLOW](https://github.com/stan-smith/FossFLOW) with expanded editing features, file management, full internationalisation, and performance improvements. Source and issue tracker: [github.com/molikas/FossFLOW_V2](https://github.com/molikas/FossFLOW_V2).
 
 **Performance highlight:** On a real 85-node / 54-connector diagram, idle FPS improved from 5–18 to a consistent 60 fps after fixing two root-cause render bugs. See the [Performance section](#performance) below.
 
@@ -64,10 +64,16 @@ An "exprimental" community fork of [FossFLOW](https://github.com/stan-smith/Foss
 
 *How it works:* The async path (Fix 6) dequeues A* pathfinding out of the paste transaction into `requestAnimationFrame` batches of 25 connectors each. Each connector appears routed as its batch completes. The browser stays responsive between batches, eliminating the main-thread block that triggered Chrome's "page is unresponsive" dialog. A* results are cached (LRU, 2 000 entries) so repeated paste of the same topology is instant. For the "1k node" edge case the routing window is still noticeable (~9 s), but the tab stays alive and a progress toast counts completion percentage.
 
+### Internationalisation (i18n)
+
+- **12 languages** — English (default), Chinese Simplified, German, French, Spanish, Italian, Portuguese (Brazil), Polish, Turkish, Russian, Hindi, Indonesian, Bengali.
+- Language selector in the toolbar shows the active language name and switches instantly without reload.
+- All UI text localised: toolbar buttons (Save / Diagrams / Share / Preview), save-status timestamps, Save As dialog, Share popover, Diagrams Manager, tool tooltips (Select / Lasso / Pan / Rectangle / Connector etc.), icon selector search, QuickIconSelector help text, node panel tabs, zoom controls, export image dialog, settings panels, connector/lasso hint tooltips, and all alert/confirmation strings.
+
 ### Quality-of-life
 
 - Editing a node no longer adds an empty description block to its canvas label.
-- Language selector stays on screen — dropdown anchors to the right edge of the button.
+- Language selector stays on screen — dropdown anchors to the right edge of the button and shows the active language name.
 - Lasso hint auto-dismisses after first use.
 - Lasso tool activates correctly on first canvas click — no longer reverts to pointer before drawing the selection box.
 - Help dialog (`F1` / `?`) documents all keyboard shortcuts.
@@ -104,6 +110,43 @@ Diagrams are saved to a `diagrams/` folder in the project directory.
 ---
 
 ## [Unreleased]
+
+### 2026-04-06
+
+#### Internationalisation — complete UI localisation
+
+All remaining hardcoded English strings have been replaced with i18n keys across both the library and application packages.
+
+**fossflow-app (react-i18next, `app` namespace):**
+- **Toolbar buttons:** Save, Load, Diagrams, Share — wired to `t('nav.save')` etc.
+- **Preview tooltip:** context-aware (`Save first to preview` / `Save & Preview` / `Preview`) — all three states localised.
+- **Share popover:** title, hint text, Copy / ✓ Copied! button.
+- **Save As dialog:** title, subtitle, filename placeholder, Save / Cancel buttons.
+- **Save-status label:** `formatSavedAt()` output now uses `t('status.savedAt')` etc. with `time`, `month`, `day`, `year` interpolation. "Unsaved" also localised.
+- **Diagrams Manager:** title, storage badges, "Last modified", loading text, empty state, Open / Delete buttons, share link tooltip, delete confirmation, error messages — all localised in `DiagramManager.tsx` via `useTranslation('app')`.
+- **Language selector:** now shows the active language's display name (e.g. "中文 (简体)") instead of the generic "A/文" glyph.
+- **All 11 non-English JSON files** updated with the new keys (proper translations for all major languages; English fallback for hi-IN and bn-BD).
+
+**fossflow-lib (localeStore, TypeScript locale files):**
+- **ToolMenu tooltips:** `toolMenu` namespace added to `LocaleProps` and all 13 locale TS files. All 10 tool name props (Undo, Redo, Select, Lasso select, Freehand lasso, Pan, Add item, Rectangle, Connector, Text) wired to `t()`.
+- **QuickIconSelector:** `quickIconSelector` namespace added. "RECENTLY USED", search placeholder, "SEARCH RESULTS ({n} icons)", "No icons found matching…", and both help-text variants wired. Interpolation uses `.replace()` since the lib's `t()` does not support object params.
+- **zh-CN.ts viewTabs fix:** `addPage`, `deletePage`, `renameDiagram` were English placeholders — corrected to Chinese.
+
+#### Bug fix — ExportImageDialog blank preview on first open
+
+On the first open, the export preview showed only the background colour with no diagram elements. Toggling any checkbox (Show Grid, Expand Descriptions) triggered a re-export that worked correctly.
+
+**Root cause:** `exportImage()` was called after a fixed 100 ms timeout + double `requestAnimationFrame` on mount. This fired before the hidden Isoflow instance had finished populating its model store, so `html2canvas` captured an empty canvas.
+
+**Fix:** The hidden Isoflow now receives `onModelUpdated={handleHiddenIsoflowReady}`. On the first call, `isoflowLoadedRef` is set and `isoflowReadySignal` is incremented. A dedicated initial-load effect watches this signal and fires a single `requestAnimationFrame` to export — by this point Isoflow has painted at least one frame with diagram data. A separate options-change effect is guarded by `isoflowLoadedRef.current` so it only runs after the initial export is complete. Both effects call `exportImage` through a stable `exportImageRef` to avoid dependency-array churn.
+
+#### Tests
+
+- New: `exportImageDialog.initialLoad.test.ts` — 8 assertions pinning the ready-signal mechanism (ref guard, signal state, `onModelUpdated` wiring, `exportImageRef` pattern, unconditional Isoflow mount).
+- New: `i18n.localeCompleteness.test.ts` — iterates all 13 locale TS files and asserts every top-level namespace from `en-US.ts` is present. Catches missing sections at CI time rather than at runtime.
+- New: `toolMenu.i18n.test.ts` — 11 assertions verifying no hardcoded English tool-name strings remain and all use `t()` from `toolMenu` namespace.
+- New: `quickIconSelector.i18n.test.ts` — 12 assertions verifying all six hardcoded strings are gone and `.replace()` interpolation is used for parameterised strings.
+- Test count: 683 → 729, 68 → 72 suites, all passing.
 
 ### 2026-03-31
 

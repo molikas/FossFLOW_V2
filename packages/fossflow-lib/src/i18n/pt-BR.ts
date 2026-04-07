@@ -216,6 +216,134 @@ const locale: LocaleProps = {
     addPage: "Add page",
     deletePage: "Delete page",
     renameDiagram: "Rename diagram"
+  },
+  nodePanel: {
+    details: "Detalhes",
+    style: "Estilo",
+    notes: "Notas",
+    notesModified: "Notas ●",
+    close: "Fechar",
+    openLink: "Abrir link",
+    caption: "Legenda",
+    noCaption: "Sem legenda."
+  },
+  nodeInfoTab: {
+    name: "Nome",
+    namePlaceholder: "Nome do nó…",
+    removeLink: "Remover link",
+    addLink: "Adicionar link ao nome",
+    linkPlaceholder: "https://…",
+    caption: "Legenda",
+    captionHint: "Exibido na tela abaixo do nome do nó",
+    openLink: "Abrir link"
+  },
+  nodeStyleTab: {
+    icon: "Ícone",
+    close: "Fechar",
+    change: "Alterar…",
+    iconSize: "Tamanho do ícone",
+    labelFontSize: "Tamanho da fonte do rótulo",
+    labelColor: "Cor do rótulo",
+    labelHeight: "Altura do rótulo"
+  },
+  connectorControls: {
+    close: "Fechar",
+    labels: "Rótulos"
+  },
+  textBoxControls: {
+    close: "Fechar",
+    text: "Texto",
+    textSize: "Tamanho do texto",
+    textColor: "Cor do texto",
+    alignment: "Alinhamento"
+  },
+  rectangleControls: {
+    close: "Fechar",
+    color: "Cor",
+    useCustomColor: "Usar cor personalizada"
+  },
+  labelColorPicker: {
+    customColor: "Cor personalizada"
+  },
+  deleteButton: {
+    delete: "Excluir"
+  },
+  nodeActionBar: {
+    style: "Estilo",
+    editName: "Editar nome",
+    editLink: "Editar link",
+    addLink: "Adicionar link",
+    editNotes: "Editar notas",
+    addNotes: "Adicionar notas",
+    delete: "Excluir"
+  },
+  quickAddNodePopover: {
+    add: "Adicionar",
+    group: "Grupo"
+  },
+  zoomControls: {
+    zoomOut: "Diminuir zoom",
+    zoomIn: "Aumentar zoom",
+    fitToScreen: "Ajustar à tela",
+    help: "Ajuda (F1)"
+  },
+  labelSettings: {
+    description: "Configurar ajustes de exibição de rótulos",
+    expandButtonPadding: "Preenchimento do botão expandir",
+    expandButtonPaddingDesc: "Preenchimento inferior quando o botão expandir está visível (evita sobreposição de texto)"
+  },
+  iconSelectionControls: {
+    close: "Fechar",
+    importIcons: "Importar ícones",
+    isometricLabel: "Tratar como isométrico (visão 3D)",
+    isometricHint: "Desmarcar para ícones planos (logos, elementos de UI)",
+    dragHint: "Você pode arrastar e soltar qualquer item abaixo na tela."
+  },
+  searchbox: {
+    placeholder: "Pesquisar ícones"
+  },
+  exportImageDialog: {
+    title: "Exportar como imagem",
+    compatibilityTitle: "Aviso de compatibilidade do navegador",
+    compatibilityMessage: "Para melhores resultados, use Chrome ou Edge. O Firefox atualmente tem problemas de compatibilidade com o recurso de exportação.",
+    cropInstruction: "Clique e arraste para selecionar a área que deseja exportar",
+    options: "Opções",
+    showGrid: "Mostrar grade",
+    expandDescriptions: "Expandir descrições",
+    cropToContent: "Recortar ao conteúdo",
+    backgroundColor: "Cor de fundo",
+    transparentBackground: "Fundo transparente",
+    exportQuality: "Qualidade de exportação (DPI)",
+    custom: "Personalizado",
+    recrop: "Recortar novamente",
+    cropApplied: "Recorte aplicado com sucesso",
+    applyCrop: "Aplicar recorte",
+    clearSelection: "Limpar seleção",
+    cropHint: "Selecione uma área para recortar, ou desmarque \"Recortar ao conteúdo\" para usar a imagem completa",
+    cancel: "Cancelar",
+    downloadSvg: "Baixar como SVG",
+    downloadPng: "Baixar como PNG",
+    error: "Não foi possível exportar a imagem"
+  },
+  toolMenu: {
+    undo: "Undo",
+    redo: "Redo",
+    select: "Select",
+    lassoSelect: "Lasso select",
+    freehandLasso: "Freehand lasso",
+    pan: "Pan",
+    addItem: "Add item",
+    rectangle: "Rectangle",
+    connector: "Connector",
+    text: "Text"
+  },
+  quickIconSelector: {
+    searchPlaceholder: "Search icons (press Enter to select)",
+    recentlyUsed: "RECENTLY USED",
+    searchResults: "SEARCH RESULTS ({count} icons)",
+    noIconsFound: "No icons found matching \"{term}\"",
+    helpSearch: "Use arrow keys to navigate • Enter to select • Double-click to select and close",
+    helpBrowse: "Type to search • Click category to expand • Double-click to select and close"
   }
 };
 

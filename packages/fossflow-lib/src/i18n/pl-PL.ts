@@ -216,6 +216,134 @@ const locale: LocaleProps = {
     addPage: "Add page",
     deletePage: "Delete page",
     renameDiagram: "Rename diagram"
+  },
+  nodePanel: {
+    details: "Szczegóły",
+    style: "Styl",
+    notes: "Notatki",
+    notesModified: "Notatki ●",
+    close: "Zamknij",
+    openLink: "Otwórz link",
+    caption: "Podpis",
+    noCaption: "Brak podpisu."
+  },
+  nodeInfoTab: {
+    name: "Nazwa",
+    namePlaceholder: "Nazwa węzła…",
+    removeLink: "Usuń link",
+    addLink: "Dodaj link do nazwy",
+    linkPlaceholder: "https://…",
+    caption: "Podpis",
+    captionHint: "Wyświetlany na płótnie poniżej nazwy węzła",
+    openLink: "Otwórz link"
+  },
+  nodeStyleTab: {
+    icon: "Ikona",
+    close: "Zamknij",
+    change: "Zmień…",
+    iconSize: "Rozmiar ikony",
+    labelFontSize: "Rozmiar czcionki etykiety",
+    labelColor: "Kolor etykiety",
+    labelHeight: "Wysokość etykiety"
+  },
+  connectorControls: {
+    close: "Zamknij",
+    labels: "Etykiety"
+  },
+  textBoxControls: {
+    close: "Zamknij",
+    text: "Tekst",
+    textSize: "Rozmiar tekstu",
+    textColor: "Kolor tekstu",
+    alignment: "Wyrównanie"
+  },
+  rectangleControls: {
+    close: "Zamknij",
+    color: "Kolor",
+    useCustomColor: "Użyj niestandardowego koloru"
+  },
+  labelColorPicker: {
+    customColor: "Niestandardowy kolor"
+  },
+  deleteButton: {
+    delete: "Usuń"
+  },
+  nodeActionBar: {
+    style: "Styl",
+    editName: "Edytuj nazwę",
+    editLink: "Edytuj link",
+    addLink: "Dodaj link",
+    editNotes: "Edytuj notatki",
+    addNotes: "Dodaj notatki",
+    delete: "Usuń"
+  },
+  quickAddNodePopover: {
+    add: "Dodaj",
+    group: "Grupa"
+  },
+  zoomControls: {
+    zoomOut: "Pomniejsz",
+    zoomIn: "Powiększ",
+    fitToScreen: "Dopasuj do ekranu",
+    help: "Pomoc (F1)"
+  },
+  labelSettings: {
+    description: "Konfiguracja ustawień wyświetlania etykiet",
+    expandButtonPadding: "Wypełnienie przycisku rozwiń",
+    expandButtonPaddingDesc: "Dolne wypełnienie gdy przycisk rozwiń jest widoczny (zapobiega nakładaniu się tekstu)"
+  },
+  iconSelectionControls: {
+    close: "Zamknij",
+    importIcons: "Importuj ikony",
+    isometricLabel: "Traktuj jako izometryczny (widok 3D)",
+    isometricHint: "Odznacz dla płaskich ikon (loga, elementy UI)",
+    dragHint: "Możesz przeciągnąć i upuścić dowolny element poniżej na płótno."
+  },
+  searchbox: {
+    placeholder: "Szukaj ikon"
+  },
+  exportImageDialog: {
+    title: "Eksportuj jako obraz",
+    compatibilityTitle: "Uwaga dotycząca zgodności przeglądarki",
+    compatibilityMessage: "Aby uzyskać najlepsze wyniki, użyj Chrome lub Edge. Firefox ma obecnie problemy ze zgodnością z funkcją eksportu.",
+    cropInstruction: "Kliknij i przeciągnij, aby wybrać obszar do eksportu",
+    options: "Opcje",
+    showGrid: "Pokaż siatkę",
+    expandDescriptions: "Rozwiń opisy",
+    cropToContent: "Przytnij do zawartości",
+    backgroundColor: "Kolor tła",
+    transparentBackground: "Przezroczyste tło",
+    exportQuality: "Jakość eksportu (DPI)",
+    custom: "Niestandardowy",
+    recrop: "Przytnij ponownie",
+    cropApplied: "Przycięcie zastosowane pomyślnie",
+    applyCrop: "Zastosuj przycięcie",
+    clearSelection: "Wyczyść zaznaczenie",
+    cropHint: "Wybierz obszar do przycięcia lub odznacz \"Przytnij do zawartości\", aby użyć pełnego obrazu",
+    cancel: "Anuluj",
+    downloadSvg: "Pobierz jako SVG",
+    downloadPng: "Pobierz jako PNG",
+    error: "Nie można wyeksportować obrazu"
+  },
+  toolMenu: {
+    undo: "Undo",
+    redo: "Redo",
+    select: "Select",
+    lassoSelect: "Lasso select",
+    freehandLasso: "Freehand lasso",
+    pan: "Pan",
+    addItem: "Add item",
+    rectangle: "Rectangle",
+    connector: "Connector",
+    text: "Text"
+  },
+  quickIconSelector: {
+    searchPlaceholder: "Search icons (press Enter to select)",
+    recentlyUsed: "RECENTLY USED",
+    searchResults: "SEARCH RESULTS ({count} icons)",
+    noIconsFound: "No icons found matching \"{term}\"",
+    helpSearch: "Use arrow keys to navigate • Enter to select • Double-click to select and close",
+    helpBrowse: "Type to search • Click category to expand • Double-click to select and close"
   }
 };
 

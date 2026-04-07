@@ -33,12 +33,14 @@ import { ControlsContainer } from '../components/ControlsContainer';
 import { Section } from '../components/Section';
 import { DeleteButton } from '../components/DeleteButton';
 import { LabelColorPicker } from '../components/LabelColorPicker';
+import { useTranslation } from 'src/stores/localeStore';
 
 interface Props {
   id: string;
 }
 
 export const ConnectorControls = ({ id }: Props) => {
+  const { t } = useTranslation('connectorControls');
   const uiStateActions = useUiStateStore((state) => {
     return state.actions;
   });
@@ -131,7 +133,7 @@ export const ConnectorControls = ({ id }: Props) => {
       >
         {/* Close button */}
         <MUIIconButton
-          aria-label="Close"
+          aria-label={t('close')}
           onClick={() => {
             return uiStateActions.setItemControls(null);
           }}
@@ -145,7 +147,7 @@ export const ConnectorControls = ({ id }: Props) => {
         >
           <CloseIcon />
         </MUIIconButton>
-        <Section title="Labels">
+        <Section title={t('labels')}>
           <Box sx={{ mb: 2 }}>
             <Box
               sx={{
@@ -243,7 +245,7 @@ export const ConnectorControls = ({ id }: Props) => {
                             handleUpdateLabel(label.id, { position: 0 });
                           }
                         }}
-                        inputProps={{ min: 0, max: 100 }}
+                        slotProps={{ htmlInput: { min: 0, max: 100 } }}
                         sx={{ width: 70 }}
                       />
                     </Box>

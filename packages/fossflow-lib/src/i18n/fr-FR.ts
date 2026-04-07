@@ -216,6 +216,134 @@ const locale: LocaleProps = {
     addPage: "Add page",
     deletePage: "Delete page",
     renameDiagram: "Rename diagram"
+  },
+  nodePanel: {
+    details: "Détails",
+    style: "Style",
+    notes: "Notes",
+    notesModified: "Notes ●",
+    close: "Fermer",
+    openLink: "Ouvrir le lien",
+    caption: "Légende",
+    noCaption: "Aucune légende."
+  },
+  nodeInfoTab: {
+    name: "Nom",
+    namePlaceholder: "Nom du nœud…",
+    removeLink: "Supprimer le lien",
+    addLink: "Ajouter un lien au nom",
+    linkPlaceholder: "https://…",
+    caption: "Légende",
+    captionHint: "Affiché sur le canevas sous le nom du nœud",
+    openLink: "Ouvrir le lien"
+  },
+  nodeStyleTab: {
+    icon: "Icône",
+    close: "Fermer",
+    change: "Modifier…",
+    iconSize: "Taille de l'icône",
+    labelFontSize: "Taille de police de l'étiquette",
+    labelColor: "Couleur de l'étiquette",
+    labelHeight: "Hauteur de l'étiquette"
+  },
+  connectorControls: {
+    close: "Fermer",
+    labels: "Étiquettes"
+  },
+  textBoxControls: {
+    close: "Fermer",
+    text: "Texte",
+    textSize: "Taille du texte",
+    textColor: "Couleur du texte",
+    alignment: "Alignement"
+  },
+  rectangleControls: {
+    close: "Fermer",
+    color: "Couleur",
+    useCustomColor: "Utiliser une couleur personnalisée"
+  },
+  labelColorPicker: {
+    customColor: "Couleur personnalisée"
+  },
+  deleteButton: {
+    delete: "Supprimer"
+  },
+  nodeActionBar: {
+    style: "Style",
+    editName: "Modifier le nom",
+    editLink: "Modifier le lien",
+    addLink: "Ajouter un lien",
+    editNotes: "Modifier les notes",
+    addNotes: "Ajouter des notes",
+    delete: "Supprimer"
+  },
+  quickAddNodePopover: {
+    add: "Ajouter",
+    group: "Groupe"
+  },
+  zoomControls: {
+    zoomOut: "Zoom arrière",
+    zoomIn: "Zoom avant",
+    fitToScreen: "Ajuster à l'écran",
+    help: "Aide (F1)"
+  },
+  labelSettings: {
+    description: "Configurer les paramètres d'affichage des étiquettes",
+    expandButtonPadding: "Rembourrage du bouton développer",
+    expandButtonPaddingDesc: "Rembourrage inférieur lorsque le bouton développer est visible (évite le chevauchement du texte)"
+  },
+  iconSelectionControls: {
+    close: "Fermer",
+    importIcons: "Importer des icônes",
+    isometricLabel: "Traiter comme isométrique (vue 3D)",
+    isometricHint: "Décocher pour les icônes plates (logos, éléments UI)",
+    dragHint: "Vous pouvez faire glisser et déposer n'importe quel élément ci-dessous sur le canevas."
+  },
+  searchbox: {
+    placeholder: "Rechercher des icônes"
+  },
+  exportImageDialog: {
+    title: "Exporter en image",
+    compatibilityTitle: "Avis de compatibilité du navigateur",
+    compatibilityMessage: "Pour de meilleurs résultats, veuillez utiliser Chrome ou Edge. Firefox a actuellement des problèmes de compatibilité avec la fonction d'exportation.",
+    cropInstruction: "Cliquez et faites glisser pour sélectionner la zone à exporter",
+    options: "Options",
+    showGrid: "Afficher la grille",
+    expandDescriptions: "Développer les descriptions",
+    cropToContent: "Recadrer au contenu",
+    backgroundColor: "Couleur de fond",
+    transparentBackground: "Fond transparent",
+    exportQuality: "Qualité d'exportation (DPI)",
+    custom: "Personnalisé",
+    recrop: "Recadrer à nouveau",
+    cropApplied: "Recadrage appliqué avec succès",
+    applyCrop: "Appliquer le recadrage",
+    clearSelection: "Effacer la sélection",
+    cropHint: "Sélectionnez une zone à recadrer, ou décochez \"Recadrer au contenu\" pour utiliser l'image entière",
+    cancel: "Annuler",
+    downloadSvg: "Télécharger en SVG",
+    downloadPng: "Télécharger en PNG",
+    error: "Impossible d'exporter l'image"
+  },
+  toolMenu: {
+    undo: "Undo",
+    redo: "Redo",
+    select: "Select",
+    lassoSelect: "Lasso select",
+    freehandLasso: "Freehand lasso",
+    pan: "Pan",
+    addItem: "Add item",
+    rectangle: "Rectangle",
+    connector: "Connector",
+    text: "Text"
+  },
+  quickIconSelector: {
+    searchPlaceholder: "Search icons (press Enter to select)",
+    recentlyUsed: "RECENTLY USED",
+    searchResults: "SEARCH RESULTS ({count} icons)",
+    noIconsFound: "No icons found matching \"{term}\"",
+    helpSearch: "Use arrow keys to navigate • Enter to select • Double-click to select and close",
+    helpBrowse: "Type to search • Click category to expand • Double-click to select and close"
   }
 };
 

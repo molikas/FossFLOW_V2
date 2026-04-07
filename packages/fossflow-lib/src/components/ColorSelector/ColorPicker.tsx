@@ -19,7 +19,7 @@ export const ColorPicker = ({ value, onChange }: Props) => {
       format="hex"
       value={value}
       onChange={onChange}
-      InputProps={{ disableUnderline: true, type: 'hidden' }}
+      slotProps={{ input: { disableUnderline: true, type: 'hidden' } }}
       Adornment={ColorButtonElement}
     />
   );

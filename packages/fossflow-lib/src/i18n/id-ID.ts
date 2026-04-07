@@ -216,6 +216,134 @@ const locale: LocaleProps = {
     addPage: "Add page",
     deletePage: "Delete page",
     renameDiagram: "Rename diagram"
+  },
+  nodePanel: {
+    details: "Detail",
+    style: "Gaya",
+    notes: "Catatan",
+    notesModified: "Catatan ●",
+    close: "Tutup",
+    openLink: "Buka tautan",
+    caption: "Keterangan",
+    noCaption: "Tidak ada keterangan."
+  },
+  nodeInfoTab: {
+    name: "Nama",
+    namePlaceholder: "Nama node…",
+    removeLink: "Hapus tautan",
+    addLink: "Tambahkan tautan ke nama",
+    linkPlaceholder: "https://…",
+    caption: "Keterangan",
+    captionHint: "Ditampilkan di kanvas di bawah nama node",
+    openLink: "Buka tautan"
+  },
+  nodeStyleTab: {
+    icon: "Ikon",
+    close: "Tutup",
+    change: "Ubah…",
+    iconSize: "Ukuran ikon",
+    labelFontSize: "Ukuran font label",
+    labelColor: "Warna label",
+    labelHeight: "Tinggi label"
+  },
+  connectorControls: {
+    close: "Tutup",
+    labels: "Label"
+  },
+  textBoxControls: {
+    close: "Tutup",
+    text: "Teks",
+    textSize: "Ukuran teks",
+    textColor: "Warna teks",
+    alignment: "Perataan"
+  },
+  rectangleControls: {
+    close: "Tutup",
+    color: "Warna",
+    useCustomColor: "Gunakan Warna Kustom"
+  },
+  labelColorPicker: {
+    customColor: "Warna kustom"
+  },
+  deleteButton: {
+    delete: "Hapus"
+  },
+  nodeActionBar: {
+    style: "Gaya",
+    editName: "Edit nama",
+    editLink: "Edit tautan",
+    addLink: "Tambah tautan",
+    editNotes: "Edit catatan",
+    addNotes: "Tambah catatan",
+    delete: "Hapus"
+  },
+  quickAddNodePopover: {
+    add: "Tambah",
+    group: "Grup"
+  },
+  zoomControls: {
+    zoomOut: "Perkecil",
+    zoomIn: "Perbesar",
+    fitToScreen: "Sesuaikan ke layar",
+    help: "Bantuan (F1)"
+  },
+  labelSettings: {
+    description: "Konfigurasi pengaturan tampilan label",
+    expandButtonPadding: "Padding tombol perluas",
+    expandButtonPaddingDesc: "Padding bawah saat tombol perluas terlihat (mencegah tumpang tindih teks)"
+  },
+  iconSelectionControls: {
+    close: "Tutup",
+    importIcons: "Impor Ikon",
+    isometricLabel: "Perlakukan sebagai isometrik (tampilan 3D)",
+    isometricHint: "Hapus centang untuk ikon datar (logo, elemen UI)",
+    dragHint: "Anda dapat menyeret dan menjatuhkan item mana pun di bawah ke kanvas."
+  },
+  searchbox: {
+    placeholder: "Cari ikon"
+  },
+  exportImageDialog: {
+    title: "Ekspor sebagai gambar",
+    compatibilityTitle: "Pemberitahuan Kompatibilitas Browser",
+    compatibilityMessage: "Untuk hasil terbaik, gunakan Chrome atau Edge. Firefox saat ini memiliki masalah kompatibilitas dengan fitur ekspor.",
+    cropInstruction: "Klik dan seret untuk memilih area yang ingin diekspor",
+    options: "Opsi",
+    showGrid: "Tampilkan kisi",
+    expandDescriptions: "Perluas deskripsi",
+    cropToContent: "Pangkas ke konten",
+    backgroundColor: "Warna latar belakang",
+    transparentBackground: "Latar belakang transparan",
+    exportQuality: "Kualitas Ekspor (DPI)",
+    custom: "Kustom",
+    recrop: "Pangkas ulang",
+    cropApplied: "Pemangkasan berhasil diterapkan",
+    applyCrop: "Terapkan Pemangkasan",
+    clearSelection: "Hapus Pilihan",
+    cropHint: "Pilih area untuk dipangkas, atau hapus centang \"Pangkas ke konten\" untuk menggunakan gambar penuh",
+    cancel: "Batal",
+    downloadSvg: "Unduh sebagai SVG",
+    downloadPng: "Unduh sebagai PNG",
+    error: "Tidak dapat mengekspor gambar"
+  },
+  toolMenu: {
+    undo: "Undo",
+    redo: "Redo",
+    select: "Select",
+    lassoSelect: "Lasso select",
+    freehandLasso: "Freehand lasso",
+    pan: "Pan",
+    addItem: "Add item",
+    rectangle: "Rectangle",
+    connector: "Connector",
+    text: "Text"
+  },
+  quickIconSelector: {
+    searchPlaceholder: "Search icons (press Enter to select)",
+    recentlyUsed: "RECENTLY USED",
+    searchResults: "SEARCH RESULTS ({count} icons)",
+    noIconsFound: "No icons found matching \"{term}\"",
+    helpSearch: "Use arrow keys to navigate • Enter to select • Double-click to select and close",
+    helpBrowse: "Type to search • Click category to expand • Double-click to select and close"
   }
 };
 

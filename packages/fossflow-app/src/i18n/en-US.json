@@ -1,6 +1,10 @@
 {
     "nav": {
         "newDiagram": "New Diagram",
+        "save": "Save",
+        "load": "Load",
+        "diagrams": "Diagrams",
+        "share": "Share",
         "saveSessionOnly": "Save (Session Only)",
         "loadSessionOnly": "Load (Session Only)",
         "importFile": "Import File",
@@ -12,7 +16,23 @@
         "current": "Current",
         "untitled": "Untitled Diagram",
         "modified": "Modified",
+        "unsaved": "Unsaved",
+        "savedAt": "Saved at {{time}}",
+        "savedYesterdayAt": "Saved yesterday at {{time}}",
+        "savedOnDate": "Saved {{month}} {{day}} at {{time}}",
+        "savedOnDateYear": "Saved {{month}} {{day}}, {{year}} at {{time}}",
         "sessionStorageNote": "Session storage only - export to save permanently"
+    },
+    "toolbar": {
+        "previewSaveFirst": "Save first to preview",
+        "saveAndPreview": "Save & Preview",
+        "preview": "Preview"
+    },
+    "share": {
+        "title": "Share Diagram",
+        "hint": "Anyone with this link can view the diagram in read-only mode.",
+        "copy": "Copy",
+        "copied": "✓ Copied!"
     },
     "dialog": {
         "save": {
@@ -21,6 +41,13 @@
             "warningMessage": "This save is temporary and will be lost when you close the browser.",
             "warningExport": "Use <strong>Export File</strong> to permanently save your work.",
             "placeholder": "Enter diagram name",
+            "btnSave": "Save",
+            "btnCancel": "Cancel"
+        },
+        "saveAs": {
+            "title": "Save Diagram",
+            "subtitle": "Choose a name to save this diagram.",
+            "fileNamePlaceholder": "File name",
             "btnSave": "Save",
             "btnCancel": "Cancel"
         },
@@ -45,6 +72,22 @@
         "readOnly": {
             "mode": "View-Only Mode",
             "failed": "Failed to load diagram"
+        },
+        "diagramManager": {
+            "title": "Open Diagram",
+            "serverStorage": "🌐 Server Storage",
+            "localStorageBadge": "💾 Local Storage",
+            "lastModified": "Last modified",
+            "loading": "Loading diagrams...",
+            "noSaved": "No saved diagrams",
+            "noSavedHint": "Save your current diagram to get started",
+            "btnOpen": "Open",
+            "btnDelete": "Delete",
+            "copyShareLink": "Copy share link",
+            "deleteConfirm": "Delete \"{{name}}\"? This cannot be undone.",
+            "failedLoad": "Failed to load diagrams",
+            "failedLoadDiagram": "Failed to load diagram",
+            "failedDelete": "Failed to delete diagram"
         }
     },
     "alert": {

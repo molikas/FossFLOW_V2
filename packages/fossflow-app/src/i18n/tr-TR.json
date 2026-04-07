@@ -6,13 +6,33 @@
         "importFile": "Dosya İçe Aktar",
         "exportFile": "Dosya Dışa Aktar",
         "quickSaveSession": "Hızlı Kaydet (Oturum)",
-        "serverStorage": "Sunucu Depolama"
+        "serverStorage": "Sunucu Depolama",
+        "save": "Kaydet",
+        "load": "Yükle",
+        "diagrams": "Diyagramlar",
+        "share": "Paylaş"
     },
     "status": {
         "current": "Mevcut",
         "untitled": "İsimsiz Diyagram",
         "modified": "Değiştirildi",
-        "sessionStorageNote": "Yalnızca oturum depolama - kalıcı olarak kaydetmek için dışa aktar"
+        "sessionStorageNote": "Yalnızca oturum depolama - kalıcı olarak kaydetmek için dışa aktar",
+        "unsaved": "Kaydedilmedi",
+        "savedAt": "{{time}} tarihinde kaydedildi",
+        "savedYesterdayAt": "Dün {{time}} tarihinde kaydedildi",
+        "savedOnDate": "{{day}} {{month}} {{time}} tarihinde kaydedildi",
+        "savedOnDateYear": "{{day}} {{month}} {{year}}, {{time}} tarihinde kaydedildi"
+    },
+    "toolbar": {
+        "previewSaveFirst": "Önizlemek için önce kaydedin",
+        "saveAndPreview": "Kaydet ve Önizle",
+        "preview": "Önizle"
+    },
+    "share": {
+        "title": "Diyagramı Paylaş",
+        "hint": "Bu bağlantıya sahip herkes diyagramı salt okunur modda görüntüleyebilir.",
+        "copy": "Kopyala",
+        "copied": "✓ Kopyalandı!"
     },
     "dialog": {
         "save": {
@@ -21,6 +41,13 @@
             "warningMessage": "Bu kayıt geçicidir ve tarayıcıyı kapattığınızda kaybolacaktır.",
             "warningExport": "Çalışmanızı kalıcı olarak kaydetmek için <strong>Dosya Dışa Aktar</strong> kullanın.",
             "placeholder": "Diyagram adı girin",
+            "btnSave": "Kaydet",
+            "btnCancel": "İptal"
+        },
+        "saveAs": {
+            "title": "Diyagramı Kaydet",
+            "subtitle": "Bu diyagramı kaydetmek için bir ad seçin.",
+            "fileNamePlaceholder": "Dosya adı",
             "btnSave": "Kaydet",
             "btnCancel": "İptal"
         },
@@ -45,6 +72,22 @@
         "readOnly": {
             "mode": "Yalnızca Görüntüleme Modu",
             "failed": "Diyagram yüklenemedi"
+        },
+        "diagramManager": {
+            "title": "Diyagram Aç",
+            "serverStorage": "🌐 Sunucu Depolama",
+            "localStorageBadge": "💾 Yerel Depolama",
+            "lastModified": "Son değiştirilme",
+            "loading": "Diyagramlar yükleniyor...",
+            "noSaved": "Kayıtlı diyagram yok",
+            "noSavedHint": "Başlamak için mevcut diyagramınızı kaydedin",
+            "btnOpen": "Aç",
+            "btnDelete": "Sil",
+            "copyShareLink": "Paylaşım bağlantısını kopyala",
+            "deleteConfirm": "\"{{name}}\" silinsin mi? Bu işlem geri alınamaz.",
+            "failedLoad": "Diyagramlar yüklenemedi",
+            "failedLoadDiagram": "Diyagram yüklenemedi",
+            "failedDelete": "Diyagram silinemedi"
         }
     },
     "alert": {

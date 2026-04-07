@@ -216,6 +216,134 @@ const locale: LocaleProps = {
     addPage: "Add page",
     deletePage: "Delete page",
     renameDiagram: "Rename diagram"
+  },
+  nodePanel: {
+    details: "Подробности",
+    style: "Стиль",
+    notes: "Заметки",
+    notesModified: "Заметки ●",
+    close: "Закрыть",
+    openLink: "Открыть ссылку",
+    caption: "Подпись",
+    noCaption: "Нет подписи."
+  },
+  nodeInfoTab: {
+    name: "Название",
+    namePlaceholder: "Имя узла…",
+    removeLink: "Удалить ссылку",
+    addLink: "Добавить ссылку к названию",
+    linkPlaceholder: "https://…",
+    caption: "Подпись",
+    captionHint: "Отображается на холсте под именем узла",
+    openLink: "Открыть ссылку"
+  },
+  nodeStyleTab: {
+    icon: "Иконка",
+    close: "Закрыть",
+    change: "Изменить…",
+    iconSize: "Размер иконки",
+    labelFontSize: "Размер шрифта метки",
+    labelColor: "Цвет метки",
+    labelHeight: "Высота метки"
+  },
+  connectorControls: {
+    close: "Закрыть",
+    labels: "Метки"
+  },
+  textBoxControls: {
+    close: "Закрыть",
+    text: "Текст",
+    textSize: "Размер текста",
+    textColor: "Цвет текста",
+    alignment: "Выравнивание"
+  },
+  rectangleControls: {
+    close: "Закрыть",
+    color: "Цвет",
+    useCustomColor: "Использовать пользовательский цвет"
+  },
+  labelColorPicker: {
+    customColor: "Пользовательский цвет"
+  },
+  deleteButton: {
+    delete: "Удалить"
+  },
+  nodeActionBar: {
+    style: "Стиль",
+    editName: "Редактировать название",
+    editLink: "Редактировать ссылку",
+    addLink: "Добавить ссылку",
+    editNotes: "Редактировать заметки",
+    addNotes: "Добавить заметки",
+    delete: "Удалить"
+  },
+  quickAddNodePopover: {
+    add: "Добавить",
+    group: "Группа"
+  },
+  zoomControls: {
+    zoomOut: "Уменьшить",
+    zoomIn: "Увеличить",
+    fitToScreen: "По размеру экрана",
+    help: "Помощь (F1)"
+  },
+  labelSettings: {
+    description: "Настройка параметров отображения меток",
+    expandButtonPadding: "Отступ кнопки развернуть",
+    expandButtonPaddingDesc: "Нижний отступ при видимой кнопке развернуть (предотвращает перекрытие текста)"
+  },
+  iconSelectionControls: {
+    close: "Закрыть",
+    importIcons: "Импортировать иконки",
+    isometricLabel: "Использовать как изометрический (3D вид)",
+    isometricHint: "Снимите галочку для плоских иконок (логотипы, элементы UI)",
+    dragHint: "Вы можете перетащить любой элемент ниже на холст."
+  },
+  searchbox: {
+    placeholder: "Поиск иконок"
+  },
+  exportImageDialog: {
+    title: "Экспортировать как изображение",
+    compatibilityTitle: "Уведомление о совместимости браузера",
+    compatibilityMessage: "Для наилучших результатов используйте Chrome или Edge. Firefox в настоящее время имеет проблемы совместимости с функцией экспорта.",
+    cropInstruction: "Щёлкните и перетащите, чтобы выбрать область для экспорта",
+    options: "Параметры",
+    showGrid: "Показать сетку",
+    expandDescriptions: "Развернуть описания",
+    cropToContent: "Обрезать по содержимому",
+    backgroundColor: "Цвет фона",
+    transparentBackground: "Прозрачный фон",
+    exportQuality: "Качество экспорта (DPI)",
+    custom: "Пользовательский",
+    recrop: "Обрезать снова",
+    cropApplied: "Обрезка успешно применена",
+    applyCrop: "Применить обрезку",
+    clearSelection: "Снять выделение",
+    cropHint: "Выберите область для обрезки или снимите галочку «Обрезать по содержимому», чтобы использовать полное изображение",
+    cancel: "Отмена",
+    downloadSvg: "Скачать как SVG",
+    downloadPng: "Скачать как PNG",
+    error: "Не удалось экспортировать изображение"
+  },
+  toolMenu: {
+    undo: "Undo",
+    redo: "Redo",
+    select: "Select",
+    lassoSelect: "Lasso select",
+    freehandLasso: "Freehand lasso",
+    pan: "Pan",
+    addItem: "Add item",
+    rectangle: "Rectangle",
+    connector: "Connector",
+    text: "Text"
+  },
+  quickIconSelector: {
+    searchPlaceholder: "Search icons (press Enter to select)",
+    recentlyUsed: "RECENTLY USED",
+    searchResults: "SEARCH RESULTS ({count} icons)",
+    noIconsFound: "No icons found matching \"{term}\"",
+    helpSearch: "Use arrow keys to navigate • Enter to select • Double-click to select and close",
+    helpBrowse: "Type to search • Click category to expand • Double-click to select and close"
   }
 };
 

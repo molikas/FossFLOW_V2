@@ -7,6 +7,7 @@ import { useIconCategories } from 'src/hooks/useIconCategories';
 import { IconGrid } from '../IconSelectionControls/IconGrid';
 import { Icons } from '../IconSelectionControls/Icons';
 import { Section } from '../components/Section';
+import { useTranslation } from 'src/stores/localeStore';
 
 interface Props {
   onIconSelected: (icon: Icon) => void;
@@ -41,6 +42,7 @@ const escapeRegex = (str: string): string => {
 };
 
 export const QuickIconSelector = ({ onIconSelected, onClose, currentIconId: _currentIconId }: Props) => {
+  const { t } = useTranslation('quickIconSelector');
   const [searchTerm, setSearchTerm] = useState('');
   const [hoveredIndex, setHoveredIndex] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -146,18 +148,20 @@ export const QuickIconSelector = ({ onIconSelected, onClose, currentIconId: _cur
           <TextField
             ref={searchInputRef}
             fullWidth
-            placeholder="Search icons (press Enter to select)"
+            placeholder={t('searchPlaceholder')}
             value={searchTerm}
             onChange={(e) => {
               setSearchTerm(e.target.value);
               setHoveredIndex(0); // Reset hover when searching
             }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              )
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon />
+                  </InputAdornment>
+                )
+              }
             }}
             size="small"
             autoFocus
@@ -167,7 +171,7 @@ export const QuickIconSelector = ({ onIconSelected, onClose, currentIconId: _cur
           {!searchTerm && recentIcons.length > 0 && (
             <>
               <Typography variant="caption" color="text.secondary">
-                RECENTLY USED
+                {t('recentlyUsed')}
               </Typography>
               <IconGrid
                 icons={recentIcons}
@@ -185,7 +189,7 @@ export const QuickIconSelector = ({ onIconSelected, onClose, currentIconId: _cur
         <>
           <Section sx={{ py: 1 }}>
             <Typography variant="caption" color="text.secondary">
-              SEARCH RESULTS ({filteredIcons.length} icons)
+              {t('searchResults').replace('{count}', String(filteredIcons.length))}
             </Typography>
           </Section>
           <Divider />
@@ -202,7 +206,7 @@ export const QuickIconSelector = ({ onIconSelected, onClose, currentIconId: _cur
               </Section>
             ) : (
               <Section>
-                <Alert severity="info">No icons found matching "{searchTerm}"</Alert>
+                <Alert severity="info">{t('noIconsFound').replace('{term}', searchTerm)}</Alert>
               </Section>
             )}
           </Box>
@@ -223,10 +227,7 @@ export const QuickIconSelector = ({ onIconSelected, onClose, currentIconId: _cur
       {/* Help Text */}
       <Section sx={{ py: 1 }}>
         <Typography variant="caption" color="text.secondary">
-          {searchTerm 
-            ? 'Use arrow keys to navigate • Enter to select • Double-click to select and close'
-            : 'Type to search • Click category to expand • Double-click to select and close'
-          }
+          {searchTerm ? t('helpSearch') : t('helpBrowse')}
         </Typography>
       </Section>
     </Box>

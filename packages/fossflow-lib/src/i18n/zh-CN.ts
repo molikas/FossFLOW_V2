@@ -213,9 +213,137 @@ const locale: LocaleProps = {
     signature: "-Stan"
   },
   viewTabs: {
-    addPage: "Add page",
-    deletePage: "Delete page",
-    renameDiagram: "Rename diagram"
+    addPage: "添加页面",
+    deletePage: "删除页面",
+    renameDiagram: "重命名图表"
+  },
+  nodePanel: {
+    details: "详情",
+    style: "样式",
+    notes: "备注",
+    notesModified: "备注 ●",
+    close: "关闭",
+    openLink: "打开链接",
+    caption: "说明文字",
+    noCaption: "无说明文字。"
+  },
+  nodeInfoTab: {
+    name: "名称",
+    namePlaceholder: "节点名称…",
+    removeLink: "移除链接",
+    addLink: "为名称添加链接",
+    linkPlaceholder: "https://…",
+    caption: "说明文字",
+    captionHint: "显示在画布中节点名称下方",
+    openLink: "打开链接"
+  },
+  nodeStyleTab: {
+    icon: "图标",
+    close: "关闭",
+    change: "更改…",
+    iconSize: "图标大小",
+    labelFontSize: "标签字体大小",
+    labelColor: "标签颜色",
+    labelHeight: "标签高度"
+  },
+  connectorControls: {
+    close: "关闭",
+    labels: "标签"
+  },
+  textBoxControls: {
+    close: "关闭",
+    text: "文本",
+    textSize: "文本大小",
+    textColor: "文本颜色",
+    alignment: "对齐方式"
+  },
+  rectangleControls: {
+    close: "关闭",
+    color: "颜色",
+    useCustomColor: "使用自定义颜色"
+  },
+  labelColorPicker: {
+    customColor: "自定义颜色"
+  },
+  deleteButton: {
+    delete: "删除"
+  },
+  nodeActionBar: {
+    style: "样式",
+    editName: "编辑名称",
+    editLink: "编辑链接",
+    addLink: "添加链接",
+    editNotes: "编辑备注",
+    addNotes: "添加备注",
+    delete: "删除"
+  },
+  quickAddNodePopover: {
+    add: "添加",
+    group: "分组"
+  },
+  zoomControls: {
+    zoomOut: "缩小",
+    zoomIn: "放大",
+    fitToScreen: "适应屏幕",
+    help: "帮助 (F1)"
+  },
+  labelSettings: {
+    description: "配置标签显示设置",
+    expandButtonPadding: "展开按钮内边距",
+    expandButtonPaddingDesc: "展开按钮可见时的底部内边距（防止文字重叠）"
+  },
+  iconSelectionControls: {
+    close: "关闭",
+    importIcons: "导入图标",
+    isometricLabel: "作为等轴测处理（3D 视图）",
+    isometricHint: "取消勾选以使用平面图标（Logo、UI 元素）",
+    dragHint: "您可以将下方任意项目拖放到画布上。"
+  },
+  searchbox: {
+    placeholder: "搜索图标"
+  },
+  exportImageDialog: {
+    title: "导出为图片",
+    compatibilityTitle: "浏览器兼容性提示",
+    compatibilityMessage: "为获得最佳效果，请使用 Chrome 或 Edge。Firefox 目前与导出功能存在兼容性问题。",
+    cropInstruction: "点击并拖动以选择要导出的区域",
+    options: "选项",
+    showGrid: "显示网格",
+    expandDescriptions: "展开描述",
+    cropToContent: "裁剪到内容",
+    backgroundColor: "背景颜色",
+    transparentBackground: "透明背景",
+    exportQuality: "导出质量（DPI）",
+    custom: "自定义",
+    recrop: "重新裁剪",
+    cropApplied: "裁剪已成功应用",
+    applyCrop: "应用裁剪",
+    clearSelection: "清除选择",
+    cropHint: "选择要裁剪的区域，或取消勾选「裁剪到内容」以使用完整图片",
+    cancel: "取消",
+    downloadSvg: "下载为 SVG",
+    downloadPng: "下载为 PNG",
+    error: "无法导出图片"
+  },
+  toolMenu: {
+    undo: "撤销",
+    redo: "重做",
+    select: "选择",
+    lassoSelect: "套索选择",
+    freehandLasso: "自由套索",
+    pan: "平移",
+    addItem: "添加项目",
+    rectangle: "矩形",
+    connector: "连接器",
+    text: "文本"
+  },
+  quickIconSelector: {
+    searchPlaceholder: "搜索图标（按 Enter 选择）",
+    recentlyUsed: "最近使用",
+    searchResults: "搜索结果（{count} 个图标）",
+    noIconsFound: "未找到匹配 \"{term}\" 的图标",
+    helpSearch: "使用方向键导航 • Enter 选择 • 双击选择并关闭",
+    helpBrowse: "输入以搜索 • 点击分类展开 • 双击选择并关闭"
   }
 };
 

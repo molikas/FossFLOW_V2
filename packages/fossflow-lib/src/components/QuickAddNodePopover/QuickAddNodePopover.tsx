@@ -8,6 +8,7 @@ import { useUiStateStore } from 'src/stores/uiStateStore';
 import { generateId } from 'src/utils';
 import { VIEW_ITEM_DEFAULTS } from 'src/config';
 import { QuickIconSelector } from 'src/components/ItemControls/NodeControls/QuickIconSelector';
+import { useTranslation } from 'src/stores/localeStore';
 
 interface DblClickDetail {
   tile: Coords;
@@ -16,6 +17,7 @@ interface DblClickDetail {
 }
 
 export const QuickAddNodePopover = () => {
+  const { t } = useTranslation('quickAddNodePopover');
   const [anchorPosition, setAnchorPosition] = useState<{ top: number; left: number } | null>(null);
   const [targetTile, setTargetTile] = useState<Coords | null>(null);
   const scene = useScene();
@@ -89,7 +91,7 @@ export const QuickAddNodePopover = () => {
     >
       <Box sx={{ px: 2, pt: 1.5, pb: 0.5, borderBottom: '1px solid', borderColor: 'divider' }}>
         <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
-          Add
+          {t('add')}
         </Typography>
       </Box>
       <Box sx={{ px: 1.5, pt: 1, pb: 0.5 }}>
@@ -101,7 +103,7 @@ export const QuickAddNodePopover = () => {
           onClick={handleAddRectangle}
           sx={{ justifyContent: 'flex-start', textTransform: 'none' }}
         >
-          Group
+          {t('group')}
         </Button>
       </Box>
       <Divider sx={{ mx: 1.5, mt: 0.5 }} />

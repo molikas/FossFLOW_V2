@@ -8,6 +8,7 @@ import { ModelItem, ViewItem } from 'src/types';
 import { RichTextEditor } from 'src/components/RichTextEditor/RichTextEditor';
 import { useModelItem } from 'src/hooks/useModelItem';
 import { Section } from '../../components/Section';
+import { useTranslation } from 'src/stores/localeStore';
 
 interface Props {
   node: ViewItem;
@@ -28,6 +29,8 @@ export const NodeInfoTab = ({
   showLink,
   onShowLinkChange
 }: Props) => {
+  const { t } = useTranslation('nodeInfoTab');
+  const { t: tPanel } = useTranslation('nodePanel');
   const modelItem = useModelItem(node.id);
 
   const handleToggleLink = useCallback(() => {
@@ -46,13 +49,13 @@ export const NodeInfoTab = ({
     return (
       <Stack>
         {/* Name */}
-        <Section title="Name">
+        <Section title={t('name')}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
             <Typography variant="body2" fontWeight={600} sx={{ flex: 1 }}>
               {modelItem.name || '—'}
             </Typography>
             {modelItem.headerLink && (
-              <Tooltip title="Open link">
+              <Tooltip title={t('openLink')}>
                 <IconButton
                   size="small"
                   component="a"
@@ -74,13 +77,13 @@ export const NodeInfoTab = ({
 
         {/* Caption (canvas text) */}
         {hasCaption ? (
-          <Section title="Caption">
+          <Section title={t('caption')}>
             <RichTextEditor value={modelItem.description} readOnly height={80} />
           </Section>
         ) : (
           <Section>
             <Typography variant="body2" color="text.disabled" sx={{ fontStyle: 'italic' }}>
-              No caption.
+              {tPanel('noCaption')}
             </Typography>
           </Section>
         )}
@@ -91,20 +94,20 @@ export const NodeInfoTab = ({
   return (
     <Stack>
       {/* Name */}
-      <Section title="Name">
+      <Section title={t('name')}>
         <Stack direction="row" spacing={0.5} alignItems="center">
           <TextField
             inputRef={nameRef}
             value={modelItem.name}
             fullWidth
-            placeholder="Node name…"
+            placeholder={t('namePlaceholder')}
             size="small"
             onChange={(e) => {
               const text = e.target.value;
               if (modelItem.name !== text) onModelItemUpdated({ name: text });
             }}
           />
-          <Tooltip title={showLink ? 'Remove link' : 'Add link to name'}>
+          <Tooltip title={showLink ? t('removeLink') : t('addLink')}>
             <IconButton
               size="small"
               color={modelItem.headerLink ? 'primary' : 'default'}
@@ -118,7 +121,7 @@ export const NodeInfoTab = ({
           <TextField
             inputRef={linkRef}
             value={modelItem.headerLink || ''}
-            placeholder="https://…"
+            placeholder={t('linkPlaceholder')}
             fullWidth
             size="small"
             sx={{ mt: 1 }}
@@ -130,9 +133,9 @@ export const NodeInfoTab = ({
       </Section>
 
       {/* Caption — short text shown on the canvas under the node name */}
-      <Section title="Caption">
+      <Section title={t('caption')}>
         <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mb: 0.5 }}>
-          Shown on the canvas below the node name
+          {t('captionHint')}
         </Typography>
         <RichTextEditor
           height={80}

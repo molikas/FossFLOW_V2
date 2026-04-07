@@ -13,8 +13,10 @@ import { MAX_ZOOM, MIN_ZOOM } from 'src/config';
 import { useUiStateStore } from 'src/stores/uiStateStore';
 import { useDiagramUtils } from 'src/hooks/useDiagramUtils';
 import { DialogTypeEnum } from 'src/types/ui';
+import { useTranslation } from 'src/stores/localeStore';
 
 export const ZoomControls = () => {
+  const { t } = useTranslation('zoomControls');
   const uiStateStoreActions = useUiStateStore((state) => {
     return state.actions;
   });
@@ -28,7 +30,7 @@ export const ZoomControls = () => {
       <UiElement>
         <Stack direction="row">
           <IconButton
-            name="Zoom out"
+            name={t('zoomOut')}
             Icon={<ZoomOutIcon />}
             onClick={uiStateStoreActions.decrementZoom}
             disabled={zoom >= MAX_ZOOM}
@@ -48,7 +50,7 @@ export const ZoomControls = () => {
           </Box>
           <Divider orientation="vertical" flexItem />
           <IconButton
-            name="Zoom in"
+            name={t('zoomIn')}
             Icon={<ZoomInIcon />}
             onClick={uiStateStoreActions.incrementZoom}
             disabled={zoom <= MIN_ZOOM}
@@ -57,14 +59,14 @@ export const ZoomControls = () => {
       </UiElement>
       <UiElement>
         <IconButton
-          name="Fit to screen"
+          name={t('fitToScreen')}
           Icon={<FitToScreenIcon />}
           onClick={fitToView}
         />
       </UiElement>
       <UiElement>
         <IconButton
-          name="Help (F1)"
+          name={t('help')}
           Icon={<HelpIcon />}
           onClick={() => {
             return uiStateStoreActions.setDialog(DialogTypeEnum.HELP);

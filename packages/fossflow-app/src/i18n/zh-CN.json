@@ -1,6 +1,10 @@
 {
     "nav": {
         "newDiagram": "新建图表",
+        "save": "保存",
+        "load": "加载",
+        "diagrams": "图表",
+        "share": "分享",
         "saveSessionOnly": "保存（仅会话）",
         "loadSessionOnly": "加载（仅会话）",
         "importFile": "导入文件",
@@ -12,7 +16,23 @@
         "current": "当前",
         "untitled": "未命名图表",
         "modified": "已修改",
+        "unsaved": "未保存",
+        "savedAt": "已保存于 {{time}}",
+        "savedYesterdayAt": "昨天 {{time}} 已保存",
+        "savedOnDate": "{{month}} {{day}} {{time}} 已保存",
+        "savedOnDateYear": "{{year}} 年 {{month}} {{day}} {{time}} 已保存",
         "sessionStorageNote": "仅会话存储 - 导出以永久保存"
+    },
+    "toolbar": {
+        "previewSaveFirst": "请先保存以预览",
+        "saveAndPreview": "保存并预览",
+        "preview": "预览"
+    },
+    "share": {
+        "title": "分享图表",
+        "hint": "拥有此链接的任何人都可以以只读模式查看图表。",
+        "copy": "复制",
+        "copied": "✓ 已复制！"
     },
     "dialog": {
         "save": {
@@ -21,6 +41,13 @@
             "warningMessage": "此保存是临时的，关闭浏览器后将丢失。",
             "warningExport": "使用<strong>导出文件</strong>功能永久保存您的工作。",
             "placeholder": "输入图表名称",
+            "btnSave": "保存",
+            "btnCancel": "取消"
+        },
+        "saveAs": {
+            "title": "保存图表",
+            "subtitle": "请为此图表选择一个名称。",
+            "fileNamePlaceholder": "文件名",
             "btnSave": "保存",
             "btnCancel": "取消"
         },
@@ -45,6 +72,22 @@
         "readOnly": {
             "mode": "阅读模式",
             "failed": "加载图表失败"
+        },
+        "diagramManager": {
+            "title": "打开图表",
+            "serverStorage": "🌐 服务端存储",
+            "localStorageBadge": "💾 本地存储",
+            "lastModified": "最后修改",
+            "loading": "正在加载图表...",
+            "noSaved": "没有已保存的图表",
+            "noSavedHint": "保存当前图表以开始",
+            "btnOpen": "打开",
+            "btnDelete": "删除",
+            "copyShareLink": "复制分享链接",
+            "deleteConfirm": "删除\"{{name}}\"？此操作无法撤销。",
+            "failedLoad": "加载图表列表失败",
+            "failedLoadDiagram": "加载图表失败",
+            "failedDelete": "删除图表失败"
         }
     },
     "alert": {

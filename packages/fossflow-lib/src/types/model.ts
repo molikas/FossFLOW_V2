@@ -1,4 +1,4 @@
-import z from 'zod';
+import { z } from 'zod';
 import {
   iconSchema,
   modelSchema,
@@ -40,7 +40,7 @@ export type Rectangle = z.infer<typeof rectangleSchema>;
 export type ModelStore = Model & {
   actions: {
     get: StoreApi<ModelStore>['getState'];
-    set: StoreApi<ModelStore>['setState'];
+    set: (model: Partial<Model>) => void;
   };
 };
 

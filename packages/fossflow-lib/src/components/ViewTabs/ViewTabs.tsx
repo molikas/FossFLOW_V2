@@ -167,8 +167,10 @@ export const ViewTabs = () => {
                   size="small"
                   variant="standard"
                   sx={{ flexGrow: 1, minWidth: 70, backgroundColor: 'transparent' }}
-                  inputProps={{
-                    style: { fontSize: '0.875rem', padding: 0, background: 'transparent', color: '#000000' }
+                  slotProps={{
+                    htmlInput: {
+                      style: { fontSize: '0.875rem', padding: 0, background: 'transparent', color: '#000000' }
+                    }
                   }}
                 />
               ) : (

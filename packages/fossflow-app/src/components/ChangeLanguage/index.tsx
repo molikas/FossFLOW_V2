@@ -35,7 +35,7 @@ const ChangeLanguage = () => {
         className="language-display"
         onClick={() => setIsOpen((prev) => !prev)}
       >
-        A/文
+        {supportedLanguages.find(l => l.value === currentLang)?.label ?? currentLang}
       </div>
       {isOpen && (
         <div className="language-dropdown">

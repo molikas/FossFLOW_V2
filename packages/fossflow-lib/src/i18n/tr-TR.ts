@@ -216,6 +216,134 @@ const locale: LocaleProps = {
     addPage: "Add page",
     deletePage: "Delete page",
     renameDiagram: "Rename diagram"
+  },
+  nodePanel: {
+    details: "Ayrıntılar",
+    style: "Stil",
+    notes: "Notlar",
+    notesModified: "Notlar ●",
+    close: "Kapat",
+    openLink: "Bağlantıyı aç",
+    caption: "Altyazı",
+    noCaption: "Altyazı yok."
+  },
+  nodeInfoTab: {
+    name: "Ad",
+    namePlaceholder: "Düğüm adı…",
+    removeLink: "Bağlantıyı kaldır",
+    addLink: "Ada bağlantı ekle",
+    linkPlaceholder: "https://…",
+    caption: "Altyazı",
+    captionHint: "Tuvalde düğüm adının altında gösterilir",
+    openLink: "Bağlantıyı aç"
+  },
+  nodeStyleTab: {
+    icon: "Simge",
+    close: "Kapat",
+    change: "Değiştir…",
+    iconSize: "Simge boyutu",
+    labelFontSize: "Etiket yazı tipi boyutu",
+    labelColor: "Etiket rengi",
+    labelHeight: "Etiket yüksekliği"
+  },
+  connectorControls: {
+    close: "Kapat",
+    labels: "Etiketler"
+  },
+  textBoxControls: {
+    close: "Kapat",
+    text: "Metin",
+    textSize: "Metin boyutu",
+    textColor: "Metin rengi",
+    alignment: "Hizalama"
+  },
+  rectangleControls: {
+    close: "Kapat",
+    color: "Renk",
+    useCustomColor: "Özel Renk Kullan"
+  },
+  labelColorPicker: {
+    customColor: "Özel renk"
+  },
+  deleteButton: {
+    delete: "Sil"
+  },
+  nodeActionBar: {
+    style: "Stil",
+    editName: "Adı düzenle",
+    editLink: "Bağlantıyı düzenle",
+    addLink: "Bağlantı ekle",
+    editNotes: "Notları düzenle",
+    addNotes: "Not ekle",
+    delete: "Sil"
+  },
+  quickAddNodePopover: {
+    add: "Ekle",
+    group: "Grup"
+  },
+  zoomControls: {
+    zoomOut: "Uzaklaştır",
+    zoomIn: "Yaklaştır",
+    fitToScreen: "Ekrana sığdır",
+    help: "Yardım (F1)"
+  },
+  labelSettings: {
+    description: "Etiket görüntüleme ayarlarını yapılandır",
+    expandButtonPadding: "Genişlet düğmesi dolgusu",
+    expandButtonPaddingDesc: "Genişlet düğmesi görünür olduğunda alt dolgu (metin üst üste binmesini önler)"
+  },
+  iconSelectionControls: {
+    close: "Kapat",
+    importIcons: "Simge İçe Aktar",
+    isometricLabel: "İzometrik olarak değerlendir (3D görünüm)",
+    isometricHint: "Düz simgeler için işareti kaldırın (logolar, UI öğeleri)",
+    dragHint: "Aşağıdaki herhangi bir öğeyi tuvale sürükleyip bırakabilirsiniz."
+  },
+  searchbox: {
+    placeholder: "Simge ara"
+  },
+  exportImageDialog: {
+    title: "Resim olarak dışa aktar",
+    compatibilityTitle: "Tarayıcı Uyumluluk Bildirimi",
+    compatibilityMessage: "En iyi sonuçlar için lütfen Chrome veya Edge kullanın. Firefox şu anda dışa aktarma özelliğiyle uyumluluk sorunları yaşamaktadır.",
+    cropInstruction: "Dışa aktarmak istediğiniz alanı seçmek için tıklayıp sürükleyin",
+    options: "Seçenekler",
+    showGrid: "Kılavuzu göster",
+    expandDescriptions: "Açıklamaları genişlet",
+    cropToContent: "İçeriğe göre kırp",
+    backgroundColor: "Arka plan rengi",
+    transparentBackground: "Şeffaf arka plan",
+    exportQuality: "Dışa Aktarma Kalitesi (DPI)",
+    custom: "Özel",
+    recrop: "Yeniden kırp",
+    cropApplied: "Kırpma başarıyla uygulandı",
+    applyCrop: "Kırpmayı Uygula",
+    clearSelection: "Seçimi Temizle",
+    cropHint: "Kırpılacak bir alan seçin veya tam resmi kullanmak için \"İçeriğe göre kırp\" seçeneğinin işaretini kaldırın",
+    cancel: "İptal",
+    downloadSvg: "SVG olarak indir",
+    downloadPng: "PNG olarak indir",
+    error: "Resim dışa aktarılamadı"
+  },
+  toolMenu: {
+    undo: "Undo",
+    redo: "Redo",
+    select: "Select",
+    lassoSelect: "Lasso select",
+    freehandLasso: "Freehand lasso",
+    pan: "Pan",
+    addItem: "Add item",
+    rectangle: "Rectangle",
+    connector: "Connector",
+    text: "Text"
+  },
+  quickIconSelector: {
+    searchPlaceholder: "Search icons (press Enter to select)",
+    recentlyUsed: "RECENTLY USED",
+    searchResults: "SEARCH RESULTS ({count} icons)",
+    noIconsFound: "No icons found matching \"{term}\"",
+    helpSearch: "Use arrow keys to navigate • Enter to select • Double-click to select and close",
+    helpBrowse: "Type to search • Click category to expand • Double-click to select and close"
   }
 };
 

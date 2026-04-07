@@ -216,6 +216,134 @@ const locale: LocaleProps = {
     addPage: "Add page",
     deletePage: "Delete page",
     renameDiagram: "Rename diagram"
+  },
+  nodePanel: {
+    details: "Details",
+    style: "Style",
+    notes: "Notes",
+    notesModified: "Notes ●",
+    close: "Close",
+    openLink: "Open link",
+    caption: "Caption",
+    noCaption: "No caption."
+  },
+  nodeInfoTab: {
+    name: "Name",
+    namePlaceholder: "Node name…",
+    removeLink: "Remove link",
+    addLink: "Add link to name",
+    linkPlaceholder: "https://…",
+    caption: "Caption",
+    captionHint: "Shown on the canvas below the node name",
+    openLink: "Open link"
+  },
+  nodeStyleTab: {
+    icon: "Icon",
+    close: "Close",
+    change: "Change…",
+    iconSize: "Icon size",
+    labelFontSize: "Label font size",
+    labelColor: "Label color",
+    labelHeight: "Label height"
+  },
+  connectorControls: {
+    close: "Close",
+    labels: "Labels"
+  },
+  textBoxControls: {
+    close: "Close",
+    text: "Text",
+    textSize: "Text size",
+    textColor: "Text color",
+    alignment: "Alignment"
+  },
+  rectangleControls: {
+    close: "Close",
+    color: "Color",
+    useCustomColor: "Use Custom Color"
+  },
+  labelColorPicker: {
+    customColor: "Custom color"
+  },
+  deleteButton: {
+    delete: "Delete"
+  },
+  nodeActionBar: {
+    style: "Style",
+    editName: "Edit name",
+    editLink: "Edit link",
+    addLink: "Add link",
+    editNotes: "Edit notes",
+    addNotes: "Add notes",
+    delete: "Delete"
+  },
+  quickAddNodePopover: {
+    add: "Add",
+    group: "Group"
+  },
+  zoomControls: {
+    zoomOut: "Zoom out",
+    zoomIn: "Zoom in",
+    fitToScreen: "Fit to screen",
+    help: "Help (F1)"
+  },
+  labelSettings: {
+    description: "Configure label display settings",
+    expandButtonPadding: "Expand Button Padding",
+    expandButtonPaddingDesc: "Bottom padding when expand button is visible (prevents text overlap)"
+  },
+  iconSelectionControls: {
+    close: "Close",
+    importIcons: "Import Icons",
+    isometricLabel: "Treat as isometric (3D view)",
+    isometricHint: "Uncheck for flat icons (logos, UI elements)",
+    dragHint: "You can drag and drop any item below onto the canvas."
+  },
+  searchbox: {
+    placeholder: "Search icons"
+  },
+  exportImageDialog: {
+    title: "Export as image",
+    compatibilityTitle: "Browser Compatibility Notice",
+    compatibilityMessage: "For best results, please use Chrome or Edge. Firefox currently has compatibility issues with the export feature.",
+    cropInstruction: "Click and drag to select the area you want to export",
+    options: "Options",
+    showGrid: "Show grid",
+    expandDescriptions: "Expand descriptions",
+    cropToContent: "Crop to content",
+    backgroundColor: "Background color",
+    transparentBackground: "Transparent background",
+    exportQuality: "Export Quality (DPI)",
+    custom: "Custom",
+    recrop: "Recrop",
+    cropApplied: "Crop applied successfully",
+    applyCrop: "Apply Crop",
+    clearSelection: "Clear Selection",
+    cropHint: "Select an area to crop, or uncheck \"Crop to content\" to use full image",
+    cancel: "Cancel",
+    downloadSvg: "Download as SVG",
+    downloadPng: "Download as PNG",
+    error: "Could not export image"
+  },
+  toolMenu: {
+    undo: "Undo",
+    redo: "Redo",
+    select: "Select",
+    lassoSelect: "Lasso select",
+    freehandLasso: "Freehand lasso",
+    pan: "Pan",
+    addItem: "Add item",
+    rectangle: "Rectangle",
+    connector: "Connector",
+    text: "Text"
+  },
+  quickIconSelector: {
+    searchPlaceholder: "Search icons (press Enter to select)",
+    recentlyUsed: "RECENTLY USED",
+    searchResults: "SEARCH RESULTS ({count} icons)",
+    noIconsFound: "No icons found matching \"{term}\"",
+    helpSearch: "Use arrow keys to navigate • Enter to select • Double-click to select and close",
+    helpBrowse: "Type to search • Click category to expand • Double-click to select and close"
   }
 };
 

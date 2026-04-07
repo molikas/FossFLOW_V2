@@ -185,12 +185,12 @@ function EditorPage() {
     const yesterday = new Date(today.getTime() - 86400000);
     const dDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
     const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    if (dDay.getTime() === today.getTime()) return `Saved at ${time}`;
-    if (dDay.getTime() === yesterday.getTime()) return `Saved yesterday at ${time}`;
+    if (dDay.getTime() === today.getTime()) return t('status.savedAt', { time });
+    if (dDay.getTime() === yesterday.getTime()) return t('status.savedYesterdayAt', { time });
     const month = d.toLocaleString([], { month: 'short' });
     const day = d.getDate();
-    if (d.getFullYear() === now.getFullYear()) return `Saved ${month} ${day} at ${time}`;
-    return `Saved ${month} ${day}, ${d.getFullYear()} at ${time}`;
+    if (d.getFullYear() === now.getFullYear()) return t('status.savedOnDate', { month, day, time });
+    return t('status.savedOnDateYear', { month, day, year: d.getFullYear(), time });
   };
 
   // Suppress the spurious onModelUpdated that fires immediately after isoflowRef.current.load().
@@ -890,12 +890,12 @@ function EditorPage() {
                       onClick={handleShareClick}
                       sx={{ whiteSpace: 'nowrap', minWidth: 80 }}
                     >
-                      {shareCopied ? '✓ Copied!' : 'Copy'}
+                      {shareCopied ? t('share.copied', '✓ Copied!') : t('share.copy', 'Copy')}
                     </Button>
                   </Stack>
                 </Stack>
               </Popover>
-              <Tooltip title={!serverStorageAvailable || !currentDiagram ? 'Save first to preview' : hasUnsavedChanges ? 'Save & Preview' : 'Preview'}>
+              <Tooltip title={!serverStorageAvailable || !currentDiagram ? t('toolbar.previewSaveFirst', 'Save first to preview') : hasUnsavedChanges ? t('toolbar.saveAndPreview', 'Save & Preview') : t('toolbar.preview', 'Preview')}>
                 <span>
                   <IconButton
                     size="small"
@@ -929,7 +929,7 @@ function EditorPage() {
               {lastSaved
                 ? `${formatSavedAt(lastSaved)}${hasUnsavedChanges ? ' •' : ''}`
                 : hasUnsavedChanges
-                  ? 'Unsaved'
+                  ? t('status.unsaved', 'Unsaved')
                   : ''
               }
             </Typography>
@@ -1106,21 +1106,21 @@ function EditorPage() {
       {showSaveAsDialog && (
         <div className="dialog-overlay">
           <div className="dialog">
-            <h2>Save Diagram</h2>
+            <h2>{t('dialog.saveAs.title', 'Save Diagram')}</h2>
             <p style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#666' }}>
-              Choose a name to save this diagram.
+              {t('dialog.saveAs.subtitle', 'Choose a name to save this diagram.')}
             </p>
             <input
               type="text"
-              placeholder="File name"
+              placeholder={t('dialog.saveAs.fileNamePlaceholder', 'File name')}
               value={saveAsName}
               onChange={(e) => setSaveAsName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSaveAs()}
               autoFocus
             />
             <div className="dialog-buttons">
-              <button onClick={handleSaveAs}>Save</button>
-              <button onClick={() => { setShowSaveAsDialog(false); setSaveAsName(''); }}>Cancel</button>
+              <button onClick={handleSaveAs}>{t('dialog.saveAs.btnSave', 'Save')}</button>
+              <button onClick={() => { setShowSaveAsDialog(false); setSaveAsName(''); }}>{t('dialog.saveAs.btnCancel', 'Cancel')}</button>
             </div>
           </div>
         </div>

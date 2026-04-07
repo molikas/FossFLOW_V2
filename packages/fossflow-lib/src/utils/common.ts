@@ -1,9 +1,8 @@
 import chroma from 'chroma-js';
 import { Icon, EditorModeEnum, Mode } from 'src/types';
-import { v4 as uuid } from 'uuid';
 
 export const generateId = () => {
-  return uuid();
+  return crypto.randomUUID();
 };
 
 export const clamp = (num: number, min: number, max: number) => {

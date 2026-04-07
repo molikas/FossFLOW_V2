@@ -18,6 +18,7 @@ import { useIcon } from 'src/hooks/useIcon';
 import { RichTextEditor } from 'src/components/RichTextEditor/RichTextEditor';
 import { NodeInfoTab } from '../NodeInfoTab/NodeInfoTab';
 import { NodeStyleTab } from '../NodeStyleTab/NodeStyleTab';
+import { useTranslation } from 'src/stores/localeStore';
 
 const PANEL_EVENT = 'nodePanel';
 
@@ -48,6 +49,7 @@ interface Props {
 }
 
 export const NodePanel = ({ viewItem, readOnly }: Props) => {
+  const { t } = useTranslation('nodePanel');
   const modelItem = useModelItem(viewItem.id);
   const { updateModelItem, updateViewItem } = useScene();
   const uiStateActions = useUiStateStore((state) => state.actions);
@@ -147,7 +149,7 @@ export const NodePanel = ({ viewItem, readOnly }: Props) => {
           </Typography>
           <Stack direction="row" spacing={0}>
             {modelItem.headerLink && (
-              <Tooltip title="Open link">
+              <Tooltip title={t('openLink')}>
                 <IconButton
                   size="small"
                   component="a"
@@ -164,7 +166,7 @@ export const NodePanel = ({ viewItem, readOnly }: Props) => {
                 </IconButton>
               </Tooltip>
             )}
-            <Tooltip title="Close">
+            <Tooltip title={t('close')}>
               <IconButton size="small" onClick={handleClose} sx={{ p: 0.5 }}>
                 <CloseIcon sx={{ fontSize: 15 }} />
               </IconButton>
@@ -178,7 +180,7 @@ export const NodePanel = ({ viewItem, readOnly }: Props) => {
             <Box sx={{ px: 2, pt: 2, pb: 1 }}>
               <Typography variant="caption" fontWeight={700} color="text.secondary"
                 sx={{ textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', mb: 1 }}>
-                Caption
+                {t('caption')}
               </Typography>
               <RichTextEditor value={modelItem.description} readOnly />
             </Box>
@@ -188,7 +190,7 @@ export const NodePanel = ({ viewItem, readOnly }: Props) => {
             <Box sx={{ px: 2, pt: 2, pb: 2 }}>
               <Typography variant="caption" fontWeight={700} color="text.secondary"
                 sx={{ textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', mb: 1 }}>
-                Notes
+                {t('notes')}
               </Typography>
               <RichTextEditor value={modelItem.notes} readOnly />
             </Box>
@@ -225,15 +227,15 @@ export const NodePanel = ({ viewItem, readOnly }: Props) => {
             '& .MuiTab-root': { minHeight: 36, fontSize: '0.72rem', py: 0.5, px: 1.5 }
           }}
         >
-          <Tab label="Details" value={TAB_DETAILS} />
-          <Tab label="Style" value={TAB_STYLE} />
+          <Tab label={t('details')} value={TAB_DETAILS} />
+          <Tab label={t('style')} value={TAB_STYLE} />
           <Tab
-            label={hasNotes ? 'Notes ●' : 'Notes'}
+            label={hasNotes ? t('notesModified') : t('notes')}
             value={TAB_NOTES}
             sx={{ color: hasNotes ? 'primary.main' : undefined }}
           />
         </Tabs>
-        <Tooltip title="Close">
+        <Tooltip title={t('close')}>
           <IconButton size="small" onClick={handleClose} sx={{ p: 0.5, flexShrink: 0 }}>
             <CloseIcon sx={{ fontSize: 15 }} />
           </IconButton>

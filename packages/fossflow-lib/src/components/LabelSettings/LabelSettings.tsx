@@ -5,8 +5,10 @@ import {
   Slider
 } from '@mui/material';
 import { useUiStateStore } from 'src/stores/uiStateStore';
+import { useTranslation } from 'src/stores/localeStore';
 
 export const LabelSettings = () => {
+  const { t } = useTranslation('labelSettings');
   const labelSettings = useUiStateStore((state) => state.labelSettings);
   const setLabelSettings = useUiStateStore((state) => state.actions.setLabelSettings);
 
@@ -20,15 +22,15 @@ export const LabelSettings = () => {
   return (
     <Box>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Configure label display settings
+        {t('description')}
       </Typography>
 
       <Box sx={{ mb: 3 }}>
         <Typography variant="body1" gutterBottom>
-          Expand Button Padding
+          {t('expandButtonPadding')}
         </Typography>
         <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
-          Bottom padding when expand button is visible (prevents text overlap)
+          {t('expandButtonPaddingDesc')}
         </Typography>
         <Slider
           value={labelSettings.expandButtonPadding}

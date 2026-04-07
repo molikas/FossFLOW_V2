@@ -1,5 +1,4 @@
 import domtoimage from 'dom-to-image-more';
-import FileSaver from 'file-saver';
 import { optimizeSvgDataUrl } from './svgOptimizer';
 import { Model, Size } from '../types';
 import { icons as availableIcons } from '../examples/initialData';
@@ -35,7 +34,12 @@ export const base64ToBlob = (
 };
 
 export const downloadFile = (data: Blob, filename: string) => {
-  FileSaver.saveAs(data, filename);
+  const url = URL.createObjectURL(data);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 };
 
 export const transformToCompactFormat = (model: Model) => {

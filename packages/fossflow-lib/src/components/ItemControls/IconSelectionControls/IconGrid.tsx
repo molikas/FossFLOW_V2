@@ -18,7 +18,7 @@ export const IconGrid = ({ icons, onMouseDown, onClick, onDoubleClick, hoveredIn
       {icons.map((icon, index) => {
         const isHovered = hoveredIndex === index;
         return (
-          <Grid item xs={3} key={icon.id}>
+          <Grid size={3} key={icon.id}>
             <Box
               data-testid="icon-grid-item"
               sx={{

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, FormControlLabel, Switch } from '@mui/material';
 import { useScene } from 'src/hooks/useScene';
+import { useTranslation } from 'src/stores/localeStore';
 import { ColorSwatch } from 'src/components/ColorSelector/ColorSwatch';
 import { CustomColorInput } from 'src/components/ColorSelector/CustomColorInput';
 
@@ -17,6 +18,7 @@ const isPresetColor = (hex: string | undefined, presetHexValues: string[]) => {
 };
 
 export const LabelColorPicker = ({ value, onChange }: Props) => {
+  const { t } = useTranslation('labelColorPicker');
   const { colors } = useScene();
 
   const presetHexValues = colors.map((c) => c.value);
@@ -55,7 +57,7 @@ export const LabelColorPicker = ({ value, onChange }: Props) => {
             }}
           />
         }
-        label="Custom color"
+        label={t('customColor')}
         sx={{ mb: 1 }}
       />
       {useCustom ? (

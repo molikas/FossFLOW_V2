@@ -216,6 +216,134 @@ const locale: LocaleProps = {
     addPage: "Add page",
     deletePage: "Delete page",
     renameDiagram: "Rename diagram"
+  },
+  nodePanel: {
+    details: "বিবরণ",
+    style: "স্টাইল",
+    notes: "নোট",
+    notesModified: "নোট ●",
+    close: "বন্ধ করুন",
+    openLink: "লিঙ্ক খুলুন",
+    caption: "ক্যাপশন",
+    noCaption: "কোনো ক্যাপশন নেই।"
+  },
+  nodeInfoTab: {
+    name: "নাম",
+    namePlaceholder: "নোডের নাম…",
+    removeLink: "লিঙ্ক সরান",
+    addLink: "নামে লিঙ্ক যোগ করুন",
+    linkPlaceholder: "https://…",
+    caption: "ক্যাপশন",
+    captionHint: "ক্যানভাসে নোডের নামের নিচে দেখানো হয়",
+    openLink: "লিঙ্ক খুলুন"
+  },
+  nodeStyleTab: {
+    icon: "আইকন",
+    close: "বন্ধ করুন",
+    change: "পরিবর্তন করুন…",
+    iconSize: "আইকনের আকার",
+    labelFontSize: "লেবেল ফন্ট আকার",
+    labelColor: "লেবেলের রং",
+    labelHeight: "লেবেলের উচ্চতা"
+  },
+  connectorControls: {
+    close: "বন্ধ করুন",
+    labels: "লেবেল"
+  },
+  textBoxControls: {
+    close: "বন্ধ করুন",
+    text: "পাঠ্য",
+    textSize: "পাঠ্যের আকার",
+    textColor: "পাঠ্যের রং",
+    alignment: "সারিবদ্ধতা"
+  },
+  rectangleControls: {
+    close: "বন্ধ করুন",
+    color: "রং",
+    useCustomColor: "কাস্টম রং ব্যবহার করুন"
+  },
+  labelColorPicker: {
+    customColor: "কাস্টম রং"
+  },
+  deleteButton: {
+    delete: "মুছুন"
+  },
+  nodeActionBar: {
+    style: "স্টাইল",
+    editName: "নাম সম্পাদনা করুন",
+    editLink: "লিঙ্ক সম্পাদনা করুন",
+    addLink: "লিঙ্ক যোগ করুন",
+    editNotes: "নোট সম্পাদনা করুন",
+    addNotes: "নোট যোগ করুন",
+    delete: "মুছুন"
+  },
+  quickAddNodePopover: {
+    add: "যোগ করুন",
+    group: "গ্রুপ"
+  },
+  zoomControls: {
+    zoomOut: "জুম আউট",
+    zoomIn: "জুম ইন",
+    fitToScreen: "স্ক্রিনে ফিট করুন",
+    help: "সাহায্য (F1)"
+  },
+  labelSettings: {
+    description: "লেবেল প্রদর্শন সেটিংস কনফিগার করুন",
+    expandButtonPadding: "বিস্তার বোতাম প্যাডিং",
+    expandButtonPaddingDesc: "বিস্তার বোতাম দৃশ্যমান হলে নিচের প্যাডিং (পাঠ্য ওভারল্যাপ প্রতিরোধ করে)"
+  },
+  iconSelectionControls: {
+    close: "বন্ধ করুন",
+    importIcons: "আইকন আমদানি করুন",
+    isometricLabel: "আইসোমেট্রিক হিসেবে বিবেচনা করুন (3D দৃশ্য)",
+    isometricHint: "সমতল আইকনের জন্য আনচেক করুন (লোগো, UI উপাদান)",
+    dragHint: "আপনি নিচের যেকোনো আইটেম ক্যানভাসে টেনে নামাতে পারেন।"
+  },
+  searchbox: {
+    placeholder: "আইকন খুঁজুন"
+  },
+  exportImageDialog: {
+    title: "ছবি হিসেবে রপ্তানি করুন",
+    compatibilityTitle: "ব্রাউজার সামঞ্জস্যতা বিজ্ঞপ্তি",
+    compatibilityMessage: "সেরা ফলাফলের জন্য Chrome বা Edge ব্যবহার করুন। Firefox-এ বর্তমানে রপ্তানি বৈশিষ্ট্যের সাথে সামঞ্জস্যতার সমস্যা রয়েছে।",
+    cropInstruction: "রপ্তানি করতে চান এমন অঞ্চল নির্বাচন করতে ক্লিক করুন এবং টেনে আনুন",
+    options: "বিকল্প",
+    showGrid: "গ্রিড দেখান",
+    expandDescriptions: "বিবরণ প্রসারিত করুন",
+    cropToContent: "বিষয়বস্তুতে ক্রপ করুন",
+    backgroundColor: "পটভূমির রং",
+    transparentBackground: "স্বচ্ছ পটভূমি",
+    exportQuality: "রপ্তানি মান (DPI)",
+    custom: "কাস্টম",
+    recrop: "আবার ক্রপ করুন",
+    cropApplied: "ক্রপ সফলভাবে প্রয়োগ হয়েছে",
+    applyCrop: "ক্রপ প্রয়োগ করুন",
+    clearSelection: "নির্বাচন সাফ করুন",
+    cropHint: "ক্রপ করার জন্য একটি অঞ্চল নির্বাচন করুন, অথবা পুরো ছবি ব্যবহার করতে \"বিষয়বস্তুতে ক্রপ করুন\" আনচেক করুন",
+    cancel: "বাতিল করুন",
+    downloadSvg: "SVG হিসেবে ডাউনলোড করুন",
+    downloadPng: "PNG হিসেবে ডাউনলোড করুন",
+    error: "ছবি রপ্তানি করা যায়নি"
+  },
+  toolMenu: {
+    undo: "Undo",
+    redo: "Redo",
+    select: "Select",
+    lassoSelect: "Lasso select",
+    freehandLasso: "Freehand lasso",
+    pan: "Pan",
+    addItem: "Add item",
+    rectangle: "Rectangle",
+    connector: "Connector",
+    text: "Text"
+  },
+  quickIconSelector: {
+    searchPlaceholder: "Search icons (press Enter to select)",
+    recentlyUsed: "RECENTLY USED",
+    searchResults: "SEARCH RESULTS ({count} icons)",
+    noIconsFound: "No icons found matching \"{term}\"",
+    helpSearch: "Use arrow keys to navigate • Enter to select • Double-click to select and close",
+    helpBrowse: "Type to search • Click category to expand • Double-click to select and close"
   }
 };
 

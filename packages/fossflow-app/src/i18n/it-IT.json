@@ -6,13 +6,33 @@
         "importFile": "Importa file",
         "exportFile": "Esporta file",
         "quickSaveSession": "Salvataggio rapido (sessione)",
-        "serverStorage": "Archivio server"
+        "serverStorage": "Archivio server",
+        "save": "Salva",
+        "load": "Carica",
+        "diagrams": "Diagrammi",
+        "share": "Condividi"
     },
     "status": {
         "current": "Corrente",
         "untitled": "Diagramma senza titolo",
         "modified": "Modificato",
-        "sessionStorageNote": "Solo archiviazione di sessione - esporta per salvare in modo permanente"
+        "sessionStorageNote": "Solo archiviazione di sessione - esporta per salvare in modo permanente",
+        "unsaved": "Non salvato",
+        "savedAt": "Salvato alle {{time}}",
+        "savedYesterdayAt": "Salvato ieri alle {{time}}",
+        "savedOnDate": "Salvato il {{day}} {{month}} alle {{time}}",
+        "savedOnDateYear": "Salvato il {{day}} {{month}} {{year}} alle {{time}}"
+    },
+    "toolbar": {
+        "previewSaveFirst": "Salva prima di visualizzare l'anteprima",
+        "saveAndPreview": "Salva e visualizza anteprima",
+        "preview": "Anteprima"
+    },
+    "share": {
+        "title": "Condividi diagramma",
+        "hint": "Chiunque abbia questo link può visualizzare il diagramma in modalità sola lettura.",
+        "copy": "Copia",
+        "copied": "✓ Copiato!"
     },
     "dialog": {
         "save": {
@@ -21,6 +41,13 @@
             "warningMessage": "Questo salvataggio è temporaneo e verrà perso alla chiusura del browser.",
             "warningExport": "Usa <strong>Esporta file</strong> per salvare il tuo lavoro in modo permanente.",
             "placeholder": "Inserisci il nome del diagramma",
+            "btnSave": "Salva",
+            "btnCancel": "Annulla"
+        },
+        "saveAs": {
+            "title": "Salva diagramma",
+            "subtitle": "Scegli un nome per salvare questo diagramma.",
+            "fileNamePlaceholder": "Nome file",
             "btnSave": "Salva",
             "btnCancel": "Annulla"
         },
@@ -45,6 +72,22 @@
         "readOnly": {
             "mode": "Modalità sola lettura",
             "failed": "Impossibile caricare il diagramma"
+        },
+        "diagramManager": {
+            "title": "Apri diagramma",
+            "serverStorage": "🌐 Archiviazione server",
+            "localStorageBadge": "💾 Archiviazione locale",
+            "lastModified": "Ultima modifica",
+            "loading": "Caricamento diagrammi...",
+            "noSaved": "Nessun diagramma salvato",
+            "noSavedHint": "Salva il diagramma corrente per iniziare",
+            "btnOpen": "Apri",
+            "btnDelete": "Elimina",
+            "copyShareLink": "Copia link di condivisione",
+            "deleteConfirm": "Eliminare \"{{name}}\"? Questa azione non può essere annullata.",
+            "failedLoad": "Impossibile caricare i diagrammi",
+            "failedLoadDiagram": "Impossibile caricare il diagramma",
+            "failedDelete": "Impossibile eliminare il diagramma"
         }
     },
     "alert": {

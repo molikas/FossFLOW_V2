@@ -216,6 +216,134 @@ const locale: LocaleProps = {
     addPage: "Add page",
     deletePage: "Delete page",
     renameDiagram: "Rename diagram"
+  },
+  nodePanel: {
+    details: "Dettagli",
+    style: "Stile",
+    notes: "Note",
+    notesModified: "Note ●",
+    close: "Chiudi",
+    openLink: "Apri link",
+    caption: "Didascalia",
+    noCaption: "Nessuna didascalia."
+  },
+  nodeInfoTab: {
+    name: "Nome",
+    namePlaceholder: "Nome del nodo…",
+    removeLink: "Rimuovi link",
+    addLink: "Aggiungi link al nome",
+    linkPlaceholder: "https://…",
+    caption: "Didascalia",
+    captionHint: "Mostrato sulla tela sotto il nome del nodo",
+    openLink: "Apri link"
+  },
+  nodeStyleTab: {
+    icon: "Icona",
+    close: "Chiudi",
+    change: "Cambia…",
+    iconSize: "Dimensione icona",
+    labelFontSize: "Dimensione font etichetta",
+    labelColor: "Colore etichetta",
+    labelHeight: "Altezza etichetta"
+  },
+  connectorControls: {
+    close: "Chiudi",
+    labels: "Etichette"
+  },
+  textBoxControls: {
+    close: "Chiudi",
+    text: "Testo",
+    textSize: "Dimensione testo",
+    textColor: "Colore testo",
+    alignment: "Allineamento"
+  },
+  rectangleControls: {
+    close: "Chiudi",
+    color: "Colore",
+    useCustomColor: "Usa colore personalizzato"
+  },
+  labelColorPicker: {
+    customColor: "Colore personalizzato"
+  },
+  deleteButton: {
+    delete: "Elimina"
+  },
+  nodeActionBar: {
+    style: "Stile",
+    editName: "Modifica nome",
+    editLink: "Modifica link",
+    addLink: "Aggiungi link",
+    editNotes: "Modifica note",
+    addNotes: "Aggiungi note",
+    delete: "Elimina"
+  },
+  quickAddNodePopover: {
+    add: "Aggiungi",
+    group: "Gruppo"
+  },
+  zoomControls: {
+    zoomOut: "Riduci zoom",
+    zoomIn: "Aumenta zoom",
+    fitToScreen: "Adatta allo schermo",
+    help: "Aiuto (F1)"
+  },
+  labelSettings: {
+    description: "Configura le impostazioni di visualizzazione delle etichette",
+    expandButtonPadding: "Spaziatura pulsante espandi",
+    expandButtonPaddingDesc: "Spaziatura inferiore quando il pulsante espandi è visibile (evita la sovrapposizione del testo)"
+  },
+  iconSelectionControls: {
+    close: "Chiudi",
+    importIcons: "Importa icone",
+    isometricLabel: "Tratta come isometrico (vista 3D)",
+    isometricHint: "Deseleziona per icone piatte (loghi, elementi UI)",
+    dragHint: "Puoi trascinare e rilasciare qualsiasi elemento qui sotto sulla tela."
+  },
+  searchbox: {
+    placeholder: "Cerca icone"
+  },
+  exportImageDialog: {
+    title: "Esporta come immagine",
+    compatibilityTitle: "Avviso di compatibilità del browser",
+    compatibilityMessage: "Per i migliori risultati, usa Chrome o Edge. Firefox attualmente ha problemi di compatibilità con la funzione di esportazione.",
+    cropInstruction: "Clicca e trascina per selezionare l'area da esportare",
+    options: "Opzioni",
+    showGrid: "Mostra griglia",
+    expandDescriptions: "Espandi descrizioni",
+    cropToContent: "Ritaglia al contenuto",
+    backgroundColor: "Colore di sfondo",
+    transparentBackground: "Sfondo trasparente",
+    exportQuality: "Qualità di esportazione (DPI)",
+    custom: "Personalizzato",
+    recrop: "Ritaglia di nuovo",
+    cropApplied: "Ritaglio applicato con successo",
+    applyCrop: "Applica ritaglio",
+    clearSelection: "Cancella selezione",
+    cropHint: "Seleziona un'area da ritagliare, o deseleziona \"Ritaglia al contenuto\" per usare l'immagine completa",
+    cancel: "Annulla",
+    downloadSvg: "Scarica come SVG",
+    downloadPng: "Scarica come PNG",
+    error: "Impossibile esportare l'immagine"
+  },
+  toolMenu: {
+    undo: "Undo",
+    redo: "Redo",
+    select: "Select",
+    lassoSelect: "Lasso select",
+    freehandLasso: "Freehand lasso",
+    pan: "Pan",
+    addItem: "Add item",
+    rectangle: "Rectangle",
+    connector: "Connector",
+    text: "Text"
+  },
+  quickIconSelector: {
+    searchPlaceholder: "Search icons (press Enter to select)",
+    recentlyUsed: "RECENTLY USED",
+    searchResults: "SEARCH RESULTS ({count} icons)",
+    noIconsFound: "No icons found matching \"{term}\"",
+    helpSearch: "Use arrow keys to navigate • Enter to select • Double-click to select and close",
+    helpBrowse: "Type to search • Click category to expand • Double-click to select and close"
   }
 };
 

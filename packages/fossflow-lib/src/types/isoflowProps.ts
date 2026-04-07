@@ -224,6 +224,134 @@ export interface LocaleProps {
     deletePage: string;
     renameDiagram: string;
   };
+  nodePanel: {
+    details: string;
+    style: string;
+    notes: string;
+    notesModified: string;
+    close: string;
+    openLink: string;
+    caption: string;
+    noCaption: string;
+  };
+  nodeInfoTab: {
+    name: string;
+    namePlaceholder: string;
+    removeLink: string;
+    addLink: string;
+    linkPlaceholder: string;
+    caption: string;
+    captionHint: string;
+    openLink: string;
+  };
+  nodeStyleTab: {
+    icon: string;
+    close: string;
+    change: string;
+    iconSize: string;
+    labelFontSize: string;
+    labelColor: string;
+    labelHeight: string;
+  };
+  connectorControls: {
+    close: string;
+    labels: string;
+  };
+  textBoxControls: {
+    close: string;
+    text: string;
+    textSize: string;
+    textColor: string;
+    alignment: string;
+  };
+  rectangleControls: {
+    close: string;
+    color: string;
+    useCustomColor: string;
+  };
+  labelColorPicker: {
+    customColor: string;
+  };
+  deleteButton: {
+    delete: string;
+  };
+  nodeActionBar: {
+    style: string;
+    editName: string;
+    editLink: string;
+    addLink: string;
+    editNotes: string;
+    addNotes: string;
+    delete: string;
+  };
+  quickAddNodePopover: {
+    add: string;
+    group: string;
+  };
+  zoomControls: {
+    zoomOut: string;
+    zoomIn: string;
+    fitToScreen: string;
+    help: string;
+  };
+  labelSettings: {
+    description: string;
+    expandButtonPadding: string;
+    expandButtonPaddingDesc: string;
+  };
+  iconSelectionControls: {
+    close: string;
+    importIcons: string;
+    isometricLabel: string;
+    isometricHint: string;
+    dragHint: string;
+  };
+  searchbox: {
+    placeholder: string;
+  };
+  exportImageDialog: {
+    title: string;
+    compatibilityTitle: string;
+    compatibilityMessage: string;
+    cropInstruction: string;
+    options: string;
+    showGrid: string;
+    expandDescriptions: string;
+    cropToContent: string;
+    backgroundColor: string;
+    transparentBackground: string;
+    exportQuality: string;
+    custom: string;
+    recrop: string;
+    cropApplied: string;
+    applyCrop: string;
+    clearSelection: string;
+    cropHint: string;
+    cancel: string;
+    downloadSvg: string;
+    downloadPng: string;
+    error: string;
+  };
+  toolMenu: {
+    undo: string;
+    redo: string;
+    select: string;
+    lassoSelect: string;
+    freehandLasso: string;
+    pan: string;
+    addItem: string;
+    rectangle: string;
+    connector: string;
+    text: string;
+  };
+  quickIconSelector: {
+    searchPlaceholder: string;
+    recentlyUsed: string;
+    searchResults: string;
+    noIconsFound: string;
+    helpSearch: string;
+    helpBrowse: string;
+  };
   // other namespaces can be added here
 }
 

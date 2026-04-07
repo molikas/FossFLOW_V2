@@ -39,6 +39,7 @@ import { Loader } from 'src/components/Loader/Loader';
 import { customVars } from 'src/styles/theme';
 import { ColorPicker } from 'src/components/ColorSelector/ColorPicker';
 import { DOMErrorBoundary } from 'src/components/DOMErrorBoundary';
+import { useTranslation } from 'src/stores/localeStore';
 
 interface Props {
   quality?: number;
@@ -53,6 +54,7 @@ interface CropArea {
 }
 
 export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
+  const { t } = useTranslation('exportImageDialog');
   const containerRef = useRef<HTMLDivElement>(null);
   const cropCanvasRef = useRef<HTMLCanvasElement>(null);
   const isExporting = useRef<boolean>(false);
@@ -91,8 +93,18 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
     return getUnprojectedBounds();
   }, [getUnprojectedBounds]);
 
-  // Note: No need to manually set mode here - the hidden Isoflow component
-  // with editorMode="NON_INTERACTIVE" will handle its own mode state
+  // Track when the hidden Isoflow has finished its first render cycle
+  const isoflowLoadedRef = useRef(false);
+  const [isoflowReadySignal, setIsoflowReadySignal] = useState(0);
+
+  // Called by the hidden Isoflow's onModelUpdated — fires after its model store
+  // is first populated, meaning React has the data and will paint next rAF
+  const handleHiddenIsoflowReady = useCallback(() => {
+    if (!isoflowLoadedRef.current) {
+      isoflowLoadedRef.current = true;
+      setIsoflowReadySignal((s) => s + 1);
+    }
+  }, []);
 
   const [transparentBackground, setTransparentBackground] = useState(false);
 
@@ -131,6 +143,11 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
       isExporting.current = false;
     }
   }, [bounds, exportScale, transparentBackground, backgroundColor]);
+
+  // Stable ref so effects can call the latest exportImage without adding it
+  // to their dependency arrays (which would cause spurious re-fires)
+  const exportImageRef = useRef(exportImage);
+  useEffect(() => { exportImageRef.current = exportImage; }, [exportImage]);
 
   // Crop the image based on selected area
   const cropImage = useCallback((cropArea: CropArea, sourceImage: string) => {
@@ -324,7 +341,7 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
           ctx.fillStyle = 'white';
           ctx.font = '14px Arial';
           ctx.textAlign = 'left';
-          ctx.fillText('Click and drag to select crop area', 10, 25);
+          ctx.fillText(t('cropInstruction'), 10, 25);
         }
       }
     };
@@ -384,28 +401,35 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
     setIsInCropMode(false);
   };
 
-  // Reset image data when non-crop options change
+  // Initial export: fire once when the hidden Isoflow signals it has rendered
   useEffect(() => {
-    if (!cropToContent) {
-      setImageData(undefined);
-      setSvgData(undefined);
-      setExportError(false);
-      isExporting.current = false;
-      const timer = setTimeout(() => {
-        exportImage();
-      }, 200);
-      return () => clearTimeout(timer);
-    }
-  }, [showGrid, backgroundColor, expandLabels, exportImage, cropToContent, exportScale, transparentBackground]);
+    if (isoflowReadySignal === 0) return;
+    setImageData(undefined);
+    setSvgData(undefined);
+    setExportError(false);
+    isExporting.current = false;
+    // One rAF is enough here — the model update callback already guarantees a
+    // paint cycle has occurred
+    const id = requestAnimationFrame(() => {
+      exportImageRef.current();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [isoflowReadySignal]);
 
+  // Re-export when options change — only after the initial load has completed
   useEffect(() => {
-    if (!imageData) {
-      const timer = setTimeout(() => {
-        exportImage();
-      }, 200);
-      return () => clearTimeout(timer);
-    }
-  }, [exportImage, imageData]);
+    if (!isoflowLoadedRef.current || cropToContent) return;
+    setImageData(undefined);
+    setSvgData(undefined);
+    setExportError(false);
+    isExporting.current = false;
+    const timer = setTimeout(() => {
+      requestAnimationFrame(() => {
+        exportImageRef.current();
+      });
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [showGrid, backgroundColor, expandLabels, cropToContent, exportScale, transparentBackground]);
 
   const downloadFile = useCallback(() => {
     const dataToDownload = croppedImageData || imageData;
@@ -437,71 +461,69 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
 
   return (
     <Dialog open onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>Export as image</DialogTitle>
+      <DialogTitle>{t('title')}</DialogTitle>
       <DialogContent>
         <Stack spacing={2}>
           <Alert severity="info">
             <strong>
-              Browser Compatibility Notice
+              {t('compatibilityTitle')}
             </strong>
             <br />
-            For best results, please use Chrome or Edge. Firefox currently has 
-            compatibility issues with the export feature.
+            {t('compatibilityMessage')}
           </Alert>
 
+          <Box
+            sx={{
+              position: 'absolute',
+              width: 0,
+              height: 0,
+              overflow: 'hidden'
+            }}
+          >
+            <Box
+              ref={containerRef}
+              sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0
+              }}
+              style={{
+                width: bounds.width,
+                height: bounds.height
+              }}
+            >
+              <DOMErrorBoundary>
+                <Isoflow
+                  key="export-dialog-isoflow"
+                  editorMode="NON_INTERACTIVE"
+                  initialData={{
+                    ...model,
+                    fitToView: true,
+                    view: currentView
+                  }}
+                  renderer={{
+                    showGrid,
+                    backgroundColor,
+                    expandLabels
+                  }}
+                  onModelUpdated={handleHiddenIsoflowReady}
+                />
+              </DOMErrorBoundary>
+            </Box>
+          </Box>
           {!imageData && (
-            <>
-              <Box
-                sx={{
-                  position: 'absolute',
-                  width: 0,
-                  height: 0,
-                  overflow: 'hidden'
-                }}
-              >
-                <Box
-                  ref={containerRef}
-                  sx={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0
-                  }}
-                  style={{
-                    width: bounds.width,
-                    height: bounds.height
-                  }}
-                >
-                  <DOMErrorBoundary>
-                    <Isoflow
-                      key="export-dialog-isoflow"
-                      editorMode="NON_INTERACTIVE"
-                      initialData={{
-                        ...model,
-                        fitToView: true,
-                        view: currentView
-                      }}
-                      renderer={{
-                        showGrid,
-                        backgroundColor,
-                        expandLabels
-                      }}
-                    />
-                  </DOMErrorBoundary>
-                </Box>
-              </Box>
-              <Box
-                sx={{
-                  position: 'relative',
-                  top: 0,
-                  left: 0,
-                  width: 500,
-                  height: 300,
-                  bgcolor: 'common.white'
-                }}
-              >
-                <Loader size={2} />
-              </Box>
-            </>
+            <Box
+              sx={{
+                position: 'relative',
+                top: 0,
+                left: 0,
+                width: 500,
+                height: 300,
+                bgcolor: 'common.white'
+              }}
+            >
+              <Loader size={2} />
+            </Box>
           )}
           <Stack alignItems="center" spacing={2}>
             {displayImage && (
@@ -528,7 +550,7 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
                     {isInCropMode && (
                       <Box sx={{ mt: 1 }}>
                         <Typography variant="caption" color="primary">
-                          Click and drag to select the area you want to export
+                          {t('cropInstruction')}
                         </Typography>
                       </Box>
                     )}
@@ -553,11 +575,11 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
             <Box sx={{ width: '100%' }}>
               <Box component="fieldset">
                 <Typography variant="caption" component="legend">
-                  Options
+                  {t('options')}
                 </Typography>
 
                 <FormControlLabel
-                  label="Show grid"
+                  label={t('showGrid')}
                   control={
                     <Checkbox
                       size="small"
@@ -569,7 +591,7 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
                   }
                 />
                 <FormControlLabel
-                  label="Expand descriptions"
+                  label={t('expandDescriptions')}
                   control={
                     <Checkbox
                       size="small"
@@ -581,7 +603,7 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
                   }
                 />
                 <FormControlLabel
-                  label="Crop to content"
+                  label={t('cropToContent')}
                   control={
                     <Checkbox
                       size="small"
@@ -593,7 +615,7 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
                   }
                 />
                 <FormControlLabel
-                  label="Background color"
+                  label={t('backgroundColor')}
                   control={
                     <ColorPicker
                       value={backgroundColor}
@@ -604,7 +626,7 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
                 />
 
                 <FormControlLabel
-                  label="Transparent background"
+                  label={t('transparentBackground')}
                   control={
                     <Checkbox
                       size="small"
@@ -618,7 +640,7 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
 
                 <Box sx={{ mt: 2, mb: 1 }}>
                   <Typography variant="caption" component="div" sx={{ mb: 1 }}>
-                    Export Quality (DPI)
+                    {t('exportQuality')}
                   </Typography>
 
                   <FormControl fullWidth size="small" sx={{ mb: 1 }}>
@@ -639,7 +661,7 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
                           {preset.label}
                         </MenuItem>
                       ))}
-                      <MenuItem value="custom">Custom</MenuItem>
+                      <MenuItem value="custom">{t('custom')}</MenuItem>
                     </Select>
                   </FormControl>
 
@@ -675,24 +697,24 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
                   {croppedImageData ? (
                     <Stack direction="row" spacing={1}>
                       <Button variant="outlined" size="small" onClick={handleRecrop}>
-                        Recrop
+                        {t('recrop')}
                       </Button>
                       <Typography variant="caption" sx={{ alignSelf: 'center' }}>
-                        Crop applied successfully
+                        {t('cropApplied')}
                       </Typography>
                     </Stack>
                   ) : cropArea ? (
                     <Stack direction="row" spacing={1}>
                       <Button variant="contained" size="small" onClick={handleAcceptCrop}>
-                        Apply Crop
+                        {t('applyCrop')}
                       </Button>
                       <Button variant="outlined" size="small" onClick={() => setCropArea(null)}>
-                        Clear Selection
+                        {t('clearSelection')}
                       </Button>
                     </Stack>
                   ) : isInCropMode ? (
                     <Typography variant="caption" color="text.secondary">
-                      Select an area to crop, or uncheck "Crop to content" to use full image
+                      {t('cropHint')}
                     </Typography>
                   ) : null}
                 </Box>
@@ -703,7 +725,7 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
               <Stack sx={{ width: '100%' }} alignItems="flex-end">
                 <Stack direction="row" spacing={2}>
                   <Button variant="text" onClick={onClose}>
-                    Cancel
+                    {t('cancel')}
                   </Button>
                   <Button
                     variant="outlined"
@@ -711,13 +733,13 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
                     onClick={downloadSvgFile}
                     disabled={!svgData || (cropToContent && isInCropMode && !croppedImageData)}
                   >
-                    Download as SVG
+                    {t('downloadSvg')}
                   </Button>
                   <Button
                     onClick={downloadFile}
                     disabled={cropToContent && isInCropMode && !croppedImageData}
                   >
-                    Download as PNG
+                    {t('downloadPng')}
                   </Button>
                 </Stack>
               </Stack>
@@ -725,7 +747,7 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
           </Stack>
 
           {exportError && (
-            <Alert severity="error">Could not export image</Alert>
+            <Alert severity="error">{t('error')}</Alert>
           )}
         </Stack>
       </DialogContent>

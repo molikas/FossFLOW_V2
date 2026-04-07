@@ -71,8 +71,8 @@ export const useInitialDataManager = () => {
         const validationResult = modelSchema.safeParse(initialData);
 
         if (!validationResult.success) {
-          console.error('[useInitialDataManager] Model validation failed:', validationResult.error.errors);
-          console.error('[useInitialDataManager] Validation error detail:', JSON.stringify(validationResult.error.errors, null, 2));
+          console.error('[useInitialDataManager] Model validation failed:', validationResult.error.issues);
+          console.error('[useInitialDataManager] Validation error detail:', JSON.stringify(validationResult.error.issues, null, 2));
           setIsReady(false);
           return;
         }

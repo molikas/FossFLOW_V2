@@ -7,6 +7,7 @@ import { useModelStore } from 'src/stores/modelStore';
 import { Section } from '../../components/Section';
 import { LabelColorPicker } from '../../components/LabelColorPicker';
 import { QuickIconSelector } from '../QuickIconSelector';
+import { useTranslation } from 'src/stores/localeStore';
 
 interface Props {
   node: ViewItem;
@@ -21,6 +22,7 @@ export const NodeStyleTab = ({
   onModelItemUpdated,
   onViewItemUpdated
 }: Props) => {
+  const { t } = useTranslation('nodeStyleTab');
   const modelItem = useModelItem(node.id);
   const modelActions = useModelStore((state) => state.actions);
   const icons = useModelStore((state) => state.icons);
@@ -58,7 +60,7 @@ export const NodeStyleTab = ({
   return (
     <Stack>
       {/* Icon */}
-      <Section title="Icon">
+      <Section title={t('icon')}>
         <Stack direction="row" spacing={1.5} alignItems="center">
           <Box
             component="img"
@@ -72,7 +74,7 @@ export const NodeStyleTab = ({
             onClick={() => setIconPickerOpen((v) => !v)}
             sx={{ fontSize: 11 }}
           >
-            {iconPickerOpen ? 'Close' : 'Change…'}
+            {iconPickerOpen ? t('close') : t('change')}
           </Button>
         </Stack>
         <Collapse in={iconPickerOpen} unmountOnExit>
@@ -90,7 +92,7 @@ export const NodeStyleTab = ({
       </Section>
 
       {/* Icon size */}
-      <Section title="Icon size">
+      <Section title={t('iconSize')}>
         <Slider
           marks
           step={0.1}
@@ -107,7 +109,7 @@ export const NodeStyleTab = ({
 
       {/* Font size */}
       {modelItem.name && (
-        <Section title="Label font size">
+        <Section title={t('labelFontSize')}>
           <Slider
             marks
             step={2}
@@ -121,7 +123,7 @@ export const NodeStyleTab = ({
 
       {/* Label colour */}
       {modelItem.name && (
-        <Section title="Label color">
+        <Section title={t('labelColor')}>
           <LabelColorPicker
             value={node.labelColor}
             onChange={(color) => onViewItemUpdated({ labelColor: color })}
@@ -131,7 +133,7 @@ export const NodeStyleTab = ({
 
       {/* Label height */}
       {modelItem.name && (
-        <Section title="Label height">
+        <Section title={t('labelHeight')}>
           <Slider
             marks
             step={20}

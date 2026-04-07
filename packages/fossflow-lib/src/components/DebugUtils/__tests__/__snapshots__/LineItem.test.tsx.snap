@@ -9,7 +9,7 @@ exports[`LineItem matches snapshot 1`] = `
       class="MuiBox-root css-v7v99c"
     >
       <p
-        class="MuiTypography-root MuiTypography-body1 css-usvsv9-MuiTypography-root"
+        class="MuiTypography-root MuiTypography-body1 css-enfwa5-MuiTypography-root"
       >
         Snapshot Title
       </p>
@@ -21,7 +21,7 @@ exports[`LineItem matches snapshot 1`] = `
         class="MuiBox-root css-15potm4"
       >
         <p
-          class="MuiTypography-root MuiTypography-body2 css-qg16d9-MuiTypography-root"
+          class="MuiTypography-root MuiTypography-body2 css-17arlrx-MuiTypography-root"
         >
           Snapshot Value
         </p>

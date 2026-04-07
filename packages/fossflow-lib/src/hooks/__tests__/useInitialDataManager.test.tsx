@@ -366,7 +366,7 @@ describe('useInitialDataManager - Orphaned Connector Handling', () => {
     mockModelSchema.safeParse.mockReturnValueOnce({
       success: false,
       error: {
-        errors: [{ message: 'Validation failed' }]
+        issues: [{ message: 'Validation failed' }]
       }
     });
 

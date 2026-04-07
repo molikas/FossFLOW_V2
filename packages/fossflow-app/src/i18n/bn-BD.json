@@ -6,13 +6,33 @@
         "importFile": "ফাইল আমদানি করুন",
         "exportFile": "ফাইল রপ্তানি করুন",
         "quickSaveSession": "দ্রুত সংরক্ষণ (সেশন)",
-        "serverStorage": "সার্ভার স্টোরেজ"
+        "serverStorage": "সার্ভার স্টোরেজ",
+        "save": "Save",
+        "load": "Load",
+        "diagrams": "Diagrams",
+        "share": "Share"
     },
     "status": {
         "current": "বর্তমান",
         "untitled": "শিরোনামহীন ডায়াগ্রাম",
         "modified": "পরিবর্তিত",
-        "sessionStorageNote": "শুধুমাত্র সেশন স্টোরেজ - স্থায়ীভাবে সংরক্ষণ করতে রপ্তানি করুন"
+        "sessionStorageNote": "শুধুমাত্র সেশন স্টোরেজ - স্থায়ীভাবে সংরক্ষণ করতে রপ্তানি করুন",
+        "unsaved": "Unsaved",
+        "savedAt": "Saved at {{time}}",
+        "savedYesterdayAt": "Saved yesterday at {{time}}",
+        "savedOnDate": "Saved {{month}} {{day}} at {{time}}",
+        "savedOnDateYear": "Saved {{month}} {{day}}, {{year}} at {{time}}"
+    },
+    "toolbar": {
+        "previewSaveFirst": "Save first to preview",
+        "saveAndPreview": "Save & Preview",
+        "preview": "Preview"
+    },
+    "share": {
+        "title": "Share Diagram",
+        "hint": "Anyone with this link can view the diagram in read-only mode.",
+        "copy": "Copy",
+        "copied": "✓ Copied!"
     },
     "dialog": {
         "save": {
@@ -23,6 +43,13 @@
             "placeholder": "ডায়াগ্রামের নাম লিখুন",
             "btnSave": "সংরক্ষণ করুন",
             "btnCancel": "বাতিল করুন"
+        },
+        "saveAs": {
+            "title": "Save Diagram",
+            "subtitle": "Choose a name to save this diagram.",
+            "fileNamePlaceholder": "File name",
+            "btnSave": "Save",
+            "btnCancel": "Cancel"
         },
         "load": {
             "title": "ডায়াগ্রাম লোড করুন (শুধুমাত্র বর্তমান সেশন)",
@@ -45,6 +72,22 @@
         "readOnly": {
             "mode": "শুধুমাত্র দেখার মোড",
             "failed": "ডায়াগ্রাম লোড করতে ব্যর্থ"
+        },
+        "diagramManager": {
+            "title": "Open Diagram",
+            "serverStorage": "🌐 Server Storage",
+            "localStorageBadge": "💾 Local Storage",
+            "lastModified": "Last modified",
+            "loading": "Loading diagrams...",
+            "noSaved": "No saved diagrams",
+            "noSavedHint": "Save your current diagram to get started",
+            "btnOpen": "Open",
+            "btnDelete": "Delete",
+            "copyShareLink": "Copy share link",
+            "deleteConfirm": "Delete \"{{name}}\"? This cannot be undone.",
+            "failedLoad": "Failed to load diagrams",
+            "failedLoadDiagram": "Failed to load diagram",
+            "failedDelete": "Failed to delete diagram"
         }
     },
     "alert": {

@@ -216,6 +216,134 @@ const locale: LocaleProps = {
     addPage: "Add page",
     deletePage: "Delete page",
     renameDiagram: "Rename diagram"
+  },
+  nodePanel: {
+    details: "विवरण",
+    style: "शैली",
+    notes: "नोट्स",
+    notesModified: "नोट्स ●",
+    close: "बंद करें",
+    openLink: "लिंक खोलें",
+    caption: "कैप्शन",
+    noCaption: "कोई कैप्शन नहीं।"
+  },
+  nodeInfoTab: {
+    name: "नाम",
+    namePlaceholder: "नोड का नाम…",
+    removeLink: "लिंक हटाएं",
+    addLink: "नाम में लिंक जोड़ें",
+    linkPlaceholder: "https://…",
+    caption: "कैप्शन",
+    captionHint: "कैनवास पर नोड के नाम के नीचे दिखाया गया",
+    openLink: "लिंक खोलें"
+  },
+  nodeStyleTab: {
+    icon: "आइकन",
+    close: "बंद करें",
+    change: "बदलें…",
+    iconSize: "आइकन का आकार",
+    labelFontSize: "लेबल फ़ॉन्ट आकार",
+    labelColor: "लेबल का रंग",
+    labelHeight: "लेबल की ऊँचाई"
+  },
+  connectorControls: {
+    close: "बंद करें",
+    labels: "लेबल"
+  },
+  textBoxControls: {
+    close: "बंद करें",
+    text: "पाठ",
+    textSize: "पाठ का आकार",
+    textColor: "पाठ का रंग",
+    alignment: "संरेखण"
+  },
+  rectangleControls: {
+    close: "बंद करें",
+    color: "रंग",
+    useCustomColor: "कस्टम रंग उपयोग करें"
+  },
+  labelColorPicker: {
+    customColor: "कस्टम रंग"
+  },
+  deleteButton: {
+    delete: "हटाएं"
+  },
+  nodeActionBar: {
+    style: "शैली",
+    editName: "नाम संपादित करें",
+    editLink: "लिंक संपादित करें",
+    addLink: "लिंक जोड़ें",
+    editNotes: "नोट्स संपादित करें",
+    addNotes: "नोट्स जोड़ें",
+    delete: "हटाएं"
+  },
+  quickAddNodePopover: {
+    add: "जोड़ें",
+    group: "समूह"
+  },
+  zoomControls: {
+    zoomOut: "ज़ूम आउट",
+    zoomIn: "ज़ूम इन",
+    fitToScreen: "स्क्रीन में फ़िट करें",
+    help: "सहायता (F1)"
+  },
+  labelSettings: {
+    description: "लेबल प्रदर्शन सेटिंग कॉन्फ़िगर करें",
+    expandButtonPadding: "विस्तार बटन पैडिंग",
+    expandButtonPaddingDesc: "विस्तार बटन दृश्यमान होने पर नीचे की पैडिंग (टेक्स्ट ओवरलैप रोकता है)"
+  },
+  iconSelectionControls: {
+    close: "बंद करें",
+    importIcons: "आइकन आयात करें",
+    isometricLabel: "आइसोमेट्रिक के रूप में मानें (3D दृश्य)",
+    isometricHint: "फ्लैट आइकन के लिए अनचेक करें (लोगो, UI तत्व)",
+    dragHint: "आप नीचे दिए किसी भी आइटम को कैनवास पर खींच और छोड़ सकते हैं।"
+  },
+  searchbox: {
+    placeholder: "आइकन खोजें"
+  },
+  exportImageDialog: {
+    title: "छवि के रूप में निर्यात करें",
+    compatibilityTitle: "ब्राउज़र संगतता सूचना",
+    compatibilityMessage: "सर्वोत्तम परिणामों के लिए कृपया Chrome या Edge उपयोग करें। Firefox में वर्तमान में निर्यात सुविधा के साथ संगतता समस्याएं हैं।",
+    cropInstruction: "निर्यात करने के लिए क्षेत्र चुनने हेतु क्लिक करें और खींचें",
+    options: "विकल्प",
+    showGrid: "ग्रिड दिखाएं",
+    expandDescriptions: "विवरण विस्तृत करें",
+    cropToContent: "सामग्री पर क्रॉप करें",
+    backgroundColor: "पृष्ठभूमि रंग",
+    transparentBackground: "पारदर्शी पृष्ठभूमि",
+    exportQuality: "निर्यात गुणवत्ता (DPI)",
+    custom: "कस्टम",
+    recrop: "फिर से क्रॉप करें",
+    cropApplied: "क्रॉप सफलतापूर्वक लागू किया गया",
+    applyCrop: "क्रॉप लागू करें",
+    clearSelection: "चयन साफ़ करें",
+    cropHint: "क्रॉप करने के लिए क्षेत्र चुनें, या पूरी छवि उपयोग करने के लिए \"सामग्री पर क्रॉप करें\" अनचेक करें",
+    cancel: "रद्द करें",
+    downloadSvg: "SVG के रूप में डाउनलोड करें",
+    downloadPng: "PNG के रूप में डाउनलोड करें",
+    error: "छवि निर्यात नहीं हो सकी"
+  },
+  toolMenu: {
+    undo: "Undo",
+    redo: "Redo",
+    select: "Select",
+    lassoSelect: "Lasso select",
+    freehandLasso: "Freehand lasso",
+    pan: "Pan",
+    addItem: "Add item",
+    rectangle: "Rectangle",
+    connector: "Connector",
+    text: "Text"
+  },
+  quickIconSelector: {
+    searchPlaceholder: "Search icons (press Enter to select)",
+    recentlyUsed: "RECENTLY USED",
+    searchResults: "SEARCH RESULTS ({count} icons)",
+    noIconsFound: "No icons found matching \"{term}\"",
+    helpSearch: "Use arrow keys to navigate • Enter to select • Double-click to select and close",
+    helpBrowse: "Type to search • Click category to expand • Double-click to select and close"
   }
 };
 

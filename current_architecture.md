@@ -1,6 +1,6 @@
 # FossFLOW Community Edition — Architecture Reference
 
-**Last updated:** 2026-03-31 (rev 5)
+**Last updated:** 2026-04-06 (rev 6)
 **Codebase root:** `packages/fossflow-lib/src` (library) · `packages/fossflow-app/src` (application shell)
 **Purpose:** Living architecture reference — feature inventory, store/reducer/mode architecture, test audit, gap analysis, lessons learned, and key APIs. Update this document whenever significant architectural changes are made.
 
@@ -20,6 +20,7 @@
    - [2h. Component Tree](#2h-component-tree)
    - [2i. Event Propagation Architecture](#2i-event-propagation-architecture)
    - [2j. Configuration Layer](#2j-configuration-layer)
+   - [2k. Internationalisation (i18n) Layer](#2k-internationalisation-i18n-layer)
 3. [Test Audit](#3-test-audit)
 4. [Gap Analysis](#4-gap-analysis)
 5. [Lessons Learned](#5-lessons-learned)
@@ -619,6 +620,49 @@ For pastes with ≥ 500 connectors, `useCopyPaste` passes an `onPathProgress(don
 
 ---
 
+### 2k. Internationalisation (i18n) Layer
+
+**Two separate i18n systems** — one per package — connected via the `locale` prop on `<Isoflow>`.
+
+#### fossflow-app (react-i18next)
+
+| Item | Detail |
+|---|---|
+| Library | `react-i18next` v17 + `i18next-http-backend` |
+| Namespace | `app` |
+| JSON files | `packages/fossflow-app/src/i18n/*.json` (11 languages) — copied to `build/i18n/app/` at build time by rsbuild |
+| Config | `packages/fossflow-app/src/i18n.ts` — `load: 'currentOnly'` prevents short-code 404; `fallbackLng: 'en-US'` |
+| Usage | `const { t, i18n } = useTranslation('app')` in `App.tsx` and `DiagramManager.tsx` |
+| Language switch | `ChangeLanguage/index.tsx` calls `i18n.changeLanguage(lang)` and writes to `localStorage('i18nextLng')`. Displays the active language's full label from `supportedLanguages`. |
+
+**App namespace key groups:**
+- `nav.*` — toolbar button labels (Save, Diagrams, Share, Load…)
+- `status.*` — save-status timestamps (savedAt, savedYesterdayAt, savedOnDate, savedOnDateYear, unsaved)
+- `toolbar.*` — Preview tooltip variants
+- `share.*` — Share popover (title, hint, copy, copied)
+- `dialog.save.*` / `dialog.saveAs.*` / `dialog.load.*` / `dialog.export.*` / `dialog.readOnly.*` / `dialog.diagramManager.*`
+- `alert.*` — confirm/error strings
+
+#### fossflow-lib (localeStore)
+
+| Item | Detail |
+|---|---|
+| Store | `packages/fossflow-lib/src/stores/localeStore.tsx` — Zustand with React context |
+| Type | `LocaleProps` in `packages/fossflow-lib/src/types/isoflowProps.ts` |
+| TS locale files | `packages/fossflow-lib/src/i18n/*.ts` (13 languages: en-US + 12 others) |
+| Exported | `allLocales` from `packages/fossflow-lib/src/i18n/index.ts` |
+| Usage | `const { t } = useTranslation('namespaceName')` in any lib component |
+| Prop | `<Isoflow locale={currentLocale}>` — App.tsx derives `currentLocale` from `allLocales[i18n.language]` with `en-US` fallback |
+
+**Lib namespaces** (all defined in `LocaleProps`, all 13 locale files must contain each):
+`common`, `mainMenu`, `helpDialog`, `connectorHintTooltip`, `lassoHintTooltip`, `importHintTooltip`, `connectorRerouteTooltip`, `connectorEmptySpaceTooltip`, `settings`, `lazyLoadingWelcome`, `viewTabs`, `nodePanel`, `nodeInfoTab`, `nodeStyleTab`, `connectorControls`, `textBoxControls`, `rectangleControls`, `labelColorPicker`, `deleteButton`, `nodeActionBar`, `quickAddNodePopover`, `zoomControls`, `labelSettings`, `iconSelectionControls`, `searchbox`, `exportImageDialog`, `toolMenu`, `quickIconSelector`
+
+**Interpolation note:** The lib's `t()` returns a plain string with no parameter support. For strings needing runtime values (e.g. `searchResults: "SEARCH RESULTS ({count} icons)"`), callers use `.replace('{count}', value)` manually.
+
+**Locale completeness enforcement:** `__perf_refactor_regression__/i18n.localeCompleteness.test.ts` — reads all 13 locale files and asserts each contains every top-level namespace from `en-US.ts`.
+
+---
+
 ## 3. Test Audit
 
 ### Summary Table
@@ -730,6 +774,17 @@ For pastes with ≥ 500 connectors, `useCopyPaste` passes an `onPathProgress(don
 | `__perf_refactor_regression__/useScene.referenceStability.test.tsx` | updated | tests updated | VALID — `hitConnectors` (not `connectors`) updates on sceneStore change |
 
 **Total test count as of 2026-03-31:** 683 tests across 68 suites, all passing. Global statement coverage ~32%.
+
+**New suites — round 8 (2026-04-06, full i18n + export image fix):**
+
+| Suite | Tests | Status | What it covers |
+|---|---|---|---|
+| `__perf_refactor_regression__/exportImageDialog.initialLoad.test.ts` | 8 | new | Pins the ready-signal mechanism: `isoflowLoadedRef` guard, `isoflowReadySignal` state, `onModelUpdated` wiring, `exportImageRef` stable-ref pattern, unconditional Isoflow mount |
+| `__perf_refactor_regression__/i18n.localeCompleteness.test.ts` | 1 + N | new | Iterates all 13 locale TS files; asserts every top-level namespace in `en-US.ts` is present in each file. Catches missing sections (e.g. `toolMenu`, `quickIconSelector`) at CI time |
+| `__perf_refactor_regression__/toolMenu.i18n.test.ts` | 11 | new | No hardcoded English tool-name strings; all 10 tools (`select`, `lassoSelect`, `freehandLasso`, `pan`, `addItem`, `rectangle`, `connector`, `text`, `undo`, `redo`) use `t()` from `toolMenu` namespace |
+| `__perf_refactor_regression__/quickIconSelector.i18n.test.ts` | 12 | new | All 6 hardcoded strings replaced; `.replace()` interpolation used for `{count}` and `{term}` since lib `t()` has no object interpolation |
+
+**Total test count as of 2026-04-06:** 729 tests across 72 suites, all passing.
 
 **Full regression suite documentation:** See `regression_tests.md` at repo root — suites listed with production targets, test counts, classifications, coverage notes, and known gaps.
 
@@ -1198,6 +1253,22 @@ Source: The `useStore(store, selector, equalityFn)` call in all three stores.
 **Fix applied:** Replaced `useStore` from `zustand` with `useStoreWithEqualityFn` from `zustand/traditional` in `uiStateStore.tsx`, `modelStore.tsx`, and `sceneStore.tsx`. Identical behavior, no deprecation warning.
 
 **Regression test:** `stores/__tests__/zustand.deprecation.test.ts` — spies on `console.warn` for all three stores and asserts no `[DEPRECATED]` message fires; also reads source files to confirm `useStoreWithEqualityFn` import is present.
+
+---
+
+### 7g. ExportImageDialog Blank Preview on First Open ✅ FIXED (2026-04-06)
+
+**Symptom:** On first open, the export preview shows only the background colour — no diagram nodes or connectors. Toggling "Show Grid" or "Expand Descriptions" triggers a re-export that works correctly.
+
+**Root cause:** `exportImage()` was called after a fixed 100 ms `setTimeout` + double `requestAnimationFrame` on mount. This timing was insufficient — Isoflow's React tree had not yet populated its model store, so `html2canvas` captured an empty canvas (just the blue background).
+
+**Fix applied:**
+1. The hidden Isoflow receives `onModelUpdated={handleHiddenIsoflowReady}` — a callback that fires exactly once (guarded by `isoflowLoadedRef`) when Isoflow's model store is first populated. This guarantees at least one full render cycle has completed.
+2. A dedicated `isoflowReadySignal` state drives a separate initial-load effect that fires a single `requestAnimationFrame` then calls `exportImage()`.
+3. The options-change effect (`showGrid`, `backgroundColor`, etc.) is guarded by `isoflowLoadedRef.current` so it cannot fire before the initial load.
+4. Both effects call `exportImage` via `exportImageRef` (a stable ref kept current via a sync effect) to avoid re-firing when `exportImage` itself changes due to option updates.
+
+**Regression test:** `__perf_refactor_regression__/exportImageDialog.initialLoad.test.ts` — 8 structural assertions.
 
 ---
 

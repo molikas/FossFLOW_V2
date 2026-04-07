@@ -6,13 +6,33 @@
         "importFile": "Importuj Plik",
         "exportFile": "Eksportuj Plik",
         "quickSaveSession": "Szybki zapis (Sesji)",
-        "serverStorage": "Dysk aplikacji"
+        "serverStorage": "Dysk aplikacji",
+        "save": "Zapisz",
+        "load": "Wczytaj",
+        "diagrams": "Diagramy",
+        "share": "Udostępnij"
     },
     "status": {
         "current": "Obecny",
         "untitled": "Diagram bez tytułu",
         "modified": "Zmodyfikowany",
-        "sessionStorageNote": "Tylko pamięć sesji – eksportuj, aby zapisać na stałe"
+        "sessionStorageNote": "Tylko pamięć sesji – eksportuj, aby zapisać na stałe",
+        "unsaved": "Niezapisane",
+        "savedAt": "Zapisano o {{time}}",
+        "savedYesterdayAt": "Zapisano wczoraj o {{time}}",
+        "savedOnDate": "Zapisano {{day}} {{month}} o {{time}}",
+        "savedOnDateYear": "Zapisano {{day}} {{month}} {{year}} o {{time}}"
+    },
+    "toolbar": {
+        "previewSaveFirst": "Najpierw zapisz, aby podejrzeć",
+        "saveAndPreview": "Zapisz i podejrzyj",
+        "preview": "Podgląd"
+    },
+    "share": {
+        "title": "Udostępnij diagram",
+        "hint": "Każda osoba posiadająca ten link może wyświetlić diagram w trybie tylko do odczytu.",
+        "copy": "Kopiuj",
+        "copied": "✓ Skopiowano!"
     },
     "dialog": {
         "save": {
@@ -21,6 +41,13 @@
             "warningMessage": "To zapisanie jest tymczasowe i zostanie utracone po zamknięciu przeglądarki.",
             "warningExport": "Użyj opcji <strong>Eksportuj plik</strong>, aby trwale zapisać swoją pracę..",
             "placeholder": "Wprowadź nazwę diagramu",
+            "btnSave": "Zapisz",
+            "btnCancel": "Anuluj"
+        },
+        "saveAs": {
+            "title": "Zapisz diagram",
+            "subtitle": "Wybierz nazwę, aby zapisać ten diagram.",
+            "fileNamePlaceholder": "Nazwa pliku",
             "btnSave": "Zapisz",
             "btnCancel": "Anuluj"
         },
@@ -45,6 +72,22 @@
         "readOnly": {
             "mode": "Tryb tylko do odczytu",
             "failed": "Nie udało się załadować diagramu"
+        },
+        "diagramManager": {
+            "title": "Otwórz diagram",
+            "serverStorage": "🌐 Pamięć serwera",
+            "localStorageBadge": "💾 Pamięć lokalna",
+            "lastModified": "Ostatnio zmodyfikowano",
+            "loading": "Ładowanie diagramów...",
+            "noSaved": "Brak zapisanych diagramów",
+            "noSavedHint": "Zapisz bieżący diagram, aby rozpocząć",
+            "btnOpen": "Otwórz",
+            "btnDelete": "Usuń",
+            "copyShareLink": "Kopiuj link udostępniania",
+            "deleteConfirm": "Usunąć \"{{name}}\"? Tej czynności nie można cofnąć.",
+            "failedLoad": "Nie udało się załadować diagramów",
+            "failedLoadDiagram": "Nie udało się załadować diagramu",
+            "failedDelete": "Nie udało się usunąć diagramu"
         }
     },
     "alert": {

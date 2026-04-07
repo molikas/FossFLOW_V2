@@ -12,7 +12,7 @@ exports[`DebugUtils matches snapshot 1`] = `
         class="MuiBox-root css-v7v99c"
       >
         <p
-          class="MuiTypography-root MuiTypography-body1 css-usvsv9-MuiTypography-root"
+          class="MuiTypography-root MuiTypography-body1 css-enfwa5-MuiTypography-root"
         >
           Mouse
         </p>
@@ -24,7 +24,7 @@ exports[`DebugUtils matches snapshot 1`] = `
           class="MuiBox-root css-15potm4"
         >
           <p
-            class="MuiTypography-root MuiTypography-body2 css-qg16d9-MuiTypography-root"
+            class="MuiTypography-root MuiTypography-body2 css-17arlrx-MuiTypography-root"
           >
             0, 0
           </p>
@@ -38,7 +38,7 @@ exports[`DebugUtils matches snapshot 1`] = `
         class="MuiBox-root css-v7v99c"
       >
         <p
-          class="MuiTypography-root MuiTypography-body1 css-usvsv9-MuiTypography-root"
+          class="MuiTypography-root MuiTypography-body1 css-enfwa5-MuiTypography-root"
         >
           Mouse down
         </p>
@@ -50,7 +50,7 @@ exports[`DebugUtils matches snapshot 1`] = `
           class="MuiBox-root css-15potm4"
         >
           <p
-            class="MuiTypography-root MuiTypography-body2 css-qg16d9-MuiTypography-root"
+            class="MuiTypography-root MuiTypography-body2 css-17arlrx-MuiTypography-root"
           >
             null
           </p>
@@ -64,7 +64,7 @@ exports[`DebugUtils matches snapshot 1`] = `
         class="MuiBox-root css-v7v99c"
       >
         <p
-          class="MuiTypography-root MuiTypography-body1 css-usvsv9-MuiTypography-root"
+          class="MuiTypography-root MuiTypography-body1 css-enfwa5-MuiTypography-root"
         >
           Mouse delta
         </p>
@@ -76,7 +76,7 @@ exports[`DebugUtils matches snapshot 1`] = `
           class="MuiBox-root css-15potm4"
         >
           <p
-            class="MuiTypography-root MuiTypography-body2 css-qg16d9-MuiTypography-root"
+            class="MuiTypography-root MuiTypography-body2 css-17arlrx-MuiTypography-root"
           >
             null
           </p>
@@ -90,7 +90,7 @@ exports[`DebugUtils matches snapshot 1`] = `
         class="MuiBox-root css-v7v99c"
       >
         <p
-          class="MuiTypography-root MuiTypography-body1 css-usvsv9-MuiTypography-root"
+          class="MuiTypography-root MuiTypography-body1 css-enfwa5-MuiTypography-root"
         >
           Scroll
         </p>
@@ -102,7 +102,7 @@ exports[`DebugUtils matches snapshot 1`] = `
           class="MuiBox-root css-15potm4"
         >
           <p
-            class="MuiTypography-root MuiTypography-body2 css-qg16d9-MuiTypography-root"
+            class="MuiTypography-root MuiTypography-body2 css-17arlrx-MuiTypography-root"
           >
             0, 0
           </p>
@@ -116,7 +116,7 @@ exports[`DebugUtils matches snapshot 1`] = `
         class="MuiBox-root css-v7v99c"
       >
         <p
-          class="MuiTypography-root MuiTypography-body1 css-usvsv9-MuiTypography-root"
+          class="MuiTypography-root MuiTypography-body1 css-enfwa5-MuiTypography-root"
         >
           Zoom
         </p>
@@ -128,7 +128,7 @@ exports[`DebugUtils matches snapshot 1`] = `
           class="MuiBox-root css-15potm4"
         >
           <p
-            class="MuiTypography-root MuiTypography-body2 css-qg16d9-MuiTypography-root"
+            class="MuiTypography-root MuiTypography-body2 css-17arlrx-MuiTypography-root"
           >
             0.9
           </p>
@@ -142,7 +142,7 @@ exports[`DebugUtils matches snapshot 1`] = `
         class="MuiBox-root css-v7v99c"
       >
         <p
-          class="MuiTypography-root MuiTypography-body1 css-usvsv9-MuiTypography-root"
+          class="MuiTypography-root MuiTypography-body1 css-enfwa5-MuiTypography-root"
         >
           Size
         </p>
@@ -154,7 +154,7 @@ exports[`DebugUtils matches snapshot 1`] = `
           class="MuiBox-root css-15potm4"
         >
           <p
-            class="MuiTypography-root MuiTypography-body2 css-qg16d9-MuiTypography-root"
+            class="MuiTypography-root MuiTypography-body2 css-17arlrx-MuiTypography-root"
           >
             0, 0
           </p>
@@ -168,7 +168,7 @@ exports[`DebugUtils matches snapshot 1`] = `
         class="MuiBox-root css-v7v99c"
       >
         <p
-          class="MuiTypography-root MuiTypography-body1 css-usvsv9-MuiTypography-root"
+          class="MuiTypography-root MuiTypography-body1 css-enfwa5-MuiTypography-root"
         >
           Scene info
         </p>
@@ -180,7 +180,7 @@ exports[`DebugUtils matches snapshot 1`] = `
           class="MuiBox-root css-15potm4"
         >
           <p
-            class="MuiTypography-root MuiTypography-body2 css-qg16d9-MuiTypography-root"
+            class="MuiTypography-root MuiTypography-body2 css-17arlrx-MuiTypography-root"
           >
             0 items in scene
           </p>
@@ -194,7 +194,7 @@ exports[`DebugUtils matches snapshot 1`] = `
         class="MuiBox-root css-v7v99c"
       >
         <p
-          class="MuiTypography-root MuiTypography-body1 css-usvsv9-MuiTypography-root"
+          class="MuiTypography-root MuiTypography-body1 css-enfwa5-MuiTypography-root"
         >
           Mode
         </p>
@@ -206,7 +206,7 @@ exports[`DebugUtils matches snapshot 1`] = `
           class="MuiBox-root css-15potm4"
         >
           <p
-            class="MuiTypography-root MuiTypography-body2 css-qg16d9-MuiTypography-root"
+            class="MuiTypography-root MuiTypography-body2 css-17arlrx-MuiTypography-root"
           >
             PAN
           </p>
@@ -220,7 +220,7 @@ exports[`DebugUtils matches snapshot 1`] = `
         class="MuiBox-root css-v7v99c"
       >
         <p
-          class="MuiTypography-root MuiTypography-body1 css-usvsv9-MuiTypography-root"
+          class="MuiTypography-root MuiTypography-body1 css-enfwa5-MuiTypography-root"
         >
           Mode data
         </p>
@@ -232,7 +232,7 @@ exports[`DebugUtils matches snapshot 1`] = `
           class="MuiBox-root css-15potm4"
         >
           <p
-            class="MuiTypography-root MuiTypography-body2 css-qg16d9-MuiTypography-root"
+            class="MuiTypography-root MuiTypography-body2 css-17arlrx-MuiTypography-root"
           >
             {
   "type": "PAN",
