@@ -11,6 +11,16 @@ describe('viewItemSchema', () => {
   it('labelColor is optional — omitting it still passes', () => {
     expect(viewItemSchema.safeParse({ id: 'item1', tile: { x: 0, y: 0 } }).success).toBe(true);
   });
+  it('accepts optional zIndex integer', () => {
+    expect(viewItemSchema.safeParse({ id: 'item1', tile: { x: 0, y: 0 }, zIndex: 3 }).success).toBe(true);
+  });
+  it('rejects zIndex if non-integer', () => {
+    const result = viewItemSchema.safeParse({ id: 'item1', tile: { x: 0, y: 0 }, zIndex: 1.5 });
+    expect(result.success).toBe(false);
+  });
+  it('accepts optional layerId', () => {
+    expect(viewItemSchema.safeParse({ id: 'item1', tile: { x: 0, y: 0 }, layerId: 'layer-abc' }).success).toBe(true);
+  });
   it('fails if required fields are missing', () => {
     const invalid = { tile: { x: 1, y: 2 } };
     const result = viewItemSchema.safeParse(invalid);
@@ -45,6 +55,33 @@ describe('viewSchema', () => {
         })
       ).toBe(true);
     }
+  });
+});
+
+describe('viewSchema layers field', () => {
+  it('accepts a view with layers array', () => {
+    const valid = {
+      id: 'view1',
+      name: 'View',
+      items: [],
+      layers: [{ id: 'l1', name: 'BG', visible: true, locked: false, order: 0 }]
+    };
+    expect(viewSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it('layers is optional — view without it still validates', () => {
+    const valid = { id: 'view1', name: 'View', items: [] };
+    expect(viewSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it('rejects invalid layer in layers array', () => {
+    const invalid = {
+      id: 'view1',
+      name: 'View',
+      items: [],
+      layers: [{ name: 'Missing id', visible: true, locked: false, order: 0 }]
+    };
+    expect(viewSchema.safeParse(invalid).success).toBe(false);
   });
 });
 

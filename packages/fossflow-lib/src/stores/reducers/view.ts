@@ -1,6 +1,6 @@
 import { produce } from 'immer';
-import { View } from 'src/types';
-import { getItemByIdOrThrow } from 'src/utils';
+import { View, Layer, ViewItem, Connector, Rectangle, TextBox } from 'src/types';
+import { getItemByIdOrThrow, generateId } from 'src/utils';
 import { VIEW_DEFAULTS, INITIAL_SCENE_STATE } from 'src/config';
 import type { ViewReducerContext, State, ViewReducerParams } from './types';
 import { syncConnector } from './connector';
@@ -65,6 +65,110 @@ export const updateView = (
   });
 
   return newState;
+};
+
+// ---------------------------------------------------------------------------
+// Layer reducers
+// ---------------------------------------------------------------------------
+
+export const createLayer = (
+  layer: Partial<Layer> & { name: string },
+  ctx: ViewReducerContext
+): State => {
+  return produce(ctx.state, (draft) => {
+    const view = getItemByIdOrThrow(draft.model.views, ctx.viewId);
+    if (!view.value.layers) view.value.layers = [];
+    const newOrder = view.value.layers.length;
+    view.value.layers.push({
+      id: generateId(),
+      visible: true,
+      locked: false,
+      order: newOrder,
+      ...layer
+    });
+  });
+};
+
+export const updateLayer = (
+  updates: Partial<Layer> & { id: string },
+  ctx: ViewReducerContext
+): State => {
+  return produce(ctx.state, (draft) => {
+    const view = getItemByIdOrThrow(draft.model.views, ctx.viewId);
+    if (!view.value.layers) return;
+    const idx = view.value.layers.findIndex((l) => l.id === updates.id);
+    if (idx === -1) return;
+    Object.assign(view.value.layers[idx], updates);
+  });
+};
+
+export const deleteLayer = (
+  layerId: string,
+  ctx: ViewReducerContext
+): State => {
+  return produce(ctx.state, (draft) => {
+    const view = getItemByIdOrThrow(draft.model.views, ctx.viewId);
+    if (!view.value.layers) return;
+
+    view.value.layers = view.value.layers.filter((l) => l.id !== layerId);
+
+    // Unassign layerId from all entities that referenced this layer
+    const unassign = (entity: ViewItem | Connector | Rectangle | TextBox) => {
+      if (entity.layerId === layerId) delete entity.layerId;
+    };
+    (view.value.items ?? []).forEach(unassign);
+    (view.value.connectors ?? []).forEach(unassign);
+    (view.value.rectangles ?? []).forEach(unassign);
+    (view.value.textBoxes ?? []).forEach(unassign);
+  });
+};
+
+export const reorderLayers = (
+  orderedIds: string[],
+  ctx: ViewReducerContext
+): State => {
+  return produce(ctx.state, (draft) => {
+    const view = getItemByIdOrThrow(draft.model.views, ctx.viewId);
+    if (!view.value.layers) return;
+    orderedIds.forEach((id, index) => {
+      const layer = view.value.layers!.find((l) => l.id === id);
+      if (layer) layer.order = index;
+    });
+    view.value.layers.sort((a, b) => a.order - b.order);
+  });
+};
+
+export const assignLayerToItems = (
+  { layerId, itemIds }: { layerId: string | undefined; itemIds: string[] },
+  ctx: ViewReducerContext
+): State => {
+  const idSet = new Set(itemIds);
+  return produce(ctx.state, (draft) => {
+    const view = getItemByIdOrThrow(draft.model.views, ctx.viewId);
+    const assign = (entity: ViewItem | Connector | Rectangle | TextBox) => {
+      if (!idSet.has(entity.id)) return;
+      if (layerId === undefined) {
+        delete entity.layerId;
+      } else {
+        entity.layerId = layerId;
+      }
+    };
+    (view.value.items ?? []).forEach(assign);
+    (view.value.connectors ?? []).forEach(assign);
+    (view.value.rectangles ?? []).forEach(assign);
+    (view.value.textBoxes ?? []).forEach(assign);
+  });
+};
+
+export const reorderViewItem = (
+  { id, zIndex }: { id: string; zIndex: number },
+  ctx: ViewReducerContext
+): State => {
+  return produce(ctx.state, (draft) => {
+    const view = getItemByIdOrThrow(draft.model.views, ctx.viewId);
+    const item = view.value.items.find((i) => i.id === id);
+    if (item) item.zIndex = zIndex;
+  });
 };
 
 export const createView = (
@@ -137,6 +241,24 @@ export const view = ({ action, payload, ctx }: ViewReducerParams) => {
     case 'DELETE_RECTANGLE':
       newState = rectangleReducers.deleteRectangle(payload, ctx);
       break;
+    case 'CREATE_LAYER':
+      newState = createLayer(payload, ctx);
+      break;
+    case 'UPDATE_LAYER':
+      newState = updateLayer(payload, ctx);
+      break;
+    case 'DELETE_LAYER':
+      newState = deleteLayer(payload, ctx);
+      break;
+    case 'REORDER_LAYERS':
+      newState = reorderLayers(payload, ctx);
+      break;
+    case 'ASSIGN_LAYER_TO_ITEMS':
+      newState = assignLayerToItems(payload, ctx);
+      break;
+    case 'REORDER_VIEWITEM':
+      newState = reorderViewItem(payload, ctx);
+      break;
     default:
       throw new Error('Invalid action.');
   }
@@ -146,7 +268,9 @@ export const view = ({ action, payload, ctx }: ViewReducerParams) => {
     'CREATE_VIEWITEM', 'UPDATE_VIEWITEM', 'DELETE_VIEWITEM',
     'CREATE_CONNECTOR', 'UPDATE_CONNECTOR', 'DELETE_CONNECTOR',
     'CREATE_TEXTBOX', 'UPDATE_TEXTBOX', 'DELETE_TEXTBOX',
-    'CREATE_RECTANGLE', 'UPDATE_RECTANGLE', 'DELETE_RECTANGLE'
+    'CREATE_RECTANGLE', 'UPDATE_RECTANGLE', 'DELETE_RECTANGLE',
+    'CREATE_LAYER', 'UPDATE_LAYER', 'DELETE_LAYER', 'REORDER_LAYERS',
+    'ASSIGN_LAYER_TO_ITEMS', 'REORDER_VIEWITEM'
   ]);
 
   if (TIMESTAMPED_ACTIONS.has(action)) {

@@ -3,6 +3,8 @@ import { useUiStateStore } from 'src/stores/uiStateStore';
 import { generateId, findNearestUnoccupiedTile } from 'src/utils';
 import { useScene } from 'src/hooks/useScene';
 import { useModelStore } from 'src/stores/modelStore';
+import { useLayerContext } from 'src/hooks/useLayerContext';
+import { useLayerActions } from 'src/hooks/useLayerActions';
 import { VIEW_ITEM_DEFAULTS } from 'src/config';
 import { ContextMenu } from './ContextMenu';
 
@@ -23,9 +25,35 @@ export const ContextMenuManager = ({ anchorEl }: Props) => {
     return state.actions;
   });
 
+  const { layers } = useLayerContext();
+  const { assignLayerToItems } = useLayerActions();
+
   const onClose = useCallback(() => {
     uiStateActions.setContextMenu(null);
   }, [uiStateActions]);
+
+  if (contextMenu?.type === 'ITEM' && contextMenu.item) {
+    const itemId = contextMenu.item.id;
+    const layerMenuItems = layers.length > 0
+      ? [
+          { label: 'Remove from layer', onClick: () => { assignLayerToItems(undefined, [{ type: 'ITEM' as const, id: itemId }]); onClose(); } },
+          ...[...layers]
+            .sort((a, b) => b.order - a.order)
+            .map((layer) => ({
+              label: `Move to "${layer.name}"`,
+              onClick: () => { assignLayerToItems(layer.id, [{ type: 'ITEM' as const, id: itemId }]); onClose(); }
+            }))
+        ]
+      : [{ label: 'No layers — add one via the Layers panel', onClick: onClose }];
+
+    return (
+      <ContextMenu
+        anchorEl={anchorEl}
+        onClose={onClose}
+        menuItems={layerMenuItems}
+      />
+    );
+  }
 
   return (
     <ContextMenu
@@ -39,8 +67,7 @@ export const ContextMenuManager = ({ anchorEl }: Props) => {
             if (model.icons.length > 0) {
               const modelItemId = generateId();
               const firstIcon = model.icons[0];
-              
-              // Find nearest unoccupied tile (should return the same tile since context menu is for empty tiles)
+
               const targetTile = findNearestUnoccupiedTile(contextMenu.tile, scene) || contextMenu.tile;
 
               scene.placeIcon({
@@ -77,8 +104,4 @@ export const ContextMenuManager = ({ anchorEl }: Props) => {
       ]}
     />
   );
-
-  // Remove ITEM context menu since layer ordering only works for rectangles
-  // and provides no value for regular diagram items
-
 };

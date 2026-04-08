@@ -71,6 +71,7 @@ function EditorPage() {
 
   const isoflowRef = useRef<IsoflowRef>(null);
   const shareButtonRef = useRef<HTMLButtonElement>(null);
+  const [menuPortalTarget, setMenuPortalTarget] = useState<HTMLElement | null>(null);
   const { storage, isServerStorage: isStorageServer, isInitialized: isStorageInitialized } = useStorage();
 
   const [diagrams, setDiagrams] = useState<SavedDiagram[]>([]);
@@ -825,6 +826,8 @@ function EditorPage() {
         }}
       >
         <Box className="toolbar-left" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
+          {/* Main menu button rendered here via portal from Isoflow */}
+          <Box ref={(el: HTMLDivElement | null) => { if (el && !menuPortalTarget) setMenuPortalTarget(el); }} sx={{ display: 'inline-flex', alignItems: 'center' }} />
           {!isReadonlyUrl && (
             <>
               <Button
@@ -964,6 +967,7 @@ function EditorPage() {
             editorMode={isReadonlyUrl ? 'EXPLORABLE_READONLY' : 'EDITABLE'}
             locale={currentLocale}
             iconPackManager={iconPackManagerProp}
+            menuPortalTarget={menuPortalTarget}
           />
         ) : (
           <div className="loading-screen">Loading icons…</div>

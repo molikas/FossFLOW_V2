@@ -16,5 +16,6 @@ export const textBoxSchema = z.object({
       z.literal(ProjectionOrientationEnum.X),
       z.literal(ProjectionOrientationEnum.Y)
     ])
-    .optional()
+    .optional(),
+  layerId: id.optional()
 });

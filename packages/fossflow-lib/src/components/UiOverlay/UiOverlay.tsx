@@ -1,10 +1,13 @@
-import React, { useCallback, useMemo, useRef } from 'react';
-import { Box, useTheme, Typography, Stack } from '@mui/material';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Box, useTheme, Typography, Stack, IconButton, Tooltip } from '@mui/material';
 import { shallow } from 'zustand/shallow';
-import { ChevronRight } from '@mui/icons-material';
+import { ChevronRight, LayersOutlined } from '@mui/icons-material';
 import { EditorModeEnum, DialogTypeEnum } from 'src/types';
 import { UiElement } from 'components/UiElement/UiElement';
 import { SceneLayer } from 'src/components/SceneLayer/SceneLayer';
+import { LayersPanel } from 'src/components/LayersPanel/LayersPanel';
+import { LayerContextProvider } from 'src/hooks/useLayerContext';
 import { DragAndDrop } from 'src/components/DragAndDrop/DragAndDrop';
 import { ItemControlsManager } from 'src/components/ItemControls/ItemControlsManager';
 import { ToolMenu } from 'src/components/ToolMenu/ToolMenu';
@@ -77,11 +80,16 @@ const PlaceIconLayer = () => {
   );
 };
 
-export const UiOverlay = () => {
+interface UiOverlayProps {
+  menuPortalTarget?: HTMLElement | null;
+}
+
+export const UiOverlay = ({ menuPortalTarget }: UiOverlayProps = {}) => {
   const theme = useTheme();
   const contextMenuAnchorRef = useRef<HTMLDivElement>(null);
   const toolMenuRef = useRef<HTMLDivElement>(null);
   const { appPadding } = theme.customVars;
+  const [layersPanelOpen, setLayersPanelOpen] = useState(false);
   const spacing = useCallback(
     (multiplier: number) => {
       return parseInt(theme.spacing(multiplier), 10);
@@ -189,7 +197,67 @@ export const UiOverlay = () => {
           </Box>
         )}
 
-        {availableTools.includes('MAIN_MENU') && (
+        {/* Layers panel toggle button + panel — EDITABLE only, positioned below MainMenu */}
+        {availableTools.includes('TOOL_MENU') && (
+          <>
+            <Box
+              onMouseDown={(e) => e.stopPropagation()}
+              sx={{ position: 'absolute' }}
+              style={{
+                top: appPadding.y + 44,
+                left: appPadding.x
+              }}
+            >
+              <Tooltip title="Layers" placement="right">
+                <IconButton
+                  size="small"
+                  onClick={() => setLayersPanelOpen((v) => !v)}
+                  sx={{
+                    bgcolor: layersPanelOpen ? 'primary.main' : 'background.paper',
+                    color: layersPanelOpen ? 'primary.contrastText' : 'text.primary',
+                    border: 1,
+                    borderColor: 'grey.300',
+                    borderRadius: 1.5,
+                    boxShadow: 1,
+                    '&:hover': {
+                      bgcolor: layersPanelOpen ? 'primary.dark' : 'grey.100'
+                    }
+                  }}
+                >
+                  <LayersOutlined fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Box>
+
+            {layersPanelOpen && (
+              <UiElement
+                sx={{
+                  position: 'absolute',
+                  width: 220,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  overflow: 'hidden',
+                  '@keyframes layersPanelIn': {
+                    from: { opacity: 0, transform: 'translateY(-8px)' },
+                    to:   { opacity: 1, transform: 'translateY(0)' }
+                  },
+                  animation: 'layersPanelIn 0.15s ease-out'
+                }}
+                style={{
+                  left: appPadding.x + 40,
+                  top: appPadding.y + 44,
+                  height: 240
+                }}
+              >
+                <LayerContextProvider>
+                  <LayersPanel />
+                </LayerContextProvider>
+              </UiElement>
+            )}
+          </>
+        )}
+
+        {availableTools.includes('MAIN_MENU') && !menuPortalTarget && (
           <Box
             sx={{
               position: 'absolute'
@@ -202,6 +270,9 @@ export const UiOverlay = () => {
             <MainMenu />
           </Box>
         )}
+        {availableTools.includes('MAIN_MENU') && menuPortalTarget &&
+          createPortal(<MainMenu />, menuPortalTarget)
+        }
 
         {availableTools.includes('VIEW_TITLE') && (
           <Box
@@ -306,17 +377,19 @@ export const UiOverlay = () => {
       {editorMode === EditorModeEnum.EDITABLE && <QuickAddNodePopover />}
 
       <SceneLayer>
-        {contextMenu && (
-          <Box
-            ref={contextMenuAnchorRef}
-            sx={{
-              position: 'absolute',
-              left: getTilePosition({ tile: contextMenu.tile }).x,
-              top: getTilePosition({ tile: contextMenu.tile }).y
-            }}
-          />
-        )}
-        <ContextMenuManager anchorEl={contextMenu && contextMenu.type === "EMPTY" ? contextMenuAnchorRef.current : null} />
+        {/* Always rendered so contextMenuAnchorRef.current is never null when contextMenu is set */}
+        <Box
+          ref={contextMenuAnchorRef}
+          sx={{
+            position: 'absolute',
+            left: contextMenu ? getTilePosition({ tile: contextMenu.tile }).x : 0,
+            top: contextMenu ? getTilePosition({ tile: contextMenu.tile }).y : 0,
+            width: 0,
+            height: 0,
+            pointerEvents: 'none'
+          }}
+        />
+        <ContextMenuManager anchorEl={contextMenu ? contextMenuAnchorRef.current : null} />
 
         {/* Floating action bar — edit mode only, hidden while dragging */}
         {editorMode === EditorModeEnum.EDITABLE &&

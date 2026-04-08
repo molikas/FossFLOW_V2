@@ -6,5 +6,6 @@ export const rectangleSchema = z.object({
   color: id.optional(),
   customColor: z.string().optional(), // For custom RGB colors
   from: coords,
-  to: coords
+  to: coords,
+  layerId: id.optional()
 });

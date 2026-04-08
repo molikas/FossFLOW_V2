@@ -1,4 +1,4 @@
-import { ModelStore, UiStateStore, Size } from 'src/types';
+import { ModelStore, UiStateStore, Size, ItemReference } from 'src/types';
 import { useScene } from 'src/hooks/useScene';
 
 export interface State {
@@ -8,6 +8,11 @@ export interface State {
   rendererRef: HTMLElement;
   rendererSize: Size;
   isRendererInteraction: boolean;
+  /**
+   * Returns true if the given item can be interacted with.
+   * Items on locked layers return false. Items with no layer always return true.
+   */
+  isItemInteractable: (ref: ItemReference) => boolean;
 }
 
 export type ModeActionsAction = (state: State) => void;

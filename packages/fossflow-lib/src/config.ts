@@ -32,7 +32,7 @@ export const DEFAULT_COLOR: Colors[0] = {
 export const DEFAULT_FONT_FAMILY = 'Roboto, Arial, sans-serif';
 
 export const VIEW_DEFAULTS: Required<
-  Omit<View, 'id' | 'description' | 'lastUpdated'>
+  Omit<View, 'id' | 'description' | 'lastUpdated' | 'layers'>
 > = {
   name: 'Untitled view',
   items: [],
@@ -41,13 +41,13 @@ export const VIEW_DEFAULTS: Required<
   textBoxes: []
 };
 
-export const VIEW_ITEM_DEFAULTS: Required<Omit<ViewItem, 'id' | 'tile'>> = {
+export const VIEW_ITEM_DEFAULTS: Required<Omit<ViewItem, 'id' | 'tile' | 'zIndex' | 'layerId'>> = {
   labelHeight: 80,
   labelFontSize: 14,
   labelColor: ''
 };
 
-export const CONNECTOR_DEFAULTS: Required<Omit<Connector, 'id' | 'color'>> = {
+export const CONNECTOR_DEFAULTS: Required<Omit<Connector, 'id' | 'color' | 'layerId'>> = {
   width: 10,
   description: '',
   startLabel: '',
@@ -67,7 +67,7 @@ export const CONNECTOR_DEFAULTS: Required<Omit<Connector, 'id' | 'color'>> = {
 // is the grid that encompasses the two nodes + the offset below.
 export const CONNECTOR_SEARCH_OFFSET = { x: 1, y: 1 };
 
-export const TEXTBOX_DEFAULTS: Required<Omit<TextBox, 'id' | 'tile'>> = {
+export const TEXTBOX_DEFAULTS: Required<Omit<TextBox, 'id' | 'tile' | 'layerId'>> = {
   orientation: 'X',
   fontSize: 0.6,
   content: 'Text',
@@ -81,7 +81,7 @@ export const TEXTBOX_PADDING = 0.2;
 export const TEXTBOX_FONT_WEIGHT = 'bold';
 
 export const RECTANGLE_DEFAULTS: Required<
-  Omit<Rectangle, 'id' | 'from' | 'to' | 'color'>
+  Omit<Rectangle, 'id' | 'from' | 'to' | 'color' | 'layerId'>
 > = {
   customColor: ''
 };

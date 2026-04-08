@@ -1,4 +1,4 @@
-import { Model, Scene } from 'src/types';
+import { Model, Scene, Layer } from 'src/types';
 import type * as viewReducers from './view';
 import type * as viewItemReducers from './viewItem';
 import type * as connectorReducers from './connector';
@@ -83,6 +83,30 @@ type ViewReducerAction =
   | {
       action: 'DELETE_RECTANGLE';
       payload: Parameters<typeof rectangleReducers.deleteRectangle>[0];
+    }
+  | {
+      action: 'CREATE_LAYER';
+      payload: Partial<Layer> & { name: string };
+    }
+  | {
+      action: 'UPDATE_LAYER';
+      payload: Partial<Layer> & { id: string };
+    }
+  | {
+      action: 'DELETE_LAYER';
+      payload: string;
+    }
+  | {
+      action: 'REORDER_LAYERS';
+      payload: string[];
+    }
+  | {
+      action: 'ASSIGN_LAYER_TO_ITEMS';
+      payload: { layerId: string | undefined; itemIds: string[] };
+    }
+  | {
+      action: 'REORDER_VIEWITEM';
+      payload: { id: string; zIndex: number };
     };
 
 export type ViewReducerParams = ViewReducerAction & { ctx: ViewReducerContext };

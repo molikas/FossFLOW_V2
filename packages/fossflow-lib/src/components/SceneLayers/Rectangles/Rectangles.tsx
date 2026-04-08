@@ -1,5 +1,6 @@
 import React, { memo, useMemo } from 'react';
 import { useScene } from 'src/hooks/useScene';
+import { useLayerContext } from 'src/hooks/useLayerContext';
 import { Rectangle } from './Rectangle';
 
 interface Props {
@@ -7,11 +8,18 @@ interface Props {
 }
 
 export const Rectangles = memo(({ rectangles }: Props) => {
-  const reversedRectangles = useMemo(() => [...rectangles].reverse(), [rectangles]);
+  const { visibleIds } = useLayerContext();
+
+  const visibleRectangles = useMemo(() => {
+    const filtered = rectangles.filter(
+      (r) => visibleIds.size === 0 || visibleIds.has(r.id)
+    );
+    return [...filtered].reverse();
+  }, [rectangles, visibleIds]);
 
   return (
     <>
-      {reversedRectangles.map((rectangle) => (
+      {visibleRectangles.map((rectangle) => (
         <Rectangle key={rectangle.id} {...rectangle} />
       ))}
     </>

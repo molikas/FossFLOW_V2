@@ -16,6 +16,7 @@ import { INITIAL_DATA, MAIN_MENU_OPTIONS } from 'src/config';
 import { savePersistedSettings } from 'src/config/persistedSettings';
 import { useInitialDataManager } from 'src/hooks/useInitialDataManager';
 import { ClipboardProvider } from 'src/clipboard/ClipboardContext';
+import { LayerContextProvider } from 'src/hooks/useLayerContext';
 import enUS from 'src/i18n/en-US';
 
 const App = forwardRef<IsoflowRef, IsoflowProps>(({
@@ -29,6 +30,7 @@ const App = forwardRef<IsoflowRef, IsoflowProps>(({
   renderer,
   locale = enUS,
   iconPackManager,
+  menuPortalTarget,
 }, ref) => {
   const uiStateActions = useUiStateStore((state) => {
     return state.actions;
@@ -150,8 +152,10 @@ const App = forwardRef<IsoflowRef, IsoflowProps>(({
           transform: 'translateZ(0)'
         }}
       >
-        <Renderer {...renderer} />
-        <UiOverlay />
+        <LayerContextProvider>
+          <Renderer {...renderer} />
+          <UiOverlay menuPortalTarget={menuPortalTarget} />
+        </LayerContextProvider>
       </Box>
     </>
   );

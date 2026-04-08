@@ -185,8 +185,17 @@ export const usePanHandlers = () => {
       }
 
       // Right-click without drag: deselect — close item controls and clear any lasso selection.
+      // Exception: if there is an item under the cursor, let the contextmenu event handle it
+      // (the item context menu will open) rather than deselecting.
       if (previousModeTypeRef.current !== null) {
         const uiState = uiStateApi.getState();
+        const tile = uiState.mouse.position.tile;
+        const itemUnderCursor = getItemAtTile({ tile, scene });
+        if (itemUnderCursor) {
+          // Don't deselect — contextmenu event will show the item context menu
+          previousModeTypeRef.current = null;
+          return true;
+        }
         // Close context menu if open
         if (uiState.contextMenu !== null) {
           uiState.actions.setContextMenu(null);

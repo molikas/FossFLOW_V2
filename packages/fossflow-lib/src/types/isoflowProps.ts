@@ -382,6 +382,8 @@ export interface IsoflowProps {
   renderer?: RendererProps;
   locale?: LocaleProps;
   iconPackManager?: IconPackManagerProps;
+  /** When set, the MainMenu button is rendered into this DOM element via a portal instead of floating on the canvas. */
+  menuPortalTarget?: HTMLElement | null;
 }
 
 export interface IsoflowRef {

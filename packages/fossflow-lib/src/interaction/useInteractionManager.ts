@@ -9,6 +9,7 @@ import { useScene } from 'src/hooks/useScene';
 import { useHistory } from 'src/hooks/useHistory';
 import { HOTKEY_PROFILES } from 'src/config/hotkeys';
 import { TEXTBOX_DEFAULTS } from 'src/config';
+import { useLayerContext } from 'src/hooks/useLayerContext';
 import { Cursor } from './modes/Cursor';
 import { DragItems } from './modes/DragItems';
 import { DrawRectangle } from './modes/Rectangle/DrawRectangle';
@@ -62,12 +63,13 @@ export const useInteractionManager = () => {
   const uiStateApi = useUiStateStoreApi();
   const modelStoreApi = useModelStoreApi();
   const scene = useScene();
+  const layerContext = useLayerContext();
   // Single ResizeObserver for rendererEl — result is stored in the Zustand store
   // so UiOverlay and useDiagramUtils can read it without creating their own observers.
   const { size: rendererSize } = useResizeObserver(rendererEl);
   const { undo, redo, canUndo, canRedo } = useHistory();
   const { handleCopy, handleCut, handlePaste } = useCopyPaste();
-  const { createTextBox, deleteSelectedItems, deleteViewItem, deleteConnector, deleteTextBox, deleteRectangle } = scene;
+  const { createTextBox, deleteSelectedItems, deleteViewItem, deleteConnector, deleteTextBox, deleteRectangle, updateViewItem } = scene;
   const { handleMouseDown: handlePanMouseDown, handleMouseMove: handlePanMouseMove, handleMouseUp: handlePanMouseUp } = usePanHandlers();
   const { scheduleUpdate, flushUpdate, cleanup } = useRAFThrottle();
 
@@ -290,6 +292,26 @@ export const useInteractionManager = () => {
         });
       }
 
+      // Z-order: Ctrl+] bring forward, Ctrl+[ send backward (Tier-1 layer feature)
+      if (isCtrlOrCmd && (e.key === ']' || e.key === '[')) {
+        const ctrl = uiState.itemControls;
+        if (ctrl?.type === 'ITEM') {
+          e.preventDefault();
+          const modelState = modelStoreApi.getState();
+          const currentView = uiState.view
+            ? modelState.views.find((v: { id: string }) => v.id === uiState.view)
+            : undefined;
+          const viewItem = currentView?.items?.find(
+            (i: { id: string }) => i.id === ctrl.id
+          );
+          if (viewItem) {
+            const currentZ = (viewItem as any).zIndex ?? 0;
+            const delta = e.key === ']' ? 1 : -1;
+            updateViewItem(ctrl.id, { zIndex: currentZ + delta });
+          }
+        }
+      }
+
       // Keyboard pan (arrow / wasd / ijkl) — consolidated here from usePanHandlers
       const panSettings = uiState.panSettings;
       const panSpeed = panSettings.keyboardPanSpeed;
@@ -330,7 +352,7 @@ export const useInteractionManager = () => {
     return () => {
       return window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [undo, redo, canUndo, canRedo, uiStateApi, createTextBox, deleteSelectedItems, deleteViewItem, deleteConnector, deleteTextBox, deleteRectangle, handleCopy, handleCut, handlePaste]);
+  }, [undo, redo, canUndo, canRedo, uiStateApi, modelStoreApi, createTextBox, deleteSelectedItems, deleteViewItem, deleteConnector, deleteTextBox, deleteRectangle, handleCopy, handleCut, handlePaste, updateViewItem]);
 
   const processMouseUpdate = useCallback(
     (nextMouse: Mouse, e: SlimMouseEvent) => {
@@ -346,13 +368,15 @@ export const useInteractionManager = () => {
 
       uiState.actions.setMouse(nextMouse);
 
+      const { lockedIds } = layerContext;
       const baseState: State = {
         model,
         scene,
         uiState,
         rendererRef: rendererRef.current,
         rendererSize,
-        isRendererInteraction: rendererRef.current === e.target
+        isRendererInteraction: rendererRef.current === e.target,
+        isItemInteractable: (ref) => !lockedIds.has(ref.id)
       };
 
       if (reducerTypeRef.current !== uiState.mode.type) {
@@ -372,7 +396,7 @@ export const useInteractionManager = () => {
       modeFunction(baseState);
       reducerTypeRef.current = uiState.mode.type;
     },
-    [uiStateApi, modelStoreApi, scene, rendererSize]
+    [uiStateApi, modelStoreApi, scene, rendererSize, layerContext]
   );
 
   const onMouseEvent = useCallback(
@@ -427,8 +451,16 @@ export const useInteractionManager = () => {
   const onContextMenu = useCallback(
     (e: SlimMouseEvent) => {
       e.preventDefault();
+      const uiState = uiStateApi.getState();
+      const tile = uiState.mouse.position.tile;
+      const item = getItemAtTile({ tile, scene });
+      if (item) {
+        uiState.actions.setContextMenu({ type: 'ITEM', item: { type: 'ITEM', id: item.id }, tile });
+      } else {
+        uiState.actions.setContextMenu({ type: 'EMPTY', tile });
+      }
     },
-    []
+    [uiStateApi, scene]
   );
 
   useEffect(() => {

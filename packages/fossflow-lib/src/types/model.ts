@@ -15,7 +15,9 @@ import {
   textBoxSchema,
   rectangleSchema,
   connectorStyleOptions,
-  connectorLineTypeOptions
+  connectorLineTypeOptions,
+  layerSchema,
+  layersSchema
 } from 'src/schemas';
 import { StoreApi } from 'zustand';
 
@@ -36,6 +38,8 @@ export type ConnectorLabel = z.infer<typeof connectorLabelSchema>;
 export type Connector = z.infer<typeof connectorSchema>;
 export type TextBox = z.infer<typeof textBoxSchema>;
 export type Rectangle = z.infer<typeof rectangleSchema>;
+export type Layer = z.infer<typeof layerSchema>;
+export type Layers = z.infer<typeof layersSchema>;
 
 export type ModelStore = Model & {
   actions: {
