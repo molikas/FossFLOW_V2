@@ -32,7 +32,7 @@ An "experimental" community fork of [FossFLOW](https://github.com/stan-smith/Fos
 ### Canvas and navigation
 
 - **Right-click to pan** — Right-click drag pans the canvas; release to resume the active tool.
-- **Default zoom 90%** — Opens with a little breathing room.
+- **Default zoom 85%** — Opens with a little breathing room.
 
 ### File management
 
@@ -112,40 +112,26 @@ Diagrams are saved to a `diagrams/` folder in the project directory.
 
 ## [Unreleased]
 
+### 2026-04-08
+
+#### Canvas
+
+- **Default zoom 85%** — reduced from 90% for slightly more breathing room on load.
+
+---
+
 ### 2026-04-07
 
 #### Architecture Refactoring
 
-Six-phase structural cleanup targeting maintainability, security, and DX — no feature changes, no library changes. All 392 tests pass; production source has zero TypeScript errors.
+Six-phase structural cleanup — no feature changes, no library changes. 392 tests pass; zero production TypeScript errors. Architecture health score: **4.9 → 7.4 / 10**.
 
-**Phase 1 — Security + observability**
-- `window.__fossflow__` store reference is now gated behind the `enableDebugTools` prop — no longer leaked in production builds.
-- Unroutable connectors are now visible: a dashed-red indicator renders on the canvas when `syncConnector` fails, and `console.warn` is emitted. Previously they were silent zero-size ghost connectors with no feedback path. `SceneConnector` type now carries `unroutable?: boolean`.
-
-**Phase 2 — Canonical settings types**
-- `types/settings.ts` is now the single source of truth for `HotkeyProfile`, `PanSettings`, `ZoomSettings`, `LabelSettings`. Config files re-export from there. `ConnectorInteractionMode` is now properly typed throughout (was `string` in `PersistedSettings`).
-
-**Phase 3 — Split `renderer.ts` (866 → ~210 lines)**
-- `utils/isoMath.ts` (~280 lines): all pure coordinate math — `screenToIso`, `getTilePosition`, `getBoundingBox`, `getConnectorPath`, `getTextBoxDimensions`, etc.
-- `utils/hitDetection.ts` (~77 lines): WeakMap spatial index + `getItemAtTile`.
-- `utils/renderer.ts` (~210 lines): screen-space helpers + barrel re-exports. Existing `import { X } from 'src/utils/renderer'` call sites unchanged.
-
-**Phase 4 — Split `useScene.ts` (697 → 13 lines)**
-- `hooks/useSceneData.ts`: pure read selectors — `currentView`, `items`, `colors`, `connectors`, `hitConnectors`, `rectangles`, `textBoxes`.
-- `hooks/useSceneActions.ts`: all write operations, `transaction()` machinery, `computePathsAsync`, `pasteItems`. `getState()` is transaction-aware — returns `pendingStateRef` inside a transaction, removing the need for the old `currentState?` parameter threading anti-pattern.
-- `hooks/useScene.ts`: 13-line combiner, unchanged external API.
-
-**Phase 5 — Clipboard context**
-- `clipboard/ClipboardContext.tsx`: `ClipboardProvider` + `useClipboard()` hook. Each mounted `<Isoflow>` instance gets its own clipboard — no cross-instance bleed, no test-order interference.
-- `useCopyPaste.ts` updated to use `useClipboard()` instead of the module-level singleton.
-- `Isoflow.tsx` wraps the app with `<ClipboardProvider>`.
-
-**Phase 6 — Settings persistence**
-- `config/persistedSettings.ts`: `loadPersistedSettings()` / `savePersistedSettings()` backed by `localStorage`. SSR-safe (errors silently swallowed).
-- `UiStateProvider` hydrates `hotkeyProfile`, `panSettings`, `zoomSettings`, `labelSettings`, `connectorInteractionMode`, and `expandLabels` from localStorage on mount.
-- User preferences now survive page reload without any manual save action.
-
-**Architecture health score: 4.9 → 7.4 / 10** (see `current_architecture.md` Section 10 for the full breakdown).
+- **Security:** `window.__fossflow__` gated behind `enableDebugTools` prop; unroutable connectors now show a dashed-red canvas indicator + `console.warn` instead of being silent ghost elements.
+- **Types:** `types/settings.ts` is the canonical home for all settings types; config files re-export from there.
+- **`renderer.ts` split** (866 → ~210 lines): `utils/isoMath.ts` (coordinate math), `utils/hitDetection.ts` (spatial index), `utils/renderer.ts` (screen-space helpers + barrel re-exports).
+- **`useScene.ts` split** (697 → 13 lines): `useSceneData.ts` (read selectors), `useSceneActions.ts` (write ops + transaction machinery), `useScene.ts` (combiner, external API unchanged).
+- **Clipboard context:** `ClipboardProvider` replaces the module-level singleton — each `<Isoflow>` instance gets its own clipboard with no cross-instance bleed.
+- **Settings persistence:** user preferences (`hotkeyProfile`, pan/zoom/label settings, connector mode) now survive page reload via `localStorage`.
 
 ---
 
@@ -352,7 +338,7 @@ Nine targeted optimizations, all measured with the in-app DiagnosticsOverlay:
 #### Features
 
 - **Right-click pan:** Single right-click deselects and dismisses item controls; right-click drag pans; releasing restores the previous tool. Gated by the existing `rightClickPan` setting.
-- **Default zoom 90%:** Canvas loads at 90% zoom for better initial framing.
+- **Default zoom 90%:** Canvas loads at 90% zoom for better initial framing. *(Later changed to 85% on 2026-04-08.)*
 
 #### Bug Fixes
 
