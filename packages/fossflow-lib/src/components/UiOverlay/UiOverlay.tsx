@@ -1,15 +1,12 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Box, useTheme, Typography, Stack, IconButton, Tooltip } from '@mui/material';
 import { shallow } from 'zustand/shallow';
-import { ChevronRight, LayersOutlined } from '@mui/icons-material';
+import { ChevronRight, ViewSidebarOutlined } from '@mui/icons-material';
 import { EditorModeEnum, DialogTypeEnum } from 'src/types';
 import { UiElement } from 'components/UiElement/UiElement';
 import { SceneLayer } from 'src/components/SceneLayer/SceneLayer';
-import { LayersPanel } from 'src/components/LayersPanel/LayersPanel';
-import { LayerContextProvider } from 'src/hooks/useLayerContext';
 import { DragAndDrop } from 'src/components/DragAndDrop/DragAndDrop';
-import { ItemControlsManager } from 'src/components/ItemControls/ItemControlsManager';
 import { ToolMenu } from 'src/components/ToolMenu/ToolMenu';
 import { useUiStateStore } from 'src/stores/uiStateStore';
 import { MainMenu } from 'src/components/MainMenu/MainMenu';
@@ -32,6 +29,7 @@ import { getTilePosition } from 'src/utils';
 import { ViewTabs } from 'src/components/ViewTabs/ViewTabs';
 import { QuickAddNodePopover } from 'src/components/QuickAddNodePopover/QuickAddNodePopover';
 import { NodeActionBar } from 'src/components/NodeActionBar/NodeActionBar';
+import { LassoLayerBar } from 'src/components/LassoLayerBar/LassoLayerBar';
 
 const ToolsEnum = {
   MAIN_MENU: 'MAIN_MENU',
@@ -81,15 +79,19 @@ const PlaceIconLayer = () => {
 };
 
 interface UiOverlayProps {
+  toolbarPortalTarget?: HTMLElement | null;
+  sidebarTogglePortalTarget?: HTMLElement | null;
+  languageSelector?: React.ReactNode;
+  /** @deprecated use toolbarPortalTarget */
   menuPortalTarget?: HTMLElement | null;
 }
 
-export const UiOverlay = ({ menuPortalTarget }: UiOverlayProps = {}) => {
+export const UiOverlay = ({ toolbarPortalTarget, sidebarTogglePortalTarget, languageSelector, menuPortalTarget }: UiOverlayProps = {}) => {
+  const portalTarget = toolbarPortalTarget ?? menuPortalTarget ?? null;
   const theme = useTheme();
   const contextMenuAnchorRef = useRef<HTMLDivElement>(null);
   const toolMenuRef = useRef<HTMLDivElement>(null);
   const { appPadding } = theme.customVars;
-  const [layersPanelOpen, setLayersPanelOpen] = useState(false);
   const spacing = useCallback(
     (multiplier: number) => {
       return parseInt(theme.spacing(multiplier), 10);
@@ -105,7 +107,9 @@ export const UiOverlay = ({ menuPortalTarget }: UiOverlayProps = {}) => {
     itemControls,
     editorMode,
     iconPackManager,
-    contextMenu
+    contextMenu,
+    leftSidebarOpen,
+    rightSidebarOpen
   } = useUiStateStore(
     (state) => ({
       uiStateActions: state.actions,
@@ -115,7 +119,9 @@ export const UiOverlay = ({ menuPortalTarget }: UiOverlayProps = {}) => {
       itemControls: state.itemControls,
       editorMode: state.editorMode,
       iconPackManager: state.iconPackManager,
-      contextMenu: state.contextMenu
+      contextMenu: state.contextMenu,
+      leftSidebarOpen: state.leftSidebarOpen,
+      rightSidebarOpen: state.rightSidebarOpen
     }),
     shallow
   );
@@ -140,31 +146,6 @@ export const UiOverlay = ({ menuPortalTarget }: UiOverlayProps = {}) => {
           left: 0
         }}
       >
-        {availableTools.includes('ITEM_CONTROLS') && itemControls && (
-          <UiElement
-            sx={{
-              position: 'absolute',
-              width: '300px',
-              transform: 'translateX(-100%)',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-              '@keyframes panelSlideIn': {
-                from: { opacity: 0, transform: 'translateX(calc(-100% + 16px))' },
-                to:   { opacity: 1, transform: 'translateX(-100%)' }
-              },
-              animation: 'panelSlideIn 0.15s ease-out'
-            }}
-            style={{
-              left: rendererSize.width - appPadding.x,
-              top: appPadding.y,
-              height: rendererSize.height - appPadding.y * 2
-            }}
-          >
-            <ItemControlsManager readOnly={editorMode === EditorModeEnum.EXPLORABLE_READONLY} />
-          </UiElement>
-        )}
-
         {availableTools.includes('TOOL_MENU') && (
           <Box
             ref={toolMenuRef}
@@ -197,82 +178,56 @@ export const UiOverlay = ({ menuPortalTarget }: UiOverlayProps = {}) => {
           </Box>
         )}
 
-        {/* Layers panel toggle button + panel — EDITABLE only, positioned below MainMenu */}
-        {availableTools.includes('TOOL_MENU') && (
-          <>
-            <Box
-              onMouseDown={(e) => e.stopPropagation()}
-              sx={{ position: 'absolute' }}
-              style={{
-                top: appPadding.y + 44,
-                left: appPadding.x
-              }}
-            >
-              <Tooltip title="Layers" placement="right">
-                <IconButton
-                  size="small"
-                  onClick={() => setLayersPanelOpen((v) => !v)}
-                  sx={{
-                    bgcolor: layersPanelOpen ? 'primary.main' : 'background.paper',
-                    color: layersPanelOpen ? 'primary.contrastText' : 'text.primary',
-                    border: 1,
-                    borderColor: 'grey.300',
-                    borderRadius: 1.5,
-                    boxShadow: 1,
-                    '&:hover': {
-                      bgcolor: layersPanelOpen ? 'primary.dark' : 'grey.100'
-                    }
-                  }}
-                >
-                  <LayersOutlined fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </Box>
 
-            {layersPanelOpen && (
-              <UiElement
-                sx={{
-                  position: 'absolute',
-                  width: 220,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  overflow: 'hidden',
-                  '@keyframes layersPanelIn': {
-                    from: { opacity: 0, transform: 'translateY(-8px)' },
-                    to:   { opacity: 1, transform: 'translateY(0)' }
-                  },
-                  animation: 'layersPanelIn 0.15s ease-out'
-                }}
-                style={{
-                  left: appPadding.x + 40,
-                  top: appPadding.y + 44,
-                  height: 240
-                }}
-              >
-                <LayerContextProvider>
-                  <LayersPanel />
-                </LayerContextProvider>
-              </UiElement>
-            )}
-          </>
-        )}
-
-        {availableTools.includes('MAIN_MENU') && !menuPortalTarget && (
+        {availableTools.includes('MAIN_MENU') && !portalTarget && (
           <Box
-            sx={{
-              position: 'absolute'
-            }}
-            style={{
-              top: appPadding.y,
-              left: appPadding.x
-            }}
+            sx={{ position: 'absolute' }}
+            style={{ top: appPadding.y, left: appPadding.x }}
           >
             <MainMenu />
           </Box>
         )}
-        {availableTools.includes('MAIN_MENU') && menuPortalTarget &&
-          createPortal(<MainMenu />, menuPortalTarget)
-        }
+        {/* MainMenu portal — left zone */}
+        {portalTarget && availableTools.includes('MAIN_MENU') && createPortal(
+          <MainMenu />,
+          portalTarget
+        )}
+
+        {/* Sidebar toggle portal — right zone (falls back to left portal if no separate target) */}
+        {(sidebarTogglePortalTarget ?? portalTarget) && createPortal(
+          <Stack direction="row" spacing={0.25} alignItems="center">
+            <Tooltip title="Toggle Layers panel" placement="bottom">
+              <IconButton
+                size="small"
+                onClick={() => uiStateActions.setLeftSidebarOpen(!leftSidebarOpen)}
+                sx={{
+                  borderRadius: 1,
+                  color: 'inherit',
+                  bgcolor: leftSidebarOpen ? 'action.selected' : 'transparent'
+                }}
+              >
+                {/* scaleX(-1) mirrors the icon so the narrow panel appears on the LEFT */}
+                <ViewSidebarOutlined sx={{ fontSize: 18, transform: 'scaleX(-1)' }} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Toggle Properties panel" placement="bottom">
+              <IconButton
+                size="small"
+                onClick={() => uiStateActions.setRightSidebarOpen(!rightSidebarOpen)}
+                sx={{
+                  borderRadius: 1,
+                  color: 'inherit',
+                  bgcolor: rightSidebarOpen ? 'action.selected' : 'transparent'
+                }}
+              >
+                {/* no transform — narrow panel appears on the RIGHT */}
+                <ViewSidebarOutlined sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+          </Stack>,
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          (sidebarTogglePortalTarget ?? portalTarget)!
+        )}
 
         {availableTools.includes('VIEW_TITLE') && (
           <Box
@@ -359,7 +314,7 @@ export const UiOverlay = ({ menuPortalTarget }: UiOverlayProps = {}) => {
 
       {dialog === DialogTypeEnum.HELP && <HelpDialog />}
 
-      {dialog === DialogTypeEnum.SETTINGS && <SettingsDialog iconPackManager={iconPackManager || undefined} />}
+      {dialog === DialogTypeEnum.SETTINGS && <SettingsDialog iconPackManager={iconPackManager || undefined} languageSelector={languageSelector} />}
 
       {/* Show hint tooltips only in editable mode */}
       {editorMode === EditorModeEnum.EDITABLE && <ConnectorHintTooltip toolMenuRef={toolMenuRef} />}
@@ -397,6 +352,9 @@ export const UiOverlay = ({ menuPortalTarget }: UiOverlayProps = {}) => {
           mode.type !== 'DRAG_ITEMS' && (
             <NodeActionBar id={itemControls.id} />
           )}
+
+        {/* Lasso layer assign bar */}
+        {editorMode === EditorModeEnum.EDITABLE && <LassoLayerBar />}
       </SceneLayer>
     </>
   );

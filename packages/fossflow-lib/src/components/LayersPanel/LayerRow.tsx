@@ -11,7 +11,9 @@ import {
   VisibilityOffOutlined,
   LockOutlined,
   LockOpenOutlined,
-  DragIndicator
+  DragIndicator,
+  ChevronRight,
+  ExpandMore
 } from '@mui/icons-material';
 import { Layer } from 'src/types';
 
@@ -19,7 +21,9 @@ interface Props {
   layer: Layer;
   isSelected: boolean;
   itemCount: number;
+  isExpanded: boolean;
   onSelect: (id: string) => void;
+  onToggleExpand: (id: string) => void;
   onToggleVisible: (id: string) => void;
   onToggleLocked: (id: string) => void;
   onRename: (id: string, name: string) => void;
@@ -32,7 +36,9 @@ export const LayerRow = memo(
     layer,
     isSelected,
     itemCount,
+    isExpanded,
     onSelect,
+    onToggleExpand,
     onToggleVisible,
     onToggleLocked,
     onRename,
@@ -74,6 +80,17 @@ export const LayerRow = memo(
           userSelect: 'none'
         }}
       >
+        {/* Expand/collapse chevron */}
+        <Box
+          sx={{ display: 'flex', alignItems: 'center', color: 'text.disabled', mr: 0 }}
+          onClick={(e) => { e.stopPropagation(); onToggleExpand(layer.id); }}
+        >
+          {itemCount > 0
+            ? (isExpanded ? <ExpandMore sx={{ fontSize: 16 }} /> : <ChevronRight sx={{ fontSize: 16 }} />)
+            : <Box sx={{ width: 16 }} />
+          }
+        </Box>
+
         {/* Drag handle */}
         <Box
           {...dragHandleProps}

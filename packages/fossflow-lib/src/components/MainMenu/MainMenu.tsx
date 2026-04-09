@@ -1,17 +1,14 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { Menu, Typography, Divider, Card } from '@mui/material';
+import { Menu, Typography, Divider, Card, IconButton, Tooltip } from '@mui/material';
 import {
-  Menu as MenuIcon,
+  MenuOutlined as MenuIcon,
   GitHub as GitHubIcon,
   DataObject as ExportJsonIcon,
   ImageOutlined as ExportImageIcon,
   FolderOpen as FolderOpenIcon,
   DeleteOutline as DeleteOutlineIcon,
   Settings as SettingsIcon,
-
 } from '@mui/icons-material';
-import { UiElement } from 'src/components/UiElement/UiElement';
-import { IconButton } from 'src/components/IconButton/IconButton';
 import { useUiStateStore } from 'src/stores/uiStateStore';
 import {
   exportAsJSON,
@@ -148,13 +145,20 @@ export const MainMenu = () => {
   }
 
   return (
-    <UiElement>
-      <IconButton
-        Icon={<MenuIcon />}
-        name="Main menu"
-        onClick={onToggleMenu}
-        isActive={isMainMenuOpen}
-      />
+    <>
+      <Tooltip title="Main menu" placement="bottom">
+        <IconButton
+          size="small"
+          onClick={onToggleMenu}
+          sx={{
+            bgcolor: isMainMenuOpen ? 'action.selected' : 'transparent',
+            borderRadius: 1,
+            color: 'inherit'
+          }}
+        >
+          <MenuIcon sx={{ fontSize: 18 }} />
+        </IconButton>
+      </Tooltip>
 
       <Menu
         anchorEl={anchorEl}
@@ -238,7 +242,7 @@ export const MainMenu = () => {
               {mainMenuOptions.includes('VERSION') && (
                 <MenuItem>
                   <Typography variant="body2" color="text.secondary">
-                    FossFLOW v{PACKAGE_VERSION}
+                    FossFLOW Community Edition v{PACKAGE_VERSION}
                   </Typography>
                 </MenuItem>
               )}
@@ -246,6 +250,6 @@ export const MainMenu = () => {
           )}
         </Card>
       </Menu>
-    </UiElement>
+    </>
   );
 };

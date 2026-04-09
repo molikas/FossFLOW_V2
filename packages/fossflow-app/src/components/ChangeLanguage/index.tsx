@@ -1,57 +1,31 @@
-import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import './styles.css';
+import { Select, MenuItem, FormControl, InputLabel } from '@mui/material';
 import { supportedLanguages } from '../../i18n';
 
 const ChangeLanguage = () => {
   const { i18n } = useTranslation();
-  const [isOpen, setIsOpen] = useState(false);
-  const [currentLang, setCurrentLang] = useState(i18n.language || 'en-US');
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const changeLanguage = (lang: string) => {
+  const handleChange = (lang: string) => {
     i18n.changeLanguage(lang);
-    setCurrentLang(lang);
-    setIsOpen(false);
     localStorage.setItem('i18nextLng', lang);
   };
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
   return (
-    <div className="language-selector" ref={dropdownRef}>
-      <div
-        className="language-display"
-        onClick={() => setIsOpen((prev) => !prev)}
+    <FormControl size="small" sx={{ minWidth: 160 }}>
+      <InputLabel id="language-select-label">Language</InputLabel>
+      <Select
+        labelId="language-select-label"
+        value={i18n.language || 'en-US'}
+        label="Language"
+        onChange={(e) => handleChange(e.target.value)}
       >
-        {supportedLanguages.find(l => l.value === currentLang)?.label ?? currentLang}
-      </div>
-      {isOpen && (
-        <div className="language-dropdown">
-          {supportedLanguages.map(item => (
-            <div
-              key={item.value}
-              className={`language-option ${currentLang === item.value ? 'active' : ''}`}
-              onClick={() => changeLanguage(item.value)}
-            >
-              {item.label}
-            </div>
-          ))
-          }
-        </div>
-      )}
-    </div>
+        {supportedLanguages.map((lang) => (
+          <MenuItem key={lang.value} value={lang.value}>
+            {lang.label}
+          </MenuItem>
+        ))}
+      </Select>
+    </FormControl>
   );
 };
 

@@ -17,7 +17,20 @@ import { savePersistedSettings } from 'src/config/persistedSettings';
 import { useInitialDataManager } from 'src/hooks/useInitialDataManager';
 import { ClipboardProvider } from 'src/clipboard/ClipboardContext';
 import { LayerContextProvider } from 'src/hooks/useLayerContext';
+import { LeftSidebar } from 'src/components/Sidebars/LeftSidebar';
+import { RightSidebar } from 'src/components/Sidebars/RightSidebar';
 import enUS from 'src/i18n/en-US';
+
+// Sidebar slots — rendered inside the LayerContextProvider so they have full store access.
+const LeftSidebarSlot = () => {
+  const open = useUiStateStore((s) => s.leftSidebarOpen);
+  return <LeftSidebar open={open} />;
+};
+
+const RightSidebarSlot = ({ editorMode }: { editorMode: string }) => {
+  const open = useUiStateStore((s) => s.rightSidebarOpen);
+  return <RightSidebar open={open} editorMode={editorMode} />;
+};
 
 const App = forwardRef<IsoflowRef, IsoflowProps>(({
   initialData,
@@ -30,8 +43,13 @@ const App = forwardRef<IsoflowRef, IsoflowProps>(({
   renderer,
   locale = enUS,
   iconPackManager,
+  toolbarPortalTarget,
+  sidebarTogglePortalTarget,
+  languageSelector,
+  /** @deprecated use toolbarPortalTarget */
   menuPortalTarget,
 }, ref) => {
+  const portalTarget = toolbarPortalTarget ?? menuPortalTarget;
   const uiStateActions = useUiStateStore((state) => {
     return state.actions;
   });
@@ -147,14 +165,20 @@ const App = forwardRef<IsoflowRef, IsoflowProps>(({
         sx={{
           width,
           height,
-          position: 'relative',
+          display: 'flex',
+          flexDirection: 'row',
           overflow: 'hidden',
           transform: 'translateZ(0)'
         }}
       >
         <LayerContextProvider>
-          <Renderer {...renderer} />
-          <UiOverlay menuPortalTarget={menuPortalTarget} />
+          <LeftSidebarSlot />
+          {/* Canvas area — flex:1 so it fills all space not taken by sidebars */}
+          <Box sx={{ flex: 1, position: 'relative', overflow: 'hidden', minWidth: 0 }}>
+            <Renderer {...renderer} />
+            <UiOverlay toolbarPortalTarget={portalTarget} sidebarTogglePortalTarget={sidebarTogglePortalTarget} languageSelector={languageSelector} />
+          </Box>
+          <RightSidebarSlot editorMode={editorMode} />
         </LayerContextProvider>
       </Box>
     </>

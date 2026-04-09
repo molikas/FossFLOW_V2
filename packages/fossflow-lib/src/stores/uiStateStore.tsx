@@ -48,6 +48,9 @@ const initialState = () => {
       expandLabels: persisted?.expandLabels ?? false,
       iconPackManager: null, // Will be set by Isoflow if provided
       notification: null,
+      leftSidebarOpen: false,
+      rightSidebarOpen: false,
+      rightSidebarAutoOpened: false,
 
       actions: {
         setView: (view) => {
@@ -97,7 +100,22 @@ const initialState = () => {
           set({ scroll: { position, offset: offset ?? get().scroll.offset } });
         },
         setItemControls: (itemControls) => {
-          set({ itemControls });
+          if (itemControls !== null) {
+            const { rightSidebarOpen, rightSidebarAutoOpened } = get();
+            // If user manually pinned the panel open, don't mark it as auto-opened
+            const alreadyPinned = rightSidebarOpen && !rightSidebarAutoOpened;
+            set({
+              itemControls,
+              rightSidebarOpen: true,
+              ...(!alreadyPinned && { rightSidebarAutoOpened: true })
+            });
+          } else {
+            const autoOpened = get().rightSidebarAutoOpened;
+            set({
+              itemControls,
+              ...(autoOpened && { rightSidebarOpen: false, rightSidebarAutoOpened: false })
+            });
+          }
         },
         setContextMenu: (contextMenu) => {
           set({ contextMenu });
@@ -137,6 +155,12 @@ const initialState = () => {
         },
         setNotification: (notification) => {
           set({ notification });
+        },
+        setLeftSidebarOpen: (leftSidebarOpen) => {
+          set({ leftSidebarOpen });
+        },
+        setRightSidebarOpen: (rightSidebarOpen) => {
+          set({ rightSidebarOpen, rightSidebarAutoOpened: false });
         }
       }
     };

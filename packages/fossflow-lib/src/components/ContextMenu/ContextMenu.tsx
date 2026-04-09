@@ -28,10 +28,17 @@ export const ContextMenu = ({
         onClose();
       }}
       PaperProps={{ 'data-testid': 'context-menu' } as any}
+      MenuListProps={{ dense: true }}
     >
-      {menuItems.map((item, index) => {
-        return <MenuItem key={index} onClick={item.onClick}>{item.label}</MenuItem>;
-      })}
+      {menuItems.map((item, index) => (
+        <MenuItem
+          key={index}
+          onClick={item.onClick}
+          sx={{ fontSize: 12, py: 0.5, minHeight: 32 }}
+        >
+          {item.label}
+        </MenuItem>
+      ))}
     </Menu>
   );
 };

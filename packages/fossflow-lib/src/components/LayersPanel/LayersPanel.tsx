@@ -8,17 +8,25 @@ import {
   Stack
 } from '@mui/material';
 import { AddOutlined, DeleteOutlineOutlined } from '@mui/icons-material';
-import { useLayerContext } from 'src/hooks/useLayerContext';
+import { useLayerContext, LayerItem } from 'src/hooks/useLayerContext';
 import { useLayerActions } from 'src/hooks/useLayerActions';
+import { useUiStateStore } from 'src/stores/uiStateStore';
 import { LayerRow } from './LayerRow';
-import { generateId } from 'src/utils';
+import { LayerItemRow } from './LayerItemRow';
 
 export const LayersPanel = () => {
-  const { layers, itemCountByLayerId, unassignedCount } = useLayerContext();
+  const { layers, itemCountByLayerId, unassignedCount, itemsByLayerId } = useLayerContext();
   const { createLayer, updateLayer, deleteLayer, reorderLayers } = useLayerActions();
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
+  const [expandedLayerIds, setExpandedLayerIds] = useState<Set<string>>(new Set());
 
-  // Layers displayed top-to-bottom = highest order first (top layer shown at top of list).
+  // Bidirectional: read current canvas selection
+  const itemControls = useUiStateStore((s) => s.itemControls);
+  const uiStateActions = useUiStateStore((s) => s.actions);
+
+  const selectedItemId = itemControls && itemControls.type !== 'ADD_ITEM' ? itemControls.id : null;
+
+  // Layers displayed top-to-bottom = highest order first
   const sortedLayers = [...layers].sort((a, b) => b.order - a.order);
 
   const handleAddLayer = useCallback(() => {
@@ -54,6 +62,33 @@ export const LayersPanel = () => {
     [updateLayer]
   );
 
+  const handleToggleExpand = useCallback((layerId: string) => {
+    setExpandedLayerIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(layerId)) {
+        next.delete(layerId);
+      } else {
+        next.add(layerId);
+      }
+      return next;
+    });
+  }, []);
+
+  // Panel → canvas: clicking an item row selects it on canvas
+  const handleItemClick = useCallback(
+    (item: LayerItem) => {
+      if (item.type === 'ITEM') {
+        uiStateActions.setItemControls({ type: 'ITEM', id: item.id });
+      } else if (item.type === 'CONNECTOR') {
+        uiStateActions.setItemControls({ type: 'CONNECTOR', id: item.id });
+      } else if (item.type === 'RECTANGLE') {
+        uiStateActions.setItemControls({ type: 'RECTANGLE', id: item.id });
+      }
+      // TEXTBOX not supported in ItemReference — skip
+    },
+    [uiStateActions]
+  );
+
   // Simple drag-to-reorder via mousedown/mousemove on drag handle
   const [dragState, setDragState] = useState<{
     dragId: string;
@@ -78,7 +113,6 @@ export const LayersPanel = () => {
       setDragState(null);
       return;
     }
-    // Build new order: remove dragId from position, insert before overI
     const ids = sortedLayers.map((l) => l.id);
     const fromIdx = ids.indexOf(dragState.dragId);
     const toIdx = ids.indexOf(dragState.overId);
@@ -86,11 +120,12 @@ export const LayersPanel = () => {
       const reordered = [...ids];
       reordered.splice(fromIdx, 1);
       reordered.splice(toIdx, 0, dragState.dragId);
-      // Reverse because sortedLayers is top→bottom (highest order first)
       reorderLayers([...reordered].reverse());
     }
     setDragState(null);
   }, [dragState, sortedLayers, reorderLayers]);
+
+  const unassignedItems = itemsByLayerId.get('__unassigned__') ?? [];
 
   return (
     <Box
@@ -136,7 +171,7 @@ export const LayersPanel = () => {
 
       <Divider />
 
-      {/* Layer list — scrollable */}
+      {/* Layer tree — scrollable */}
       <Box sx={{ flex: 1, overflowY: 'auto', px: 0.5, py: 0.5 }}>
         {sortedLayers.length === 0 ? (
           <Typography
@@ -148,45 +183,72 @@ export const LayersPanel = () => {
           </Typography>
         ) : (
           <>
-            {sortedLayers.map((layer) => (
-              <Box
-                key={layer.id}
-                onMouseEnter={() => dragState && handleDragOver(layer.id)}
-                sx={{
-                  outline:
-                    dragState?.overId === layer.id
-                      ? '2px solid'
-                      : 'none',
-                  outlineColor: 'primary.main',
-                  borderRadius: 1
-                }}
-              >
-                <LayerRow
-                  layer={layer}
-                  isSelected={selectedLayerId === layer.id}
-                  itemCount={itemCountByLayerId.get(layer.id) ?? 0}
-                  onSelect={setSelectedLayerId}
-                  onToggleVisible={handleToggleVisible}
-                  onToggleLocked={handleToggleLocked}
-                  onRename={handleRename}
-                  onDelete={deleteLayer}
-                  dragHandleProps={{
-                    onMouseDown: (e) => {
-                      e.preventDefault();
-                      handleDragStart(layer.id);
-                    }
+            {sortedLayers.map((layer) => {
+              const isExpanded = expandedLayerIds.has(layer.id);
+              const layerItems = itemsByLayerId.get(layer.id) ?? [];
+              return (
+                <Box
+                  key={layer.id}
+                  onMouseEnter={() => dragState && handleDragOver(layer.id)}
+                  sx={{
+                    outline: dragState?.overId === layer.id ? '2px solid' : 'none',
+                    outlineColor: 'primary.main',
+                    borderRadius: 1
                   }}
-                />
-              </Box>
-            ))}
+                >
+                  <LayerRow
+                    layer={layer}
+                    isSelected={selectedLayerId === layer.id}
+                    isExpanded={isExpanded}
+                    itemCount={itemCountByLayerId.get(layer.id) ?? 0}
+                    onSelect={setSelectedLayerId}
+                    onToggleExpand={handleToggleExpand}
+                    onToggleVisible={handleToggleVisible}
+                    onToggleLocked={handleToggleLocked}
+                    onRename={handleRename}
+                    onDelete={deleteLayer}
+                    dragHandleProps={{
+                      onMouseDown: (e) => {
+                        e.preventDefault();
+                        handleDragStart(layer.id);
+                      }
+                    }}
+                  />
+                  {isExpanded && layerItems.length > 0 && (
+                    <Box>
+                      {layerItems.map((item) => (
+                        <LayerItemRow
+                          key={item.id}
+                          item={item}
+                          isSelected={item.id === selectedItemId}
+                          onClick={handleItemClick}
+                        />
+                      ))}
+                    </Box>
+                  )}
+                </Box>
+              );
+            })}
+
+            {/* Unassigned group */}
             {unassignedCount > 0 && (
-              <Typography
-                variant="caption"
-                color="text.disabled"
-                sx={{ display: 'block', px: 0.5, pt: 0.5, fontSize: '0.65rem' }}
-              >
-                {unassignedCount} unassigned
-              </Typography>
+              <Box sx={{ mt: 0.5 }}>
+                <Typography
+                  variant="caption"
+                  color="text.disabled"
+                  sx={{ display: 'block', px: 0.5, pt: 0.5, pb: 0.25, fontSize: '0.65rem', fontWeight: 600 }}
+                >
+                  UNASSIGNED ({unassignedCount})
+                </Typography>
+                {unassignedItems.map((item) => (
+                  <LayerItemRow
+                    key={item.id}
+                    item={item}
+                    isSelected={item.id === selectedItemId}
+                    onClick={handleItemClick}
+                  />
+                ))}
+              </Box>
             )}
           </>
         )}

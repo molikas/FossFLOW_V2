@@ -19,7 +19,7 @@ import {
 import {
   SaveOutlined as SaveIcon,
   FolderOpenOutlined as FolderIcon,
-  LinkOutlined as LinkIcon,
+  ShareOutlined as ShareIcon,
   Close as CloseIcon,
   VisibilityOutlined as PreviewIcon
 } from '@mui/icons-material';
@@ -71,7 +71,8 @@ function EditorPage() {
 
   const isoflowRef = useRef<IsoflowRef>(null);
   const shareButtonRef = useRef<HTMLButtonElement>(null);
-  const [menuPortalTarget, setMenuPortalTarget] = useState<HTMLElement | null>(null);
+  const [toolbarPortalTarget, setMenuPortalTarget] = useState<HTMLElement | null>(null);
+  const [sidebarTogglePortalTarget, setSidebarTogglePortalTarget] = useState<HTMLElement | null>(null);
   const { storage, isServerStorage: isStorageServer, isInitialized: isStorageInitialized } = useStorage();
 
   const [diagrams, setDiagrams] = useState<SavedDiagram[]>([]);
@@ -825,58 +826,123 @@ function EditorPage() {
           gap: 0
         }}
       >
-        <Box className="toolbar-left" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
-          {/* Main menu button rendered here via portal from Isoflow */}
-          <Box ref={(el: HTMLDivElement | null) => { if (el && !menuPortalTarget) setMenuPortalTarget(el); }} sx={{ display: 'inline-flex', alignItems: 'center' }} />
+        {/* LEFT: menu + save + diagrams */}
+        <Box className="toolbar-left" sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
+          <Box ref={(el: HTMLDivElement | null) => { if (el && !toolbarPortalTarget) setMenuPortalTarget(el); }} sx={{ display: 'inline-flex', alignItems: 'center' }} />
           {!isReadonlyUrl && (
             <>
-              <Button
-                variant="contained"
-                size="small"
-                startIcon={<SaveIcon />}
-                onClick={handleSaveClick}
-                title={t('nav.save', 'Save') + ' (Ctrl+S)'}
-                disabled={!!currentDiagram && !hasUnsavedChanges}
+              <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+              <Tooltip title={t('nav.save', 'Save') + ' (Ctrl+S)'} placement="bottom">
+                <span>
+                  <IconButton
+                    size="small"
+                    onClick={handleSaveClick}
+                    disabled={!!currentDiagram && !hasUnsavedChanges}
+                    sx={{ borderRadius: 1, color: 'inherit' }}
+                  >
+                    <SaveIcon sx={{ fontSize: 18 }} />
+                  </IconButton>
+                </span>
+              </Tooltip>
+              <Tooltip title={t('nav.diagrams', 'Diagrams') + ' (Ctrl+O)'} placement="bottom">
+                <IconButton
+                  size="small"
+                  onClick={handleOpenClick}
+                  sx={{ borderRadius: 1, color: 'inherit' }}
+                >
+                  <FolderIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+            </>
+          )}
+          {isReadonlyUrl && (
+            <Chip label={t('dialog.readOnly.mode')} variant="outlined" size="small" sx={{ ml: 1 }} />
+          )}
+        </Box>
+
+        {/* CENTER: diagram name */}
+        <Box className="toolbar-center" sx={{ flex: 1, display: 'flex', justifyContent: 'center', px: 1, overflow: 'hidden' }}>
+          {diagramName && (
+            <Typography variant="body2" fontWeight={500} color="text.secondary" noWrap sx={{ userSelect: 'none' }}>
+              {diagramName}
+            </Typography>
+          )}
+        </Box>
+
+        {/* RIGHT: status | share + preview | sidebar toggles */}
+        <Box className="toolbar-right" sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
+          {!isReadonlyUrl && (
+            <>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: hasUnsavedChanges ? 'text.primary' : 'text.disabled',
+                  whiteSpace: 'nowrap',
+                  userSelect: 'none',
+                  minWidth: 60,
+                  textAlign: 'right'
+                }}
               >
-                {t('nav.save', 'Save')}
-              </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                startIcon={<FolderIcon />}
-                onClick={handleOpenClick}
-                title={t('nav.load', 'Load') + ' (Ctrl+O)'}
-              >
-                {t('nav.diagrams', 'Diagrams')}
-              </Button>
-              <Button
-                ref={shareButtonRef}
-                variant="outlined"
-                size="small"
-                startIcon={<LinkIcon />}
-                onClick={handleShareClick}
-                title={t('nav.share', 'Share')}
-                disabled={!serverStorageAvailable || !currentDiagram}
-              >
-                {t('nav.share', 'Share')}
-              </Button>
-              <Popover
-                open={showSharePopover && !!currentDiagram}
-                anchorEl={shareButtonRef.current}
-                onClose={() => setShowSharePopover(false)}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-                transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-                PaperProps={{ sx: { p: 2, width: 380, mt: 0.5 } }}
-              >
-                <Stack spacing={1.5}>
-                  <Stack direction="row" justifyContent="space-between" alignItems="center">
-                    <Typography variant="subtitle2">{t('share.title', 'Share Diagram')}</Typography>
-                    <IconButton size="small" onClick={() => setShowSharePopover(false)}>
-                      <CloseIcon />
-                    </IconButton>
-                  </Stack>
-                  <Typography variant="body2" color="text.secondary">
-                    {t('share.hint', 'Anyone with this link can view the diagram in read-only mode.')}
+                {lastSaved
+                  ? `${formatSavedAt(lastSaved)}${hasUnsavedChanges ? ' •' : ''}`
+                  : hasUnsavedChanges ? t('status.unsaved', 'Unsaved') : ''
+                }
+              </Typography>
+              <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+              <Tooltip title={!serverStorageAvailable || !currentDiagram ? t('nav.share', 'Share') + ' (requires server)' : t('nav.share', 'Share')} placement="bottom">
+                <span>
+                  <IconButton
+                    ref={shareButtonRef}
+                    size="small"
+                    onClick={handleShareClick}
+                    disabled={!serverStorageAvailable || !currentDiagram}
+                    sx={{ borderRadius: 1, color: 'inherit' }}
+                  >
+                    <ShareIcon sx={{ fontSize: 18 }} />
+                  </IconButton>
+                </span>
+              </Tooltip>
+              <Tooltip title={!serverStorageAvailable || !currentDiagram ? t('toolbar.previewSaveFirst', 'Save first to preview') : hasUnsavedChanges ? t('toolbar.saveAndPreview', 'Save & Preview') : t('toolbar.preview', 'Preview')} placement="bottom">
+                <span>
+                  <IconButton
+                    size="small"
+                    onClick={handlePreviewClick}
+                    disabled={!serverStorageAvailable || !currentDiagram}
+                    sx={{ borderRadius: 1, color: 'inherit' }}
+                  >
+                    <PreviewIcon sx={{ fontSize: 18 }} />
+                  </IconButton>
+                </span>
+              </Tooltip>
+              <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+              {/* Sidebar toggle portal target — Layers + Properties injected here by Isoflow */}
+              <Box
+                ref={(el: HTMLDivElement | null) => { if (el && !sidebarTogglePortalTarget) setSidebarTogglePortalTarget(el); }}
+                sx={{ display: 'inline-flex', alignItems: 'center' }}
+              />
+            </>
+          )}
+        </Box>
+
+        {/* Share popover (anchored to share icon button) */}
+        {!isReadonlyUrl && (
+          <Popover
+            open={showSharePopover && !!currentDiagram}
+            anchorEl={shareButtonRef.current}
+            onClose={() => setShowSharePopover(false)}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+            PaperProps={{ sx: { p: 2, width: 380, mt: 0.5 } }}
+          >
+            <Stack spacing={1.5}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center">
+                <Typography variant="subtitle2">{t('share.title', 'Share Diagram')}</Typography>
+                <IconButton size="small" onClick={() => setShowSharePopover(false)}>
+                  <CloseIcon />
+                </IconButton>
+              </Stack>
+              <Typography variant="body2" color="text.secondary">
+                {t('share.hint', 'Anyone with this link can view the diagram in read-only mode.')}
                   </Typography>
                   <Stack direction="row" spacing={1}>
                     <TextField
@@ -897,51 +963,8 @@ function EditorPage() {
                     </Button>
                   </Stack>
                 </Stack>
-              </Popover>
-              <Tooltip title={!serverStorageAvailable || !currentDiagram ? t('toolbar.previewSaveFirst', 'Save first to preview') : hasUnsavedChanges ? t('toolbar.saveAndPreview', 'Save & Preview') : t('toolbar.preview', 'Preview')}>
-                <span>
-                  <IconButton
-                    size="small"
-                    onClick={handlePreviewClick}
-                    disabled={!serverStorageAvailable || !currentDiagram}
-                    sx={{ ml: 0.25 }}
-                  >
-                    <PreviewIcon fontSize="small" />
-                  </IconButton>
-                </span>
-              </Tooltip>
-            </>
-          )}
-          {isReadonlyUrl && (
-            <Chip label={t('dialog.readOnly.mode')} variant="outlined" size="small" />
-          )}
-        </Box>
-
-        <Box className="toolbar-center" sx={{ flex: 1 }} />
-
-        <Box className="toolbar-right" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
-          {!isReadonlyUrl && (
-            <Typography
-              variant="body2"
-              sx={{
-                color: hasUnsavedChanges ? 'text.primary' : 'text.secondary',
-                whiteSpace: 'nowrap',
-                userSelect: 'none'
-              }}
-            >
-              {lastSaved
-                ? `${formatSavedAt(lastSaved)}${hasUnsavedChanges ? ' •' : ''}`
-                : hasUnsavedChanges
-                  ? t('status.unsaved', 'Unsaved')
-                  : ''
-              }
-            </Typography>
-          )}
-          {!isReadonlyUrl && (
-            <Divider orientation="vertical" flexItem sx={{ mx: 0.25 }} />
-          )}
-          <ChangeLanguage />
-        </Box>
+          </Popover>
+        )}
       </Box>
 
       {/* Session storage banner — shown once per session, dismissible */}
@@ -967,7 +990,9 @@ function EditorPage() {
             editorMode={isReadonlyUrl ? 'EXPLORABLE_READONLY' : 'EDITABLE'}
             locale={currentLocale}
             iconPackManager={iconPackManagerProp}
-            menuPortalTarget={menuPortalTarget}
+            toolbarPortalTarget={toolbarPortalTarget}
+            sidebarTogglePortalTarget={sidebarTogglePortalTarget}
+            languageSelector={<ChangeLanguage />}
           />
         ) : (
           <div className="loading-screen">Loading icons…</div>

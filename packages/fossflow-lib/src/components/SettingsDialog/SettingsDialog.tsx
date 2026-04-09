@@ -8,7 +8,8 @@ import {
   IconButton,
   Tabs,
   Tab,
-  Box
+  Box,
+  Typography
 } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
 import { useUiStateStore } from 'src/stores/uiStateStore';
@@ -35,9 +36,11 @@ export interface SettingsDialogProps {
     enabledPacks: string[];
     onTogglePack: (packName: string, enabled: boolean) => void;
   };
+  /** Optional language selector component rendered on the Language tab. */
+  languageSelector?: React.ReactNode;
 }
 
-export const SettingsDialog = ({ iconPackManager }: SettingsDialogProps) => {
+export const SettingsDialog = ({ iconPackManager, languageSelector }: SettingsDialogProps) => {
   const dialog = useUiStateStore((state) => state.dialog);
   const setDialog = useUiStateStore((state) => state.actions.setDialog);
   const [tabValue, setTabValue] = useState(0);
@@ -88,6 +91,7 @@ export const SettingsDialog = ({ iconPackManager }: SettingsDialogProps) => {
           <Tab label="Canvas" />
           <Tab label={t('settings.connector.title')} />
           {iconPackManager && <Tab label={t('settings.iconPacks.title')} />}
+          {languageSelector && <Tab label="Language" />}
         </Tabs>
 
         <Box sx={{ mt: 2 }}>
@@ -112,6 +116,14 @@ export const SettingsDialog = ({ iconPackManager }: SettingsDialogProps) => {
               enabledPacks={iconPackManager.enabledPacks}
               onTogglePack={iconPackManager.onTogglePack}
             />
+          )}
+          {languageSelector && tabValue === (iconPackManager ? 4 : 3) && (
+            <Box sx={{ px: 2, py: 1 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Select the display language for the application interface.
+              </Typography>
+              {languageSelector}
+            </Box>
           )}
         </Box>
       </DialogContent>

@@ -1,3 +1,4 @@
+import type React from 'react';
 import type { EditorModeEnum, MainMenuOptions } from './common';
 import type { Model } from './model';
 import type { RendererProps } from './rendererProps';
@@ -382,7 +383,13 @@ export interface IsoflowProps {
   renderer?: RendererProps;
   locale?: LocaleProps;
   iconPackManager?: IconPackManagerProps;
-  /** When set, the MainMenu button is rendered into this DOM element via a portal instead of floating on the canvas. */
+  /** Slot rendered inside the Settings dialog as a "Language" tab — pass your own language-picker component. */
+  languageSelector?: React.ReactNode;
+  /** Portal target for the MainMenu hamburger button (left zone). */
+  toolbarPortalTarget?: HTMLElement | null;
+  /** Portal target for the sidebar toggle buttons (right zone). When omitted, toggles render alongside MainMenu in toolbarPortalTarget. */
+  sidebarTogglePortalTarget?: HTMLElement | null;
+  /** @deprecated use toolbarPortalTarget */
   menuPortalTarget?: HTMLElement | null;
 }
 

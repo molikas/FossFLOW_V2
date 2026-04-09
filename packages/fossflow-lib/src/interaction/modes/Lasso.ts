@@ -12,9 +12,11 @@ const getItemsInBounds = (
   const items: ItemReference[] = [];
 
   // Check all nodes/items
+  const selectedNodeIds = new Set<string>();
   scene.items.forEach((item: any) => {
     if (isWithinBounds(item.tile, [startTile, endTile])) {
       items.push({ type: 'ITEM', id: item.id });
+      selectedNodeIds.add(item.id);
     }
   });
 
@@ -44,13 +46,31 @@ const getItemsInBounds = (
     }
   });
 
-  // Collect tile-based connector anchors (waypoints not attached to a node)
+  // Include a connector if both its endpoint anchors are within the selection.
+  // An endpoint anchor is within bounds if it references a selected node, or
+  // its free-floating tile is within bounds.
   scene.connectors.forEach((connector: any) => {
-    connector.anchors.forEach((anchor: any) => {
-      if (anchor.ref?.tile && isWithinBounds(anchor.ref.tile, [startTile, endTile])) {
-        items.push({ type: 'CONNECTOR_ANCHOR', id: anchor.id });
-      }
-    });
+    if (!connector.anchors || connector.anchors.length < 2) return;
+
+    const first = connector.anchors[0];
+    const last = connector.anchors[connector.anchors.length - 1];
+
+    const anchorInBounds = (anchor: any): boolean => {
+      if (anchor.ref?.item) return selectedNodeIds.has(anchor.ref.item);
+      if (anchor.ref?.tile) return isWithinBounds(anchor.ref.tile, [startTile, endTile]);
+      return false;
+    };
+
+    if (anchorInBounds(first) && anchorInBounds(last)) {
+      items.push({ type: 'CONNECTOR', id: connector.id });
+    } else {
+      // Still capture any free-floating waypoint anchors
+      connector.anchors.forEach((anchor: any) => {
+        if (anchor.ref?.tile && isWithinBounds(anchor.ref.tile, [startTile, endTile])) {
+          items.push({ type: 'CONNECTOR_ANCHOR', id: anchor.id });
+        }
+      });
+    }
   });
 
   return items;
