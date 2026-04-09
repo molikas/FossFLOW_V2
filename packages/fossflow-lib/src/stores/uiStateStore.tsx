@@ -48,7 +48,7 @@ const initialState = () => {
       expandLabels: persisted?.expandLabels ?? false,
       iconPackManager: null, // Will be set by Isoflow if provided
       notification: null,
-      leftSidebarOpen: false,
+      activeLeftTab: null,
       rightSidebarOpen: false,
       rightSidebarAutoOpened: false,
 
@@ -156,8 +156,8 @@ const initialState = () => {
         setNotification: (notification) => {
           set({ notification });
         },
-        setLeftSidebarOpen: (leftSidebarOpen) => {
-          set({ leftSidebarOpen });
+        setActiveLeftTab: (activeLeftTab) => {
+          set({ activeLeftTab });
         },
         setRightSidebarOpen: (rightSidebarOpen) => {
           set({ rightSidebarOpen, rightSidebarAutoOpened: false });

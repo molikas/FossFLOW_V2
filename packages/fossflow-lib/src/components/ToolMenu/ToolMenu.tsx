@@ -3,7 +3,6 @@ import { Stack, Chip } from '@mui/material';
 import {
   PanToolOutlined as PanToolIcon,
   NearMeOutlined as NearMeIcon,
-  AddOutlined as AddIcon,
   EastOutlined as ConnectorIcon,
   CropSquareOutlined as CropSquareIcon,
   Title as TitleIcon,
@@ -136,21 +135,6 @@ export const ToolMenu = () => {
             uiStateStoreActions.setItemControls(null);
           }}
           isActive={mode.type === 'PAN'}
-        />
-        <IconButton
-          name={`${t('addItem')}${hotkeys.addItem ? ` (${hotkeys.addItem.toUpperCase()})` : ''}`}
-          Icon={<AddIcon />}
-          onClick={() => {
-            uiStateStoreActions.setItemControls({
-              type: 'ADD_ITEM'
-            });
-            uiStateStoreActions.setMode({
-              type: 'PLACE_ICON',
-              showCursor: true,
-              id: null
-            });
-          }}
-          isActive={mode.type === 'PLACE_ICON'}
         />
         <IconButton
           name={`${t('rectangle')}${hotkeys.rectangle ? ` (${hotkeys.rectangle.toUpperCase()})` : ''}`}

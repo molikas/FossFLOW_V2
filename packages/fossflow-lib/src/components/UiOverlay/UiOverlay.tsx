@@ -10,7 +10,6 @@ import { DragAndDrop } from 'src/components/DragAndDrop/DragAndDrop';
 import { ToolMenu } from 'src/components/ToolMenu/ToolMenu';
 import { useUiStateStore } from 'src/stores/uiStateStore';
 import { MainMenu } from 'src/components/MainMenu/MainMenu';
-import { ZoomControls } from 'src/components/ZoomControls/ZoomControls';
 import { DebugUtils } from 'src/components/DebugUtils/DebugUtils';
 import { ContextMenuManager } from 'src/components/ContextMenu/ContextMenuManager';
 import { useScene } from 'src/hooks/useScene';
@@ -27,13 +26,11 @@ import { LazyLoadingWelcomeNotification } from '../LazyLoadingWelcomeNotificatio
 import { NotificationSnackbar } from '../NotificationSnackbar/NotificationSnackbar';
 import { getTilePosition } from 'src/utils';
 import { ViewTabs } from 'src/components/ViewTabs/ViewTabs';
-import { QuickAddNodePopover } from 'src/components/QuickAddNodePopover/QuickAddNodePopover';
 import { NodeActionBar } from 'src/components/NodeActionBar/NodeActionBar';
 import { LassoLayerBar } from 'src/components/LassoLayerBar/LassoLayerBar';
 
 const ToolsEnum = {
   MAIN_MENU: 'MAIN_MENU',
-  ZOOM_CONTROLS: 'ZOOM_CONTROLS',
   TOOL_MENU: 'TOOL_MENU',
   ITEM_CONTROLS: 'ITEM_CONTROLS',
   VIEW_TITLE: 'VIEW_TITLE',
@@ -47,12 +44,11 @@ interface EditorModeMapping {
 const EDITOR_MODE_MAPPING: EditorModeMapping = {
   [EditorModeEnum.EDITABLE]: [
     'ITEM_CONTROLS',
-    'ZOOM_CONTROLS',
     'TOOL_MENU',
     'MAIN_MENU',
     'VIEW_TABS'
   ],
-  [EditorModeEnum.EXPLORABLE_READONLY]: ['ITEM_CONTROLS', 'ZOOM_CONTROLS', 'VIEW_TABS'],
+  [EditorModeEnum.EXPLORABLE_READONLY]: ['ITEM_CONTROLS', 'VIEW_TABS'],
   [EditorModeEnum.NON_INTERACTIVE]: []
 };
 
@@ -108,7 +104,6 @@ export const UiOverlay = ({ toolbarPortalTarget, sidebarTogglePortalTarget, lang
     editorMode,
     iconPackManager,
     contextMenu,
-    leftSidebarOpen,
     rightSidebarOpen
   } = useUiStateStore(
     (state) => ({
@@ -120,7 +115,6 @@ export const UiOverlay = ({ toolbarPortalTarget, sidebarTogglePortalTarget, lang
       editorMode: state.editorMode,
       iconPackManager: state.iconPackManager,
       contextMenu: state.contextMenu,
-      leftSidebarOpen: state.leftSidebarOpen,
       rightSidebarOpen: state.rightSidebarOpen
     }),
     shallow
@@ -163,22 +157,6 @@ export const UiOverlay = ({ toolbarPortalTarget, sidebarTogglePortalTarget, lang
           </Box>
         )}
 
-        {availableTools.includes('ZOOM_CONTROLS') && (
-          <Box
-            sx={{
-              position: 'absolute',
-              transformOrigin: 'bottom left'
-            }}
-            style={{
-              top: rendererSize.height - appPadding.y * 2,
-              left: appPadding.x
-            }}
-          >
-            <ZoomControls />
-          </Box>
-        )}
-
-
         {availableTools.includes('MAIN_MENU') && !portalTarget && (
           <Box
             sx={{ position: 'absolute' }}
@@ -193,38 +171,21 @@ export const UiOverlay = ({ toolbarPortalTarget, sidebarTogglePortalTarget, lang
           portalTarget
         )}
 
-        {/* Sidebar toggle portal — right zone (falls back to left portal if no separate target) */}
+        {/* Sidebar toggle portal — Properties panel toggle only (Layers is in the LeftDock strip) */}
         {(sidebarTogglePortalTarget ?? portalTarget) && createPortal(
-          <Stack direction="row" spacing={0.25} alignItems="center">
-            <Tooltip title="Toggle Layers panel" placement="bottom">
-              <IconButton
-                size="small"
-                onClick={() => uiStateActions.setLeftSidebarOpen(!leftSidebarOpen)}
-                sx={{
-                  borderRadius: 1,
-                  color: 'inherit',
-                  bgcolor: leftSidebarOpen ? 'action.selected' : 'transparent'
-                }}
-              >
-                {/* scaleX(-1) mirrors the icon so the narrow panel appears on the LEFT */}
-                <ViewSidebarOutlined sx={{ fontSize: 18, transform: 'scaleX(-1)' }} />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Toggle Properties panel" placement="bottom">
-              <IconButton
-                size="small"
-                onClick={() => uiStateActions.setRightSidebarOpen(!rightSidebarOpen)}
-                sx={{
-                  borderRadius: 1,
-                  color: 'inherit',
-                  bgcolor: rightSidebarOpen ? 'action.selected' : 'transparent'
-                }}
-              >
-                {/* no transform — narrow panel appears on the RIGHT */}
-                <ViewSidebarOutlined sx={{ fontSize: 18 }} />
-              </IconButton>
-            </Tooltip>
-          </Stack>,
+          <Tooltip title="Toggle Properties panel" placement="bottom">
+            <IconButton
+              size="small"
+              onClick={() => uiStateActions.setRightSidebarOpen(!rightSidebarOpen)}
+              sx={{
+                borderRadius: 1,
+                color: 'inherit',
+                bgcolor: rightSidebarOpen ? 'action.selected' : 'transparent'
+              }}
+            >
+              <ViewSidebarOutlined sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>,
           // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           (sidebarTogglePortalTarget ?? portalTarget)!
         )}
@@ -327,9 +288,6 @@ export const UiOverlay = ({ toolbarPortalTarget, sidebarTogglePortalTarget, lang
       {iconPackManager && <LazyLoadingWelcomeNotification />}
 
       <NotificationSnackbar />
-
-      {/* Double-click empty canvas → place node at cursor */}
-      {editorMode === EditorModeEnum.EDITABLE && <QuickAddNodePopover />}
 
       <SceneLayer>
         {/* Always rendered so contextMenuAnchorRef.current is never null when contextMenu is set */}

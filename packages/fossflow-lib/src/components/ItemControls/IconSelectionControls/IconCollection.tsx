@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Divider, Stack, Typography, Button } from '@mui/material';
+import { Box, Divider, Stack, Typography, Button } from '@mui/material';
 import {
   ExpandMore as ChevronDownIcon,
   ExpandLess as ChevronUpIcon
@@ -30,36 +30,38 @@ export const IconCollection = ({
       <Button
         variant="text"
         fullWidth
-        onClick={() => {
-          return setIsExpanded(!isExpanded);
-        }}
+        sx={{ py: 0.5, minHeight: 32 }}
+        onClick={() => setIsExpanded(!isExpanded)}
       >
         <Stack
           sx={{ width: '100%' }}
           direction="row"
-          spacing={2}
+          spacing={1}
           justifyContent="space-between"
           alignItems="center"
         >
           <Typography
-            variant="body2"
+            variant="caption"
             color="text.secondary"
             textTransform="uppercase"
             fontWeight={600}
+            sx={{ letterSpacing: '0.05em', fontSize: 10 }}
           >
             {id}
           </Typography>
           {isExpanded ? (
-            <ChevronUpIcon color="action" />
+            <ChevronUpIcon color="action" sx={{ fontSize: 16 }} />
           ) : (
-            <ChevronDownIcon color="action" />
+            <ChevronDownIcon color="action" sx={{ fontSize: 16 }} />
           )}
         </Stack>
       </Button>
       <Divider />
 
       {isExpanded && (
-        <IconGrid icons={icons} onMouseDown={onMouseDown} onClick={onClick} />
+        <Box sx={{ py: 0.5, px: 0.5 }}>
+          <IconGrid icons={icons} onMouseDown={onMouseDown} onClick={onClick} />
+        </Box>
       )}
     </Section>
   );

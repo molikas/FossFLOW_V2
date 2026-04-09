@@ -1,6 +1,6 @@
 import React from 'react';
 import { Icon as IconI } from 'src/types';
-import { Grid, Box } from '@mui/material';
+import { Box } from '@mui/material';
 import { Icon } from './Icon';
 
 interface Props {
@@ -12,38 +12,24 @@ interface Props {
   onHover?: (index: number) => void;
 }
 
-export const IconGrid = ({ icons, onMouseDown, onClick, onDoubleClick, hoveredIndex, onHover }: Props) => {
+export const IconGrid = ({ icons, onMouseDown, onClick, onDoubleClick }: Props) => {
   return (
-    <Grid container>
-      {icons.map((icon, index) => {
-        const isHovered = hoveredIndex === index;
-        return (
-          <Grid size={3} key={icon.id}>
-            <Box
-              data-testid="icon-grid-item"
-              sx={{
-                backgroundColor: isHovered ? 'action.hover' : 'transparent',
-                borderRadius: 1,
-                transition: 'background-color 0.2s'
-              }}
-              onMouseEnter={() => onHover?.(index)}
-            >
-              <Icon
-                icon={icon}
-                onClick={() => {
-                  onClick?.(icon);
-                }}
-                onMouseDown={() => {
-                  onMouseDown?.(icon);
-                }}
-                onDoubleClick={() => {
-                  onDoubleClick?.(icon);
-                }}
-              />
-            </Box>
-          </Grid>
-        );
-      })}
-    </Grid>
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(5, 1fr)',
+        gap: 0.25
+      }}
+    >
+      {icons.map((icon) => (
+        <Icon
+          key={icon.id}
+          icon={icon}
+          onClick={() => onClick?.(icon)}
+          onMouseDown={() => onMouseDown?.(icon)}
+          onDoubleClick={() => onDoubleClick?.(icon)}
+        />
+      ))}
+    </Box>
   );
 };

@@ -202,7 +202,7 @@ export interface UiState {
   expandLabels: boolean;
   iconPackManager: IconPackManagerProps | null;
   notification: Notification | null;
-  leftSidebarOpen: boolean;
+  activeLeftTab: 'ELEMENTS' | 'LAYERS' | null;
   rightSidebarOpen: boolean;
   /** true when the right sidebar was opened automatically by node selection (not manually pinned) */
   rightSidebarAutoOpened: boolean;
@@ -235,7 +235,7 @@ export interface UiStateActions {
   setExpandLabels: (expand: boolean) => void;
   setIconPackManager: (iconPackManager: IconPackManagerProps | null) => void;
   setNotification: (notification: Notification | null) => void;
-  setLeftSidebarOpen: (open: boolean) => void;
+  setActiveLeftTab: (tab: 'ELEMENTS' | 'LAYERS' | null) => void;
   setRightSidebarOpen: (open: boolean) => void;
 }
 

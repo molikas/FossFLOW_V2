@@ -19,48 +19,48 @@ export const RightSidebar = ({ open, editorMode }: Props) => {
   return (
     <Box
       sx={{
-        width: open ? 300 : 0,
-        flexShrink: 0,
-        overflow: 'hidden',
-        transition: 'width 0.2s ease',
-        borderLeft: open ? '1px solid' : 'none',
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        bottom: 0,
+        width: 300,
+        transform: open ? 'translateX(0)' : 'translateX(100%)',
+        transition: 'transform 0.2s ease',
+        borderLeft: '1px solid',
         borderColor: 'divider',
         bgcolor: 'background.paper',
         display: 'flex',
         flexDirection: 'column',
-        height: '100%'
+        zIndex: 10,
+        boxShadow: open ? 3 : 0
       }}
     >
-      {open && (
-        <Box sx={{ width: 300, height: '100%', display: 'flex', flexDirection: 'column' }}>
-          {hasSelection ? (
-            <Box sx={{ height: '100%', overflowY: 'auto' }}>
-              <ItemControlsManager readOnly={readOnly} />
-            </Box>
-          ) : (
-            <Box
-              sx={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 1.5,
-                px: 3,
-                color: 'text.disabled'
-              }}
-            >
-              <TuneOutlined sx={{ fontSize: 32, opacity: 0.4 }} />
-              <Typography
-                variant="body2"
-                color="text.disabled"
-                textAlign="center"
-                sx={{ lineHeight: 1.5 }}
-              >
-                Select a node, connector or shape to view its properties
-              </Typography>
-            </Box>
-          )}
+      {hasSelection ? (
+        <Box sx={{ height: '100%', overflowY: 'auto' }}>
+          <ItemControlsManager readOnly={readOnly} />
+        </Box>
+      ) : (
+        <Box
+          sx={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 1.5,
+            px: 3,
+            color: 'text.disabled'
+          }}
+        >
+          <TuneOutlined sx={{ fontSize: 32, opacity: 0.4 }} />
+          <Typography
+            variant="body2"
+            color="text.disabled"
+            textAlign="center"
+            sx={{ lineHeight: 1.5 }}
+          >
+            Select a node, connector or shape to view its properties
+          </Typography>
         </Box>
       )}
     </Box>
