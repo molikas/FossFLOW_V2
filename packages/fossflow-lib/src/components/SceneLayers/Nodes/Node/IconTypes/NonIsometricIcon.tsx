@@ -15,7 +15,7 @@ export const NonIsometricIcon = ({ icon }: Props) => {
         sx={{
           position: 'absolute',
           left: -PROJECTED_TILE_SIZE.width / 2,
-          top: -PROJECTED_TILE_SIZE.height / 2,
+          top: 0,
           transformOrigin: 'top left',
           transform: getIsoProjectionCss()
         }}

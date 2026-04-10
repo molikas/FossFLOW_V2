@@ -11,12 +11,14 @@ import { AddOutlined, DeleteOutlineOutlined } from '@mui/icons-material';
 import { useLayerContext, LayerItem } from 'src/hooks/useLayerContext';
 import { useLayerActions } from 'src/hooks/useLayerActions';
 import { useUiStateStore } from 'src/stores/uiStateStore';
+import { useScene } from 'src/hooks/useScene';
 import { LayerRow } from './LayerRow';
 import { LayerItemRow } from './LayerItemRow';
 
 export const LayersPanel = () => {
   const { layers, itemCountByLayerId, unassignedCount, itemsByLayerId } = useLayerContext();
-  const { createLayer, updateLayer, deleteLayer, reorderLayers } = useLayerActions();
+  const { createLayer, updateLayer, deleteLayer, reorderLayers, assignLayerToItems } = useLayerActions();
+  const { updateModelItem } = useScene();
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
   const [expandedLayerIds, setExpandedLayerIds] = useState<Set<string>>(new Set());
 
@@ -74,6 +76,16 @@ export const LayersPanel = () => {
     });
   }, []);
 
+  // Rename item from layers panel (only ITEM type has a model name)
+  const handleItemRename = useCallback(
+    (item: LayerItem, newName: string) => {
+      if (item.type === 'ITEM') {
+        updateModelItem(item.id, { name: newName });
+      }
+    },
+    [updateModelItem]
+  );
+
   // Panel → canvas: clicking an item row selects it on canvas
   const handleItemClick = useCallback(
     (item: LayerItem) => {
@@ -83,11 +95,33 @@ export const LayersPanel = () => {
         uiStateActions.setItemControls({ type: 'CONNECTOR', id: item.id });
       } else if (item.type === 'RECTANGLE') {
         uiStateActions.setItemControls({ type: 'RECTANGLE', id: item.id });
+      } else if (item.type === 'TEXTBOX') {
+        uiStateActions.setItemControls({ type: 'TEXTBOX', id: item.id });
       }
-      // TEXTBOX not supported in ItemReference — skip
     },
     [uiStateActions]
   );
+
+  // Drag item to assign to a layer
+  const [itemDragState, setItemDragState] = useState<{
+    item: LayerItem;
+    overLayerId: string | null;
+  } | null>(null);
+
+  const handleItemDragStart = useCallback((item: LayerItem) => {
+    setItemDragState({ item, overLayerId: null });
+  }, []);
+
+  const handleItemDragOverLayer = useCallback((layerId: string) => {
+    setItemDragState((s) => s ? { ...s, overLayerId: layerId } : null);
+  }, []);
+
+  const handleItemDragEnd = useCallback(() => {
+    if (itemDragState?.overLayerId) {
+      assignLayerToItems(itemDragState.overLayerId, [{ type: itemDragState.item.type, id: itemDragState.item.id }]);
+    }
+    setItemDragState(null);
+  }, [itemDragState, assignLayerToItems]);
 
   // Simple drag-to-reorder via mousedown/mousemove on drag handle
   const [dragState, setDragState] = useState<{
@@ -135,8 +169,8 @@ export const LayersPanel = () => {
         height: '100%',
         minHeight: 0
       }}
-      onMouseUp={handleDragEnd}
-      onMouseLeave={handleDragEnd}
+      onMouseUp={() => { handleDragEnd(); handleItemDragEnd(); }}
+      onMouseLeave={() => { handleDragEnd(); handleItemDragEnd(); }}
     >
       {/* Header */}
       <Stack
@@ -173,15 +207,16 @@ export const LayersPanel = () => {
 
       {/* Layer tree — scrollable */}
       <Box sx={{ flex: 1, overflowY: 'auto', px: 0.5, py: 0.5 }}>
-        {sortedLayers.length === 0 ? (
+        {sortedLayers.length === 0 && (
           <Typography
             variant="caption"
             color="text.disabled"
-            sx={{ display: 'block', textAlign: 'center', mt: 2 }}
+            sx={{ display: 'block', textAlign: 'center', mt: 2, mb: 1 }}
           >
             No layers yet. Click + to add one.
           </Typography>
-        ) : (
+        )}
+        {sortedLayers.length > 0 && (
           <>
             {sortedLayers.map((layer) => {
               const isExpanded = expandedLayerIds.has(layer.id);
@@ -189,9 +224,12 @@ export const LayersPanel = () => {
               return (
                 <Box
                   key={layer.id}
-                  onMouseEnter={() => dragState && handleDragOver(layer.id)}
+                  onMouseEnter={() => {
+                    if (dragState) handleDragOver(layer.id);
+                    if (itemDragState) handleItemDragOverLayer(layer.id);
+                  }}
                   sx={{
-                    outline: dragState?.overId === layer.id ? '2px solid' : 'none',
+                    outline: (dragState?.overId === layer.id || itemDragState?.overLayerId === layer.id) ? '2px solid' : 'none',
                     outlineColor: 'primary.main',
                     borderRadius: 1
                   }}
@@ -222,6 +260,8 @@ export const LayersPanel = () => {
                           item={item}
                           isSelected={item.id === selectedItemId}
                           onClick={handleItemClick}
+                          onRename={handleItemRename}
+                          onDragStart={handleItemDragStart}
                         />
                       ))}
                     </Box>
@@ -230,27 +270,30 @@ export const LayersPanel = () => {
               );
             })}
 
-            {/* Unassigned group */}
-            {unassignedCount > 0 && (
-              <Box sx={{ mt: 0.5 }}>
-                <Typography
-                  variant="caption"
-                  color="text.disabled"
-                  sx={{ display: 'block', px: 0.5, pt: 0.5, pb: 0.25, fontSize: '0.65rem', fontWeight: 600 }}
-                >
-                  UNASSIGNED ({unassignedCount})
-                </Typography>
-                {unassignedItems.map((item) => (
-                  <LayerItemRow
-                    key={item.id}
-                    item={item}
-                    isSelected={item.id === selectedItemId}
-                    onClick={handleItemClick}
-                  />
-                ))}
-              </Box>
-            )}
           </>
+        )}
+
+        {/* Unassigned group — always shown when there are unassigned items */}
+        {unassignedCount > 0 && (
+          <Box sx={{ mt: 0.5 }}>
+            <Typography
+              variant="caption"
+              color="text.disabled"
+              sx={{ display: 'block', px: 0.5, pt: 0.5, pb: 0.25, fontSize: '0.65rem', fontWeight: 600 }}
+            >
+              UNASSIGNED ({unassignedCount})
+            </Typography>
+            {unassignedItems.map((item) => (
+              <LayerItemRow
+                key={item.id}
+                item={item}
+                isSelected={item.id === selectedItemId}
+                onClick={handleItemClick}
+                onRename={handleItemRename}
+                onDragStart={handleItemDragStart}
+              />
+            ))}
+          </Box>
         )}
       </Box>
     </Box>

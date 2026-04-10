@@ -10,28 +10,26 @@ interface Props {
   tile: Coords;
 }
 
-// Isometric icons have no built-in centering offset — shift by half their visual size.
-// Non-isometric icons already have left:-halfW, top:-halfH inside NonIsometricIcon,
-// so placing the container at tile CENTER is sufficient.
-const HALF_ISO = PROJECTED_TILE_SIZE.width * 0.4;
+const HALF_H = PROJECTED_TILE_SIZE.height / 2;
 
 export const DragAndDrop = ({ iconId, tile }: Props) => {
-  const { icon, iconComponent } = useIcon(iconId);
+  const { iconComponent } = useIcon(iconId);
 
+  // Mirror Node.tsx exactly: getTilePosition(BOTTOM) then subtract halfH = tile CENTER.
   const tilePosition = useMemo(() => {
-    return getTilePosition({ tile, origin: 'CENTER' });
+    const pos = getTilePosition({ tile, origin: 'BOTTOM' });
+    return { x: pos.x, y: pos.y - HALF_H };
   }, [tile]);
-
-  const isIsometric = icon.isIsometric !== false;
-  const offsetX = isIsometric ? -HALF_ISO : 0;
-  const offsetY = isIsometric ? -HALF_ISO : 0;
 
   return (
     <Box
-      sx={{ position: 'absolute' }}
-      style={{
-        left: tilePosition.x + offsetX,
-        top: tilePosition.y + offsetY
+      sx={{
+        position: 'absolute',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        left: tilePosition.x,
+        top: tilePosition.y
       }}
     >
       {iconComponent}
