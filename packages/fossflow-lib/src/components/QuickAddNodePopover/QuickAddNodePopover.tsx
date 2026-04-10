@@ -103,7 +103,7 @@ export const QuickAddNodePopover = () => {
           onClick={handleAddRectangle}
           sx={{ justifyContent: 'flex-start', textTransform: 'none' }}
         >
-          {t('group')}
+          {t('rectangle')}
         </Button>
       </Box>
       <Divider sx={{ mx: 1.5, mt: 0.5 }} />

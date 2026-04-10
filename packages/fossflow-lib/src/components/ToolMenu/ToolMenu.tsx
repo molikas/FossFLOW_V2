@@ -4,34 +4,25 @@ import {
   PanToolOutlined as PanToolIcon,
   NearMeOutlined as NearMeIcon,
   EastOutlined as ConnectorIcon,
-  CropSquareOutlined as CropSquareIcon,
-  Title as TitleIcon,
   Undo as UndoIcon,
   Redo as RedoIcon,
   HighlightAltOutlined as LassoIcon,
   GestureOutlined as FreehandLassoIcon
 } from '@mui/icons-material';
-import { useUiStateStore, useUiStateStoreApi } from 'src/stores/uiStateStore';
+import { useUiStateStore } from 'src/stores/uiStateStore';
 import { IconButton } from 'src/components/IconButton/IconButton';
 import { UiElement } from 'src/components/UiElement/UiElement';
-import { useScene } from 'src/hooks/useScene';
 import { useHistory } from 'src/hooks/useHistory';
-import { TEXTBOX_DEFAULTS } from 'src/config';
-import { generateId } from 'src/utils';
 import { HOTKEY_PROFILES } from 'src/config/hotkeys';
 import { useTranslation } from 'src/stores/localeStore';
 
 export const ToolMenu = () => {
   const { t } = useTranslation('toolMenu');
-  const { createTextBox } = useScene();
   const { undo, redo, canUndo, canRedo } = useHistory();
-  const uiStateStoreApi = useUiStateStoreApi();
   const mode = useUiStateStore((state) => {
     return state.mode;
   });
-  const uiStateStoreActions = useUiStateStore((state) => {
-    return state.actions;
-  });
+  const uiStateStoreActions = useUiStateStore((state) => state.actions);
   const hotkeyProfile = useUiStateStore((state) => {
     return state.hotkeyProfile;
   });
@@ -41,30 +32,8 @@ export const ToolMenu = () => {
 
   const hotkeys = HOTKEY_PROFILES[hotkeyProfile];
 
-  const handleUndo = useCallback(() => {
-    undo();
-  }, [undo]);
-
-  const handleRedo = useCallback(() => {
-    redo();
-  }, [redo]);
-
-  const createTextBoxProxy = useCallback(() => {
-    const textBoxId = generateId();
-    const mouseTile = uiStateStoreApi.getState().mouse.position.tile;
-
-    createTextBox({
-      ...TEXTBOX_DEFAULTS,
-      id: textBoxId,
-      tile: mouseTile
-    });
-
-    uiStateStoreActions.setMode({
-      type: 'TEXTBOX',
-      showCursor: false,
-      id: textBoxId
-    });
-  }, [uiStateStoreApi, uiStateStoreActions, createTextBox]);
+  const handleUndo = useCallback(() => { undo(); }, [undo]);
+  const handleRedo = useCallback(() => { redo(); }, [redo]);
 
   return (
     <UiElement>
@@ -137,18 +106,6 @@ export const ToolMenu = () => {
           isActive={mode.type === 'PAN'}
         />
         <IconButton
-          name={`${t('rectangle')}${hotkeys.rectangle ? ` (${hotkeys.rectangle.toUpperCase()})` : ''}`}
-          Icon={<CropSquareIcon />}
-          onClick={() => {
-            uiStateStoreActions.setMode({
-              type: 'RECTANGLE.DRAW',
-              showCursor: true,
-              id: null
-            });
-          }}
-          isActive={mode.type === 'RECTANGLE.DRAW'}
-        />
-        <IconButton
           name={`${t('connector')}${hotkeys.connector ? ` (${hotkeys.connector.toUpperCase()})` : ''}`}
           Icon={<ConnectorIcon />}
           onClick={() => {
@@ -168,12 +125,6 @@ export const ToolMenu = () => {
             sx={{ fontSize: '0.65rem', height: 18, mx: 'auto' }}
           />
         )}
-        <IconButton
-          name={`${t('text')}${hotkeys.text ? ` (${hotkeys.text.toUpperCase()})` : ''}`}
-          Icon={<TitleIcon />}
-          onClick={createTextBoxProxy}
-          isActive={mode.type === 'TEXTBOX'}
-        />
       </Stack>
     </UiElement>
   );

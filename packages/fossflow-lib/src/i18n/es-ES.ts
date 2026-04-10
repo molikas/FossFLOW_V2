@@ -281,7 +281,7 @@ const locale: LocaleProps = {
   },
   quickAddNodePopover: {
     add: "Añadir",
-    group: "Grupo"
+    rectangle: "Grupo"
   },
   zoomControls: {
     zoomOut: "Alejar",

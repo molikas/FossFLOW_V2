@@ -289,7 +289,7 @@ export interface LocaleProps {
   };
   quickAddNodePopover: {
     add: string;
-    group: string;
+    rectangle: string;
   };
   zoomControls: {
     zoomOut: string;

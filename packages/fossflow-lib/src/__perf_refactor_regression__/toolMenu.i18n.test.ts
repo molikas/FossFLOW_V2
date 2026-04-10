@@ -66,23 +66,16 @@ describe('ToolMenu — i18n tool names', () => {
     expect(src).toContain("t('pan')");
   });
 
-  it('does not contain hardcoded "Add item" name string', () => {
-    expect(src).not.toContain('`Add item${');
-    expect(src).toContain("t('addItem')");
-  });
-
-  it('does not contain hardcoded "Rectangle" name string', () => {
-    expect(src).not.toContain('`Rectangle${');
-    expect(src).toContain("t('rectangle')");
-  });
-
   it('does not contain hardcoded "Connector" name string', () => {
     expect(src).not.toContain('`Connector${');
     expect(src).toContain("t('connector')");
   });
 
-  it('does not contain hardcoded "Text" name string', () => {
-    expect(src).not.toContain('`Text${');
-    expect(src).toContain("t('text')");
+  // Rectangle and Text buttons were moved to the Elements panel (left dock).
+  // Add Item was removed entirely. These are intentionally absent from ToolMenu.
+  it('does not contain removed tools (Rectangle, Text, Add Item)', () => {
+    expect(src).not.toContain("t('rectangle')");
+    expect(src).not.toContain("t('text')");
+    expect(src).not.toContain("t('addItem')");
   });
 });

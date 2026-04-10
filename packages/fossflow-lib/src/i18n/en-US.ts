@@ -54,9 +54,9 @@ const locale: LocaleProps = {
     deselectAction: "Deselect",
     deselectShortcut: "Left-click (empty area)",
     deselectDescription: "Deselect the current selection and return to select mode",
-    addNodeGroupAction: "Add Node / Group",
+    addNodeGroupAction: "Add Node / Rectangle",
     addNodeGroupShortcut: "Double-click (empty area)",
-    addNodeGroupDescription: "Opens the Add popover at the cursor: pick an icon to place a node, or click Group to add a background area for visually grouping nodes",
+    addNodeGroupDescription: "Opens the Add popover at the cursor: pick an icon to place a node, or click Rectangle to add a background area for visually grouping nodes",
     // Mouse interactions
     selectToolAction: "Select Tool",
     selectToolShortcut: "Click Select button",
@@ -281,7 +281,7 @@ const locale: LocaleProps = {
   },
   quickAddNodePopover: {
     add: "Add",
-    group: "Group"
+    rectangle: "Rectangle"
   },
   zoomControls: {
     zoomOut: "Zoom out",

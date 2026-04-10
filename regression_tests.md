@@ -1,7 +1,7 @@
 # Regression Test Suite Reference
 
-**Last updated:** 2026-03-22
-**Total:** 514 tests · 54 suites · all passing
+**Last updated:** 2026-04-10
+**Total:** ~729 tests · 72 suites · all passing (last full run 2026-04-06; test updates in round 10 are net-neutral)
 **Run:** `npm test --workspace=packages/fossflow-lib`
 
 ---
@@ -13,7 +13,7 @@
 | Interaction / Mode System | 6 | 87 |
 | Scene / Hooks | 6 | 63 |
 | Reducers | 6 | 85 |
-| Schemas / Validation | 8 | 47 |
+| Schemas / Validation | 9 | 56 |
 | Components | 11 | 48 |
 | Perf / Render Isolation | 8 | 36 |
 | Utilities & Config | 8 | 71 |
@@ -233,6 +233,7 @@ All schema tests use Zod's `.parse()` / `.safeParse()` directly. They act as liv
 | File | Production target | Tests | What's pinned |
 |---|---|---|---|
 | [colors.test.ts](packages/fossflow-lib/src/schemas/__tests__/colors.test.ts) | `schemas/colors.ts` | 4 | colorSchema fields, colorsSchema array |
+| [layer.test.ts](packages/fossflow-lib/src/schemas/__tests__/layer.test.ts) | `schemas/layer.ts` | 9 | layerSchema required fields (id, visible, locked, order); order must be integer; round-trip; layersSchema empty array + invalid member |
 | [connector.test.ts](packages/fossflow-lib/src/schemas/__tests__/connector.test.ts) | `schemas/connector.ts` | 9 | anchorSchema (valid anchor, missing id); anchorSchema ref contracts (tile-only, empty ref, simultaneous item+tile — no exclusivity guard at schema level); connectorSchema (valid, missing anchors); connector anchor count (0 anchors allowed, 1 anchor allowed — minimum is app-level invariant only) |
 | [icons.test.ts](packages/fossflow-lib/src/schemas/__tests__/icons.test.ts) | `schemas/icons.ts` | 4 | iconSchema, iconsSchema |
 | [modelItems.test.ts](packages/fossflow-lib/src/schemas/__tests__/modelItems.test.ts) | `schemas/modelItems.ts` | 10 | modelItemSchema including `headerLink` optional URL field |
@@ -241,7 +242,7 @@ All schema tests use Zod's `.parse()` / `.safeParse()` directly. They act as liv
 | [validation.test.ts](packages/fossflow-lib/src/schemas/__tests__/validation.test.ts) | `schemas/validation.ts` | 10 | Full model validation, Zod coercion, invalid model rejection |
 | [views.test.ts](packages/fossflow-lib/src/schemas/__tests__/views.test.ts) | `schemas/views.ts` | 6 | viewItemSchema, viewSchema, viewsSchema |
 
-**Total: 47 tests**
+**Total: 56 tests** (layer.test.ts added; prior count was 47)
 
 ---
 
@@ -386,6 +387,36 @@ Covers: `setClipboard` / `getClipboard` round-trip; null/undefined handling; cli
 | `handlePaste` (5) | Null clipboard → 'Nothing to paste' warning; IDs remapped (pasted items get new IDs); orphan detach — anchor referencing item not in clipboard has item ref removed; offset = original tile + (mouse − centroid); sets LASSO mode with all pasted refs |
 
 **Why this exists:** `handlePaste` is the most complex operation in the codebase — ID remapping, anchor detachment, centroid offset, collision avoidance, and multi-type batch paste all in one function. Any refactor risks regressing the ID/anchor plumbing.
+
+---
+
+---
+
+## Round 10 Changes (2026-04-10)
+
+### Updated: [toolMenu.i18n.test.ts](packages/fossflow-lib/src/__perf_refactor_regression__/toolMenu.i18n.test.ts) · 8 active assertions · ✅ VALID
+
+**Production target:** `src/components/ToolMenu/ToolMenu.tsx`
+
+Three assertions were inverted: `t('rectangle')`, `t('text')`, and `t('addItem')` are now asserted **absent** (with explanatory comment) because those tools were removed from ToolMenu in round 10 — Rectangle and Text moved to the Elements panel.
+
+Remaining assertions: `useTranslation` import, `useTranslation('toolMenu')` namespace, `t('undo')` present, `name="Undo` absent, `t('select')` present, `t('lassoSelect')` present, `t('freehandLasso')` present, `t('pan')` present, `t('connector')` present.
+
+---
+
+### Updated: [quickAdd.groupButton.test.ts](packages/fossflow-lib/src/__perf_refactor_regression__/quickAdd.groupButton.test.ts) · 10 tests · ✅ VALID
+
+**Production target:** `QuickAddNodePopover` rectangle-creation logic
+
+Comments updated from "Group button" to "Rectangle button". All 10 tests unchanged — they test pure callback logic and are unaffected by the rename.
+
+---
+
+### Updated: [Icon.test.tsx](packages/fossflow-lib/src/components/ItemControls/IconSelectionControls/__tests__/Icon.test.tsx) · 2 tests · ✅ VALID
+
+**Production target:** `IconSelectionControls/Icon.tsx`
+
+Tests updated from `getByText('flat')` / `getByText('isometric')` to `getByAltText('flat icon')` / `getByAltText('isometric icon')`. Text label rendering was removed from the `Icon` component in a prior session; testing `alt` text is the correct contract now.
 
 ---
 

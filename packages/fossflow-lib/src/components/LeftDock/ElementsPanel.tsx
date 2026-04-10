@@ -123,7 +123,7 @@ export const ElementsPanel = () => {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      {/* Common elements: Group, Text, Connector */}
+      {/* Common elements: Rectangle, Text, Connector */}
       <Box sx={{ flexShrink: 0, borderBottom: '1px solid', borderColor: 'divider' }}>
         <CommonElements />
       </Box>

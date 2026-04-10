@@ -103,7 +103,8 @@ export const Connector: ModeActions = {
           showCursor: true,
           id: newConnector.id,
           startAnchor,
-          isConnecting: true
+          isConnecting: true,
+          returnToCursor: uiState.mode.type === 'CONNECTOR' ? uiState.mode.returnToCursor : undefined
         });
       } else {
         // Second click: complete the connection
@@ -188,14 +189,15 @@ export const Connector: ModeActions = {
 
     // Only handle mouseup for drag mode
     if (uiState.connectorInteractionMode === 'drag') {
-      // Don't delete connectors to empty space - they're valid
-      // Validation is handled in the reducer layer
-
-      uiState.actions.setMode({
-        type: 'CONNECTOR',
-        showCursor: true,
-        id: null
-      });
+      if (uiState.mode.type === 'CONNECTOR' && uiState.mode.returnToCursor) {
+        uiState.actions.setMode({ type: 'CURSOR', showCursor: true, mousedownItem: null });
+      } else {
+        uiState.actions.setMode({
+          type: 'CONNECTOR',
+          showCursor: true,
+          id: null
+        });
+      }
     }
     // Click mode handles completion in mousedown (second click)
   }

@@ -1,6 +1,6 @@
 # FossFLOW Community Edition — Architecture Reference
 
-**Last updated:** 2026-04-07 (rev 7)
+**Last updated:** 2026-04-10 (rev 8)
 **Codebase root:** `packages/fossflow-lib/src` (library) · `packages/fossflow-app/src` (application shell)
 **Purpose:** Living architecture reference — feature inventory, store/reducer/mode architecture, test audit, gap analysis, lessons learned, and key APIs. Update this document whenever significant architectural changes are made.
 
@@ -41,7 +41,7 @@
 | **Lasso** | `interaction/modes/Lasso.ts` | Mode dispatch in `processMouseUpdate` | Reads `mouse.mousedown`, `mouse.position.tile`, `uiState.mode.selection`; writes mode with selection bounds + items array | `mousedown` with no selection is a no-op — lets `mousemove` build the box; clicking outside an existing selection clears it and stays in LASSO (does NOT exit to CURSOR); `mouseup` with items stays in LASSO, without items exits to CURSOR; `mouseup` guard (`!mouse.mousedown`) prevents toolbar-click stray events |
 | **Freehand Lasso** | `interaction/modes/FreehandLasso.ts` | Mode dispatch in `processMouseUpdate` | Reads `mouse.position.screen`, writes `mode.path` (screen coords); on mouseup converts path to tiles via `screenToIso`, runs `isPointInPolygon` | Same `isRendererInteraction` fix as Lasso — within-selection check runs for all clicks; only new-path start and outside-selection clear require renderer interaction; uses `rendererEl.getBoundingClientRect()` at mouseup, not `rendererSize` |
 | **Drag Items** | `interaction/modes/DragItems.ts` | Transitioned to from Cursor.mousemove when mousedown + moved tile | Reads `mode.items`, `mode.initialTiles`, `mode.initialRectangles`, `mouse.position.tile`, `mouse.mousedown.tile`; uses **absolute positioning** (`initialTile + mouseOffset`); calls `scene.transaction()` wrapping updateViewItem, updateTextBox, updateRectangle | Guard: `mouseOffset != zero()` (replaces stale `hasMovedTile`); node collision = stay-at-last-valid (occupied-tile check only, no nearest-search); `not-allowed` cursor only when node dragged over another node; sets `renderer.style.userSelect = 'none'` on entry |
-| **Connector** | `interaction/modes/Connector.ts` | ToolMenu / hotkey → `setMode({type:'CONNECTOR'})` | Reads `connectorInteractionMode`; two sub-flows: click mode (first-click creates+stores `startAnchor`, second-click finalises) vs. drag mode (mousedown creates, mousemove updates anchor[1], mouseup finalises) | Entry calls `setWindowCursor('crosshair')`; Escape in `useInteractionManager` handles in-progress connection cleanup |
+| **Connector** | `interaction/modes/Connector.ts` | ToolMenu / hotkey → `setMode({type:'CONNECTOR'})` · Elements panel card → `setMode({type:'CONNECTOR', returnToCursor:true})` | Reads `connectorInteractionMode`; two sub-flows: click mode (first-click creates+stores `startAnchor`, second-click finalises) vs. drag mode (mousedown creates, mousemove updates anchor[1], mouseup finalises). On completion (both flows): if `returnToCursor` is true → `setMode({type:'CURSOR'})`. If false → stays in CONNECTOR. | Entry calls `setWindowCursor('crosshair')`; Escape in `useInteractionManager` handles in-progress connection cleanup. **Important**: first-click `setMode` must explicitly forward `returnToCursor` from `uiState.mode` — failing to do so loses the flag before the second click. |
 | **Place Icon** | `interaction/modes/PlaceIcon.ts` | ToolMenu "Add item" → `setMode({type:'PLACE_ICON', id:null})`; id set when icon selected | On mouseup: calls `findNearestUnoccupiedTile` then `scene.placeIcon()` | If no tile found (`targetTile` is null), no item is placed — silent no-op |
 | **Draw Rectangle** | `interaction/modes/Rectangle/DrawRectangle.ts` | ToolMenu "Rectangle" | On mousedown: creates rectangle at cursor; on mousemove: `updateRectangle({to:...})`; on mouseup: → CURSOR | `isRendererInteraction` guard on mousedown |
 | **Transform Rectangle** | `interaction/modes/Rectangle/TransformRectangle.ts` | `TransformAnchor.tsx` fires `setMode({type:'RECTANGLE.TRANSFORM'})` | Reads `mode.selectedAnchor` (BOTTOM_LEFT/BOTTOM_RIGHT/TOP_LEFT/TOP_RIGHT); computes new bounds with `getBoundingBox` + `convertBoundsToNamedAnchors` | mousedown handler is empty — the anchor component itself sets the mode |
@@ -113,10 +113,10 @@ Both model and scene have **independent** history stacks (past/present/future, m
 | Item controls panel | `ItemControlsManager` → `NodePanel` | `uiState.itemControls !== null`; EDITABLE: 3-tab layout (Details/Style/Notes); EXPLORABLE_READONLY: single-scroll panel (Caption + Notes sections when non-empty, header with icon/name/link) |
 | Floating action bar | `NodeActionBar` (inside SceneLayer, `getTilePosition` origin TOP) | EDITABLE + `itemControls.type === 'ITEM'` + mode ≠ `DRAG_ITEMS`; 5 buttons: Style, Edit name, Link, Notes, Delete |
 | Note indicator dot | 14 px blue dot in `Node.tsx` at icon top-right | `modelItem.notes` non-empty |
-| Quick add popover | `QuickAddNodePopover` (MUI Popover at cursor) | EDITABLE; fires on `canvasEmptyDblClick` from dblclick on empty canvas; has **Group** button (creates background rectangle) + icon picker (places node) |
+| Quick add popover | `QuickAddNodePopover` (MUI Popover at cursor) | EDITABLE; fires on `canvasEmptyDblClick` from dblclick on empty canvas; has **Rectangle** button (creates background rectangle) + icon picker (places node) |
 | Preview button | `IconButton` in `fossflow-app` toolbar | EDITABLE + server storage + saved diagram; if `hasUnsavedChanges`, saves first (same path as explicit Save), shows toast, then opens `/display/{id}` in new tab; tooltip: *"Save & Preview"* / *"Preview"* / *"Save first to preview"* |
-| ToolMenu | `ToolMenu` | EDITABLE mode only |
-| MainMenu | `MainMenu` | EDITABLE mode only |
+| ToolMenu | `ToolMenu` | EDITABLE mode only; tools: Undo, Redo, Select, Lasso, Freehand lasso, Pan, Connector. **Rectangle and Text were removed** — both are in the Elements panel (LeftDock). |
+| MainMenu | `MainMenu` | EDITABLE mode only; options: **New diagram** (ACTION.NEW — opens ConfirmDiscardDialog if `isDirty`), Open, Export JSON, Export Compact JSON, Export Image, Clear canvas, Settings, GitHub |
 | ZoomControls | `ZoomControls` | EDITABLE + EXPLORABLE_READONLY |
 | ViewTabs | `ViewTabs` | EDITABLE only |
 | ViewTitle | Typography in `UiOverlay` | EXPLORABLE_READONLY only |
@@ -181,6 +181,9 @@ Starting mode determined by `getStartingMode()` in `utils`.
 | `expandLabels` | `boolean` | Settings (from `renderer.expandLabels` prop) |
 | `iconPackManager` | `IconPackManagerProps \| null` | Transient (from props) |
 | `notification` | `Notification \| null` | Transient |
+| `isDirty` | `boolean` | Transient — set by `useDirtyTracker`; cleared by `markClean()` (called after export-to-file or new-diagram flow) |
+| `activeLeftTab` | `'ELEMENTS' \| 'LAYERS' \| null` | Transient — which left-dock tab is open; `null` = panel closed |
+| `rightSidebarOpen` | `boolean` | Transient — whether the right Properties panel is open |
 
 **UiState actions — non-trivial ones:**
 - `setEditorMode`: also calls `getStartingMode(mode)` to reset mode
@@ -451,6 +454,23 @@ Rectangle center = { x: round((r.from.x + r.to.x) / 2), y: round((r.from.y + r.t
 
 ---
 
+### 2f.1 Dirty Tracking (`hooks/useDirtyTracker.ts`)
+
+`useDirtyTracker(isReady: boolean)` wires unsaved-change detection:
+
+1. Waits 100 ms after `isReady=true` before subscribing (avoids false-dirty on initial model load).
+2. Subscribes to `modelStore` changes; any change calls `uiStateActions.setIsDirty(true)`.
+3. Installs a `window.beforeunload` handler that returns a warning string when `isDirty=true` (shows native browser "Leave site?" dialog on tab close).
+4. Returns `markClean()` — resets `isDirty` to false. Called by `MainMenu` after a successful export or new-diagram flow.
+
+`MainMenu` reads `isDirty` from `uiStateStore`. Clicking "New diagram", "Open", or "Clear canvas" when dirty opens `ConfirmDiscardDialog` (three buttons: *Save & continue* / *Discard changes* / *Cancel*).
+
+**`ConfirmDiscardDialog`** (`components/ConfirmDiscardDialog/ConfirmDiscardDialog.tsx`): pure presentational component, props: `open`, `onSave`, `onDiscard`, `onCancel`.
+
+**`localStorageSave`** (`utils/localStorageSave.ts`): `saveModelLocally(model)` — tries `localStorage.setItem('fossflow-autosave', JSON.stringify(model))`, falls back to `exportAsJSON(model)` (download) if storage is unavailable.
+
+---
+
 ### 2g. History System
 
 **Dual-store history**: Model store and Scene store each maintain independent `{ past: HistoryEntry[], future: HistoryEntry[], maxHistorySize: 50 }` where each entry is an Immer patch pair (`{ patches, inversePatches }`). The `useHistory` hook coordinates them.
@@ -482,11 +502,15 @@ ThemeProvider
       SceneProvider (Zustand context)
         UiStateProvider (Zustand context)
           ClipboardProvider (useRef-based, 2026-04-07)
-            App (inner component via forwardRef)
-              GlobalStyles
-              Box (overflow:hidden, relative positioning)
-                Renderer
-                UiOverlay
+            LayerContextProvider (React context, derived from model + uiState)
+              App (inner component via forwardRef)
+                GlobalStyles
+                Box (overflow:hidden, relative positioning)
+                  Renderer       ← canvas + scene layers
+                  UiOverlay      ← toolbar, menus, dialogs (position:absolute)
+              LeftDockSlot       ← position:absolute, left edge
+              RightSidebarSlot   ← position:absolute, right edge
+              BottomDockSlot     ← position:absolute, bottom edge
 ```
 
 **`Renderer.tsx` layering (bottom to top, by DOM order):**
@@ -509,6 +533,91 @@ containerRef Box (position:absolute, full size, z-index:0)
 **Key DOM ordering insight**: The interaction div sits **below** Nodes and TransformControls. Nodes are above it and capture their own events. Only clicks on the empty grid land on the interaction div, making `e.target === interactionsRef.current` true only for empty-canvas clicks.
 
 **`UiOverlay`** is a sibling of `Renderer`. It absolutely positions all UI elements relative to `rendererSize` (from store), renders on top of everything.
+
+---
+
+### 2h.1 LeftDock (`components/LeftDock/LeftDock.tsx`)
+
+A collapsible left panel with two tabs. Rendered as a sibling of the canvas Box — `position:absolute`, full-height, `zIndex:10`. Never affects canvas layout.
+
+**Structure:**
+```
+LeftDock (position:absolute, left:0, top:0, bottom:0)
+  Icon strip (width:40px, always visible)
+    Tab icon: ELEMENTS  →  WidgetsOutlined
+    Tab icon: LAYERS    →  LayersOutlined
+  Sliding panel (width:240px)
+    if activeLeftTab === 'ELEMENTS' → <ElementsPanel>
+    if activeLeftTab === 'LAYERS'   → <LayersPanel>
+```
+
+The sliding panel animates via `transform: translateX`. When closed, `translateX(-(240+40)px)` — fully off-screen including the strip width. `pointerEvents: 'none'` on the panel while closed so canvas clicks pass through.
+
+**`ElementsPanel`** (`LeftDock/ElementsPanel.tsx`):
+- Icon grid: `IconSelectionControls` — drag an icon to start `PLACE_ICON` mode; ghost rendered by `DragAndDrop` component
+- **Rectangle card** (`CommonElements`): mousedown → `setMode({type:'RECTANGLE.DRAW'})`
+- **Connector card** (`CommonElements`): mousedown → `setMode({type:'CONNECTOR', returnToCursor:true})`
+- **Import Icons button**: file input → `setPendingFiles` → opens `ImportIconsDialog`
+
+**`DragAndDrop`** (`components/DragAndDrop/DragAndDrop.tsx`):
+Ghost icon rendered during `PLACE_ICON` mode. Receives `iconId` and current `tile` from `UiOverlay`. Positioned via `getTilePosition(BOTTOM).y - halfH` — mirrors `Node.tsx` exactly. Rendered inside `UiOverlay`'s scene transform so it tracks the isometric grid correctly.
+
+**`activeLeftTab`** state lives in `uiStateStore`. Clicking an active tab sets it to `null` (closes panel).
+
+---
+
+### 2h.2 RightSidebar (`components/Sidebars/RightSidebar.tsx`)
+
+Properties panel on the right edge. `position:absolute`, right:0, top:0, bottom:0, `width:300px`. Slides via `transform: translateX(100%)` when closed.
+
+**Open/close control:** `uiState.rightSidebarOpen` (boolean). Toggle button rendered in `UiOverlay`'s sidebar portal (`sidebarTogglePortalTarget`).
+
+**Content:**
+- When `itemControls !== null` → renders `<ItemControlsManager readOnly={readOnly} />` (full-height scrollable)
+- When `itemControls === null` → empty-state: `TuneOutlined` icon + "Select a node, connector or shape to view its properties"
+
+**`LeftSidebar`** (`components/Sidebars/LeftSidebar.tsx`): legacy wrapper that renders only `<LayersPanel>`. Superseded by `LeftDock` which integrates both Elements and Layers tabs. Kept in the codebase but not used in the main render path.
+
+---
+
+### 2h.3 Layer System
+
+**Data model:**
+```typescript
+// schema: src/schemas/layer.ts
+Layer = { id: string; name: string; visible: boolean; locked: boolean; order: number }
+```
+Stored as `view.layers: Layer[]` inside each view — per-view layer stacks, not global. All canvas entities (`ViewItem`, `Connector`, `Rectangle`, `TextBox`) carry an optional `layerId` field that references a layer in the same view.
+
+**`LayerContextProvider`** (`hooks/useLayerContext.ts`):
+Wraps the entire editor tree. Derives `LayerContextValue` from `modelStore.views` + `uiState.view` — recomputed when either changes. Provides:
+- `visibleIds: ReadonlySet<string>` — IDs of entities whose layer is visible (or have no layer)
+- `lockedIds: ReadonlySet<string>` — IDs of entities on locked layers
+- `layers: Layer[]` — ordered layer definitions for the current view
+- `itemCountByLayerId: ReadonlyMap<string, number>`
+- `unassignedCount: number`
+- `itemsByLayerId: ReadonlyMap<string, LayerItem[]>` — grouped by layerId; `'__unassigned__'` key for unassigned items
+
+`LayerItem = { id, type: 'ITEM'|'CONNECTOR'|'RECTANGLE'|'TEXTBOX', name }`. Nodes use model item name; connectors use label or "Connector"; rectangles use "Rectangle"; text boxes use plain-text extract (first 24 chars).
+
+**`useLayerActions`** (`hooks/useLayerActions.ts`):
+Dispatches view reducer actions directly (no `useScene` indirection). Each call: `saveToHistory()` → `viewReducer(params)` → `commit(newState)`.
+
+| Action | Reducer action | Payload |
+|--------|---------------|---------|
+| `createLayer(layer)` | `CREATE_LAYER` | `Partial<Layer> & { name }` |
+| `updateLayer(updates)` | `UPDATE_LAYER` | `Partial<Layer> & { id }` |
+| `deleteLayer(layerId)` | `DELETE_LAYER` | layerId string |
+| `reorderLayers(orderedIds)` | `REORDER_LAYERS` | `string[]` |
+| `assignLayerToItems(layerId, items)` | `ASSIGN_LAYER_TO_ITEMS` | `{ layerId, itemIds }` |
+| `reorderViewItem(id, zIndex)` | `REORDER_VIEWITEM` | `{ id, zIndex }` |
+
+**`LayersPanel`** (`components/LayersPanel/LayersPanel.tsx`):
+- **Layer list**: sorted by `order` (highest first = top of stack). Each `LayerRow` has: drag handle (reorder), visibility eye, lock toggle, inline rename, delete button.
+- **Add layer**: `+` button creates `Layer N`.
+- **Item list per layer** (expandable): `LayerItemRow` for each assigned item. Shows type icon + name. Clicking selects the item on canvas (`setItemControls`). Canvas selection (`itemControls`) highlights the matching row — bidirectional sync.
+- **Drag item to layer**: mousedown on a `LayerItemRow` drag handle sets `itemDragState`; hovering a `LayerRow` sets `overLayerId`; mouseup calls `assignLayerToItems`.
+- **Drag layer to reorder**: mousedown on layer drag handle sets `dragState`; hover sets `overId`; mouseup calls `reorderLayers` via array splice+reverse.
 
 **`SceneLayer`** applies the scroll+zoom CSS transform: `translate(scroll.x, scroll.y) scale(zoom)`. All scene elements inherit this.
 
@@ -822,6 +931,14 @@ For pastes with ≥ 500 connectors, `useCopyPaste` passes an `onPathProgress(don
 
 **Total test count as of 2026-04-07:** 392 tests (fossflow-lib only, excluding `__perf_refactor_regression__`), 39 suites, all passing.
 
+**Updated suites — round 10 (2026-04-10, UX & icon elevation fixes):**
+
+| Suite | Tests | Change | Notes |
+|---|---|---|---|
+| `__perf_refactor_regression__/toolMenu.i18n.test.ts` | 11 → 8 | 3 assertions flipped | `t('rectangle')`, `t('text')`, `t('addItem')` assertions changed from `toContain` to `not.toContain` — those tools were removed from ToolMenu |
+| `__perf_refactor_regression__/quickAdd.groupButton.test.ts` | 10 | comments only | "Group button" → "Rectangle button" in comments; logic unchanged |
+| `components/ItemControls/IconSelectionControls/__tests__/Icon.test.tsx` | 2 | test changed | `getByText('flat')` → `getByAltText('flat icon')` / `getByAltText('isometric icon')` — tests alt text since text labels were removed in a prior session |
+
 **Full regression suite documentation:** See `regression_tests.md` at repo root — suites listed with production targets, test counts, classifications, coverage notes, and known gaps.
 
 ---
@@ -1020,7 +1137,13 @@ Before the H-2 perf fix, `rendererSize` was observed by multiple `useResizeObser
 **FreehandLasso reads `rendererEl.getBoundingClientRect()` on mouseup:**
 Unlike all other coordinate calculations which use `rendererSize` from the store, `FreehandLasso.mouseup` directly calls `uiState.rendererEl?.getBoundingClientRect()`. Inconsistent but acceptable.
 
-**The `INTERACTIONS_DISABLED` mode:**
+**`NonIsometricIcon` must use `top: 0` not `top: -halfH`:**
+`NonIsometricIcon.tsx` positions the icon at `left: -halfW, top: 0` in a container that applies the isometric CSS matrix with `transformOrigin: top left`. The matrix rotates the space so the left vertex of the tile diamond lands at the element's origin. Setting `top: -halfH` instead shifts the icon ~41 px above the diamond before the matrix is applied — the transform then rotates the wrong origin, rendering the icon elevated. Fix: always `top: 0`. (Introduced 2026-04-10.)
+
+**`ConnectorMode.returnToCursor` flag must survive the first-click `setMode`:**
+`Connector.ts` click mode calls `setMode` on first click to store the start anchor. This overwrites the mode object. If `returnToCursor` is not explicitly forwarded (`returnToCursor: uiState.mode.type === 'CONNECTOR' ? uiState.mode.returnToCursor : undefined`), the flag is lost and the connector will not return to cursor on completion. (Introduced 2026-04-10.)
+
+**`INTERACTIONS_DISABLED` mode:**
 No `ModeActions` handler for it in the `modes` map in `useInteractionManager`. The keydown effect early-returns if `modeType === 'INTERACTIONS_DISABLED'`. Window event listeners are not registered. This mode is purely an opt-out flag.
 
 **ViewTabs and EXPLORABLE_READONLY:**

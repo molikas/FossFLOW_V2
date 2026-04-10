@@ -6,7 +6,7 @@ import { generateId } from 'src/utils';
 import { TEXTBOX_DEFAULTS } from 'src/config';
 
 // Simple flat SVG thumbnails matching the tool icons
-const GroupSvg = () => (
+const RectangleSvg = () => (
   <svg viewBox="0 0 28 28" width="28" height="28" fill="none" xmlns="http://www.w3.org/2000/svg">
     <rect x="3" y="3" width="22" height="22" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none" />
   </svg>
@@ -74,7 +74,7 @@ export const CommonElements = () => {
   const mode = useUiStateStore((s) => s.mode);
   const { createTextBox } = useScene();
 
-  const handleGroupMouseDown = useCallback(() => {
+  const handleRectangleMouseDown = useCallback(() => {
     uiStateActions.setMode({
       type: 'RECTANGLE.DRAW',
       showCursor: true,
@@ -97,7 +97,8 @@ export const CommonElements = () => {
     uiStateActions.setMode({
       type: 'CONNECTOR',
       id: null,
-      showCursor: true
+      showCursor: true,
+      returnToCursor: true
     });
   }, [uiStateActions]);
 
@@ -125,10 +126,10 @@ export const CommonElements = () => {
         }}
       >
         <ElementCard
-          label="Group"
-          icon={<GroupSvg />}
+          label="Rectangle"
+          icon={<RectangleSvg />}
           isActive={mode.type === 'RECTANGLE.DRAW'}
-          onMouseDown={handleGroupMouseDown}
+          onMouseDown={handleRectangleMouseDown}
         />
         <ElementCard
           label="Text"

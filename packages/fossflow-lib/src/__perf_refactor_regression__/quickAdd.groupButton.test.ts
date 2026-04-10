@@ -1,16 +1,15 @@
 /**
- * REGRESSION — QuickAddNodePopover "Group" button contracts
+ * REGRESSION — QuickAddNodePopover "Rectangle" button contracts
  *
- * Covers the pure callback logic for adding a group (rectangle) from the
+ * Covers the pure callback logic for adding a rectangle from the
  * double-click popover. Tests are pure functions — no component rendering.
  *
  * Background:
  *   - Double-clicking empty canvas fires `canvasEmptyDblClick` → opens popover.
- *   - Popover has two actions: pick an icon (adds a node) or click "Group"
+ *   - Popover has two actions: pick an icon (adds a node) or click "Rectangle"
  *     (adds a background rectangle at the clicked tile).
- *   - "Group" replaces the old "Background area" label and consolidates the
- *     "Add Rectangle" action that previously lived only in the left-click
- *     context menu. The context menu no longer opens on single left-click.
+ *   - Previously labeled "Group" — renamed to "Rectangle" to match the toolbar
+ *     and avoid confusion with grouping semantics.
  */
 
 // ---------------------------------------------------------------------------
@@ -36,7 +35,7 @@ function buildRectangleArgs(
 
 // ---------------------------------------------------------------------------
 // Pure logic extracted from QuickAddNodePopover.handleIconSelected
-// (verifies the node placement path is unaffected by Group addition)
+// (verifies the node placement path is unaffected by Rectangle addition)
 // ---------------------------------------------------------------------------
 
 interface Icon { id: string }
@@ -58,7 +57,7 @@ function buildNodeArgs(
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('QuickAddNodePopover — Group button logic', () => {
+describe('QuickAddNodePopover — Rectangle button logic', () => {
   const tile: Tile = { x: 5, y: 7 };
   const colors: Color[] = [{ id: 'color-1' }, { id: 'color-2' }];
   const fakeId = 'rect-id-123';

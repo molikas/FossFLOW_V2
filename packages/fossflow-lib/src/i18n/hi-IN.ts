@@ -281,7 +281,7 @@ const locale: LocaleProps = {
   },
   quickAddNodePopover: {
     add: "जोड़ें",
-    group: "समूह"
+    rectangle: "समूह"
   },
   zoomControls: {
     zoomOut: "ज़ूम आउट",

@@ -18,18 +18,13 @@ describe('Icon', () => {
         isIsometric: true
     }
 
-    it("should show 'flat' label for non isometric icon", () => {
-        render(
-            <Icon icon={flatIcon} />
-        )
-        const label = screen.getByText('flat')
-        expect(label).toBeInTheDocument()
+    it('renders an img element for a flat icon', () => {
+        render(<Icon icon={flatIcon} />)
+        expect(screen.getByAltText('flat icon')).toBeInTheDocument()
     })
 
-    it("should not show 'flat' label for isometric icon", () => {
-        render(
-            <Icon icon={isometricIcon} />
-        )
-        expect(screen.queryByText('flat')).toBeNull()
+    it('renders an img element for an isometric icon', () => {
+        render(<Icon icon={isometricIcon} />)
+        expect(screen.getByAltText('isometric icon')).toBeInTheDocument()
     })
 })

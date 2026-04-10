@@ -17,12 +17,12 @@ An "experimental" community fork of [FossFLOW](https://github.com/stan-smith/Fos
 
 ### Nodes and text
 
-- **Node panel — Details / Style / Notes tabs** — Selecting a node opens a 300 px side panel with three tabs. *Details*: name, caption (short text shown on the canvas below the node name), and optional link. *Style*: icon picker, icon size, label font/color/height. *Notes*: full-height rich-text editor for private documentation — never shown on the canvas itself.
+- **Node panel — Details / Style / Notes tabs** — Selecting a node opens the right Properties panel with three tabs. *Details*: name, caption (short text shown on the canvas below the node name), and optional link. *Style*: icon picker, icon size, label font/color/height. *Notes*: full-height rich-text editor for private documentation — never shown on the canvas itself.
 - **Caption vs Notes** — "Caption" is canvas-visible text (subtitle under the node name). "Notes" is hidden documentation only accessible in the panel. Both fields are rich-text (Quill), stored separately in the model.
-- **Floating action bar** — When a node is selected in edit mode a compact pill bar appears above the node on the canvas with six icon buttons: Style, Edit name, Link, Notes (opens the Notes tab), **Start connector** (draws a new connector from this node and returns to the selector after connecting), Delete.
+- **Floating action bar** — When a node is selected in edit mode a compact pill bar appears above the node on the canvas with seven icon buttons: Style, Edit name, Edit/Add link, Edit/Add notes, **Start connector** (draws a new connector from this node and returns to cursor after connecting), Delete.
 - **Note indicator dot** — Nodes with non-empty Notes show a small blue dot at the top-right of their icon on the canvas.
 - **Read-only node panel** — In `EXPLORABLE_READONLY` mode, clicking a node opens a single-scroll panel showing **Caption** and **Notes** sections (only when non-empty). Header shows the node icon, name, and optional link button. Nodes with no caption and no notes are not clickable at all — the panel stays closed.
-- **Double-click to place node or group** — Double-clicking empty canvas opens a compact "Add" popover at the cursor. A **Group** button at the top creates a background rectangle (used to visually group nodes). Below it, an icon picker lets you place a node — selecting an icon places it and immediately opens its Details tab for naming. Single left-click on empty canvas just deselects; no context menu.
+- **Double-click to place node or rectangle** — Double-clicking empty canvas opens a compact "Add" popover at the cursor. A **Rectangle** button at the top creates a background rectangle for visually grouping nodes. Below it, an icon picker lets you place a node — selecting an icon places it and immediately opens its Details tab for naming. Single left-click on empty canvas just deselects; no context menu.
 - **Clickable node links** — Attach a URL to any node; its label becomes a clickable link in the diagram.
 - **Node label font size and color** — Adjust font size and text color from the Style tab.
 - **Text box rich text and color** — Text boxes support bold, italic, bullet lists, headers, and more. Text color is adjustable. The box auto-expands to fit its content.
@@ -33,6 +33,7 @@ An "experimental" community fork of [FossFLOW](https://github.com/stan-smith/Fos
 
 - **Right-click to pan** — Right-click drag pans the canvas; release to resume the active tool.
 - **Default zoom 85%** — Opens with a little breathing room.
+- **Layers** — Each view has an independent layer stack. Layers control visibility and lock state for all element types (nodes, connectors, rectangles, text boxes). Elements can be assigned to layers; unassigned elements are always visible and interactive. Layer order is draggable.
 
 ### File management
 
@@ -41,6 +42,7 @@ An "experimental" community fork of [FossFLOW](https://github.com/stan-smith/Fos
 - **Save status indicator** — Shows when the diagram was last saved and whether there are unsaved changes. Displayed in the toolbar right section as `Saved at HH:MM`, `Saved yesterday at HH:MM`, or `Saved Mon DD at HH:MM` for older diagrams. A `•` dot appears when there are pending changes. No auto-save — only explicit Save updates the timestamp.
 - **Save confirmation toast** — A brief `✓ [Name] saved` notification slides up from the bottom on every explicit save.
 - **Share link** — Generates a read-only URL for the current diagram (requires server storage).
+- **New diagram with unsaved-changes guard** — Hamburger menu → "New diagram" clears the canvas. Pending edits trigger a three-button dialog: *Save & continue* (autosaves to `localStorage`, falls back to a JSON download), *Discard changes*, or *Cancel*. Tab-close also shows a native browser warning when there are unsaved edits.
 
 ### Performance
 
@@ -71,6 +73,12 @@ An "experimental" community fork of [FossFLOW](https://github.com/stan-smith/Fos
 - Language selector in the toolbar shows the active language name and switches instantly without reload.
 - All UI text localised: toolbar buttons (Save / Diagrams / Share / Preview), save-status timestamps, Save As dialog, Share popover, Diagrams Manager, tool tooltips (Select / Lasso / Pan / Rectangle / Connector etc.), icon selector search, QuickIconSelector help text, node panel tabs, zoom controls, export image dialog, settings panels, connector/lasso hint tooltips, and all alert/confirmation strings.
 
+### Panels
+
+- **Left panel (Elements / Layers)** — 40 px icon strip on the left edge. Click **Elements** to open a 240 px sliding panel with: icon search and drag-to-canvas, Rectangle shape, Connector tool, and import icons button. Click **Layers** to open the Layers panel. Click the active tab again to close.
+- **Right panel (Properties)** — 300 px panel on the right edge, toggled by a button in the top-right corner. Shows the Details / Style / Notes tabs for the selected item. Shows an empty-state hint when nothing is selected. Slides in/out without resizing the canvas.
+- **Icon drag-to-canvas** — Dragging an icon from the Elements panel shows a ghost icon following the cursor across the isometric grid until you drop it at the target tile.
+
 ### Quality-of-life
 
 - Editing a node no longer adds an empty description block to its canvas label.
@@ -79,6 +87,9 @@ An "experimental" community fork of [FossFLOW](https://github.com/stan-smith/Fos
 - Lasso tool activates correctly on first canvas click — no longer reverts to pointer before drawing the selection box.
 - Help dialog (`F1` / `?`) documents all keyboard shortcuts.
 - Session-only storage shows a dismissible warning banner.
+- **Connector — single-shot from Elements panel** — The Connector card in the Elements panel draws one connection then returns to the cursor tool. The toolbar Connector button stays in persistent mode as before.
+- **Import Icons dialog** — After selecting icon files, a dialog asks whether to treat them as isometric (3-D) or flat. Default is flat. Previously a persistent checkbox sat in the panel.
+- **ToolMenu cleanup** — Rectangle and Text removed from the top toolbar (both accessible from the Elements panel). Toolbar is now: Undo / Redo / Select / Lasso / Freehand / Pan / Connector.
 
 ---
 
@@ -111,6 +122,20 @@ Diagrams are saved to a `diagrams/` folder in the project directory.
 ---
 
 ## [Unreleased]
+
+### 2026-04-10
+
+#### UX & Editor
+
+- **New diagram** — Hamburger menu gains a "New diagram" item. Pending edits show a three-button guard dialog: *Save & continue* (autosaves to `localStorage`, falls back to JSON download), *Discard changes*, *Cancel*. Tab-close fires a native browser warning when edits are unsaved.
+- **Connector — single-shot from Elements panel** — Connector card in the Elements panel draws one connection then returns to the cursor tool. Toolbar Connector button keeps its persistent mode.
+- **Rectangle renamed from Group** — The double-click popover button and Elements panel card now say "Rectangle". All 13 locale files updated. Internal mode types unchanged.
+- **Import Icons dialog** — Isometric toggle moved from a persistent checkbox into a per-import confirm dialog (default: flat). Reduces clutter in the Elements panel.
+- **ToolMenu cleanup** — Rectangle and Text buttons removed from the top toolbar; both are in the Elements panel.
+
+#### Bug fix
+
+- **Flat icon elevation** — Non-isometric icons were rendered ~41 px too high. `NonIsometricIcon` was applying a negative `top` offset before the isometric matrix transform. Fixed by anchoring at `top: 0`.
 
 ### 2026-04-08
 
@@ -152,7 +177,7 @@ All remaining hardcoded English strings have been replaced with i18n keys across
 - **All 11 non-English JSON files** updated with the new keys (proper translations for all major languages; English fallback for hi-IN and bn-BD).
 
 **fossflow-lib (localeStore, TypeScript locale files):**
-- **ToolMenu tooltips:** `toolMenu` namespace added to `LocaleProps` and all 13 locale TS files. All 10 tool name props (Undo, Redo, Select, Lasso select, Freehand lasso, Pan, Add item, Rectangle, Connector, Text) wired to `t()`.
+- **ToolMenu tooltips:** `toolMenu` namespace added to `LocaleProps` and all 13 locale TS files. Tool name props (Undo, Redo, Select, Lasso select, Freehand lasso, Pan, Connector) wired to `t()`. Rectangle and Text were subsequently moved to the Elements panel and removed from the toolbar.
 - **QuickIconSelector:** `quickIconSelector` namespace added. "RECENTLY USED", search placeholder, "SEARCH RESULTS ({n} icons)", "No icons found matching…", and both help-text variants wired. Interpolation uses `.replace()` since the lib's `t()` does not support object params.
 - **zh-CN.ts viewTabs fix:** `addPage`, `deletePage`, `renameDiagram` were English placeholders — corrected to Chinese.
 
@@ -226,7 +251,7 @@ Nine targeted optimizations, all measured with the in-app DiagnosticsOverlay:
 - **Note indicator dot:** Nodes with non-empty Notes show a small blue dot at the top-right of their icon on the canvas.
 - **Read-only node panel — single-scroll:** In `EXPLORABLE_READONLY` mode, clicking a node opens a single-scroll panel (no tabs): header with node icon + name + optional link button, then **Caption** and **Notes** sections only when non-empty. Nodes with neither caption nor notes are not clickable — the panel stays closed.
 - **Save & Preview button:** Eye icon in the toolbar (edit mode only). If there are unsaved changes, silently saves first (shows the save toast), then opens `/display/{id}` in a new browser tab. Tooltip adapts: *"Save & Preview"* when dirty, *"Preview"* when already saved, *"Save first to preview"* when no diagram exists yet.
-- **Double-click to add node or group:** Double-clicking empty canvas opens a compact "Add" popover at the cursor. A **Group** button at the top creates a background rectangle for visually grouping nodes. Below it, an icon picker lets you place a node — selecting an icon places it and opens its Details tab for naming. Single left-click on empty canvas now just deselects (no context menu, no ambiguity).
+- **Double-click to add node or rectangle:** Double-clicking empty canvas opens a compact "Add" popover at the cursor. A **Rectangle** button at the top creates a background rectangle for visually grouping nodes. Below it, an icon picker lets you place a node — selecting an icon places it and opens its Details tab for naming. Single left-click on empty canvas now just deselects (no context menu, no ambiguity).
 - **Help dialog updated:** "Add Node / Group — Double-click (empty area)" entry added to the shortcuts table so the double-click gesture is discoverable.
 - **MUI toolbar:** Toolbar in `fossflow-app` fully rewritten with MUI components — `Button`, `Divider`, `Chip`, `Popover`, `Alert`, `Typography`. Custom Bootstrap-era CSS classes removed from `App.css`.
 - **Toolbar button hierarchy:** Save is `variant="contained"` (primary, blue). Diagrams and Share are `variant="outlined"` — consistent secondary actions.

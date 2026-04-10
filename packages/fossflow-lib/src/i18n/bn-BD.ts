@@ -281,7 +281,7 @@ const locale: LocaleProps = {
   },
   quickAddNodePopover: {
     add: "যোগ করুন",
-    group: "গ্রুপ"
+    rectangle: "গ্রুপ"
   },
   zoomControls: {
     zoomOut: "জুম আউট",

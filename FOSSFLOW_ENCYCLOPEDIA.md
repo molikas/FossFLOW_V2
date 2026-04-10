@@ -2,7 +2,7 @@
 
 **Last Updated**: April 2026
 **Original Created**: August 14, 2025 (commit 94bf3c0)
-**Major Updates**: Connector anchor drag-to-reconnect UX (RECONNECT_ANCHOR mode, glass-morphism anchor overlay), transient right-click pan, node header links, description persistence fix, performance improvements, and service worker overhaul — plus 79+ prior commits including backend storage, i18n, lasso tools, and connector enhancements
+**Major Updates**: New diagram UX with unsaved-changes guard, flat icon elevation fix, connector single-shot from Elements panel, Rectangle rename (was Group), ToolMenu cleanup, ImportIconsDialog, connector anchor reconnect UX, transient right-click pan, node header links, performance improvements, full i18n, and service worker overhaul — plus many prior commits
 
 ---
 
@@ -241,12 +241,15 @@ Response: { success: boolean }
 - `editorMode`: Edit/readonly state
 - `hotkeyProfile`: Selected hotkey scheme (NEW)
 - `panSettings`: Pan control configuration (NEW)
-- `connectorInteractionMode`: 'click' or 'drag' (NEW)
-- `locale`: Current language (NEW)
+- `connectorInteractionMode`: 'click' or 'drag'
+- `isDirty`: boolean — set by `useDirtyTracker` on any model change after load; cleared by `markClean()` after export or new-diagram flow
+- `activeLeftTab`: `'ELEMENTS' | 'LAYERS' | null` — which left-dock tab is open
+- `rightSidebarOpen`: boolean — whether the right Properties panel is visible
 
 **New Features** (since Aug 2025):
 - Configurable hotkey profiles (qwerty, smnrct, none)
 - Advanced pan control settings
+- `isDirty` flag + `useDirtyTracker` hook for unsaved-changes detection
 - Connector creation mode toggle
 - i18n locale state
 - Settings persistence (2026-04-07): `hotkeyProfile`, `panSettings`, `zoomSettings`, `labelSettings`, `connectorInteractionMode`, `expandLabels` are loaded from `localStorage` on init via `loadPersistedSettings()`. `Isoflow.tsx` saves them back on change via `savePersistedSettings()`.
@@ -328,7 +331,7 @@ The FossFLOW application is a Progressive Web App (PWA) built with RSBuild that 
   - `Nodes.tsx`: Node collection renderer
 - **Icon Types**:
   - `IsometricIcon.tsx`: 3D-style icons
-  - `NonIsometricIcon.tsx`: Flat icons
+  - `NonIsometricIcon.tsx`: Flat icons — must use `top: 0` (not `top: -halfH`). The isometric CSS matrix is applied with `transformOrigin: top left`; a negative top offset shifts the icon before the matrix rotates it, causing ~41 px elevation. Fix: always anchor at `top: 0`. (2026-04-10)
 - **Updates**:
   - Support for custom imported icons with scaling (commit dd80e86)
   - Header link: when `modelItem.headerLink` is set the node name renders as a clickable `<a>` tag that opens the URL in a new tab (2026-03)
@@ -427,15 +430,76 @@ The FossFLOW application is a Progressive Web App (PWA) built with RSBuild that 
 
 #### MainMenu (`packages/fossflow-lib/src/components/MainMenu/`)
 - **Purpose**: Application menu
-- **Features**: Open, Export, Clear
-- **Updates**: i18n support (commit a001da7)
+- **Features**: New diagram (with unsaved-changes guard), Open, Export JSON, Export Compact JSON, Export Image, Clear canvas, Settings, GitHub
+- **New diagram UX**: Reads `uiStateStore.isDirty`. If dirty, shows `ConfirmDiscardDialog` (Save & continue / Discard / Cancel). "Save & continue" calls `saveModelLocally()` (localStorage, falls back to JSON download) then executes the action.
+- **Updates**: i18n support; `ACTION.NEW` added to `MainMenuOptionsEnum` and `MAIN_MENU_OPTIONS` config
 
 #### ToolMenu (`packages/fossflow-lib/src/components/ToolMenu/`)
 - **Purpose**: Drawing tools palette
-- **Tools**: Select, Pan, Add Icon, Draw Rectangle, Add Text, Lasso (NEW), Freehand Lasso (NEW)
+- **Tools**: Undo, Redo, Select, Lasso, Freehand Lasso, Pan, Connector
+- **Note**: Rectangle and Text were removed from ToolMenu (2026-04-10) — both are accessible from the Elements panel (LeftDock). This reduces toolbar clutter and keeps element creation tools in one place.
 - **Updates**:
-  - Hotkey indicators (commit ef258df)
-  - Visual profile badges for active hotkeys
+  - Hotkey indicators
+  - All tool names use i18n `t()` from `toolMenu` namespace — no hardcoded English strings
+
+#### LeftDock (`packages/fossflow-lib/src/components/LeftDock/`)
+
+**Architecture:** A 40 px icon strip always visible on the left edge, plus a 240 px sliding panel that animates in/out. `position:absolute`, full-height, `zIndex:10` — never resizes the canvas. `activeLeftTab: 'ELEMENTS' | 'LAYERS' | null` in `uiStateStore` controls which panel is open. Clicking an active tab closes the panel.
+
+**Tabs:**
+- **Elements** (`WidgetsOutlined` icon) → `ElementsPanel`
+- **Layers** (`LayersOutlined` icon) → `LayersPanel`
+
+**ElementsPanel** (`ElementsPanel.tsx`):
+- Icon search grid: drag an icon to begin `PLACE_ICON` mode; a ghost icon (`DragAndDrop`) tracks the cursor across the isometric grid
+- **Rectangle card**: mousedown → `RECTANGLE.DRAW` mode
+- **Connector card**: mousedown → `CONNECTOR` mode with `returnToCursor: true` (single-shot — returns to cursor after one connection; contrast with the toolbar button which stays persistent)
+- **Import Icons button**: file input → `setPendingFiles` → opens `ImportIconsDialog`
+
+**ImportIconsDialog** (`ImportIconsDialog.tsx`): Per-import confirm dialog showing file count and an isometric toggle (default: flat). Props: `open`, `fileCount`, `onConfirm(isIsometric: boolean)`, `onCancel`. Replaced the persistent "Treat as isometric" checkbox (removed 2026-04-10).
+
+**CommonElements** (`CommonElements.tsx`): shared Rectangle and Connector card components used by `ElementsPanel`.
+
+**DragAndDrop** (`components/DragAndDrop/DragAndDrop.tsx`): Ghost icon rendered by `UiOverlay` during `PLACE_ICON` mode. Positioned at `getTilePosition(BOTTOM).y - halfH` — mirrors `Node.tsx` exactly so the ghost lands at the correct tile center.
+
+#### LayersPanel (`packages/fossflow-lib/src/components/LayersPanel/`)
+
+**Purpose:** Manage named layers for the current view. Layers control visibility and lock state for all canvas element types.
+
+**Layer data model** (`schemas/layer.ts`):
+```typescript
+Layer = { id: string; name: string; visible: boolean; locked: boolean; order: number }
+```
+Stored as `view.layers: Layer[]` — per-view, not global. All canvas entities (`ViewItem`, `Connector`, `Rectangle`, `TextBox`) carry an optional `layerId`.
+
+**Features:**
+- **Add / delete layers** — `+` button creates `Layer N`; delete button on selected layer
+- **Inline rename** — click layer name to edit in-place
+- **Visibility toggle** — eye icon; hidden-layer entities are excluded from rendering
+- **Lock toggle** — lock icon; locked-layer entities cannot be interacted with
+- **Drag to reorder** — drag handle reorders layer stack (order = render z-order)
+- **Expandable item list** — per-layer list of assigned items (nodes, connectors, rectangles, text boxes); clicking an item selects it on canvas
+- **Bidirectional canvas↔panel selection sync** — clicking a canvas item highlights its row in the panel; clicking a panel row selects it on canvas
+- **Drag item to layer** — drag an item row onto a layer row to reassign it; unassigned items are always visible and interactive
+- **Unassigned section** — items with no `layerId` shown at the bottom
+
+**Hooks:**
+- `useLayerContext` — reads `LayerContextValue` (visibleIds, lockedIds, layers, itemCountByLayerId, unassignedCount, itemsByLayerId) from `LayerContext`
+- `useLayerActions` — dispatches `CREATE_LAYER`, `UPDATE_LAYER`, `DELETE_LAYER`, `REORDER_LAYERS`, `ASSIGN_LAYER_TO_ITEMS`, `REORDER_VIEWITEM` via the view reducer
+
+**`LayerContextProvider`** (`hooks/useLayerContext.ts`): React context provider (not Zustand). Wraps the full editor tree. Derives `LayerContextValue` from `modelStore.views` + `uiState.view` via `useMemo` — recomputed on view or model change. Thin read-only derived state; mutations go through `useLayerActions`.
+
+#### RightSidebar (`packages/fossflow-lib/src/components/Sidebars/RightSidebar.tsx`)
+
+**Purpose:** Properties panel for the selected canvas element. `position:absolute`, right edge, 300 px wide. Slides via `transform: translateX(100%)` when closed — does not affect canvas layout.
+
+**Open/close:** `uiState.rightSidebarOpen` (boolean), toggled by a button rendered in `UiOverlay`'s sidebar portal.
+
+**Content:**
+- Item selected (`itemControls !== null`): renders `<ItemControlsManager>` — full-height scrollable; shows NodePanel (Details/Style/Notes), ConnectorControls, RectangleControls, or TextBoxControls depending on selection type
+- Nothing selected: empty-state with `TuneOutlined` icon and hint text
+
+**Note:** `LeftSidebar` (`components/Sidebars/LeftSidebar.tsx`) is a legacy wrapper that renders only `<LayersPanel>`. Superseded by `LeftDock` and no longer used in the main render path.
 
 #### ItemControls (`packages/fossflow-lib/src/components/ItemControls/`)
 - **Purpose**: Property panels for selected items
@@ -1085,8 +1149,19 @@ transaction(() => {
 - **Perf — Subscription Tightening (R-1)**: Zustand equality functions added to mouse-state selectors; `usePanHandlers` reactive subscription removed.
 - **Perf — Grid Off Zustand (R-2)**: `Grid.tsx` reads scroll position via `useRef` + resize-observer; eliminates per-frame store writes during pan.
 
+### April 2026 (2026-04-10)
+
+- **New Diagram UX**: `ACTION.NEW` added to MainMenu. Clicking "New diagram" when `isDirty=true` shows `ConfirmDiscardDialog` (Save & continue / Discard / Cancel). Save path: `saveModelLocally()` → `localStorage` autosave (key `fossflow-autosave`), falls back to JSON download. Tab-close triggers native `beforeunload` warning.
+- **`useDirtyTracker` hook**: Subscribes to `modelStore` 100 ms after `isReady`. Any model change sets `uiState.isDirty = true`. Installed in `Isoflow.tsx`.
+- **Flat icon elevation fix**: `NonIsometricIcon.tsx` corrected `top: -halfH` → `top: 0`. The isometric CSS matrix requires the element origin at `top: 0`; the negative offset was causing ~41 px elevation of all flat icons.
+- **Connector single-shot from Elements panel**: Connector card in LeftDock sets `returnToCursor: true`; mode is reset to cursor after one connection. Toolbar Connector stays persistent.
+- **Rectangle rename**: "Group" button in `QuickAddNodePopover` and Elements panel card renamed to "Rectangle". All 13 i18n locale files updated (`group` key → `rectangle` in `quickAddNodePopover` section). Internal mode types (`RECTANGLE.DRAW`, `RECTANGLE.TRANSFORM`) unchanged.
+- **ToolMenu cleanup**: Rectangle and Text `IconButton` components removed from `ToolMenu.tsx`. Both accessible from ElementsPanel (LeftDock).
+- **ImportIconsDialog**: Per-import isometric toggle dialog (`components/LeftDock/ImportIconsDialog.tsx`) replaces the persistent "Treat as isometric" checkbox in ElementsPanel. Default: flat.
+- **Default zoom 85%**: `INITIAL_UI_STATE.zoom` changed from 0.9 to 0.85.
+
 ---
 
 This encyclopedia serves as a comprehensive guide to the FossFLOW codebase. Use the table of contents and quick references to efficiently navigate to the areas you need to modify or understand.
 
-**For Contributors**: See [CONTRIBUTORS.md](./CONTRIBUTORS.md) for contribution guidelines and [FOSSFLOW_TODO.md](./FOSSFLOW_TODO.md) for current issues and roadmap.
+**For Contributors**: See [CONTRIBUTING.md](./CONTRIBUTING.md) for contribution guidelines.

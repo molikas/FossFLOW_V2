@@ -281,7 +281,7 @@ const locale: LocaleProps = {
   },
   quickAddNodePopover: {
     add: "添加",
-    group: "分组"
+    rectangle: "分组"
   },
   zoomControls: {
     zoomOut: "缩小",
