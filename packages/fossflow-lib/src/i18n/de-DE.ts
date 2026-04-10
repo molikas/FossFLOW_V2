@@ -7,6 +7,7 @@ const locale: LocaleProps = {
   mainMenu: {
     undo: "Rückgängig",
     redo: "Wiederholen",
+    new: "New diagram",
     open: "Öffnen",
     exportJson: "Als JSON exportieren",
     exportCompactJson: "Als kompaktes JSON exportieren",

@@ -112,6 +112,7 @@ export const INITIAL_SCENE_STATE = {
   textBoxes: {}
 };
 export const MAIN_MENU_OPTIONS: MainMenuOptions = [
+  'ACTION.NEW',
   'ACTION.OPEN',
   'EXPORT.JSON',
   'EXPORT.PNG',

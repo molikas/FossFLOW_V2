@@ -51,6 +51,7 @@ const initialState = () => {
       activeLeftTab: null,
       rightSidebarOpen: false,
       rightSidebarAutoOpened: false,
+      isDirty: false,
 
       actions: {
         setView: (view) => {
@@ -161,6 +162,9 @@ const initialState = () => {
         },
         setRightSidebarOpen: (rightSidebarOpen) => {
           set({ rightSidebarOpen, rightSidebarAutoOpened: false });
+        },
+        setIsDirty: (isDirty) => {
+          set({ isDirty });
         }
       }
     };

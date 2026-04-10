@@ -8,6 +8,7 @@ import {
   FolderOpen as FolderOpenIcon,
   DeleteOutline as DeleteOutlineIcon,
   Settings as SettingsIcon,
+  AddOutlined as NewIcon
 } from '@mui/icons-material';
 import { useUiStateStore } from 'src/stores/uiStateStore';
 import {
@@ -15,6 +16,7 @@ import {
   exportAsCompactJSON,
   transformFromCompactFormat
 } from 'src/utils/exportOptions';
+import { saveModelLocally } from 'src/utils/localStorageSave';
 import { modelFromModelStore } from 'src/utils';
 import { useInitialDataManager } from 'src/hooks/useInitialDataManager';
 import { useModelStore } from 'src/stores/modelStore';
@@ -22,25 +24,27 @@ import { useHistory } from 'src/hooks/useHistory';
 import { DialogTypeEnum } from 'src/types/ui';
 import { MenuItem } from './MenuItem';
 import { useTranslation } from 'src/stores/localeStore';
+import { ConfirmDiscardDialog } from 'src/components/ConfirmDiscardDialog/ConfirmDiscardDialog';
+
+type PendingAction = 'new' | 'open' | 'clear' | null;
 
 export const MainMenu = () => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const model = useModelStore((state) => {
-    return modelFromModelStore(state);
-  });
-  const isMainMenuOpen = useUiStateStore((state) => {
-    return state.isMainMenuOpen;
-  });
-  const mainMenuOptions = useUiStateStore((state) => {
-    return state.mainMenuOptions;
-  });
-  const uiStateActions = useUiStateStore((state) => {
-    return state.actions;
-  });
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+
+  const model = useModelStore((state) => modelFromModelStore(state));
+  const isMainMenuOpen = useUiStateStore((state) => state.isMainMenuOpen);
+  const mainMenuOptions = useUiStateStore((state) => state.mainMenuOptions);
+  const isDirty = useUiStateStore((state) => state.isDirty);
+  const uiStateActions = useUiStateStore((state) => state.actions);
   const initialDataManager = useInitialDataManager();
   const { clearHistory } = useHistory();
 
   const { t } = useTranslation('mainMenu');
+
+  const closeMenu = useCallback(() => {
+    uiStateActions.setIsMainMenuOpen(false);
+  }, [uiStateActions]);
 
   const onToggleMenu = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -54,95 +58,122 @@ export const MainMenu = () => {
     window.open(url, '_blank');
   }, []);
 
-  const { load } = initialDataManager;
+  const { load, clear } = initialDataManager;
 
-  const onOpenModel = useCallback(async () => {
+  // ── Guard helpers ────────────────────────────────────────────────────────────
+
+  /** Request an action — shows the discard guard if the model is dirty. */
+  const requestAction = useCallback((action: PendingAction) => {
+    closeMenu();
+    if (isDirty) {
+      setPendingAction(action);
+    } else {
+      executeAction(action);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDirty]);
+
+  const executeAction = useCallback((action: PendingAction) => {
+    setPendingAction(null);
+    switch (action) {
+      case 'new':  performNew();  break;
+      case 'open': performOpen(); break;
+      case 'clear': performClear(); break;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleGuardSave = useCallback(() => {
+    saveModelLocally(model);
+    uiStateActions.setIsDirty(false);
+    executeAction(pendingAction);
+  }, [model, uiStateActions, pendingAction, executeAction]);
+
+  const handleGuardDiscard = useCallback(() => {
+    uiStateActions.setIsDirty(false);
+    executeAction(pendingAction);
+  }, [uiStateActions, pendingAction, executeAction]);
+
+  const handleGuardCancel = useCallback(() => {
+    setPendingAction(null);
+  }, []);
+
+  // ── Actions ──────────────────────────────────────────────────────────────────
+
+  const performNew = useCallback(() => {
+    clear();
+    clearHistory();
+    uiStateActions.setIsDirty(false);
+  }, [clear, clearHistory, uiStateActions]);
+
+  const performOpen = useCallback(() => {
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = 'application/json';
 
     fileInput.onchange = async (event) => {
       const file = (event.target as HTMLInputElement).files?.[0];
-
-      if (!file) {
-        throw new Error('No file selected');
-      }
+      if (!file) return;
 
       const fileReader = new FileReader();
-
       fileReader.onload = async (e) => {
         const rawData = JSON.parse(e.target?.result as string);
         let modelData = rawData;
-
-        // Check format and transform if needed
         if (rawData._?.f === 'compact') {
           modelData = transformFromCompactFormat(rawData);
         }
-
         load(modelData);
-        clearHistory(); // Clear history when loading new model
+        clearHistory();
+        uiStateActions.setIsDirty(false);
       };
       fileReader.readAsText(file);
-
       uiStateActions.resetUiState();
     };
 
-    await fileInput.click();
-    uiStateActions.setIsMainMenuOpen(false);
-  }, [uiStateActions, load, clearHistory]);
+    fileInput.click();
+  }, [load, clearHistory, uiStateActions]);
 
-  const onExportAsJSON = useCallback(async () => {
+  const performClear = useCallback(() => {
+    clear();
+    clearHistory();
+    uiStateActions.setIsDirty(false);
+  }, [clear, clearHistory, uiStateActions]);
+
+  // ── Export (marks model as clean) ───────────────────────────────────────────
+
+  const onExportAsJSON = useCallback(() => {
     exportAsJSON(model);
-    uiStateActions.setIsMainMenuOpen(false);
-  }, [model, uiStateActions]);
+    uiStateActions.setIsDirty(false);
+    closeMenu();
+  }, [model, uiStateActions, closeMenu]);
 
-  const onExportAsCompactJSON = useCallback(async () => {
+  const onExportAsCompactJSON = useCallback(() => {
     exportAsCompactJSON(model);
-    uiStateActions.setIsMainMenuOpen(false);
-  }, [model, uiStateActions]);
+    uiStateActions.setIsDirty(false);
+    closeMenu();
+  }, [model, uiStateActions, closeMenu]);
 
   const onExportAsImage = useCallback(() => {
-    uiStateActions.setIsMainMenuOpen(false);
+    closeMenu();
     uiStateActions.setDialog(DialogTypeEnum.EXPORT_IMAGE);
-  }, [uiStateActions]);
-
-  const { clear } = initialDataManager;
-
-  const onClearCanvas = useCallback(() => {
-    clear();
-    clearHistory(); // Clear history when clearing canvas
-    uiStateActions.setIsMainMenuOpen(false);
-  }, [uiStateActions, clear, clearHistory]);
-
-
+    // Image export also counts as "saved"
+    uiStateActions.setIsDirty(false);
+  }, [uiStateActions, closeMenu]);
 
   const onOpenSettings = useCallback(() => {
-    uiStateActions.setIsMainMenuOpen(false);
+    closeMenu();
     uiStateActions.setDialog(DialogTypeEnum.SETTINGS);
-  }, [uiStateActions]);
+  }, [uiStateActions, closeMenu]);
 
+  // ── Visibility ───────────────────────────────────────────────────────────────
 
+  const sectionVisibility = useMemo(() => ({
+    actions: Boolean(mainMenuOptions.find((opt) => opt.includes('ACTION') || opt.includes('EXPORT'))),
+    links: Boolean(mainMenuOptions.find((opt) => opt.includes('LINK'))),
+    version: Boolean(mainMenuOptions.includes('VERSION'))
+  }), [mainMenuOptions]);
 
-
-  const sectionVisibility = useMemo(() => {
-    return {
-      actions: Boolean(
-        mainMenuOptions.find((opt) => {
-          return opt.includes('ACTION') || opt.includes('EXPORT');
-        })
-      ),
-      links: Boolean(
-        mainMenuOptions.find((opt) => {
-          return opt.includes('LINK');
-        })
-      ),
-      version: Boolean(mainMenuOptions.includes('VERSION'))
-    };
-  }, [mainMenuOptions]);
-
-  if (mainMenuOptions.length === 0) {
-    return null;
-  }
+  if (mainMenuOptions.length === 0) return null;
 
   return (
     <>
@@ -164,28 +195,28 @@ export const MainMenu = () => {
         anchorEl={anchorEl}
         open={isMainMenuOpen}
         onClose={() => {
-          // Restore focus to anchor before MUI sets aria-hidden on the modal root,
-          // otherwise the browser warns about aria-hidden on a focused element.
           if (anchorEl) anchorEl.focus();
-          uiStateActions.setIsMainMenuOpen(false);
+          closeMenu();
         }}
         elevation={0}
-        sx={{
-          mt: 2
-        }}
-        MenuListProps={{
-          sx: {
-            minWidth: '250px',
-            py: 0
-          }
-        }}
+        sx={{ mt: 2 }}
+        MenuListProps={{ sx: { minWidth: '250px', py: 0 } }}
       >
         <Card sx={{ py: 1 }}>
-          {/* File Actions */}
+          {mainMenuOptions.includes('ACTION.NEW') && (
+            <MenuItem onClick={() => requestAction('new')} Icon={<NewIcon />}>
+              {t('new')}
+            </MenuItem>
+          )}
+
           {mainMenuOptions.includes('ACTION.OPEN') && (
-            <MenuItem onClick={onOpenModel} Icon={<FolderOpenIcon />}>
+            <MenuItem onClick={() => requestAction('open')} Icon={<FolderOpenIcon />}>
               {t('open')}
             </MenuItem>
+          )}
+
+          {(mainMenuOptions.includes('EXPORT.JSON') || mainMenuOptions.includes('EXPORT.PNG')) && (
+            <Divider />
           )}
 
           {mainMenuOptions.includes('EXPORT.JSON') && (
@@ -207,9 +238,12 @@ export const MainMenu = () => {
           )}
 
           {mainMenuOptions.includes('ACTION.CLEAR_CANVAS') && (
-            <MenuItem onClick={onClearCanvas} Icon={<DeleteOutlineIcon />}>
-              {t('clearCanvas')}
-            </MenuItem>
+            <>
+              <Divider />
+              <MenuItem onClick={() => requestAction('clear')} Icon={<DeleteOutlineIcon />}>
+                {t('clearCanvas')}
+              </MenuItem>
+            </>
           )}
 
           <Divider />
@@ -221,14 +255,8 @@ export const MainMenu = () => {
           {sectionVisibility.links && (
             <>
               <Divider />
-
               {mainMenuOptions.includes('LINK.GITHUB') && (
-                <MenuItem
-                  onClick={() => {
-                    return gotoUrl(`${REPOSITORY_URL}`);
-                  }}
-                  Icon={<GitHubIcon />}
-                >
+                <MenuItem onClick={() => gotoUrl(`${REPOSITORY_URL}`)} Icon={<GitHubIcon />}>
                   {t('gitHub')}
                 </MenuItem>
               )}
@@ -238,7 +266,6 @@ export const MainMenu = () => {
           {sectionVisibility.version && (
             <>
               <Divider />
-
               {mainMenuOptions.includes('VERSION') && (
                 <MenuItem>
                   <Typography variant="body2" color="text.secondary">
@@ -250,6 +277,13 @@ export const MainMenu = () => {
           )}
         </Card>
       </Menu>
+
+      <ConfirmDiscardDialog
+        open={pendingAction !== null}
+        onSave={handleGuardSave}
+        onDiscard={handleGuardDiscard}
+        onCancel={handleGuardCancel}
+      />
     </>
   );
 };

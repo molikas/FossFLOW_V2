@@ -7,6 +7,7 @@ const locale: LocaleProps = {
   mainMenu: {
     undo: "撤销",
     redo: "重做", 
+    new: "New diagram",
     open: "打开",
     exportJson: "导出为 JSON",
     exportCompactJson: "导出为紧凑 JSON",

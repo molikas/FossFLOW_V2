@@ -206,6 +206,8 @@ export interface UiState {
   rightSidebarOpen: boolean;
   /** true when the right sidebar was opened automatically by node selection (not manually pinned) */
   rightSidebarAutoOpened: boolean;
+  /** true when model has changed since last export-to-file or explicit save */
+  isDirty: boolean;
 }
 
 export interface UiStateActions {
@@ -237,6 +239,7 @@ export interface UiStateActions {
   setNotification: (notification: Notification | null) => void;
   setActiveLeftTab: (tab: 'ELEMENTS' | 'LAYERS' | null) => void;
   setRightSidebarOpen: (open: boolean) => void;
+  setIsDirty: (isDirty: boolean) => void;
 }
 
 export type UiStateStore = UiState & {

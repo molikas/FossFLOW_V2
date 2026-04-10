@@ -15,6 +15,7 @@ export interface LocaleProps {
   mainMenu: {
     undo: string;
     redo: string;
+    new: string;
     open: string;
     exportJson: string;
     exportCompactJson: string;

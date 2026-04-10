@@ -1,12 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import {
-  Box,
-  Button,
-  FormControlLabel,
-  Checkbox,
-  Typography,
-  Alert
-} from '@mui/material';
+import { Box, Button } from '@mui/material';
 import { FileUpload as FileUploadIcon } from '@mui/icons-material';
 import { useUiStateStore } from 'src/stores/uiStateStore';
 import { useModelStore } from 'src/stores/modelStore';
@@ -19,6 +12,7 @@ import { useIconCategories } from 'src/hooks/useIconCategories';
 import { generateId } from 'src/utils';
 import { useTranslation } from 'src/stores/localeStore';
 import { CommonElements } from './CommonElements';
+import { ImportIconsDialog } from './ImportIconsDialog';
 
 export const ElementsPanel = () => {
   const { t } = useTranslation('iconSelectionControls');
@@ -29,40 +23,39 @@ export const ElementsPanel = () => {
   const { setFilter, filteredIcons, filter } = useIconFiltering();
   const { iconCategories } = useIconCategories();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [treatAsIsometric, setTreatAsIsometric] = useState(true);
-  const [showAlert, setShowAlert] = useState(
-    () => localStorage.getItem('fossflow-show-drag-hint') !== 'false'
-  );
+
+  // Pending files waiting for the import dialog confirmation
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
 
   const handleIconMouseDown = useCallback(
     (icon: Icon) => {
-      // Enter PLACE_ICON mode with the icon already selected
-      uiStateActions.setMode({
-        type: 'PLACE_ICON',
-        showCursor: true,
-        id: icon.id
-      });
+      uiStateActions.setMode({ type: 'PLACE_ICON', showCursor: true, id: icon.id });
     },
     [uiStateActions]
   );
 
-  const dismissAlert = useCallback(() => {
-    setShowAlert(false);
-    localStorage.setItem('fossflow-show-drag-hint', 'false');
-  }, []);
-
-  const handleFileSelect = useCallback(
-    async (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Step 1: user picks files → stash them, open the dialog
+  const handleFileChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
       const files = event.target.files;
       if (!files || files.length === 0) return;
 
+      const imageFiles = Array.from(files).filter((f) => f.type.startsWith('image/'));
+      if (imageFiles.length > 0) setPendingFiles(imageFiles);
+
+      // Reset input so the same file can be re-selected
+      event.target.value = '';
+    },
+    []
+  );
+
+  // Step 2: user confirms in dialog → process and import
+  const handleImportConfirm = useCallback(
+    async (isIsometric: boolean) => {
       const newIcons: Icon[] = [];
       const existingNames = new Set(currentIcons.map((icon) => icon.name.toLowerCase()));
 
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        if (!file.type.startsWith('image/')) continue;
-
+      for (const file of pendingFiles) {
         let baseName = file.name.replace(/\.[^/.]+$/, '');
         let finalName = baseName;
         let counter = 1;
@@ -104,7 +97,7 @@ export const ElementsPanel = () => {
           name: finalName,
           url: dataUrl,
           collection: 'imported',
-          isIsometric: treatAsIsometric
+          isIsometric
         });
       }
 
@@ -118,10 +111,15 @@ export const ElementsPanel = () => {
           ]);
         }
       }
-      event.target.value = '';
+
+      setPendingFiles([]);
     },
-    [currentIcons, modelActions, iconCategoriesState, uiStateActions, treatAsIsometric]
+    [pendingFiles, currentIcons, modelActions, iconCategoriesState, uiStateActions]
   );
+
+  const handleImportCancel = useCallback(() => {
+    setPendingFiles([]);
+  }, []);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -146,16 +144,13 @@ export const ElementsPanel = () => {
         )}
       </Box>
 
-      {/* Import section */}
+      {/* Import section — just the button, no persistent checkbox */}
       <Box
         sx={{
           flexShrink: 0,
           borderTop: '1px solid',
           borderColor: 'divider',
-          p: 1.5,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 1
+          p: 1.5
         }}
       >
         <Button
@@ -167,31 +162,22 @@ export const ElementsPanel = () => {
         >
           {t('importIcons')}
         </Button>
-        <FormControlLabel
-          control={
-            <Checkbox
-              checked={treatAsIsometric}
-              onChange={(e) => setTreatAsIsometric(e.target.checked)}
-              size="small"
-            />
-          }
-          label={<Typography variant="body2">{t('isometricLabel')}</Typography>}
-          sx={{ ml: 0, mt: 0 }}
-        />
-        {showAlert && (
-          <Alert severity="info" onClose={dismissAlert} sx={{ fontSize: 12 }}>
-            {t('dragHint')}
-          </Alert>
-        )}
         <input
           ref={fileInputRef}
           type="file"
           accept="image/*"
           multiple
           style={{ display: 'none' }}
-          onChange={handleFileSelect}
+          onChange={handleFileChange}
         />
       </Box>
+
+      <ImportIconsDialog
+        open={pendingFiles.length > 0}
+        fileCount={pendingFiles.length}
+        onConfirm={handleImportConfirm}
+        onCancel={handleImportCancel}
+      />
     </Box>
   );
 };

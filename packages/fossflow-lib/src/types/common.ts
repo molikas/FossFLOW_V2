@@ -32,6 +32,7 @@ export const EditorModeEnum = {
 } as const;
 
 export const MainMenuOptionsEnum = {
+  'ACTION.NEW': 'ACTION.NEW',
   'ACTION.OPEN': 'ACTION.OPEN',
   'EXPORT.JSON': 'EXPORT.JSON',
   'EXPORT.PNG': 'EXPORT.PNG',

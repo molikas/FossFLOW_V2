@@ -7,6 +7,7 @@ const locale: LocaleProps = {
   mainMenu: {
     undo: "Geri Al",
     redo: "Yinele", 
+    new: "New diagram",
     open: "Aç",
     exportJson: "JSON olarak dışa aktar",
     exportCompactJson: "Kompakt JSON olarak dışa aktar",

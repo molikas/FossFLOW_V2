@@ -7,6 +7,7 @@ const locale: LocaleProps = {
   mainMenu: {
     undo: "পূর্বাবস্থায় ফেরান",
     redo: "পুনরায় করুন",
+    new: "New diagram",
     open: "খুলুন",
     exportJson: "JSON হিসাবে রপ্তানি করুন",
     exportCompactJson: "কমপ্যাক্ট JSON হিসাবে রপ্তানি করুন",
