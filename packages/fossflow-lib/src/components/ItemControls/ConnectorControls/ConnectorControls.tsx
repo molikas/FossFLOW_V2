@@ -219,7 +219,14 @@ export const ConnectorControls = ({ id }: Props) => {
                   />
 
                   <Box sx={{ mb: 2 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        mb: 0.5
+                      }}
+                    >
                       <Typography variant="caption" color="text.secondary">
                         Position (%)
                       </Typography>
@@ -322,7 +329,9 @@ export const ConnectorControls = ({ id }: Props) => {
                     </Typography>
                     <LabelColorPicker
                       value={label.labelColor}
-                      onChange={(color) => handleUpdateLabel(label.id, { labelColor: color })}
+                      onChange={(color) =>
+                        handleUpdateLabel(label.id, { labelColor: color })
+                      }
                     />
                   </Box>
 

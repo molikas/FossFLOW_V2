@@ -9,7 +9,10 @@ import {
   Divider,
   Stack
 } from '@mui/material';
-import { Close as CloseIcon, OpenInNew as OpenInNewIcon } from '@mui/icons-material';
+import {
+  Close as CloseIcon,
+  OpenInNew as OpenInNewIcon
+} from '@mui/icons-material';
 import { ModelItem, ViewItem } from 'src/types';
 import { useModelItem } from 'src/hooks/useModelItem';
 import { useScene } from 'src/hooks/useScene';
@@ -26,7 +29,6 @@ const TAB_DETAILS = 0;
 const TAB_STYLE = 1;
 const TAB_NOTES = 2;
 
-
 interface TabPanelProps {
   children?: React.ReactNode;
   index: number;
@@ -37,7 +39,12 @@ const TabPanel = ({ children, index, value }: TabPanelProps) => (
   <Box
     role="tabpanel"
     hidden={value !== index}
-    sx={{ flex: 1, overflowY: 'auto', display: value === index ? 'flex' : 'none', flexDirection: 'column' }}
+    sx={{
+      flex: 1,
+      overflowY: 'auto',
+      display: value === index ? 'flex' : 'none',
+      flexDirection: 'column'
+    }}
   >
     {value === index && children}
   </Box>
@@ -115,13 +122,19 @@ export const NodePanel = ({ viewItem, readOnly }: Props) => {
 
   if (readOnly) {
     const hasCaption =
-      !!modelItem.description && modelItem.description.replace(/<[^>]*>/g, '').trim() !== '';
+      !!modelItem.description &&
+      modelItem.description.replace(/<[^>]*>/g, '').trim() !== '';
 
     return (
       <Box
         onMouseDown={(e) => e.stopPropagation()}
         onContextMenu={(e) => e.stopPropagation()}
-        sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: 'background.paper' }}
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%',
+          bgcolor: 'background.paper'
+        }}
       >
         {/* Header */}
         <Box
@@ -138,12 +151,21 @@ export const NodePanel = ({ viewItem, readOnly }: Props) => {
           }}
         >
           {iconUrl && (
-            <Box component="img" src={iconUrl} sx={{ width: 22, height: 22, flexShrink: 0 }} />
+            <Box
+              component="img"
+              src={iconUrl}
+              sx={{ width: 22, height: 22, flexShrink: 0 }}
+            />
           )}
           <Typography
             variant="subtitle2"
             fontWeight={700}
-            sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            sx={{
+              flex: 1,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}
           >
             {modelItem.name || '—'}
           </Typography>
@@ -178,8 +200,17 @@ export const NodePanel = ({ viewItem, readOnly }: Props) => {
         <Box sx={{ overflowY: 'auto', flex: 1 }}>
           {hasCaption && (
             <Box sx={{ px: 2, pt: 2, pb: 1 }}>
-              <Typography variant="caption" fontWeight={700} color="text.secondary"
-                sx={{ textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', mb: 1 }}>
+              <Typography
+                variant="caption"
+                fontWeight={700}
+                color="text.secondary"
+                sx={{
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.5,
+                  display: 'block',
+                  mb: 1
+                }}
+              >
                 {t('caption')}
               </Typography>
               <RichTextEditor value={modelItem.description} readOnly />
@@ -188,8 +219,17 @@ export const NodePanel = ({ viewItem, readOnly }: Props) => {
           {hasCaption && hasNotes && <Divider sx={{ mx: 2 }} />}
           {hasNotes && (
             <Box sx={{ px: 2, pt: 2, pb: 2 }}>
-              <Typography variant="caption" fontWeight={700} color="text.secondary"
-                sx={{ textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', mb: 1 }}>
+              <Typography
+                variant="caption"
+                fontWeight={700}
+                color="text.secondary"
+                sx={{
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.5,
+                  display: 'block',
+                  mb: 1
+                }}
+              >
                 {t('notes')}
               </Typography>
               <RichTextEditor value={modelItem.notes} readOnly />
@@ -204,7 +244,12 @@ export const NodePanel = ({ viewItem, readOnly }: Props) => {
     <Box
       onMouseDown={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.stopPropagation()}
-      sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: 'background.paper' }}
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        bgcolor: 'background.paper'
+      }}
     >
       {/* Header: tab bar + close button */}
       <Box
@@ -224,7 +269,12 @@ export const NodePanel = ({ viewItem, readOnly }: Props) => {
           sx={{
             flex: 1,
             minHeight: 36,
-            '& .MuiTab-root': { minHeight: 36, fontSize: '0.72rem', py: 0.5, px: 1.5 }
+            '& .MuiTab-root': {
+              minHeight: 36,
+              fontSize: '0.72rem',
+              py: 0.5,
+              px: 1.5
+            }
           }}
         >
           <Tab label={t('details')} value={TAB_DETAILS} />
@@ -236,7 +286,11 @@ export const NodePanel = ({ viewItem, readOnly }: Props) => {
           />
         </Tabs>
         <Tooltip title={t('close')}>
-          <IconButton size="small" onClick={handleClose} sx={{ p: 0.5, flexShrink: 0 }}>
+          <IconButton
+            size="small"
+            onClick={handleClose}
+            sx={{ p: 0.5, flexShrink: 0 }}
+          >
             <CloseIcon sx={{ fontSize: 15 }} />
           </IconButton>
         </Tooltip>

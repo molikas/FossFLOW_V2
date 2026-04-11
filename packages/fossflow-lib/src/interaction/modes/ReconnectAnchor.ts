@@ -18,7 +18,8 @@ export const ReconnectAnchor: ModeActions = {
 
     const tile = uiState.mouse.position.tile;
     const itemAtTile = getItemAtTile({ tile, scene });
-    const newRef = itemAtTile?.type === 'ITEM' ? { item: itemAtTile.id } : { tile };
+    const newRef =
+      itemAtTile?.type === 'ITEM' ? { item: itemAtTile.id } : { tile };
 
     const newAnchors = connector.anchors.map((a) =>
       a.id === anchorId ? { ...a, ref: newRef } : a
@@ -26,7 +27,8 @@ export const ReconnectAnchor: ModeActions = {
     scene.updateConnector(connectorId, { anchors: newAnchors });
   },
   mouseup: ({ uiState, scene, isRendererInteraction }) => {
-    if (uiState.mode.type !== 'RECONNECT_ANCHOR' || !isRendererInteraction) return;
+    if (uiState.mode.type !== 'RECONNECT_ANCHOR' || !isRendererInteraction)
+      return;
 
     const { connectorId } = uiState.mode;
 
@@ -34,6 +36,10 @@ export const ReconnectAnchor: ModeActions = {
     // Switch back to CURSOR with connector still selected so the user can see
     // the result and optionally adjust further.
     uiState.actions.setItemControls({ type: 'CONNECTOR', id: connectorId });
-    uiState.actions.setMode({ type: 'CURSOR', showCursor: true, mousedownItem: null });
+    uiState.actions.setMode({
+      type: 'CURSOR',
+      showCursor: true,
+      mousedownItem: null
+    });
   }
 };

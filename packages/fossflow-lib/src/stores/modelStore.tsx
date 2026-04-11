@@ -136,12 +136,19 @@ const initialState = () => {
             pendingPre = null;
             set((state) => {
               const next: Model = { ...extractModelData(state), ...updates };
-              const [, patches, inversePatches] = produceWithPatches(pre, (draft: Model) => {
-                Object.assign(draft, next);
-              });
+              const [, patches, inversePatches] = produceWithPatches(
+                pre,
+                (draft: Model) => {
+                  Object.assign(draft, next);
+                }
+              );
 
-              const newPast = [...state.history.past, { patches, inversePatches }];
-              if (newPast.length > state.history.maxHistorySize) newPast.shift();
+              const newPast = [
+                ...state.history.past,
+                { patches, inversePatches }
+              ];
+              if (newPast.length > state.history.maxHistorySize)
+                newPast.shift();
 
               return {
                 ...state,
@@ -169,14 +176,18 @@ const initialState = () => {
   });
 };
 
-const ModelContext = createContext<ReturnType<typeof initialState> | null>(null);
+const ModelContext = createContext<ReturnType<typeof initialState> | null>(
+  null
+);
 
 interface ProviderProps {
   children: React.ReactNode;
 }
 
 export const ModelProvider = ({ children }: ProviderProps) => {
-  const storeRef = useRef<ReturnType<typeof initialState> | undefined>(undefined);
+  const storeRef = useRef<ReturnType<typeof initialState> | undefined>(
+    undefined
+  );
 
   if (!storeRef.current) {
     storeRef.current = initialState();

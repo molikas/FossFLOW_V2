@@ -3,7 +3,12 @@
 
 import { Coords, Size, ItemReference, TextBox } from 'src/types';
 import { CoordsUtils } from 'src/utils/CoordsUtils';
-import { getBoundingBox, isWithinBounds, connectorPathTileToGlobal, getTextBoxEndTile } from 'src/utils/isoMath';
+import {
+  getBoundingBox,
+  isWithinBounds,
+  connectorPathTileToGlobal,
+  getTextBoxEndTile
+} from 'src/utils/isoMath';
 
 // Explicit scene shape — avoids importing the full useScene hook type here.
 export interface HitTestScene {
@@ -18,9 +23,14 @@ export interface HitTestScene {
 
 // WeakMap-based spatial index: one Map<"x,y", id> per unique scene.items array reference.
 // Building the index is O(N) once; lookups are O(1). GC'd when items array is replaced.
-const itemTileIndexCache = new WeakMap<HitTestScene['items'], Map<string, string>>();
+const itemTileIndexCache = new WeakMap<
+  HitTestScene['items'],
+  Map<string, string>
+>();
 
-const getItemTileIndex = (items: HitTestScene['items']): Map<string, string> => {
+const getItemTileIndex = (
+  items: HitTestScene['items']
+): Map<string, string> => {
   if (!itemTileIndexCache.has(items)) {
     itemTileIndexCache.set(
       items,
@@ -39,7 +49,9 @@ export const getItemAtTile = ({
 }): ItemReference | null => {
   const tileIndex = getItemTileIndex(scene.items);
   const itemId = tileIndex.get(`${tile.x},${tile.y}`);
-  const viewItem = itemId ? scene.items.find((i) => i.id === itemId) : undefined;
+  const viewItem = itemId
+    ? scene.items.find((i) => i.id === itemId)
+    : undefined;
 
   if (viewItem) return { type: 'ITEM', id: viewItem.id };
 
@@ -49,7 +61,10 @@ export const getItemAtTile = ({
       tb.tile,
       {
         x: Math.ceil(textBoxTo.x),
-        y: tb.orientation === 'X' ? Math.ceil(textBoxTo.y) : Math.floor(textBoxTo.y)
+        y:
+          tb.orientation === 'X'
+            ? Math.ceil(textBoxTo.y)
+            : Math.floor(textBoxTo.y)
       }
     ]);
     return isWithinBounds(tile, textBoxBounds);
@@ -60,16 +75,19 @@ export const getItemAtTile = ({
   const connector = scene.hitConnectors.find((con) => {
     if (!con.path?.tiles) return false;
     return con.path.tiles.find((pathTile) => {
-      const globalPathTile = connectorPathTileToGlobal(pathTile, con.path!.rectangle.from);
+      const globalPathTile = connectorPathTileToGlobal(
+        pathTile,
+        con.path!.rectangle.from
+      );
       return CoordsUtils.isEqual(globalPathTile, tile);
     });
   });
 
   if (connector) return { type: 'CONNECTOR', id: connector.id };
 
-  const rectangle = [...scene.rectangles].reverse().find(({ from, to }) =>
-    isWithinBounds(tile, [from, to])
-  );
+  const rectangle = [...scene.rectangles]
+    .reverse()
+    .find(({ from, to }) => isWithinBounds(tile, [from, to]));
 
   if (rectangle) return { type: 'RECTANGLE', id: rectangle.id };
 

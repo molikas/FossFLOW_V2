@@ -24,7 +24,10 @@ jest.mock('src/utils', () => ({
     return { value: items[index], index };
   }),
   getConnectorPath: jest.fn(() => ({
-    tiles: [{ x: 0, y: 0 }, { x: 2, y: 0 }],
+    tiles: [
+      { x: 0, y: 0 },
+      { x: 2, y: 0 }
+    ],
     rectangle: { from: { x: 0, y: 0 }, to: { x: 2, y: 0 } }
   }))
 }));
@@ -43,7 +46,10 @@ function makeConnector(id: string, anchorIds = ['a1', 'a2']) {
   };
 }
 
-function makeState(viewConnectors: any[] = [], sceneConnectors: Record<string, any> = {}): State {
+function makeState(
+  viewConnectors: any[] = [],
+  sceneConnectors: Record<string, any> = {}
+): State {
   return {
     model: {
       version: '1.0',
@@ -52,14 +58,16 @@ function makeState(viewConnectors: any[] = [], sceneConnectors: Record<string, a
       colors: [],
       icons: [],
       items: [],
-      views: [{
-        id: 'view1',
-        name: 'Test View',
-        items: [],
-        connectors: viewConnectors,
-        rectangles: [],
-        textBoxes: []
-      }]
+      views: [
+        {
+          id: 'view1',
+          name: 'Test View',
+          items: [],
+          connectors: viewConnectors,
+          rectangles: [],
+          textBoxes: []
+        }
+      ]
     },
     scene: { connectors: sceneConnectors, textBoxes: {} }
   } as unknown as State;
@@ -78,14 +86,28 @@ describe('connector reducer (real ConnectorAnchor[] format)', () => {
   describe('deleteConnector', () => {
     it('removes connector from model view', () => {
       const c1 = makeConnector('c1');
-      const state = makeState([c1], { c1: { path: { tiles: [], rectangle: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } } } } });
+      const state = makeState([c1], {
+        c1: {
+          path: {
+            tiles: [],
+            rectangle: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }
+          }
+        }
+      });
       const result = deleteConnector('c1', ctx(state));
       expect(result.model.views[0].connectors).toHaveLength(0);
     });
 
     it('removes connector from scene', () => {
       const c1 = makeConnector('c1');
-      const state = makeState([c1], { c1: { path: { tiles: [], rectangle: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } } } } });
+      const state = makeState([c1], {
+        c1: {
+          path: {
+            tiles: [],
+            rectangle: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }
+          }
+        }
+      });
       const result = deleteConnector('c1', ctx(state));
       expect(result.scene.connectors['c1']).toBeUndefined();
     });
@@ -94,8 +116,18 @@ describe('connector reducer (real ConnectorAnchor[] format)', () => {
       const c1 = makeConnector('c1');
       const c2 = makeConnector('c2');
       const state = makeState([c1, c2], {
-        c1: { path: { tiles: [], rectangle: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } } } },
-        c2: { path: { tiles: [], rectangle: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } } } }
+        c1: {
+          path: {
+            tiles: [],
+            rectangle: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }
+          }
+        },
+        c2: {
+          path: {
+            tiles: [],
+            rectangle: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }
+          }
+        }
       });
       const result = deleteConnector('c1', ctx(state));
       expect(result.model.views[0].connectors).toHaveLength(1);
@@ -110,7 +142,9 @@ describe('connector reducer (real ConnectorAnchor[] format)', () => {
 
     it('throws when view not found', () => {
       const state = makeState([makeConnector('c1')]);
-      expect(() => deleteConnector('c1', { viewId: 'nonexistent', state })).toThrow();
+      expect(() =>
+        deleteConnector('c1', { viewId: 'nonexistent', state })
+      ).toThrow();
     });
 
     it('does not mutate input state', () => {
@@ -129,7 +163,10 @@ describe('connector reducer (real ConnectorAnchor[] format)', () => {
     it('writes computed path to scene', () => {
       const { getConnectorPath } = require('src/utils');
       getConnectorPath.mockReturnValueOnce({
-        tiles: [{ x: 0, y: 0 }, { x: 3, y: 3 }],
+        tiles: [
+          { x: 0, y: 0 },
+          { x: 3, y: 3 }
+        ],
         rectangle: { from: { x: 0, y: 0 }, to: { x: 3, y: 3 } }
       });
 
@@ -137,16 +174,23 @@ describe('connector reducer (real ConnectorAnchor[] format)', () => {
       const result = syncConnector('c1', ctx(state));
 
       expect(result.scene.connectors['c1'].path.tiles).toHaveLength(2);
-      expect(result.scene.connectors['c1'].path.rectangle).toEqual({ from: { x: 0, y: 0 }, to: { x: 3, y: 3 } });
+      expect(result.scene.connectors['c1'].path.rectangle).toEqual({
+        from: { x: 0, y: 0 },
+        to: { x: 3, y: 3 }
+      });
     });
 
     it('stores empty path (never throws) when getConnectorPath throws', () => {
       const { getConnectorPath } = require('src/utils');
-      getConnectorPath.mockImplementationOnce(() => { throw new Error('pathfinder error'); });
+      getConnectorPath.mockImplementationOnce(() => {
+        throw new Error('pathfinder error');
+      });
 
       const state = makeState([makeConnector('c1')]);
       let result: State | undefined;
-      expect(() => { result = syncConnector('c1', ctx(state)); }).not.toThrow();
+      expect(() => {
+        result = syncConnector('c1', ctx(state));
+      }).not.toThrow();
       expect(result!.scene.connectors['c1'].path).toEqual({
         tiles: [],
         rectangle: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }
@@ -155,7 +199,9 @@ describe('connector reducer (real ConnectorAnchor[] format)', () => {
 
     it('connector remains in model after getConnectorPath error', () => {
       const { getConnectorPath } = require('src/utils');
-      getConnectorPath.mockImplementationOnce(() => { throw new Error('fail'); });
+      getConnectorPath.mockImplementationOnce(() => {
+        throw new Error('fail');
+      });
 
       const state = makeState([makeConnector('c1')]);
       const result = syncConnector('c1', ctx(state));
@@ -212,7 +258,9 @@ describe('connector reducer (real ConnectorAnchor[] format)', () => {
 
     it('throws when connector not found', () => {
       const state = makeState([]);
-      expect(() => updateConnector({ id: 'ghost', color: 'x' }, ctx(state))).toThrow();
+      expect(() =>
+        updateConnector({ id: 'ghost', color: 'x' }, ctx(state))
+      ).toThrow();
     });
 
     it('does not mutate input state', () => {
@@ -243,7 +291,9 @@ describe('connector reducer (real ConnectorAnchor[] format)', () => {
 
     it('stores empty path when getConnectorPath throws on creation', () => {
       const { getConnectorPath } = require('src/utils');
-      getConnectorPath.mockImplementationOnce(() => { throw new Error('fail'); });
+      getConnectorPath.mockImplementationOnce(() => {
+        throw new Error('fail');
+      });
 
       const state = makeState([]);
       const result = createConnector(makeConnector('c1'), ctx(state));
@@ -253,7 +303,9 @@ describe('connector reducer (real ConnectorAnchor[] format)', () => {
 
     it('throws when view not found', () => {
       const state = makeState([]);
-      expect(() => createConnector(makeConnector('c1'), { viewId: 'nonexistent', state })).toThrow();
+      expect(() =>
+        createConnector(makeConnector('c1'), { viewId: 'nonexistent', state })
+      ).toThrow();
     });
 
     it('does not mutate input state', () => {

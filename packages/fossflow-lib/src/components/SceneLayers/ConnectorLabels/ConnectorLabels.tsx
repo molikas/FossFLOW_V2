@@ -12,9 +12,9 @@ export const ConnectorLabels = memo(({ connectors }: Props) => {
       connectors.filter((connector) =>
         Boolean(
           connector.description ||
-            connector.startLabel ||
-            connector.endLabel ||
-            (connector.labels && connector.labels.length > 0)
+          connector.startLabel ||
+          connector.endLabel ||
+          (connector.labels && connector.labels.length > 0)
         )
       ),
     [connectors]

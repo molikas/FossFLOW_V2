@@ -15,6 +15,16 @@ export default defineConfig({
         inject: false,
       },
     },
+    {
+      format: 'esm',
+      syntax: 'es2021',
+      output: {
+        distPath: { root: './dist/esm' },
+      },
+      style: {
+        inject: false,
+      },
+    },
   ],
   plugins: [pluginReact()],
   source: {

@@ -12,18 +12,18 @@ import itIT from './it-IT';
 import trTR from './tr-TR';
 
 const locales = {
-    'en-US': enUS,
-    'zh-CN': zhCN,
-    'es-ES': esES,
-    'pt-BR': ptBR,
-    'fr-FR': frFR,
-    'hi-IN': hiIN,
-    'bn-BD': bnBD,
-    'ru-RU': ruRU,
-    'pl-PL': plPL,
-    'id-ID': idID,
-    'it-IT': itIT,
-    'tr-TR': trTR
+  'en-US': enUS,
+  'zh-CN': zhCN,
+  'es-ES': esES,
+  'pt-BR': ptBR,
+  'fr-FR': frFR,
+  'hi-IN': hiIN,
+  'bn-BD': bnBD,
+  'ru-RU': ruRU,
+  'pl-PL': plPL,
+  'id-ID': idID,
+  'it-IT': itIT,
+  'tr-TR': trTR
 };
 
 export default locales;

@@ -109,7 +109,9 @@ export const LassoHintTooltip = ({ toolMenuRef }: Props) => {
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
           {isFreehandMode ? (
             <>
-              <strong>{t('freehandDragStart')}</strong> {t('freehandDragMiddle')} <strong>{t('freehandDragEnd')}</strong> {t('freehandComplete')}
+              <strong>{t('freehandDragStart')}</strong>{' '}
+              {t('freehandDragMiddle')} <strong>{t('freehandDragEnd')}</strong>{' '}
+              {t('freehandComplete')}
             </>
           ) : (
             <>

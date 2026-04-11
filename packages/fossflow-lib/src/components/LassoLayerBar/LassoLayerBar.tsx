@@ -1,5 +1,13 @@
 import React, { useCallback, useState } from 'react';
-import { Box, Paper, Typography, Button, Menu, MenuItem, Divider } from '@mui/material';
+import {
+  Box,
+  Paper,
+  Typography,
+  Button,
+  Menu,
+  MenuItem,
+  Divider
+} from '@mui/material';
 import { LayersOutlined } from '@mui/icons-material';
 import { getTilePosition } from 'src/utils';
 import { useUiStateStore } from 'src/stores/uiStateStore';
@@ -8,7 +16,10 @@ import { useLayerActions } from 'src/hooks/useLayerActions';
 import { ItemReference } from 'src/types';
 
 /** Derive an approximate "top-center" tile of the current lasso selection */
-const useSelectionInfo = (): { items: ItemReference[]; centerTile: { x: number; y: number } } | null => {
+const useSelectionInfo = (): {
+  items: ItemReference[];
+  centerTile: { x: number; y: number };
+} | null => {
   const mode = useUiStateStore((s) => s.mode);
 
   if (mode.type === 'LASSO' && mode.selection) {
@@ -48,7 +59,10 @@ export const LassoLayerBar = () => {
 
   if (!selectionInfo) return null;
 
-  const pos = getTilePosition({ tile: selectionInfo.centerTile, origin: 'TOP' });
+  const pos = getTilePosition({
+    tile: selectionInfo.centerTile,
+    origin: 'TOP'
+  });
   const count = selectionInfo.items.length;
 
   return (
@@ -75,7 +89,11 @@ export const LassoLayerBar = () => {
           bgcolor: 'background.paper'
         }}
       >
-        <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ whiteSpace: 'nowrap' }}
+        >
           {count} {count === 1 ? 'item' : 'items'}
         </Typography>
         <Button
@@ -83,7 +101,14 @@ export const LassoLayerBar = () => {
           variant="outlined"
           startIcon={<LayersOutlined sx={{ fontSize: 14 }} />}
           onClick={(e) => setMenuAnchor(e.currentTarget)}
-          sx={{ fontSize: 11, py: 0.25, px: 1, borderRadius: '12px', textTransform: 'none', minWidth: 0 }}
+          sx={{
+            fontSize: 11,
+            py: 0.25,
+            px: 1,
+            borderRadius: '12px',
+            textTransform: 'none',
+            minWidth: 0
+          }}
         >
           Assign layer
         </Button>
@@ -102,14 +127,22 @@ export const LassoLayerBar = () => {
           </MenuItem>
         ) : (
           [
-            <MenuItem key="remove" onClick={() => handleAssign(undefined)} sx={{ fontSize: 13 }}>
+            <MenuItem
+              key="remove"
+              onClick={() => handleAssign(undefined)}
+              sx={{ fontSize: 13 }}
+            >
               Remove from layer
             </MenuItem>,
             <Divider key="divider" />,
             ...[...layers]
               .sort((a, b) => b.order - a.order)
               .map((layer) => (
-                <MenuItem key={layer.id} onClick={() => handleAssign(layer.id)} sx={{ fontSize: 13 }}>
+                <MenuItem
+                  key={layer.id}
+                  onClick={() => handleAssign(layer.id)}
+                  sx={{ fontSize: 13 }}
+                >
                   {layer.name}
                 </MenuItem>
               ))

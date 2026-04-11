@@ -8,7 +8,7 @@ import { Layer } from 'src/types';
 //   3. Isometric depth       — tiebreaker: items further "back" render first
 //
 // Bucket sizes ensure no tier overflows into the next.
-const LAYER_BUCKET  = 1_000_000;
+const LAYER_BUCKET = 1_000_000;
 const ZINDEX_BUCKET = 1_000;
 
 /**

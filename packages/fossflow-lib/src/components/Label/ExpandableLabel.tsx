@@ -38,7 +38,8 @@ export const ExpandableLabel = ({
 
   const effectiveExpanded = useMemo(() => {
     // Only force expand in NON_INTERACTIVE mode (export preview)
-    const shouldForceExpand = forceExpandLabels && editorMode === 'NON_INTERACTIVE';
+    const shouldForceExpand =
+      forceExpandLabels && editorMode === 'NON_INTERACTIVE';
     return shouldForceExpand || isExpanded;
   }, [forceExpandLabels, isExpanded, editorMode]);
 
@@ -47,7 +48,9 @@ export const ExpandableLabel = ({
   }, [effectiveExpanded]);
 
   const isContentTruncated = useMemo(() => {
-    return !effectiveExpanded && contentSize.height >= STANDARD_LABEL_HEIGHT - 10;
+    return (
+      !effectiveExpanded && contentSize.height >= STANDARD_LABEL_HEIGHT - 10
+    );
   }, [effectiveExpanded, contentSize.height]);
 
   // Determine overflow behavior based on mode
@@ -76,7 +79,10 @@ export const ExpandableLabel = ({
           '&::-webkit-scrollbar': {
             display: 'none'
           },
-          pb: isContentTruncated || isExpanded ? labelSettings.expandButtonPadding : 0 // Add bottom padding when expand button is visible
+          pb:
+            isContentTruncated || isExpanded
+              ? labelSettings.expandButtonPadding
+              : 0 // Add bottom padding when expand button is visible
         }}
         style={{
           overflowY: overflowBehavior,
@@ -98,21 +104,22 @@ export const ExpandableLabel = ({
         )}
       </Box>
 
-      {editorMode !== 'NON_INTERACTIVE' && ((!isExpanded && isContentTruncated) || isExpanded) && (
-        <ExpandButton
-          sx={{
-            position: 'absolute',
-            bottom: 0,
-            right: 0,
-            m: 0.5
-          }}
-          isExpanded={isExpanded}
-          onClick={() => {
-            setIsExpanded(!isExpanded);
-            onToggleExpand?.(!isExpanded);
-          }}
-        />
-      )}
+      {editorMode !== 'NON_INTERACTIVE' &&
+        ((!isExpanded && isContentTruncated) || isExpanded) && (
+          <ExpandButton
+            sx={{
+              position: 'absolute',
+              bottom: 0,
+              right: 0,
+              m: 0.5
+            }}
+            isExpanded={isExpanded}
+            onClick={() => {
+              setIsExpanded(!isExpanded);
+              onToggleExpand?.(!isExpanded);
+            }}
+          />
+        )}
     </Label>
   );
 };

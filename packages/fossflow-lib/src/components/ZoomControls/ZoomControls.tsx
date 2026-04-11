@@ -14,7 +14,11 @@ const MinusIcon = () => (
 
 const PlusIcon = () => (
   <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
-    <path fillRule="evenodd" clipRule="evenodd" d="M7 12.5a.5.5 0 001 0V8h4.5a.5.5 0 000-1H8V2.5a.5.5 0 00-1 0V7H2.5a.5.5 0 000 1H7v4.5z" />
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M7 12.5a.5.5 0 001 0V8h4.5a.5.5 0 000-1H8V2.5a.5.5 0 00-1 0V7H2.5a.5.5 0 000 1H7v4.5z"
+    />
   </svg>
 );
 

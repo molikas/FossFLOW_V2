@@ -19,9 +19,21 @@ function collectSourceFiles(dir: string, files: string[] = []): string[] {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (['node_modules', 'dist', '__perf_refactor_regression__', '__tests__'].includes(entry.name)) continue;
+      if (
+        [
+          'node_modules',
+          'dist',
+          '__perf_refactor_regression__',
+          '__tests__'
+        ].includes(entry.name)
+      )
+        continue;
       collectSourceFiles(full, files);
-    } else if (/\.(ts|tsx)$/.test(entry.name) && !entry.name.endsWith('.test.ts') && !entry.name.endsWith('.test.tsx')) {
+    } else if (
+      /\.(ts|tsx)$/.test(entry.name) &&
+      !entry.name.endsWith('.test.ts') &&
+      !entry.name.endsWith('.test.tsx')
+    ) {
       files.push(full);
     }
   }
@@ -48,7 +60,9 @@ describe('GSAP dependency — N-5 regression', () => {
   });
 
   it('gsap is not listed in package.json dependencies', () => {
-    const pkg = JSON.parse(fs.readFileSync(path.join(LIB_ROOT, 'package.json'), 'utf8'));
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(LIB_ROOT, 'package.json'), 'utf8')
+    );
     expect(pkg.dependencies?.gsap).toBeUndefined();
     expect(pkg.devDependencies?.gsap).toBeUndefined();
     expect(pkg.peerDependencies?.gsap).toBeUndefined();

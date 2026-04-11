@@ -31,7 +31,12 @@ import {
 import { CoordsUtils } from 'src/utils/CoordsUtils';
 import { SizeUtils } from 'src/utils/SizeUtils';
 import { findPath } from 'src/utils/pathfinder';
-import { clamp, roundToTwoDecimalPlaces, toPx, getItemByIdOrThrow } from 'src/utils/common';
+import {
+  clamp,
+  roundToTwoDecimalPlaces,
+  toPx,
+  getItemByIdOrThrow
+} from 'src/utils/common';
 
 // ---------------------------------------------------------------------------
 // Tile coordinate transforms
@@ -44,7 +49,12 @@ interface ScreenToIso {
   rendererSize: Size;
 }
 
-export const screenToIso = ({ mouse, zoom, scroll, rendererSize }: ScreenToIso) => {
+export const screenToIso = ({
+  mouse,
+  zoom,
+  scroll,
+  rendererSize
+}: ScreenToIso) => {
   const projectedTileSize = SizeUtils.multiply(PROJECTED_TILE_SIZE, zoom);
   const halfW = projectedTileSize.width / 2;
   const halfH = projectedTileSize.height / 2;
@@ -71,7 +81,10 @@ interface GetTilePosition {
   origin?: TileOrigin;
 }
 
-export const getTilePosition = ({ tile, origin = 'CENTER' }: GetTilePosition) => {
+export const getTilePosition = ({
+  tile,
+  origin = 'CENTER'
+}: GetTilePosition) => {
   const halfW = PROJECTED_TILE_SIZE.width / 2;
   const halfH = PROJECTED_TILE_SIZE.height / 2;
 
@@ -113,7 +126,10 @@ export const sortByPosition = (tiles: Coords[]) => {
   const xSorted = [...tiles].sort((a, b) => a.x - b.x);
   const ySorted = [...tiles].sort((a, b) => a.y - b.y);
 
-  const highest = { byX: xSorted[xSorted.length - 1], byY: ySorted[ySorted.length - 1] };
+  const highest = {
+    byX: xSorted[xSorted.length - 1],
+    byY: ySorted[ySorted.length - 1]
+  };
   const lowest = { byX: xSorted[0], byY: ySorted[0] };
 
   return {
@@ -144,7 +160,10 @@ export const isWithinBounds = (tile: Coords, bounds: Coords[]) => {
   return tile.x >= lowX && tile.x <= highX && tile.y >= lowY && tile.y <= highY;
 };
 
-export const getBoundingBox = (tiles: Coords[], offset: Coords = CoordsUtils.zero()): BoundingBox => {
+export const getBoundingBox = (
+  tiles: Coords[],
+  offset: Coords = CoordsUtils.zero()
+): BoundingBox => {
   const { lowX, lowY, highX, highY } = sortByPosition(tiles);
   return [
     { x: lowX - offset.x, y: lowY - offset.y },
@@ -165,7 +184,9 @@ export const getBoundingBoxSize = (boundingBox: Coords[]): Size => {
 
 const isoProjectionBaseValues = [0.707, -0.409, 0.707, 0.409, 0, -0.816];
 
-export const getIsoMatrix = (orientation?: keyof typeof ProjectionOrientationEnum) => {
+export const getIsoMatrix = (
+  orientation?: keyof typeof ProjectionOrientationEnum
+) => {
   switch (orientation) {
     case ProjectionOrientationEnum.Y:
       return produce(isoProjectionBaseValues, (draft) => {
@@ -178,7 +199,9 @@ export const getIsoMatrix = (orientation?: keyof typeof ProjectionOrientationEnu
   }
 };
 
-export const getIsoProjectionCss = (orientation?: keyof typeof ProjectionOrientationEnum) => {
+export const getIsoProjectionCss = (
+  orientation?: keyof typeof ProjectionOrientationEnum
+) => {
   return `matrix(${getIsoMatrix(orientation).join(', ')})`;
 };
 
@@ -200,7 +223,10 @@ export const decrementZoom = (zoom: number) =>
 // ---------------------------------------------------------------------------
 
 export const getAllAnchors = (connectors: Connector[]) =>
-  connectors.reduce((acc, connector) => [...acc, ...connector.anchors], [] as ConnectorAnchor[]);
+  connectors.reduce(
+    (acc, connector) => [...acc, ...connector.anchors],
+    [] as ConnectorAnchor[]
+  );
 
 export const getAnchorTile = (anchor: ConnectorAnchor, view: View): Coords => {
   if (anchor.ref.item) {
@@ -219,13 +245,16 @@ export const getAnchorTile = (anchor: ConnectorAnchor, view: View): Coords => {
 };
 
 export const getAnchorAtTile = (tile: Coords, anchors: ConnectorAnchor[]) =>
-  anchors.find((anchor) => Boolean(anchor.ref.tile && CoordsUtils.isEqual(anchor.ref.tile, tile)));
+  anchors.find((anchor) =>
+    Boolean(anchor.ref.tile && CoordsUtils.isEqual(anchor.ref.tile, tile))
+  );
 
 export const getAnchorParent = (anchorId: string, connectors: Connector[]) => {
   const connector = connectors.find((con) =>
     con.anchors.find((anchor) => anchor.id === anchorId)
   );
-  if (!connector) throw new Error(`Could not find connector with anchor id ${anchorId}`);
+  if (!connector)
+    throw new Error(`Could not find connector with anchor id ${anchorId}`);
   return connector;
 };
 
@@ -246,37 +275,58 @@ interface GetConnectorPath {
   view: View;
 }
 
-export const getConnectorPath = ({ anchors, view }: GetConnectorPath): { tiles: Coords[]; rectangle: Rect } => {
+export const getConnectorPath = ({
+  anchors,
+  view
+}: GetConnectorPath): { tiles: Coords[]; rectangle: Rect } => {
   if (anchors.length < 2)
-    throw new Error(`Connector needs at least two anchors (received: ${anchors.length})`);
+    throw new Error(
+      `Connector needs at least two anchors (received: ${anchors.length})`
+    );
 
   const anchorPosition = anchors.map((anchor) => getAnchorTile(anchor, view));
   const searchArea = getBoundingBox(anchorPosition, CONNECTOR_SEARCH_OFFSET);
   const sorted = sortByPosition(searchArea);
   const searchAreaSize = getBoundingBoxSize(searchArea);
-  const rectangle = { from: { x: sorted.highX, y: sorted.highY }, to: { x: sorted.lowX, y: sorted.lowY } };
+  const rectangle = {
+    from: { x: sorted.highX, y: sorted.highY },
+    to: { x: sorted.lowX, y: sorted.lowY }
+  };
 
   const positionsNormalisedFromSearchArea = anchorPosition.map((position) =>
     normalisePositionFromOrigin({ position, origin: rectangle.from })
   );
 
-  const tiles = positionsNormalisedFromSearchArea.reduce<Coords[]>((acc, position, i) => {
-    if (i === 0) return acc;
-    const prev = positionsNormalisedFromSearchArea[i - 1];
-    const path = findPath({ from: prev, to: position, gridSize: searchAreaSize });
-    return [...acc, ...path];
-  }, []);
+  const tiles = positionsNormalisedFromSearchArea.reduce<Coords[]>(
+    (acc, position, i) => {
+      if (i === 0) return acc;
+      const prev = positionsNormalisedFromSearchArea[i - 1];
+      const path = findPath({
+        from: prev,
+        to: position,
+        gridSize: searchAreaSize
+      });
+      return [...acc, ...path];
+    },
+    []
+  );
 
   return { tiles, rectangle };
 };
 
-export const connectorPathTileToGlobal = (tile: Coords, origin: Coords): Coords =>
+export const connectorPathTileToGlobal = (
+  tile: Coords,
+  origin: Coords
+): Coords =>
   CoordsUtils.subtract(
     CoordsUtils.subtract(origin, CONNECTOR_SEARCH_OFFSET),
     CoordsUtils.subtract(tile, CONNECTOR_SEARCH_OFFSET)
   );
 
-export const getConnectorsByViewItem = (viewItemId: string, connectors: Connector[]) =>
+export const getConnectorsByViewItem = (
+  viewItemId: string,
+  connectors: Connector[]
+) =>
   connectors.filter((connector) =>
     connector.anchors.find((anchor) => anchor.ref.item === viewItemId)
   );
@@ -289,11 +339,14 @@ export const getConnectorDirectionIcon = (connectorTiles: Coords[]) => {
   let rotation: number | undefined;
 
   if (lastTile.x > iconTile.x) {
-    rotation = lastTile.y > iconTile.y ? 135 : lastTile.y < iconTile.y ? 45 : 90;
+    rotation =
+      lastTile.y > iconTile.y ? 135 : lastTile.y < iconTile.y ? 45 : 90;
   } else if (lastTile.x < iconTile.x) {
-    rotation = lastTile.y > iconTile.y ? -135 : lastTile.y < iconTile.y ? -45 : -90;
+    rotation =
+      lastTile.y > iconTile.y ? -135 : lastTile.y < iconTile.y ? -45 : -90;
   } else {
-    rotation = lastTile.y > iconTile.y ? 180 : lastTile.y < iconTile.y ? 0 : -90;
+    rotation =
+      lastTile.y > iconTile.y ? 180 : lastTile.y < iconTile.y ? 0 : -90;
   }
 
   return {
@@ -317,14 +370,24 @@ export const hasMovedTile = (mouse: { delta: { tile: Coords } | null }) => {
   return !CoordsUtils.isEqual(mouse.delta.tile, CoordsUtils.zero());
 };
 
-export const getTileScrollPosition = (tile: Coords, origin?: TileOrigin): Coords => {
+export const getTileScrollPosition = (
+  tile: Coords,
+  origin?: TileOrigin
+): Coords => {
   const tilePosition = getTilePosition({ tile, origin });
   return { x: -tilePosition.x, y: -tilePosition.y };
 };
 
-export const outermostCornerPositions: TileOrigin[] = ['BOTTOM', 'RIGHT', 'TOP', 'LEFT'];
+export const outermostCornerPositions: TileOrigin[] = [
+  'BOTTOM',
+  'RIGHT',
+  'TOP',
+  'LEFT'
+];
 
-export const convertBoundsToNamedAnchors = (boundingBox: BoundingBox): { [key in AnchorPosition]: Coords } => ({
+export const convertBoundsToNamedAnchors = (
+  boundingBox: BoundingBox
+): { [key in AnchorPosition]: Coords } => ({
   BOTTOM_LEFT: boundingBox[0],
   BOTTOM_RIGHT: boundingBox[1],
   TOP_RIGHT: boundingBox[2],
@@ -346,7 +409,12 @@ const getPlainTextForMeasurement = (content: string): string => {
   if (!content?.trim().startsWith('<')) return content;
   const lines = content
     .split(/<\/p>|<\/div>|<br\s*\/?>/i)
-    .map((s) => s.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim())
+    .map((s) =>
+      s
+        .replace(/<[^>]*>/g, '')
+        .replace(/&nbsp;/g, ' ')
+        .trim()
+    )
     .filter(Boolean);
   return lines.reduce((a, b) => (a.length > b.length ? a : b), '');
 };
@@ -357,7 +425,14 @@ const countHtmlLines = (content: string): number => {
   return Math.max(1, matches ? matches.length : 1);
 };
 
-export const getTextWidth = (text: string, fontProps: { fontWeight: number | string; fontSize: number; fontFamily: string }) => {
+export const getTextWidth = (
+  text: string,
+  fontProps: {
+    fontWeight: number | string;
+    fontSize: number;
+    fontFamily: string;
+  }
+) => {
   if (!text) return 0;
   const paddingX = TEXTBOX_PADDING * UNPROJECTED_TILE_SIZE;
   const fontSizePx = toPx(fontProps.fontSize * UNPROJECTED_TILE_SIZE);

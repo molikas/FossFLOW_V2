@@ -12,7 +12,9 @@ import { useLocale } from 'src/stores/localeStore';
 
 export const ZoomSettings = () => {
   const zoomSettings = useUiStateStore((state) => state.zoomSettings);
-  const setZoomSettings = useUiStateStore((state) => state.actions.setZoomSettings);
+  const setZoomSettings = useUiStateStore(
+    (state) => state.actions.setZoomSettings
+  );
   const locale = useLocale();
 
   const handleToggle = (setting: keyof typeof zoomSettings) => {

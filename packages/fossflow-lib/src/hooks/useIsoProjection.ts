@@ -56,18 +56,21 @@ export const useIsoProjection = ({
     };
   }, [gridSize]);
 
-  return useMemo(() => ({
-    css: {
-      position: 'absolute' as const,
-      left: position.x,
-      top: position.y,
-      width: `${pxSize.width}px`,
-      height: `${pxSize.height}px`,
-      transform: getIsoProjectionCss(orientation),
-      transformOrigin: 'top left'
-    },
-    position,
-    gridSize,
-    pxSize
-  }), [position, pxSize, gridSize, orientation]);
+  return useMemo(
+    () => ({
+      css: {
+        position: 'absolute' as const,
+        left: position.x,
+        top: position.y,
+        width: `${pxSize.width}px`,
+        height: `${pxSize.height}px`,
+        transform: getIsoProjectionCss(orientation),
+        transformOrigin: 'top left'
+      },
+      position,
+      gridSize,
+      pxSize
+    }),
+    [position, pxSize, gridSize, orientation]
+  );
 };

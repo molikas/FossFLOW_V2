@@ -15,8 +15,9 @@ import * as path from 'path';
 
 const I18N_DIR = path.resolve(__dirname, '../i18n');
 
-const allLocaleFiles = fs.readdirSync(I18N_DIR)
-  .filter(f => f.endsWith('.ts') && f !== 'index.ts');
+const allLocaleFiles = fs
+  .readdirSync(I18N_DIR)
+  .filter((f) => f.endsWith('.ts') && f !== 'index.ts');
 
 const enUS = fs.readFileSync(path.join(I18N_DIR, 'en-US.ts'), 'utf-8');
 

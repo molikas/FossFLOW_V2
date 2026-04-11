@@ -40,7 +40,12 @@ export const IconButton = ({
       sx={{ bgcolor: 'primary.main' }}
     >
       {/* span wrapper lets the Tooltip receive hover even when Button is disabled */}
-      <span style={{ display: 'inline-flex', cursor: disabled ? 'default' : 'pointer' }}>
+      <span
+        style={{
+          display: 'inline-flex',
+          cursor: disabled ? 'default' : 'pointer'
+        }}
+      >
         <Button
           variant="text"
           onClick={onClick}

@@ -11,32 +11,41 @@ import { RECTANGLE_DEFAULTS, TEXTBOX_DEFAULTS } from 'src/config';
 import { getItemByIdOrThrow } from 'src/utils';
 
 export const useSceneData = () => {
-  const { views, colors, icons, items, version, title, description } = useModelStore(
-    (state) => ({
-      views: state.views,
-      colors: state.colors,
-      icons: state.icons,
-      items: state.items,
-      version: state.version,
-      title: state.title,
-      description: state.description
-    }),
-    shallow
-  );
+  const { views, colors, icons, items, version, title, description } =
+    useModelStore(
+      (state) => ({
+        views: state.views,
+        colors: state.colors,
+        icons: state.icons,
+        items: state.items,
+        version: state.version,
+        title: state.title,
+        description: state.description
+      }),
+      shallow
+    );
 
   // NOTE: sceneConnectors is used ONLY for hit-testing and interaction (getItemAtTile, Cursor).
   // Rendering (connectorsList) uses raw view connectors — each <Connector> fetches its own
   // path via useSceneStore. This prevents O(N) re-merge on every async path write.
-  const { connectors: sceneConnectors, textBoxes: sceneTextBoxes } = useSceneStore(
-    (state) => ({ connectors: state.connectors, textBoxes: state.textBoxes }),
-    shallow
-  );
+  const { connectors: sceneConnectors, textBoxes: sceneTextBoxes } =
+    useSceneStore(
+      (state) => ({ connectors: state.connectors, textBoxes: state.textBoxes }),
+      shallow
+    );
 
   const currentViewId = useUiStateStore((state) => state.view);
 
   const currentView = useMemo(() => {
     if (!views || !currentViewId) {
-      return { id: '', name: 'Default View', items: [], connectors: [], rectangles: [], textBoxes: [] };
+      return {
+        id: '',
+        name: 'Default View',
+        items: [],
+        connectors: [],
+        rectangles: [],
+        textBoxes: []
+      };
     }
     try {
       return getItemByIdOrThrow(views, currentViewId).value;
@@ -58,7 +67,10 @@ export const useSceneData = () => {
   const colorsList = useMemo(() => colors ?? [], [colors]);
 
   // Raw view connectors for RENDERING — no scene path merge here.
-  const connectorsList = useMemo(() => currentView.connectors ?? [], [currentView.connectors]);
+  const connectorsList = useMemo(
+    () => currentView.connectors ?? [],
+    [currentView.connectors]
+  );
 
   // Merged connectors for HIT-TESTING — subscribes to sceneConnectors so interaction
   // always sees current paths.
@@ -72,7 +84,11 @@ export const useSceneData = () => {
   );
 
   const rectanglesList = useMemo(
-    () => (currentView.rectangles ?? []).map((r) => ({ ...RECTANGLE_DEFAULTS, ...r })),
+    () =>
+      (currentView.rectangles ?? []).map((r) => ({
+        ...RECTANGLE_DEFAULTS,
+        ...r
+      })),
     [currentView.rectangles]
   );
 

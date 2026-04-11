@@ -33,7 +33,10 @@ function makeUiState(overrides: any = {}) {
       mousedown: null,
       delta: null
     },
-    scroll: overrides.scroll ?? { position: { x: 0, y: 0 }, offset: { x: 0, y: 0 } },
+    scroll: overrides.scroll ?? {
+      position: { x: 0, y: 0 },
+      offset: { x: 0, y: 0 }
+    },
     editorMode: overrides.editorMode ?? 'EDIT',
     actions: overrides.actions ?? {
       setMode: jest.fn(),
@@ -76,19 +79,31 @@ describe('Pan.mousedown', () => {
 
   it('sets grabbing cursor when isRendererInteraction is true', () => {
     const uiState = makeUiState();
-    Pan.mousedown!({ uiState, scene: makeScene(), isRendererInteraction: true } as any);
+    Pan.mousedown!({
+      uiState,
+      scene: makeScene(),
+      isRendererInteraction: true
+    } as any);
     expect(mockSetWindowCursor).toHaveBeenCalledWith('grabbing');
   });
 
   it('does nothing when isRendererInteraction is false (toolbar click guard)', () => {
     const uiState = makeUiState();
-    Pan.mousedown!({ uiState, scene: makeScene(), isRendererInteraction: false } as any);
+    Pan.mousedown!({
+      uiState,
+      scene: makeScene(),
+      isRendererInteraction: false
+    } as any);
     expect(mockSetWindowCursor).not.toHaveBeenCalled();
   });
 
   it('does nothing when mode type is not PAN', () => {
     const uiState = makeUiState({ mode: { type: 'CURSOR', showCursor: true } });
-    Pan.mousedown!({ uiState, scene: makeScene(), isRendererInteraction: true } as any);
+    Pan.mousedown!({
+      uiState,
+      scene: makeScene(),
+      isRendererInteraction: true
+    } as any);
     expect(mockSetWindowCursor).not.toHaveBeenCalled();
   });
 });
@@ -107,7 +122,11 @@ describe('Pan.mousemove', () => {
 
   it('does nothing when mousedown is null (no active drag)', () => {
     const uiState = makeUiState({
-      mouse: { position: { tile: { x: 5, y: 5 } }, mousedown: null, delta: null }
+      mouse: {
+        position: { tile: { x: 5, y: 5 } },
+        mousedown: null,
+        delta: null
+      }
     });
     Pan.mousemove!({ uiState, scene: makeScene() } as any);
     expect(uiState.actions.setScroll).not.toHaveBeenCalled();
@@ -193,9 +212,18 @@ describe('Pan.mouseup', () => {
         delta: null
       }
     });
-    const model = makeModel([{ id: 'n1', description: 'Hello world', notes: '' }]);
-    Pan.mouseup!({ uiState, scene: makeScene([{ type: 'ITEM', id: 'n1' }]), model } as any);
-    expect(uiState.actions.setItemControls).toHaveBeenCalledWith({ type: 'ITEM', id: 'n1' });
+    const model = makeModel([
+      { id: 'n1', description: 'Hello world', notes: '' }
+    ]);
+    Pan.mouseup!({
+      uiState,
+      scene: makeScene([{ type: 'ITEM', id: 'n1' }]),
+      model
+    } as any);
+    expect(uiState.actions.setItemControls).toHaveBeenCalledWith({
+      type: 'ITEM',
+      id: 'n1'
+    });
   });
 
   it('EXPLORABLE_READONLY: opens panel when item has notes content', () => {
@@ -207,9 +235,14 @@ describe('Pan.mouseup', () => {
         mousedown: { tile: { x: 3, y: 4 } }
       }
     });
-    const model = makeModel([{ id: 'n2', description: '', notes: 'Some notes here' }]);
+    const model = makeModel([
+      { id: 'n2', description: '', notes: 'Some notes here' }
+    ]);
     Pan.mouseup!({ uiState, scene: makeScene(), model } as any);
-    expect(uiState.actions.setItemControls).toHaveBeenCalledWith({ type: 'ITEM', id: 'n2' });
+    expect(uiState.actions.setItemControls).toHaveBeenCalledWith({
+      type: 'ITEM',
+      id: 'n2'
+    });
   });
 
   it('EXPLORABLE_READONLY: clears panel when item has no description or notes', () => {
@@ -235,7 +268,9 @@ describe('Pan.mouseup', () => {
         mousedown: { tile: { x: 3, y: 4 } }
       }
     });
-    const model = makeModel([{ id: 'n4', description: '<p></p>', notes: '<br/>' }]);
+    const model = makeModel([
+      { id: 'n4', description: '<p></p>', notes: '<br/>' }
+    ]);
     Pan.mouseup!({ uiState, scene: makeScene(), model } as any);
     expect(uiState.actions.setItemControls).toHaveBeenCalledWith(null);
   });

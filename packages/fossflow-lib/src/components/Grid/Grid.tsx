@@ -15,7 +15,11 @@ export const Grid = () => {
     const el = elementRef.current;
     if (!el) return;
 
-    const applyBackground = (scrollX: number, scrollY: number, zoom: number) => {
+    const applyBackground = (
+      scrollX: number,
+      scrollY: number,
+      zoom: number
+    ) => {
       const tileSize = SizeUtils.multiply(PROJECTED_TILE_SIZE, zoom);
       const elSize = el.getBoundingClientRect();
       el.style.backgroundSize = `${tileSize.width}px ${tileSize.height * 2}px`;
@@ -29,7 +33,11 @@ export const Grid = () => {
     // Subscribe to scroll/zoom changes — bypasses React render cycle entirely
     const unsubscribe = storeApi.subscribe((state, prev) => {
       if (state.scroll === prev.scroll && state.zoom === prev.zoom) return;
-      applyBackground(state.scroll.position.x, state.scroll.position.y, state.zoom);
+      applyBackground(
+        state.scroll.position.x,
+        state.scroll.position.y,
+        state.zoom
+      );
     });
 
     return unsubscribe;

@@ -40,7 +40,10 @@ export interface SettingsDialogProps {
   languageSelector?: React.ReactNode;
 }
 
-export const SettingsDialog = ({ iconPackManager, languageSelector }: SettingsDialogProps) => {
+export const SettingsDialog = ({
+  iconPackManager,
+  languageSelector
+}: SettingsDialogProps) => {
   const dialog = useUiStateStore((state) => state.dialog);
   const setDialog = useUiStateStore((state) => state.actions.setDialog);
   const [tabValue, setTabValue] = useState(0);
@@ -57,12 +60,7 @@ export const SettingsDialog = ({ iconPackManager, languageSelector }: SettingsDi
   };
 
   return (
-    <Dialog
-      open={isOpen}
-      onClose={handleClose}
-      maxWidth="md"
-      fullWidth
-    >
+    <Dialog open={isOpen} onClose={handleClose} maxWidth="md" fullWidth>
       <DialogTitle>
         Settings
         <IconButton
@@ -72,7 +70,7 @@ export const SettingsDialog = ({ iconPackManager, languageSelector }: SettingsDi
             position: 'absolute',
             right: 8,
             top: 8,
-            color: (theme) => theme.palette.grey[500],
+            color: (theme) => theme.palette.grey[500]
           }}
         >
           <CloseIcon />

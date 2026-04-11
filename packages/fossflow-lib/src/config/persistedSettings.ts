@@ -1,7 +1,12 @@
 // Thin localStorage wrapper for user preferences.
 // Errors are silently swallowed so a corrupt/missing entry never crashes the editor.
 
-import type { HotkeyProfile, PanSettings, ZoomSettings, LabelSettings } from 'src/types/settings';
+import type {
+  HotkeyProfile,
+  PanSettings,
+  ZoomSettings,
+  LabelSettings
+} from 'src/types/settings';
 import type { ConnectorInteractionMode } from 'src/types/ui';
 
 const STORAGE_KEY = 'fossflow_user_settings';

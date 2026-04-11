@@ -11,7 +11,8 @@ import {
 
 describe('stripIrrelevantProperties', () => {
   test('removes vendor-prefixed properties', () => {
-    const input = '-webkit-tap-highlight-color: rgba(0,0,0,0); position: absolute; -moz-user-select: none; width: 50px';
+    const input =
+      '-webkit-tap-highlight-color: rgba(0,0,0,0); position: absolute; -moz-user-select: none; width: 50px';
     const result = stripIrrelevantProperties(input);
     expect(result).not.toContain('-webkit-');
     expect(result).not.toContain('-moz-');
@@ -20,7 +21,8 @@ describe('stripIrrelevantProperties', () => {
   });
 
   test('removes animation properties', () => {
-    const input = 'animation: none; animation-duration: 0s; transition: all 0.2s; width: 100px';
+    const input =
+      'animation: none; animation-duration: 0s; transition: all 0.2s; width: 100px';
     const result = stripIrrelevantProperties(input);
     expect(result).not.toContain('animation');
     expect(result).not.toContain('transition');
@@ -33,7 +35,8 @@ describe('stripIrrelevantProperties', () => {
   });
 
   test('removes margin/padding/inset logical props (physical equivalents present)', () => {
-    const input = 'margin-inline-start: 0px; padding-block: 4px; width: 200px; inset-inline-start: 0px';
+    const input =
+      'margin-inline-start: 0px; padding-block: 4px; width: 200px; inset-inline-start: 0px';
     const result = stripIrrelevantProperties(input);
     expect(result).not.toContain('margin-inline-start');
     expect(result).not.toContain('padding-block');
@@ -45,7 +48,8 @@ describe('stripIrrelevantProperties', () => {
     // In position:absolute elements inside isometric transform layers, removing
     // inline-size causes the browser to resolve width from the containing block
     // (the full canvas) instead of the explicit value, causing text to wrap.
-    const input = 'inline-size: 114.609px; block-size: 34.3125px; width: 114.609px; height: 34.3125px';
+    const input =
+      'inline-size: 114.609px; block-size: 34.3125px; width: 114.609px; height: 34.3125px';
     const result = stripIrrelevantProperties(input);
     expect(result).toContain('inline-size: 114.609px');
     expect(result).toContain('block-size: 34.3125px');
@@ -54,7 +58,8 @@ describe('stripIrrelevantProperties', () => {
   });
 
   test('removes print and scroll props', () => {
-    const input = 'orphans: 2; widows: 2; scroll-behavior: smooth; overscroll-behavior: none; display: flex';
+    const input =
+      'orphans: 2; widows: 2; scroll-behavior: smooth; overscroll-behavior: none; display: flex';
     const result = stripIrrelevantProperties(input);
     expect(result).not.toContain('orphans');
     expect(result).not.toContain('scroll-behavior');
@@ -62,7 +67,8 @@ describe('stripIrrelevantProperties', () => {
   });
 
   test('preserves layout-critical properties', () => {
-    const input = 'position: absolute; top: 10px; left: 20px; width: 100px; height: 50px; overflow: hidden; display: flex; z-index: 10';
+    const input =
+      'position: absolute; top: 10px; left: 20px; width: 100px; height: 50px; overflow: hidden; display: flex; z-index: 10';
     const result = stripIrrelevantProperties(input);
     expect(result).toContain('position: absolute');
     expect(result).toContain('top: 10px');
@@ -79,7 +85,8 @@ describe('stripIrrelevantProperties', () => {
   });
 
   test('preserves -webkit-font-smoothing (affects text metrics)', () => {
-    const input = '-webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: rgba(0,0,0,0)';
+    const input =
+      '-webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: rgba(0,0,0,0)';
     const result = stripIrrelevantProperties(input);
     expect(result).toContain('-webkit-font-smoothing: antialiased');
     expect(result).not.toContain('-webkit-tap-highlight-color');
@@ -151,7 +158,8 @@ describe('roundStyleDeclarations', () => {
   });
 
   test('rounds perspective-origin and transform-origin', () => {
-    const input = 'perspective-origin: 70.296900px 17.156200px; transform-origin: 70.304700px 34.312500px';
+    const input =
+      'perspective-origin: 70.296900px 17.156200px; transform-origin: 70.304700px 34.312500px';
     const result = roundStyleDeclarations(input);
     expect(result).toContain('70.3px 17.16px');
     expect(result).toContain('70.3px 34.31px');
@@ -175,7 +183,8 @@ describe('roundStyleDeclarations', () => {
   });
 
   test('does NOT round padding, margin, border-width', () => {
-    const input = 'padding: 8.333333px 12.666667px; margin-top: 4.123456px; border-width: 1.000000px';
+    const input =
+      'padding: 8.333333px 12.666667px; margin-top: 4.123456px; border-width: 1.000000px';
     const result = roundStyleDeclarations(input);
     expect(result).toContain('padding: 8.333333px 12.666667px');
     expect(result).toContain('margin-top: 4.123456px');
@@ -183,7 +192,8 @@ describe('roundStyleDeclarations', () => {
   });
 
   test('does NOT round font-size or line-height', () => {
-    const input = 'font-size: 13.600000px; line-height: 16.320000px; letter-spacing: 0.127568px';
+    const input =
+      'font-size: 13.600000px; line-height: 16.320000px; letter-spacing: 0.127568px';
     const result = roundStyleDeclarations(input);
     expect(result).toContain('font-size: 13.600000px');
     expect(result).toContain('line-height: 16.320000px');
@@ -205,21 +215,27 @@ describe('pruneHiddenElements', () => {
   }
 
   test('removes element with display:none', () => {
-    const doc = makeDoc('<div style="display:none"><span>hidden</span></div><div style="display:block">visible</div>');
+    const doc = makeDoc(
+      '<div style="display:none"><span>hidden</span></div><div style="display:block">visible</div>'
+    );
     pruneHiddenElements(doc);
     expect(doc.querySelector('svg')!.textContent).not.toContain('hidden');
     expect(doc.querySelector('svg')!.textContent).toContain('visible');
   });
 
   test('removes entire subtree of display:none element', () => {
-    const doc = makeDoc('<div style="display:none"><p><span>deep</span></p></div>');
+    const doc = makeDoc(
+      '<div style="display:none"><p><span>deep</span></p></div>'
+    );
     pruneHiddenElements(doc);
     expect(doc.getElementsByTagName('p')).toHaveLength(0);
     expect(doc.getElementsByTagName('span')).toHaveLength(0);
   });
 
   test('keeps elements with other display values', () => {
-    const doc = makeDoc('<div style="display:flex">flex</div><div style="display:block">block</div>');
+    const doc = makeDoc(
+      '<div style="display:flex">flex</div><div style="display:block">block</div>'
+    );
     const before = doc.querySelectorAll('div').length;
     pruneHiddenElements(doc);
     expect(doc.querySelectorAll('div').length).toBe(before);
@@ -232,7 +248,9 @@ describe('pruneHiddenElements', () => {
   });
 
   test('handles display:none with surrounding whitespace in style value', () => {
-    const doc = makeDoc('<div style="color:red; display : none ; width:100px">x</div>');
+    const doc = makeDoc(
+      '<div style="color:red; display : none ; width:100px">x</div>'
+    );
     pruneHiddenElements(doc);
     expect(doc.querySelector('div')).toBeNull();
   });

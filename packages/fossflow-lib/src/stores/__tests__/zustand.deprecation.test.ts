@@ -23,7 +23,9 @@ describe('Zustand stores — no deprecated API warning', () => {
   it('loading uiStateStore does not trigger a Zustand deprecation warning', () => {
     require('src/stores/uiStateStore');
     const deprecationWarnings = warnSpy.mock.calls.filter((args) =>
-      args.some((a: unknown) => typeof a === 'string' && a.includes('DEPRECATED'))
+      args.some(
+        (a: unknown) => typeof a === 'string' && a.includes('DEPRECATED')
+      )
     );
     expect(deprecationWarnings).toHaveLength(0);
   });
@@ -31,7 +33,9 @@ describe('Zustand stores — no deprecated API warning', () => {
   it('loading modelStore does not trigger a Zustand deprecation warning', () => {
     require('src/stores/modelStore');
     const deprecationWarnings = warnSpy.mock.calls.filter((args) =>
-      args.some((a: unknown) => typeof a === 'string' && a.includes('DEPRECATED'))
+      args.some(
+        (a: unknown) => typeof a === 'string' && a.includes('DEPRECATED')
+      )
     );
     expect(deprecationWarnings).toHaveLength(0);
   });
@@ -39,7 +43,9 @@ describe('Zustand stores — no deprecated API warning', () => {
   it('loading sceneStore does not trigger a Zustand deprecation warning', () => {
     require('src/stores/sceneStore');
     const deprecationWarnings = warnSpy.mock.calls.filter((args) =>
-      args.some((a: unknown) => typeof a === 'string' && a.includes('DEPRECATED'))
+      args.some(
+        (a: unknown) => typeof a === 'string' && a.includes('DEPRECATED')
+      )
     );
     expect(deprecationWarnings).toHaveLength(0);
   });

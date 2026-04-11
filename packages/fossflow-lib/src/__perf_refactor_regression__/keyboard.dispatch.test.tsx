@@ -41,10 +41,10 @@ interface KeyHandlerDeps {
 
 function buildKeyHandler(deps: KeyHandlerDeps) {
   return (e: Partial<KeyboardEvent>) => {
-    const key   = e.key   ?? '';
-    const ctrl  = e.ctrlKey  ?? false;
+    const key = e.key ?? '';
+    const ctrl = e.ctrlKey ?? false;
     const shift = e.shiftKey ?? false;
-    const meta  = e.metaKey  ?? false;
+    const meta = e.metaKey ?? false;
     const cmdOrCtrl = ctrl || meta;
 
     // undo
@@ -73,18 +73,22 @@ function buildKeyHandler(deps: KeyHandlerDeps) {
       return;
     }
     // delete
-    if ((key === 'Delete' || key === 'Backspace') && deps.currentMode === 'CURSOR') {
+    if (
+      (key === 'Delete' || key === 'Backspace') &&
+      deps.currentMode === 'CURSOR'
+    ) {
       deps.deleteSelected();
       return;
     }
     // arrow-key pan (pan mode or when pan settings allow arrow pan)
     const PAN_SPEED = 20;
     const scroll = deps.getCurrentScroll();
-    let dx = 0, dy = 0;
-    if (key === 'ArrowLeft')  dx =  PAN_SPEED;
+    let dx = 0,
+      dy = 0;
+    if (key === 'ArrowLeft') dx = PAN_SPEED;
     if (key === 'ArrowRight') dx = -PAN_SPEED;
-    if (key === 'ArrowUp')    dy =  PAN_SPEED;
-    if (key === 'ArrowDown')  dy = -PAN_SPEED;
+    if (key === 'ArrowUp') dy = PAN_SPEED;
+    if (key === 'ArrowDown') dy = -PAN_SPEED;
     if (dx !== 0 || dy !== 0) {
       deps.setScroll({ x: scroll.x + dx, y: scroll.y + dy });
     }

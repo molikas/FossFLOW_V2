@@ -37,7 +37,9 @@ class SpyResizeObserver {
     this.callback = cb;
   }
   observe() {}
-  disconnect() { observerCount = Math.max(0, observerCount - 1); }
+  disconnect() {
+    observerCount = Math.max(0, observerCount - 1);
+  }
 }
 
 beforeEach(() => {
@@ -83,7 +85,10 @@ describe('rendererSize shared observer — N-1 regression', () => {
       );
 
       act(() => {
-        (result.current.actions as any).setRendererSize({ width: 1280, height: 720 });
+        (result.current.actions as any).setRendererSize({
+          width: 1280,
+          height: 720
+        });
       });
 
       expect(result.current.size).toEqual({ width: 1280, height: 720 });
@@ -101,7 +106,10 @@ describe('rendererSize shared observer — N-1 regression', () => {
       );
 
       act(() => {
-        (result.current.actions as any).setRendererSize({ width: 800, height: 600 });
+        (result.current.actions as any).setRendererSize({
+          width: 800,
+          height: 600
+        });
       });
 
       expect(result.current.size1).toEqual({ width: 800, height: 600 });

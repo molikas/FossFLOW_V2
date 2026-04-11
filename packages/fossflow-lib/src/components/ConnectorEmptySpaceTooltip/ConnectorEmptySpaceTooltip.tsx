@@ -35,15 +35,19 @@ export const ConnectorEmptySpaceTooltip = () => {
       // Find the most recently created connector
       const latestConnector = connectors[connectors.length - 1];
 
-      if (latestConnector && latestConnector.id !== shownForConnectorRef.current) {
+      if (
+        latestConnector &&
+        latestConnector.id !== shownForConnectorRef.current
+      ) {
         // Check if either end is connected to empty space (tile reference)
         const hasEmptySpaceConnection = latestConnector.anchors.some(
-          anchor => anchor.ref.tile && !anchor.ref.item
+          (anchor) => anchor.ref.tile && !anchor.ref.item
         );
 
         if (hasEmptySpaceConnection) {
           // Show tooltip near the mouse position (read imperatively to avoid subscribing)
-          const currentMousePosition = storeApi.getState().mouse.position.screen;
+          const currentMousePosition =
+            storeApi.getState().mouse.position.screen;
           setTooltipPosition({
             x: currentMousePosition.x,
             y: currentMousePosition.y

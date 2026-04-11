@@ -37,7 +37,7 @@ export const useDirtyTracker = (isReady: boolean) => {
     }, 100);
 
     return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady]);
 
   // Separate ref so the effect above can register cleanup without a dependency cycle

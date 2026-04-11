@@ -1,5 +1,13 @@
 import React, { useCallback, useState } from 'react';
-import { Box, Paper, Tooltip, IconButton, Menu, MenuItem, Divider } from '@mui/material';
+import {
+  Box,
+  Paper,
+  Tooltip,
+  IconButton,
+  Menu,
+  MenuItem,
+  Divider
+} from '@mui/material';
 import {
   PaletteOutlined as StyleIcon,
   EditOutlined as EditIcon,
@@ -31,11 +39,14 @@ export const NodeActionBar = ({ id }: Props) => {
   const { t } = useTranslation('nodeActionBar');
   const viewItem = useViewItem(id);
   const modelItem = useModelItem(id);
-  const { deleteViewItem, createConnector, updateViewItem, colors } = useScene();
+  const { deleteViewItem, createConnector, updateViewItem, colors } =
+    useScene();
   const uiStateActions = useUiStateStore((state) => state.actions);
   const { layers } = useLayerContext();
   const { assignLayerToItems } = useLayerActions();
-  const [layerMenuAnchor, setLayerMenuAnchor] = useState<HTMLElement | null>(null);
+  const [layerMenuAnchor, setLayerMenuAnchor] = useState<HTMLElement | null>(
+    null
+  );
 
   const handleDelete = useCallback(() => {
     uiStateActions.setItemControls(null);
@@ -75,10 +86,13 @@ export const NodeActionBar = ({ id }: Props) => {
     updateViewItem(id, { zIndex: currentZ - 1 });
   }, [id, viewItem, updateViewItem]);
 
-  const handleAssignLayer = useCallback((layerId: string | undefined) => {
-    assignLayerToItems(layerId, [{ type: 'ITEM', id }]);
-    setLayerMenuAnchor(null);
-  }, [assignLayerToItems, id]);
+  const handleAssignLayer = useCallback(
+    (layerId: string | undefined) => {
+      assignLayerToItems(layerId, [{ type: 'ITEM', id }]);
+      setLayerMenuAnchor(null);
+    },
+    [assignLayerToItems, id]
+  );
 
   if (!viewItem || !modelItem) return null;
 
@@ -184,7 +198,11 @@ export const NodeActionBar = ({ id }: Props) => {
 
         {/* Z-order */}
         <Tooltip title="Bring forward (Ctrl+])" placement="top">
-          <IconButton size="small" onClick={handleBringForward} sx={{ p: 0.75 }}>
+          <IconButton
+            size="small"
+            onClick={handleBringForward}
+            sx={{ p: 0.75 }}
+          >
             <BringForwardIcon sx={{ fontSize: 16 }} />
           </IconButton>
         </Tooltip>
@@ -221,7 +239,11 @@ export const NodeActionBar = ({ id }: Props) => {
         ) : (
           [
             currentLayerId && (
-              <MenuItem key="remove" onClick={() => handleAssignLayer(undefined)} sx={{ fontSize: 13 }}>
+              <MenuItem
+                key="remove"
+                onClick={() => handleAssignLayer(undefined)}
+                sx={{ fontSize: 13 }}
+              >
                 Remove from layer
               </MenuItem>
             ),

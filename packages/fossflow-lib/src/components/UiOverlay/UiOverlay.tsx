@@ -1,6 +1,13 @@
 import React, { useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Box, useTheme, Typography, Stack, IconButton, Tooltip } from '@mui/material';
+import {
+  Box,
+  useTheme,
+  Typography,
+  Stack,
+  IconButton,
+  Tooltip
+} from '@mui/material';
 import { shallow } from 'zustand/shallow';
 import { ChevronRight, ViewSidebarOutlined } from '@mui/icons-material';
 import { EditorModeEnum, DialogTypeEnum } from 'src/types';
@@ -82,7 +89,12 @@ interface UiOverlayProps {
   menuPortalTarget?: HTMLElement | null;
 }
 
-export const UiOverlay = ({ toolbarPortalTarget, sidebarTogglePortalTarget, languageSelector, menuPortalTarget }: UiOverlayProps = {}) => {
+export const UiOverlay = ({
+  toolbarPortalTarget,
+  sidebarTogglePortalTarget,
+  languageSelector,
+  menuPortalTarget
+}: UiOverlayProps = {}) => {
   const portalTarget = toolbarPortalTarget ?? menuPortalTarget ?? null;
   const theme = useTheme();
   const contextMenuAnchorRef = useRef<HTMLDivElement>(null);
@@ -166,29 +178,31 @@ export const UiOverlay = ({ toolbarPortalTarget, sidebarTogglePortalTarget, lang
           </Box>
         )}
         {/* MainMenu portal — left zone */}
-        {portalTarget && availableTools.includes('MAIN_MENU') && createPortal(
-          <MainMenu />,
-          portalTarget
-        )}
+        {portalTarget &&
+          availableTools.includes('MAIN_MENU') &&
+          createPortal(<MainMenu />, portalTarget)}
 
         {/* Sidebar toggle portal — Properties panel toggle only (Layers is in the LeftDock strip) */}
-        {(sidebarTogglePortalTarget ?? portalTarget) && createPortal(
-          <Tooltip title="Toggle Properties panel" placement="bottom">
-            <IconButton
-              size="small"
-              onClick={() => uiStateActions.setRightSidebarOpen(!rightSidebarOpen)}
-              sx={{
-                borderRadius: 1,
-                color: 'inherit',
-                bgcolor: rightSidebarOpen ? 'action.selected' : 'transparent'
-              }}
-            >
-              <ViewSidebarOutlined sx={{ fontSize: 18 }} />
-            </IconButton>
-          </Tooltip>,
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          (sidebarTogglePortalTarget ?? portalTarget)!
-        )}
+        {(sidebarTogglePortalTarget ?? portalTarget) &&
+          createPortal(
+            <Tooltip title="Toggle Properties panel" placement="bottom">
+              <IconButton
+                size="small"
+                onClick={() =>
+                  uiStateActions.setRightSidebarOpen(!rightSidebarOpen)
+                }
+                sx={{
+                  borderRadius: 1,
+                  color: 'inherit',
+                  bgcolor: rightSidebarOpen ? 'action.selected' : 'transparent'
+                }}
+              >
+                <ViewSidebarOutlined sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>,
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+            (sidebarTogglePortalTarget ?? portalTarget)!
+          )}
 
         {availableTools.includes('VIEW_TITLE') && (
           <Box
@@ -275,14 +289,25 @@ export const UiOverlay = ({ toolbarPortalTarget, sidebarTogglePortalTarget, lang
 
       {dialog === DialogTypeEnum.HELP && <HelpDialog />}
 
-      {dialog === DialogTypeEnum.SETTINGS && <SettingsDialog iconPackManager={iconPackManager || undefined} languageSelector={languageSelector} />}
+      {dialog === DialogTypeEnum.SETTINGS && (
+        <SettingsDialog
+          iconPackManager={iconPackManager || undefined}
+          languageSelector={languageSelector}
+        />
+      )}
 
       {/* Show hint tooltips only in editable mode */}
-      {editorMode === EditorModeEnum.EDITABLE && <ConnectorHintTooltip toolMenuRef={toolMenuRef} />}
+      {editorMode === EditorModeEnum.EDITABLE && (
+        <ConnectorHintTooltip toolMenuRef={toolMenuRef} />
+      )}
       {editorMode === EditorModeEnum.EDITABLE && <ConnectorEmptySpaceTooltip />}
       {editorMode === EditorModeEnum.EDITABLE && <ConnectorRerouteTooltip />}
-      {editorMode === EditorModeEnum.EDITABLE && <ImportHintTooltip toolMenuRef={toolMenuRef} />}
-      {editorMode === EditorModeEnum.EDITABLE && <LassoHintTooltip toolMenuRef={toolMenuRef} />}
+      {editorMode === EditorModeEnum.EDITABLE && (
+        <ImportHintTooltip toolMenuRef={toolMenuRef} />
+      )}
+      {editorMode === EditorModeEnum.EDITABLE && (
+        <LassoHintTooltip toolMenuRef={toolMenuRef} />
+      )}
 
       {/* Show lazy loading welcome notification if icon pack manager is provided */}
       {iconPackManager && <LazyLoadingWelcomeNotification />}
@@ -295,21 +320,25 @@ export const UiOverlay = ({ toolbarPortalTarget, sidebarTogglePortalTarget, lang
           ref={contextMenuAnchorRef}
           sx={{
             position: 'absolute',
-            left: contextMenu ? getTilePosition({ tile: contextMenu.tile }).x : 0,
-            top: contextMenu ? getTilePosition({ tile: contextMenu.tile }).y : 0,
+            left: contextMenu
+              ? getTilePosition({ tile: contextMenu.tile }).x
+              : 0,
+            top: contextMenu
+              ? getTilePosition({ tile: contextMenu.tile }).y
+              : 0,
             width: 0,
             height: 0,
             pointerEvents: 'none'
           }}
         />
-        <ContextMenuManager anchorEl={contextMenu ? contextMenuAnchorRef.current : null} />
+        <ContextMenuManager
+          anchorEl={contextMenu ? contextMenuAnchorRef.current : null}
+        />
 
         {/* Floating action bar — edit mode only, hidden while dragging */}
         {editorMode === EditorModeEnum.EDITABLE &&
           itemControls?.type === 'ITEM' &&
-          mode.type !== 'DRAG_ITEMS' && (
-            <NodeActionBar id={itemControls.id} />
-          )}
+          mode.type !== 'DRAG_ITEMS' && <NodeActionBar id={itemControls.id} />}
 
         {/* Lasso layer assign bar */}
         {editorMode === EditorModeEnum.EDITABLE && <LassoLayerBar />}

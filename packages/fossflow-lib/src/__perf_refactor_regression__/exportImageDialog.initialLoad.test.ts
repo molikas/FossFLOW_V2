@@ -73,11 +73,11 @@ describe('ExportImageDialog — initial load fix', () => {
     // on mount before Isoflow is ready.
     expect(src).toContain('isoflowLoadedRef.current');
     // The guard must appear inside the options-change effect body
-    const optionsEffectMatch = src.match(
-      /if \(!isoflowLoadedRef\.current[^)]*\|[^)]*cropToContent\) return/
-    ) || src.match(
-      /if \(!isoflowLoadedRef\.current \|\| cropToContent\) return/
-    );
+    const optionsEffectMatch =
+      src.match(
+        /if \(!isoflowLoadedRef\.current[^)]*\|[^)]*cropToContent\) return/
+      ) ||
+      src.match(/if \(!isoflowLoadedRef\.current \|\| cropToContent\) return/);
     expect(optionsEffectMatch).not.toBeNull();
   });
 

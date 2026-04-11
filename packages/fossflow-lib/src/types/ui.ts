@@ -1,7 +1,12 @@
 import { Coords, Size, EditorModeEnum, MainMenuOptions } from './common';
 import { Icon } from './model';
 import { ItemReference } from './scene';
-import { HotkeyProfile, PanSettings, ZoomSettings, LabelSettings } from './settings';
+import {
+  HotkeyProfile,
+  PanSettings,
+  ZoomSettings,
+  LabelSettings
+} from './settings';
 import { IconPackManagerProps } from './isoflowProps';
 
 interface AddItemControls {
@@ -169,7 +174,6 @@ export interface ContextMenu {
   item?: ItemReference;
   tile: Coords;
 }
-
 
 export type ConnectorInteractionMode = 'click' | 'drag';
 

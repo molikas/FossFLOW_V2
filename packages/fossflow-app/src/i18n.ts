@@ -5,7 +5,11 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 
 // Ensure PUBLIC_URL ends with slash for consistent path construction
 const publicUrl = process.env.PUBLIC_URL || '';
-const basePath = publicUrl ? (publicUrl.endsWith('/') ? publicUrl : publicUrl + '/') : '/';
+const basePath = publicUrl
+  ? publicUrl.endsWith('/')
+    ? publicUrl
+    : publicUrl + '/'
+  : '/';
 
 i18n
   .use(Backend)

@@ -3,7 +3,14 @@ import { useModelStoreApi } from 'src/stores/modelStore';
 import { useUiStateStore, useUiStateStoreApi } from 'src/stores/uiStateStore';
 import { ModeActions, State, SlimMouseEvent, Mouse } from 'src/types';
 import { DialogTypeEnum } from 'src/types/ui';
-import { getMouse, getItemAtTile, generateId, incrementZoom, decrementZoom, CoordsUtils } from 'src/utils';
+import {
+  getMouse,
+  getItemAtTile,
+  generateId,
+  incrementZoom,
+  decrementZoom,
+  CoordsUtils
+} from 'src/utils';
 import { useResizeObserver } from 'src/hooks/useResizeObserver';
 import { useScene } from 'src/hooks/useScene';
 import { useHistory } from 'src/hooks/useHistory';
@@ -69,8 +76,20 @@ export const useInteractionManager = () => {
   const { size: rendererSize } = useResizeObserver(rendererEl);
   const { undo, redo, canUndo, canRedo } = useHistory();
   const { handleCopy, handleCut, handlePaste } = useCopyPaste();
-  const { createTextBox, deleteSelectedItems, deleteViewItem, deleteConnector, deleteTextBox, deleteRectangle, updateViewItem } = scene;
-  const { handleMouseDown: handlePanMouseDown, handleMouseMove: handlePanMouseMove, handleMouseUp: handlePanMouseUp } = usePanHandlers();
+  const {
+    createTextBox,
+    deleteSelectedItems,
+    deleteViewItem,
+    deleteConnector,
+    deleteTextBox,
+    deleteRectangle,
+    updateViewItem
+  } = scene;
+  const {
+    handleMouseDown: handlePanMouseDown,
+    handleMouseMove: handlePanMouseMove,
+    handleMouseUp: handlePanMouseUp
+  } = usePanHandlers();
   const { scheduleUpdate, flushUpdate, cleanup } = useRAFThrottle();
 
   // Sync the single rendererEl measurement into the store so UiOverlay and
@@ -95,8 +114,10 @@ export const useInteractionManager = () => {
           const connectorMode = uiState.mode;
 
           const isConnectionInProgress =
-            (uiState.connectorInteractionMode === 'click' && connectorMode.isConnecting) ||
-            (uiState.connectorInteractionMode === 'drag' && connectorMode.id !== null);
+            (uiState.connectorInteractionMode === 'click' &&
+              connectorMode.isConnecting) ||
+            (uiState.connectorInteractionMode === 'drag' &&
+              connectorMode.id !== null);
 
           if (isConnectionInProgress && connectorMode.id) {
             deleteConnector(connectorMode.id);
@@ -216,7 +237,12 @@ export const useInteractionManager = () => {
       const hotkeyMapping = HOTKEY_PROFILES[uiState.hotkeyProfile];
       const key = e.key.toLowerCase();
 
-      if (key === 'i' && uiState.itemControls && 'id' in uiState.itemControls && uiState.itemControls.type === 'ITEM') {
+      if (
+        key === 'i' &&
+        uiState.itemControls &&
+        'id' in uiState.itemControls &&
+        uiState.itemControls.type === 'ITEM'
+      ) {
         e.preventDefault();
         const event = new CustomEvent('quickIconChange');
         window.dispatchEvent(event);
@@ -275,7 +301,10 @@ export const useInteractionManager = () => {
           selection: null,
           isDragging: false
         });
-      } else if (hotkeyMapping.freehandLasso && key === hotkeyMapping.freehandLasso) {
+      } else if (
+        hotkeyMapping.freehandLasso &&
+        key === hotkeyMapping.freehandLasso
+      ) {
         e.preventDefault();
         uiState.actions.setMode({
           type: 'FREEHAND_LASSO',
@@ -293,7 +322,9 @@ export const useInteractionManager = () => {
           e.preventDefault();
           const modelState = modelStoreApi.getState();
           const currentView = uiState.view
-            ? modelState.views.find((v: { id: string }) => v.id === uiState.view)
+            ? modelState.views.find(
+                (v: { id: string }) => v.id === uiState.view
+              )
             : undefined;
           const viewItem = currentView?.items?.find(
             (i: { id: string }) => i.id === ctrl.id
@@ -313,30 +344,60 @@ export const useInteractionManager = () => {
       let panDy = 0;
 
       if (panSettings.arrowKeysPan) {
-        if (e.key === 'ArrowUp')    { panDy =  panSpeed; e.preventDefault(); }
-        else if (e.key === 'ArrowDown')  { panDy = -panSpeed; e.preventDefault(); }
-        else if (e.key === 'ArrowLeft')  { panDx =  panSpeed; e.preventDefault(); }
-        else if (e.key === 'ArrowRight') { panDx = -panSpeed; e.preventDefault(); }
+        if (e.key === 'ArrowUp') {
+          panDy = panSpeed;
+          e.preventDefault();
+        } else if (e.key === 'ArrowDown') {
+          panDy = -panSpeed;
+          e.preventDefault();
+        } else if (e.key === 'ArrowLeft') {
+          panDx = panSpeed;
+          e.preventDefault();
+        } else if (e.key === 'ArrowRight') {
+          panDx = -panSpeed;
+          e.preventDefault();
+        }
       }
 
       if (panSettings.wasdPan) {
-        if (key === 'w')      { panDy =  panSpeed; e.preventDefault(); }
-        else if (key === 's') { panDy = -panSpeed; e.preventDefault(); }
-        else if (key === 'a') { panDx =  panSpeed; e.preventDefault(); }
-        else if (key === 'd') { panDx = -panSpeed; e.preventDefault(); }
+        if (key === 'w') {
+          panDy = panSpeed;
+          e.preventDefault();
+        } else if (key === 's') {
+          panDy = -panSpeed;
+          e.preventDefault();
+        } else if (key === 'a') {
+          panDx = panSpeed;
+          e.preventDefault();
+        } else if (key === 'd') {
+          panDx = -panSpeed;
+          e.preventDefault();
+        }
       }
 
       if (panSettings.ijklPan) {
-        if (key === 'i')      { panDy =  panSpeed; e.preventDefault(); }
-        else if (key === 'k') { panDy = -panSpeed; e.preventDefault(); }
-        else if (key === 'j') { panDx =  panSpeed; e.preventDefault(); }
-        else if (key === 'l') { panDx = -panSpeed; e.preventDefault(); }
+        if (key === 'i') {
+          panDy = panSpeed;
+          e.preventDefault();
+        } else if (key === 'k') {
+          panDy = -panSpeed;
+          e.preventDefault();
+        } else if (key === 'j') {
+          panDx = panSpeed;
+          e.preventDefault();
+        } else if (key === 'l') {
+          panDx = -panSpeed;
+          e.preventDefault();
+        }
       }
 
       if (panDx !== 0 || panDy !== 0) {
         const currentScroll = uiState.scroll;
         uiState.actions.setScroll({
-          position: CoordsUtils.add(currentScroll.position, { x: panDx, y: panDy }),
+          position: CoordsUtils.add(currentScroll.position, {
+            x: panDx,
+            y: panDy
+          }),
           offset: currentScroll.offset
         });
       }
@@ -346,7 +407,24 @@ export const useInteractionManager = () => {
     return () => {
       return window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [undo, redo, canUndo, canRedo, uiStateApi, modelStoreApi, createTextBox, deleteSelectedItems, deleteViewItem, deleteConnector, deleteTextBox, deleteRectangle, handleCopy, handleCut, handlePaste, updateViewItem]);
+  }, [
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    uiStateApi,
+    modelStoreApi,
+    createTextBox,
+    deleteSelectedItems,
+    deleteViewItem,
+    deleteConnector,
+    deleteTextBox,
+    deleteRectangle,
+    handleCopy,
+    handleCut,
+    handlePaste,
+    updateViewItem
+  ]);
 
   const processMouseUpdate = useCallback(
     (nextMouse: Mouse, e: SlimMouseEvent) => {
@@ -439,7 +517,16 @@ export const useInteractionManager = () => {
         processMouseUpdate(nextMouse, e);
       }
     },
-    [uiStateApi, rendererSize, handlePanMouseDown, handlePanMouseMove, handlePanMouseUp, scheduleUpdate, flushUpdate, processMouseUpdate]
+    [
+      uiStateApi,
+      rendererSize,
+      handlePanMouseDown,
+      handlePanMouseMove,
+      handlePanMouseUp,
+      scheduleUpdate,
+      flushUpdate,
+      processMouseUpdate
+    ]
   );
 
   const onContextMenu = useCallback(
@@ -449,7 +536,11 @@ export const useInteractionManager = () => {
       const tile = uiState.mouse.position.tile;
       const item = getItemAtTile({ tile, scene });
       if (item) {
-        uiState.actions.setContextMenu({ type: 'ITEM', item: { type: 'ITEM', id: item.id }, tile });
+        uiState.actions.setContextMenu({
+          type: 'ITEM',
+          item: { type: 'ITEM', id: item.id },
+          tile
+        });
       } else {
         uiState.actions.setContextMenu({ type: 'EMPTY', tile });
       }
@@ -516,8 +607,10 @@ export const useInteractionManager = () => {
         const mouseRelativeToCenterX = mouseX - rendererSize.width / 2;
         const mouseRelativeToCenterY = mouseY - rendererSize.height / 2;
 
-        const worldX = (mouseRelativeToCenterX - uiState.scroll.position.x) / oldZoom;
-        const worldY = (mouseRelativeToCenterY - uiState.scroll.position.y) / oldZoom;
+        const worldX =
+          (mouseRelativeToCenterX - uiState.scroll.position.x) / oldZoom;
+        const worldY =
+          (mouseRelativeToCenterY - uiState.scroll.position.y) / oldZoom;
 
         const newScrollX = mouseRelativeToCenterX - worldX * newZoom;
         const newScrollY = mouseRelativeToCenterY - worldY * newZoom;

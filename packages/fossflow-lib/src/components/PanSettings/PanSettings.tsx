@@ -13,7 +13,9 @@ import { useTranslation } from 'src/stores/localeStore';
 
 export const PanSettings = () => {
   const panSettings = useUiStateStore((state) => state.panSettings);
-  const setPanSettings = useUiStateStore((state) => state.actions.setPanSettings);
+  const setPanSettings = useUiStateStore(
+    (state) => state.actions.setPanSettings
+  );
   const { t } = useTranslation();
 
   const handleToggle = (setting: keyof typeof panSettings) => {
@@ -148,7 +150,11 @@ export const PanSettings = () => {
         </Box>
       </Paper>
 
-      <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{ mt: 2, display: 'block' }}
+      >
         {t('settings.pan.note')}
       </Typography>
     </Box>

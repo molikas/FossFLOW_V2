@@ -11,8 +11,16 @@ const PANEL_WIDTH = 240;
 type LeftTabId = 'ELEMENTS' | 'LAYERS';
 
 const TABS: { id: LeftTabId; icon: React.ReactNode; tooltip: string }[] = [
-  { id: 'ELEMENTS', icon: <WidgetsOutlined sx={{ fontSize: 20 }} />, tooltip: 'Elements' },
-  { id: 'LAYERS', icon: <LayersOutlined sx={{ fontSize: 20 }} />, tooltip: 'Layers' }
+  {
+    id: 'ELEMENTS',
+    icon: <WidgetsOutlined sx={{ fontSize: 20 }} />,
+    tooltip: 'Elements'
+  },
+  {
+    id: 'LAYERS',
+    icon: <LayersOutlined sx={{ fontSize: 20 }} />,
+    tooltip: 'Layers'
+  }
 ];
 
 export const LeftDock = () => {
@@ -59,8 +67,10 @@ export const LeftDock = () => {
               }
               sx={{
                 borderRadius: 1,
-                color: activeLeftTab === tab.id ? 'primary.main' : 'text.secondary',
-                bgcolor: activeLeftTab === tab.id ? 'action.selected' : 'transparent',
+                color:
+                  activeLeftTab === tab.id ? 'primary.main' : 'text.secondary',
+                bgcolor:
+                  activeLeftTab === tab.id ? 'action.selected' : 'transparent',
                 width: 32,
                 height: 32
               }}
@@ -81,7 +91,9 @@ export const LeftDock = () => {
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          transform: panelOpen ? 'translateX(0)' : `translateX(-${PANEL_WIDTH + STRIP_WIDTH}px)`,
+          transform: panelOpen
+            ? 'translateX(0)'
+            : `translateX(-${PANEL_WIDTH + STRIP_WIDTH}px)`,
           transition: 'transform 0.2s ease',
           boxShadow: panelOpen ? 3 : 0,
           pointerEvents: panelOpen ? 'all' : 'none'

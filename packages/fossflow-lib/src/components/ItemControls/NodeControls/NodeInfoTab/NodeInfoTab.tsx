@@ -1,5 +1,12 @@
 import React, { useCallback } from 'react';
-import { Stack, TextField, IconButton, Tooltip, Typography, Box } from '@mui/material';
+import {
+  Stack,
+  TextField,
+  IconButton,
+  Tooltip,
+  Typography,
+  Box
+} from '@mui/material';
 import {
   InsertLink as InsertLinkIcon,
   OpenInNew as OpenInNewIcon
@@ -43,7 +50,8 @@ export const NodeInfoTab = ({
   if (!modelItem) return null;
 
   const hasCaption =
-    !!modelItem.description && modelItem.description.replace(/<[^>]*>/g, '').trim() !== '';
+    !!modelItem.description &&
+    modelItem.description.replace(/<[^>]*>/g, '').trim() !== '';
 
   if (readOnly) {
     return (
@@ -78,11 +86,19 @@ export const NodeInfoTab = ({
         {/* Caption (canvas text) */}
         {hasCaption ? (
           <Section title={t('caption')}>
-            <RichTextEditor value={modelItem.description} readOnly height={80} />
+            <RichTextEditor
+              value={modelItem.description}
+              readOnly
+              height={80}
+            />
           </Section>
         ) : (
           <Section>
-            <Typography variant="body2" color="text.disabled" sx={{ fontStyle: 'italic' }}>
+            <Typography
+              variant="body2"
+              color="text.disabled"
+              sx={{ fontStyle: 'italic' }}
+            >
               {tPanel('noCaption')}
             </Typography>
           </Section>
@@ -134,7 +150,11 @@ export const NodeInfoTab = ({
 
       {/* Caption — short text shown on the canvas under the node name */}
       <Section title={t('caption')}>
-        <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mb: 0.5 }}>
+        <Typography
+          variant="caption"
+          color="text.disabled"
+          sx={{ display: 'block', mb: 0.5 }}
+        >
           {t('captionHint')}
         </Typography>
         <RichTextEditor

@@ -6,20 +6,41 @@ describe('viewItemSchema', () => {
     expect(viewItemSchema.safeParse(valid).success).toBe(true);
   });
   it('accepts optional labelColor', () => {
-    expect(viewItemSchema.safeParse({ id: 'item1', tile: { x: 0, y: 0 }, labelColor: '#ff0000' }).success).toBe(true);
+    expect(
+      viewItemSchema.safeParse({
+        id: 'item1',
+        tile: { x: 0, y: 0 },
+        labelColor: '#ff0000'
+      }).success
+    ).toBe(true);
   });
   it('labelColor is optional — omitting it still passes', () => {
-    expect(viewItemSchema.safeParse({ id: 'item1', tile: { x: 0, y: 0 } }).success).toBe(true);
+    expect(
+      viewItemSchema.safeParse({ id: 'item1', tile: { x: 0, y: 0 } }).success
+    ).toBe(true);
   });
   it('accepts optional zIndex integer', () => {
-    expect(viewItemSchema.safeParse({ id: 'item1', tile: { x: 0, y: 0 }, zIndex: 3 }).success).toBe(true);
+    expect(
+      viewItemSchema.safeParse({ id: 'item1', tile: { x: 0, y: 0 }, zIndex: 3 })
+        .success
+    ).toBe(true);
   });
   it('rejects zIndex if non-integer', () => {
-    const result = viewItemSchema.safeParse({ id: 'item1', tile: { x: 0, y: 0 }, zIndex: 1.5 });
+    const result = viewItemSchema.safeParse({
+      id: 'item1',
+      tile: { x: 0, y: 0 },
+      zIndex: 1.5
+    });
     expect(result.success).toBe(false);
   });
   it('accepts optional layerId', () => {
-    expect(viewItemSchema.safeParse({ id: 'item1', tile: { x: 0, y: 0 }, layerId: 'layer-abc' }).success).toBe(true);
+    expect(
+      viewItemSchema.safeParse({
+        id: 'item1',
+        tile: { x: 0, y: 0 },
+        layerId: 'layer-abc'
+      }).success
+    ).toBe(true);
   });
   it('fails if required fields are missing', () => {
     const invalid = { tile: { x: 1, y: 2 } };

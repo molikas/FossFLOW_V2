@@ -29,7 +29,10 @@ export const ConnectorLabel = memo(({ connector }: Props) => {
 
     return labels
       .map((label) => {
-        const tileIndex = getLabelTileIndex(scenePath.tiles.length, label.position);
+        const tileIndex = getLabelTileIndex(
+          scenePath.tiles.length,
+          label.position
+        );
         const tile = scenePath.tiles[tileIndex];
         if (!tile) return null;
 
@@ -66,8 +69,10 @@ export const ConnectorLabel = memo(({ connector }: Props) => {
       .filter(
         (
           item
-        ): item is { label: ConnectorLabelType; position: { x: number; y: number } } =>
-          item !== null
+        ): item is {
+          label: ConnectorLabelType;
+          position: { x: number; y: number };
+        } => item !== null
       );
   }, [labels, scenePath, connector.lineType, connector.width]);
 

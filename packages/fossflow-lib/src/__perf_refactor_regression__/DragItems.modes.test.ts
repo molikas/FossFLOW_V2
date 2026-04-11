@@ -92,7 +92,9 @@ describe('DragItems.entry', () => {
 
   it('does nothing when mode type is not DRAG_ITEMS', () => {
     const rendererRef = makeRendererRef();
-    const uiState = makeUiState({ mode: { type: 'CURSOR', showCursor: true, mousedownItem: null } });
+    const uiState = makeUiState({
+      mode: { type: 'CURSOR', showCursor: true, mousedownItem: null }
+    });
     DragItems.entry!({ uiState, rendererRef, scene: makeScene() } as any);
     expect(rendererRef.style.userSelect).toBe('');
     expect(mockSetWindowCursor).not.toHaveBeenCalled();
@@ -118,7 +120,11 @@ describe('DragItems.exit', () => {
   it('resets userSelect to auto and sets default cursor', () => {
     const rendererRef = makeRendererRef();
     rendererRef.style.userSelect = 'none';
-    DragItems.exit!({ rendererRef, uiState: makeUiState(), scene: makeScene() } as any);
+    DragItems.exit!({
+      rendererRef,
+      uiState: makeUiState(),
+      scene: makeScene()
+    } as any);
     expect(rendererRef.style.userSelect).toBe('auto');
     expect(mockSetWindowCursor).toHaveBeenCalledWith('default');
   });
@@ -134,7 +140,9 @@ describe('DragItems.mousemove', () => {
   });
 
   it('does nothing when mode type is not DRAG_ITEMS', () => {
-    const uiState = makeUiState({ mode: { type: 'CURSOR', showCursor: true, mousedownItem: null } });
+    const uiState = makeUiState({
+      mode: { type: 'CURSOR', showCursor: true, mousedownItem: null }
+    });
     const scene = makeScene();
     DragItems.mousemove!({ uiState, scene } as any);
     expect(scene.transaction).not.toHaveBeenCalled();
@@ -172,7 +180,7 @@ describe('DragItems.mousemove', () => {
         type: 'DRAG_ITEMS',
         showCursor: true,
         items: [{ type: 'ITEM', id: 'node1' }],
-        initialTiles: { 'node1': { x: 3, y: 3 } },
+        initialTiles: { node1: { x: 3, y: 3 } },
         initialRectangles: {}
       },
       mouse: {
@@ -198,7 +206,7 @@ describe('DragItems.mousemove', () => {
         type: 'DRAG_ITEMS',
         showCursor: true,
         items: [{ type: 'ITEM', id: 'node1' }],
-        initialTiles: { 'node1': { x: 3, y: 3 } },
+        initialTiles: { node1: { x: 3, y: 3 } },
         initialRectangles: {}
       },
       mouse: {
@@ -221,7 +229,7 @@ describe('DragItems.mousemove', () => {
         type: 'DRAG_ITEMS',
         showCursor: true,
         items: [{ type: 'ITEM', id: 'node1' }],
-        initialTiles: { 'node1': { x: 3, y: 3 } },
+        initialTiles: { node1: { x: 3, y: 3 } },
         initialRectangles: {}
       },
       mouse: {
@@ -269,7 +277,11 @@ describe('DragItems.mouseup', () => {
     DragItems.mouseup!({ uiState, scene: makeScene() } as any);
     expect(uiState.actions.setItemControls).toHaveBeenCalledWith(null);
     expect(uiState.actions.setMode).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'CURSOR', showCursor: true, mousedownItem: null })
+      expect.objectContaining({
+        type: 'CURSOR',
+        showCursor: true,
+        mousedownItem: null
+      })
     );
   });
 
@@ -278,7 +290,7 @@ describe('DragItems.mouseup', () => {
       mode: {
         type: 'DRAG_ITEMS',
         items: [{ type: 'ITEM', id: 'n1' }],
-        initialTiles: { 'n1': { x: 1, y: 1 } },
+        initialTiles: { n1: { x: 1, y: 1 } },
         initialRectangles: {}
       }
     });

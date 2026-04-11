@@ -1,10 +1,7 @@
 import React, { useMemo, memo } from 'react';
 import { useTheme, Box } from '@mui/material';
 import { UNPROJECTED_TILE_SIZE, CONNECTOR_DEFAULTS } from 'src/config';
-import {
-  getColorVariant,
-  getConnectorDirectionIcon
-} from 'src/utils';
+import { getColorVariant, getConnectorDirectionIcon } from 'src/utils';
 import { Svg } from 'src/components/Svg/Svg';
 import { useIsoProjection } from 'src/hooks/useIsoProjection';
 import type { useScene } from 'src/hooks/useScene';
@@ -29,11 +26,14 @@ export const Connector = memo(({ connector, currentView }: Props) => {
   const isUnroutable = sceneConnector?.unroutable === true;
 
   // Merge model connector with defaults and scene path.
-  const merged = useMemo(() => ({
-    ...CONNECTOR_DEFAULTS,
-    ...connector,
-    ...(scenePath ? { path: scenePath } : {})
-  }), [connector, scenePath]);
+  const merged = useMemo(
+    () => ({
+      ...CONNECTOR_DEFAULTS,
+      ...connector,
+      ...(scenePath ? { path: scenePath } : {})
+    }),
+    [connector, scenePath]
+  );
 
   const predefinedColor = useColor(merged.color);
 
@@ -52,10 +52,13 @@ export const Connector = memo(({ connector, currentView }: Props) => {
       : { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }
   );
 
-  const drawOffset = useMemo(() => ({
-    x: UNPROJECTED_TILE_SIZE / 2,
-    y: UNPROJECTED_TILE_SIZE / 2
-  }), []);
+  const drawOffset = useMemo(
+    () => ({
+      x: UNPROJECTED_TILE_SIZE / 2,
+      y: UNPROJECTED_TILE_SIZE / 2
+    }),
+    []
+  );
 
   const connectorWidthPx = useMemo(() => {
     return (UNPROJECTED_TILE_SIZE / 100) * merged.width;
@@ -83,7 +86,8 @@ export const Connector = memo(({ connector, currentView }: Props) => {
 
     for (let i = 0; i < tiles.length; i++) {
       const curr = tiles[i];
-      let dx = 0, dy = 0;
+      let dx = 0,
+        dy = 0;
 
       if (i > 0 && i < tiles.length - 1) {
         const prev = tiles[i - 1];
@@ -121,7 +125,13 @@ export const Connector = memo(({ connector, currentView }: Props) => {
     }
 
     return { path1: path1Points.join(' '), path2: path2Points.join(' ') };
-  }, [connectorPath?.tiles, merged.lineType, connectorWidthPx, drawOffset, hasTiles]);
+  }, [
+    connectorPath?.tiles,
+    merged.lineType,
+    connectorWidthPx,
+    drawOffset,
+    hasTiles
+  ]);
 
   const directionIcon = useMemo(() => {
     if (!hasTiles) return null;
@@ -170,10 +180,7 @@ export const Connector = memo(({ connector, currentView }: Props) => {
 
   return (
     <Box data-testid="connector-path" style={css}>
-      <Svg
-        style={{ transform: 'scale(-1, 1)' }}
-        viewboxSize={pxSize}
-      >
+      <Svg style={{ transform: 'scale(-1, 1)' }} viewboxSize={pxSize}>
         {lineType === 'SINGLE' ? (
           <>
             <polyline
@@ -239,40 +246,50 @@ export const Connector = memo(({ connector, currentView }: Props) => {
           </>
         ) : null}
 
-        {lineType === 'DOUBLE_WITH_CIRCLE' && connectorPath!.tiles.length >= 2 && (() => {
-          const midIndex = Math.floor(connectorPath!.tiles.length / 2);
-          const midTile = connectorPath!.tiles[midIndex];
-          const x = midTile.x * UNPROJECTED_TILE_SIZE + drawOffset.x;
-          const y = midTile.y * UNPROJECTED_TILE_SIZE + drawOffset.y;
+        {lineType === 'DOUBLE_WITH_CIRCLE' &&
+          connectorPath!.tiles.length >= 2 &&
+          (() => {
+            const midIndex = Math.floor(connectorPath!.tiles.length / 2);
+            const midTile = connectorPath!.tiles[midIndex];
+            const x = midTile.x * UNPROJECTED_TILE_SIZE + drawOffset.x;
+            const y = midTile.y * UNPROJECTED_TILE_SIZE + drawOffset.y;
 
-          let rotation = 0;
-          if (midIndex > 0 && midIndex < connectorPath!.tiles.length - 1) {
-            const prevTile = connectorPath!.tiles[midIndex - 1];
-            const nextTile = connectorPath!.tiles[midIndex + 1];
-            const dx = nextTile.x - prevTile.x;
-            const dy = nextTile.y - prevTile.y;
-            rotation = Math.atan2(dy, dx) * (180 / Math.PI);
-          }
+            let rotation = 0;
+            if (midIndex > 0 && midIndex < connectorPath!.tiles.length - 1) {
+              const prevTile = connectorPath!.tiles[midIndex - 1];
+              const nextTile = connectorPath!.tiles[midIndex + 1];
+              const dx = nextTile.x - prevTile.x;
+              const dy = nextTile.y - prevTile.y;
+              rotation = Math.atan2(dy, dx) * (180 / Math.PI);
+            }
 
-          const circleRadiusX = connectorWidthPx * 5;
-          const circleRadiusY = connectorWidthPx * 4;
+            const circleRadiusX = connectorWidthPx * 5;
+            const circleRadiusY = connectorWidthPx * 4;
 
-          return (
-            <g transform={`translate(${x}, ${y}) rotate(${rotation})`}>
-              <ellipse cx={0} cy={0} rx={circleRadiusX} ry={circleRadiusY}
-                fill="none"
-                stroke={getColorVariant(color.value, 'dark', { grade: 1 })}
-                strokeWidth={connectorWidthPx * 0.8}
-              />
-              <ellipse cx={0} cy={0} rx={circleRadiusX} ry={circleRadiusY}
-                fill="none"
-                stroke={theme.palette.common.white}
-                strokeWidth={connectorWidthPx * 1.2}
-                strokeOpacity={0.5}
-              />
-            </g>
-          );
-        })()}
+            return (
+              <g transform={`translate(${x}, ${y}) rotate(${rotation})`}>
+                <ellipse
+                  cx={0}
+                  cy={0}
+                  rx={circleRadiusX}
+                  ry={circleRadiusY}
+                  fill="none"
+                  stroke={getColorVariant(color.value, 'dark', { grade: 1 })}
+                  strokeWidth={connectorWidthPx * 0.8}
+                />
+                <ellipse
+                  cx={0}
+                  cy={0}
+                  rx={circleRadiusX}
+                  ry={circleRadiusY}
+                  fill="none"
+                  stroke={theme.palette.common.white}
+                  strokeWidth={connectorWidthPx * 1.2}
+                  strokeOpacity={0.5}
+                />
+              </g>
+            );
+          })()}
 
         {directionIcon && merged.showArrow !== false && (
           <g transform={`translate(${directionIcon.x}, ${directionIcon.y})`}>

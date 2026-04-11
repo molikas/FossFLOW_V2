@@ -84,7 +84,10 @@ const useLayerActions = () => {
   const assignLayerToItems = useCallback(
     (layerId: string | undefined, items: ItemReference[]) => {
       const itemIds = items.map((i) => i.id);
-      dispatch({ action: 'ASSIGN_LAYER_TO_ITEMS', payload: { layerId, itemIds } });
+      dispatch({
+        action: 'ASSIGN_LAYER_TO_ITEMS',
+        payload: { layerId, itemIds }
+      });
     },
     [dispatch]
   );

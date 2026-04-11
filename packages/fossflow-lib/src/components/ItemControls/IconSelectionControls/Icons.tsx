@@ -14,10 +14,7 @@ export const Icons = ({ iconCategories, onClick, onMouseDown }: Props) => {
     <Grid container spacing={1} sx={{ py: 2 }}>
       {iconCategories.map((cat) => {
         return (
-          <Grid
-            size={12}
-            key={`icon-collection-${cat.id ?? 'uncategorised'}`}
-          >
+          <Grid size={12} key={`icon-collection-${cat.id ?? 'uncategorised'}`}>
             <IconCollection
               {...cat}
               onClick={onClick}

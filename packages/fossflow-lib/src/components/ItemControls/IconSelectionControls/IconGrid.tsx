@@ -12,7 +12,12 @@ interface Props {
   onHover?: (index: number) => void;
 }
 
-export const IconGrid = ({ icons, onMouseDown, onClick, onDoubleClick }: Props) => {
+export const IconGrid = ({
+  icons,
+  onMouseDown,
+  onClick,
+  onDoubleClick
+}: Props) => {
   return (
     <Box
       sx={{

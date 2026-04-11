@@ -14,13 +14,19 @@ export const useCopyPaste = () => {
   const scene = useScene();
   const clipboard = useClipboard();
 
-  const showNotification = useCallback((message: string, severity: 'info' | 'success' | 'warning') => {
-    uiStateApi.getState().actions.setNotification({ message, severity });
-  }, [uiStateApi]);
+  const showNotification = useCallback(
+    (message: string, severity: 'info' | 'success' | 'warning') => {
+      uiStateApi.getState().actions.setNotification({ message, severity });
+    },
+    [uiStateApi]
+  );
 
   // Shared helper: gather the current selection into a clipboard payload.
   // Returns null if nothing is selected or nothing resolves to canvas items.
-  const buildPayload = useCallback((): { payload: ClipboardPayload; count: number } | null => {
+  const buildPayload = useCallback((): {
+    payload: ClipboardPayload;
+    count: number;
+  } | null => {
     const uiState = uiStateApi.getState();
     const model = modelStoreApi.getState();
 
@@ -35,10 +41,18 @@ export const useCopyPaste = () => {
       mode.selection?.items?.length
     ) {
       const refs = mode.selection.items;
-      selectedItemIds = refs.filter((r: any) => r.type === 'ITEM').map((r: any) => r.id);
-      selectedConnectorIds = refs.filter((r: any) => r.type === 'CONNECTOR').map((r: any) => r.id);
-      selectedRectangleIds = refs.filter((r: any) => r.type === 'RECTANGLE').map((r: any) => r.id);
-      selectedTextBoxIds = refs.filter((r: any) => r.type === 'TEXTBOX').map((r: any) => r.id);
+      selectedItemIds = refs
+        .filter((r: any) => r.type === 'ITEM')
+        .map((r: any) => r.id);
+      selectedConnectorIds = refs
+        .filter((r: any) => r.type === 'CONNECTOR')
+        .map((r: any) => r.id);
+      selectedRectangleIds = refs
+        .filter((r: any) => r.type === 'RECTANGLE')
+        .map((r: any) => r.id);
+      selectedTextBoxIds = refs
+        .filter((r: any) => r.type === 'TEXTBOX')
+        .map((r: any) => r.id);
     } else if (uiState.itemControls) {
       const ctrl = uiState.itemControls;
       if (ctrl.type === 'ITEM') selectedItemIds = [ctrl.id];
@@ -111,8 +125,12 @@ export const useCopyPaste = () => {
     const centroid =
       allPoints.length > 0
         ? {
-            x: Math.round(allPoints.reduce((s, t) => s + t.x, 0) / allPoints.length),
-            y: Math.round(allPoints.reduce((s, t) => s + t.y, 0) / allPoints.length)
+            x: Math.round(
+              allPoints.reduce((s, t) => s + t.x, 0) / allPoints.length
+            ),
+            y: Math.round(
+              allPoints.reduce((s, t) => s + t.y, 0) / allPoints.length
+            )
           }
         : { x: 0, y: 0 };
 
@@ -132,7 +150,10 @@ export const useCopyPaste = () => {
     const result = buildPayload();
     if (!result) return;
     clipboard.set(result.payload);
-    showNotification(`Copied ${result.count} item${result.count !== 1 ? 's' : ''}`, 'info');
+    showNotification(
+      `Copied ${result.count} item${result.count !== 1 ? 's' : ''}`,
+      'info'
+    );
   }, [buildPayload, uiStateApi, clipboard]);
 
   const handleCut = useCallback(() => {
@@ -150,7 +171,11 @@ export const useCopyPaste = () => {
       mode.selection?.items?.length
     ) {
       scene.deleteSelectedItems(mode.selection.items);
-      uiState.actions.setMode({ type: 'CURSOR', showCursor: true, mousedownItem: null });
+      uiState.actions.setMode({
+        type: 'CURSOR',
+        showCursor: true,
+        mousedownItem: null
+      });
       uiState.actions.setItemControls(null);
     } else if (uiState.itemControls) {
       const ctrl = uiState.itemControls;
@@ -161,7 +186,10 @@ export const useCopyPaste = () => {
       uiState.actions.setItemControls(null);
     }
 
-    showNotification(`Cut ${result.count} item${result.count !== 1 ? 's' : ''}`, 'success');
+    showNotification(
+      `Cut ${result.count} item${result.count !== 1 ? 's' : ''}`,
+      'success'
+    );
   }, [buildPayload, uiStateApi, scene, clipboard]);
 
   const handlePaste = useCallback(() => {
@@ -197,7 +225,9 @@ export const useCopyPaste = () => {
 
     // New IDs map (old id -> new id)
     const idMap = new Map<string, string>();
-    clipboardData.items.forEach((ci) => idMap.set(ci.viewItem.id, generateId()));
+    clipboardData.items.forEach((ci) =>
+      idMap.set(ci.viewItem.id, generateId())
+    );
     clipboardData.connectors.forEach((c) => idMap.set(c.id, generateId()));
     clipboardData.rectangles.forEach((r) => idMap.set(r.id, generateId()));
     clipboardData.textBoxes.forEach((tb) => idMap.set(tb.id, generateId()));
@@ -238,7 +268,12 @@ export const useCopyPaste = () => {
         if (anchor.ref?.tile) {
           return {
             ...anchor,
-            ref: { tile: { x: anchor.ref.tile.x + offset.x, y: anchor.ref.tile.y + offset.y } }
+            ref: {
+              tile: {
+                x: anchor.ref.tile.x + offset.x,
+                y: anchor.ref.tile.y + offset.y
+              }
+            }
           };
         }
         return anchor;
@@ -261,7 +296,10 @@ export const useCopyPaste = () => {
     }));
 
     const pastedCount =
-      newItems.length + newConnectors.length + newRectangles.length + newTextBoxes.length;
+      newItems.length +
+      newConnectors.length +
+      newRectangles.length +
+      newTextBoxes.length;
     const LARGE_PASTE_THRESHOLD = 500;
     const isLargePaste = newConnectors.length >= LARGE_PASTE_THRESHOLD;
 
@@ -269,7 +307,10 @@ export const useCopyPaste = () => {
     const onPathProgress = isLargePaste
       ? (done: number, total: number) => {
           if (done >= total) {
-            showNotification(`Pasted ${pastedCount} item${pastedCount !== 1 ? 's' : ''}`, 'success');
+            showNotification(
+              `Pasted ${pastedCount} item${pastedCount !== 1 ? 's' : ''}`,
+              'success'
+            );
           } else {
             const pct = Math.round((done / total) * 100);
             showNotification(`Pasting… routing connectors (${pct}%)`, 'info');
@@ -299,7 +340,10 @@ export const useCopyPaste = () => {
     uiState.actions.setItemControls(null);
 
     if (!isLargePaste) {
-      showNotification(`Pasted ${pastedCount} item${pastedCount !== 1 ? 's' : ''}`, 'success');
+      showNotification(
+        `Pasted ${pastedCount} item${pastedCount !== 1 ? 's' : ''}`,
+        'success'
+      );
     } else {
       showNotification('Pasting… routing connectors (0%)', 'info');
     }

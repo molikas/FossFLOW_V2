@@ -130,8 +130,17 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
     try {
       // Export both PNG and SVG in parallel
       const [pngData, svgDataResult] = await Promise.all([
-        exportAsImage(containerRef.current as HTMLDivElement, containerSize, exportScale, bgColor),
-        exportAsSVG(containerRef.current as HTMLDivElement, containerSize, bgColor)
+        exportAsImage(
+          containerRef.current as HTMLDivElement,
+          containerSize,
+          exportScale,
+          bgColor
+        ),
+        exportAsSVG(
+          containerRef.current as HTMLDivElement,
+          containerSize,
+          bgColor
+        )
       ]);
 
       setImageData(pngData);
@@ -147,7 +156,9 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
   // Stable ref so effects can call the latest exportImage without adding it
   // to their dependency arrays (which would cause spurious re-fires)
   const exportImageRef = useRef(exportImage);
-  useEffect(() => { exportImageRef.current = exportImage; }, [exportImage]);
+  useEffect(() => {
+    exportImageRef.current = exportImage;
+  }, [exportImage]);
 
   // Crop the image based on selected area
   const cropImage = useCallback((cropArea: CropArea, sourceImage: string) => {
@@ -166,7 +177,7 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
 
         const scaleX = img.width / displayCanvas.width;
         const scaleY = img.height / displayCanvas.height;
-        
+
         // Calculate the actual crop area in the source image coordinates
         const actualCropArea = {
           x: cropArea.x * scaleX,
@@ -183,10 +194,16 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
           // Draw the cropped portion from the source image
           ctx.drawImage(
             img,
-            actualCropArea.x, actualCropArea.y, actualCropArea.width, actualCropArea.height,
-            0, 0, actualCropArea.width, actualCropArea.height
+            actualCropArea.x,
+            actualCropArea.y,
+            actualCropArea.width,
+            actualCropArea.height,
+            0,
+            0,
+            actualCropArea.width,
+            actualCropArea.height
           );
-          
+
           resolve(canvas.toDataURL('image/png'));
         } else {
           reject(new Error('Could not get canvas context'));
@@ -210,50 +227,59 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
   }, [cropArea, imageData, cropToContent, cropImage, isInCropMode]);
 
   // Mouse handlers for crop selection
-  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isInCropMode) return;
-    
-    e.preventDefault();
-    const canvas = cropCanvasRef.current;
-    if (!canvas) return;
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!isInCropMode) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    
-    setDragStart({ x, y });
-    setIsDragging(true);
-    setCropArea(null);
-  }, [isInCropMode]);
+      e.preventDefault();
+      const canvas = cropCanvasRef.current;
+      if (!canvas) return;
 
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDragging || !dragStart || !isInCropMode) return;
-    
-    e.preventDefault();
-    const canvas = cropCanvasRef.current;
-    if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
 
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+      setDragStart({ x, y });
+      setIsDragging(true);
+      setCropArea(null);
+    },
+    [isInCropMode]
+  );
 
-    const newCropArea: CropArea = {
-      x: Math.min(dragStart.x, x),
-      y: Math.min(dragStart.y, y),
-      width: Math.abs(x - dragStart.x),
-      height: Math.abs(y - dragStart.y)
-    };
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!isDragging || !dragStart || !isInCropMode) return;
 
-    setCropArea(newCropArea);
-  }, [isDragging, dragStart, isInCropMode]);
+      e.preventDefault();
+      const canvas = cropCanvasRef.current;
+      if (!canvas) return;
 
-  const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDragging) return;
-    
-    e.preventDefault();
-    setIsDragging(false);
-    setDragStart(null);
-  }, [isDragging]);
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      const newCropArea: CropArea = {
+        x: Math.min(dragStart.x, x),
+        y: Math.min(dragStart.y, y),
+        width: Math.abs(x - dragStart.x),
+        height: Math.abs(y - dragStart.y)
+      };
+
+      setCropArea(newCropArea);
+    },
+    [isDragging, dragStart, isInCropMode]
+  );
+
+  const handleMouseUp = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!isDragging) return;
+
+      e.preventDefault();
+      setIsDragging(false);
+      setDragStart(null);
+    },
+    [isDragging]
+  );
 
   // Add mouse leave handler to stop dragging when leaving canvas
   const handleMouseLeave = useCallback(() => {
@@ -274,50 +300,63 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
       // Calculate scaling factors between canvas and actual image
       const scaleX = img.width / canvas.width;
       const scaleY = img.height / canvas.height;
-      
+
       // Clear canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
+
       // Draw checkerboard if transparent background
       if (transparentBackground) {
         const squareSize = 10;
         for (let y = 0; y < canvas.height; y += squareSize) {
           for (let x = 0; x < canvas.width; x += squareSize) {
-            ctx.fillStyle = (x / squareSize + y / squareSize) % 2 === 0 ? '#f0f0f0' : 'transparent';
+            ctx.fillStyle =
+              (x / squareSize + y / squareSize) % 2 === 0
+                ? '#f0f0f0'
+                : 'transparent';
             ctx.fillRect(x, y, squareSize, squareSize);
           }
         }
       }
-      
+
       // Draw the image scaled to fit canvas
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      
+
       // Draw crop overlay if in crop mode
       if (isInCropMode) {
         // Semi-transparent overlay
         ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
+
         // Clear crop area and draw border only if there's a valid selection
         if (cropArea && cropArea.width > 5 && cropArea.height > 5) {
           // Clear the selected area (remove overlay)
-          ctx.clearRect(cropArea.x, cropArea.y, cropArea.width, cropArea.height);
-          
+          ctx.clearRect(
+            cropArea.x,
+            cropArea.y,
+            cropArea.width,
+            cropArea.height
+          );
+
           // Redraw the original image in the selected area
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          
+
           // Redraw the overlay everywhere except the selected area
           ctx.save();
           ctx.globalCompositeOperation = 'source-over';
           ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-          
+
           // Top area
           if (cropArea.y > 0) {
             ctx.fillRect(0, 0, canvas.width, cropArea.y);
           }
           // Bottom area
           if (cropArea.y + cropArea.height < canvas.height) {
-            ctx.fillRect(0, cropArea.y + cropArea.height, canvas.width, canvas.height - (cropArea.y + cropArea.height));
+            ctx.fillRect(
+              0,
+              cropArea.y + cropArea.height,
+              canvas.width,
+              canvas.height - (cropArea.y + cropArea.height)
+            );
           }
           // Left area
           if (cropArea.x > 0) {
@@ -325,17 +364,27 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
           }
           // Right area
           if (cropArea.x + cropArea.width < canvas.width) {
-            ctx.fillRect(cropArea.x + cropArea.width, cropArea.y, canvas.width - (cropArea.x + cropArea.width), cropArea.height);
+            ctx.fillRect(
+              cropArea.x + cropArea.width,
+              cropArea.y,
+              canvas.width - (cropArea.x + cropArea.width),
+              cropArea.height
+            );
           }
-          
+
           ctx.restore();
-          
+
           // Draw crop border
           ctx.strokeStyle = '#2196f3';
           ctx.lineWidth = 2;
-          ctx.strokeRect(cropArea.x, cropArea.y, cropArea.width, cropArea.height);
+          ctx.strokeRect(
+            cropArea.x,
+            cropArea.y,
+            cropArea.width,
+            cropArea.height
+          );
         }
-        
+
         // Add instruction text only when no selection or dragging
         if (!cropArea || cropArea.width <= 5 || cropArea.height <= 5) {
           ctx.fillStyle = 'white';
@@ -345,7 +394,7 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
         }
       }
     };
-    
+
     img.src = imageData;
   }, [imageData, isInCropMode, cropArea, transparentBackground]);
 
@@ -429,7 +478,14 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
       });
     }, 50);
     return () => clearTimeout(timer);
-  }, [showGrid, backgroundColor, expandLabels, cropToContent, exportScale, transparentBackground]);
+  }, [
+    showGrid,
+    backgroundColor,
+    expandLabels,
+    cropToContent,
+    exportScale,
+    transparentBackground
+  ]);
 
   const downloadFile = useCallback(() => {
     const dataToDownload = croppedImageData || imageData;
@@ -465,9 +521,7 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
       <DialogContent>
         <Stack spacing={2}>
           <Alert severity="info">
-            <strong>
-              {t('compatibilityTitle')}
-            </strong>
+            <strong>{t('compatibilityTitle')}</strong>
             <br />
             {t('compatibilityMessage')}
           </Alert>
@@ -537,7 +591,11 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
                       style={{
                         maxWidth: '100%',
                         maxHeight: '300px',
-                        cursor: isInCropMode ? (isDragging ? 'grabbing' : 'crosshair') : 'default',
+                        cursor: isInCropMode
+                          ? isDragging
+                            ? 'grabbing'
+                            : 'crosshair'
+                          : 'default',
                         border: isInCropMode ? '2px solid #2196f3' : 'none',
                         userSelect: 'none'
                       }}
@@ -562,9 +620,15 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
                       maxWidth: '100%',
                       maxHeight: '300px',
                       objectFit: 'contain',
-                      backgroundImage: transparentBackground ? 'linear-gradient(45deg, #f0f0f0 25%, transparent 25%), linear-gradient(-45deg, #f0f0f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f0f0f0 75%), linear-gradient(-45deg, transparent 75%, #f0f0f0 75%)' : undefined,
-                      backgroundSize: transparentBackground ? '20px 20px' : undefined,
-                      backgroundPosition: transparentBackground ? '0 0, 0 10px, 10px -10px, -10px 0px' : undefined
+                      backgroundImage: transparentBackground
+                        ? 'linear-gradient(45deg, #f0f0f0 25%, transparent 25%), linear-gradient(-45deg, #f0f0f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f0f0f0 75%), linear-gradient(-45deg, transparent 75%, #f0f0f0 75%)'
+                        : undefined,
+                      backgroundSize: transparentBackground
+                        ? '20px 20px'
+                        : undefined,
+                      backgroundPosition: transparentBackground
+                        ? '0 0, 0 10px, 10px -10px, -10px 0px'
+                        : undefined
                     }}
                     src={displayImage}
                     alt="preview"
@@ -668,7 +732,8 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
                   {scaleMode === 'custom' && (
                     <Box sx={{ px: 1 }}>
                       <Typography variant="caption" gutterBottom>
-                        Scale: {exportScale.toFixed(1)}x ({(exportScale * 72).toFixed(0)} DPI)
+                        Scale: {exportScale.toFixed(1)}x (
+                        {(exportScale * 72).toFixed(0)} DPI)
                       </Typography>
                       <Slider
                         value={exportScale}
@@ -696,19 +761,34 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
                 <Box sx={{ mt: 2 }}>
                   {croppedImageData ? (
                     <Stack direction="row" spacing={1}>
-                      <Button variant="outlined" size="small" onClick={handleRecrop}>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={handleRecrop}
+                      >
                         {t('recrop')}
                       </Button>
-                      <Typography variant="caption" sx={{ alignSelf: 'center' }}>
+                      <Typography
+                        variant="caption"
+                        sx={{ alignSelf: 'center' }}
+                      >
                         {t('cropApplied')}
                       </Typography>
                     </Stack>
                   ) : cropArea ? (
                     <Stack direction="row" spacing={1}>
-                      <Button variant="contained" size="small" onClick={handleAcceptCrop}>
+                      <Button
+                        variant="contained"
+                        size="small"
+                        onClick={handleAcceptCrop}
+                      >
                         {t('applyCrop')}
                       </Button>
-                      <Button variant="outlined" size="small" onClick={() => setCropArea(null)}>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={() => setCropArea(null)}
+                      >
                         {t('clearSelection')}
                       </Button>
                     </Stack>
@@ -731,13 +811,18 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
                     variant="outlined"
                     data-testid="export-svg-button"
                     onClick={downloadSvgFile}
-                    disabled={!svgData || (cropToContent && isInCropMode && !croppedImageData)}
+                    disabled={
+                      !svgData ||
+                      (cropToContent && isInCropMode && !croppedImageData)
+                    }
                   >
                     {t('downloadSvg')}
                   </Button>
                   <Button
                     onClick={downloadFile}
-                    disabled={cropToContent && isInCropMode && !croppedImageData}
+                    disabled={
+                      cropToContent && isInCropMode && !croppedImageData
+                    }
                   >
                     {t('downloadPng')}
                   </Button>
@@ -746,9 +831,7 @@ export const ExportImageDialog = memo(({ onClose, quality = 1.5 }: Props) => {
             )}
           </Stack>
 
-          {exportError && (
-            <Alert severity="error">{t('error')}</Alert>
-          )}
+          {exportError && <Alert severity="error">{t('error')}</Alert>}
         </Stack>
       </DialogContent>
     </Dialog>

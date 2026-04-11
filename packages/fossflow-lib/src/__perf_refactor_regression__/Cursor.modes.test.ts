@@ -80,11 +80,19 @@ function makeScene(items: any[] = [], hitConnectors: any[] = []) {
 }
 
 function callMousedown(uiState: any, isRendererInteraction: boolean) {
-  Cursor.mousedown!({ uiState, scene: makeScene(), isRendererInteraction } as any);
+  Cursor.mousedown!({
+    uiState,
+    scene: makeScene(),
+    isRendererInteraction
+  } as any);
 }
 
 function callMouseup(uiState: any, isRendererInteraction = true) {
-  Cursor.mouseup!({ uiState, scene: makeScene(), isRendererInteraction } as any);
+  Cursor.mouseup!({
+    uiState,
+    scene: makeScene(),
+    isRendererInteraction
+  } as any);
 }
 
 function callMousemove(uiState: any, scene = makeScene()) {
@@ -107,7 +115,9 @@ describe('Cursor.mousedown (real module)', () => {
   });
 
   it('does nothing when mode type is not CURSOR', () => {
-    const uiState = makeUiState({ mode: { type: 'LASSO', selection: null, isDragging: false } });
+    const uiState = makeUiState({
+      mode: { type: 'LASSO', selection: null, isDragging: false }
+    });
     callMousedown(uiState, true);
     expect(uiState.actions.setMode).not.toHaveBeenCalled();
   });
@@ -155,7 +165,9 @@ describe('Cursor.mouseup (real module)', () => {
   });
 
   it('does nothing when mode type is not CURSOR', () => {
-    const uiState = makeUiState({ mode: { type: 'LASSO', selection: null, isDragging: false } });
+    const uiState = makeUiState({
+      mode: { type: 'LASSO', selection: null, isDragging: false }
+    });
     callMouseup(uiState);
     expect(uiState.actions.setMode).not.toHaveBeenCalled();
   });
@@ -175,7 +187,10 @@ describe('Cursor.mouseup (real module)', () => {
       }
     });
     callMouseup(uiState);
-    expect(uiState.actions.setItemControls).toHaveBeenCalledWith({ type: 'ITEM', id: 'node1' });
+    expect(uiState.actions.setItemControls).toHaveBeenCalledWith({
+      type: 'ITEM',
+      id: 'node1'
+    });
   });
 
   it('sets itemControls for RECTANGLE when mousedownItem is a RECTANGLE and no movement', () => {
@@ -193,7 +208,10 @@ describe('Cursor.mouseup (real module)', () => {
       }
     });
     callMouseup(uiState);
-    expect(uiState.actions.setItemControls).toHaveBeenCalledWith({ type: 'RECTANGLE', id: 'rect1' });
+    expect(uiState.actions.setItemControls).toHaveBeenCalledWith({
+      type: 'RECTANGLE',
+      id: 'rect1'
+    });
   });
 
   it('deselects (setItemControls null) on left-click empty canvas — no context menu, no event', () => {
@@ -224,7 +242,7 @@ describe('Cursor.mouseup (real module)', () => {
         type: 'CURSOR',
         showCursor: true,
         mousedownItem: null,
-        mousedownHandled: false  // mode was set externally, no preceding mousedown
+        mousedownHandled: false // mode was set externally, no preceding mousedown
       },
       mouse: {
         position: { tile: { x: 3, y: 4 }, screen: { x: 30, y: 40 } },
@@ -269,7 +287,10 @@ describe('Cursor.mouseup (real module)', () => {
       }
     });
     callMouseup(uiState);
-    const lastCall = uiState.actions.setMode.mock.calls[uiState.actions.setMode.mock.calls.length - 1][0];
+    const lastCall =
+      uiState.actions.setMode.mock.calls[
+        uiState.actions.setMode.mock.calls.length - 1
+      ][0];
     expect(lastCall.mousedownItem).toBeNull();
     expect(lastCall.mousedownHandled).toBe(false);
   });
@@ -284,8 +305,14 @@ describe('Cursor.mousemove (real module)', () => {
   });
 
   it('does nothing when mode type is not CURSOR', () => {
-    const uiState = makeUiState({ mode: { type: 'LASSO', selection: null, isDragging: false } });
-    Cursor.mousemove!({ uiState, scene: makeScene(), isRendererInteraction: true } as any);
+    const uiState = makeUiState({
+      mode: { type: 'LASSO', selection: null, isDragging: false }
+    });
+    Cursor.mousemove!({
+      uiState,
+      scene: makeScene(),
+      isRendererInteraction: true
+    } as any);
     expect(uiState.actions.setMode).not.toHaveBeenCalled();
   });
 
@@ -311,7 +338,12 @@ describe('Cursor.mousemove (real module)', () => {
   it('does nothing when mousedown is null and hasMovedTile is false (no hover update)', () => {
     mockHasMovedTile.mockReturnValue(false);
     const uiState = makeUiState({
-      mode: { type: 'CURSOR', showCursor: true, mousedownItem: null, mousedownHandled: false },
+      mode: {
+        type: 'CURSOR',
+        showCursor: true,
+        mousedownItem: null,
+        mousedownHandled: false
+      },
       mouse: {
         position: { tile: { x: 5, y: 5 }, screen: { x: 50, y: 50 } },
         mousedown: null,
@@ -345,7 +377,7 @@ describe('Cursor.mousemove (real module)', () => {
         type: 'DRAG_ITEMS',
         showCursor: true,
         items: [{ type: 'ITEM', id: 'n1' }],
-        initialTiles: { 'n1': { x: 5, y: 5 } },
+        initialTiles: { n1: { x: 5, y: 5 } },
         initialRectangles: {}
       })
     );
@@ -365,13 +397,18 @@ describe('Cursor.mousemove (real module)', () => {
         delta: { tile: { x: 3, y: 0 }, screen: { x: 30, y: 0 } }
       }
     });
-    const scene = { connectors: [], items: [], rectangles: [], textBoxes: [{ id: 'tb1', tile: { x: 5, y: 5 } }] };
+    const scene = {
+      connectors: [],
+      items: [],
+      rectangles: [],
+      textBoxes: [{ id: 'tb1', tile: { x: 5, y: 5 } }]
+    };
     callMousemove(uiState, scene);
     expect(uiState.actions.setMode).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'DRAG_ITEMS',
         showCursor: true,
-        initialTiles: { 'tb1': { x: 5, y: 5 } }
+        initialTiles: { tb1: { x: 5, y: 5 } }
       })
     );
   });
@@ -412,12 +449,15 @@ describe('Cursor.mousedown — connector endpoint click enters RECONNECT_ANCHOR'
     return {
       id,
       anchors: [
-        { id: 'a-src', ref: { item: 'node-A' } },  // endpoint — ref.item set
-        { id: 'a-tgt', ref: { item: 'node-B' } }   // endpoint
+        { id: 'a-src', ref: { item: 'node-A' } }, // endpoint — ref.item set
+        { id: 'a-tgt', ref: { item: 'node-B' } } // endpoint
       ],
       path: {
         tiles: [anchorTile, { x: anchorTile.x + 3, y: anchorTile.y }],
-        rectangle: { from: anchorTile, to: { x: anchorTile.x + 3, y: anchorTile.y } }
+        rectangle: {
+          from: anchorTile,
+          to: { x: anchorTile.x + 3, y: anchorTile.y }
+        }
       }
     };
   }
@@ -493,7 +533,11 @@ describe('Cursor.mousedown — connector endpoint click enters RECONNECT_ANCHOR'
       // itemControls: null — no connector selected
     });
 
-    Cursor.mousedown!({ uiState, scene: makeScene(), isRendererInteraction: true } as any);
+    Cursor.mousedown!({
+      uiState,
+      scene: makeScene(),
+      isRendererInteraction: true
+    } as any);
 
     expect(uiState.actions.setMode).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -41,13 +41,17 @@ export const VIEW_DEFAULTS: Required<
   textBoxes: []
 };
 
-export const VIEW_ITEM_DEFAULTS: Required<Omit<ViewItem, 'id' | 'tile' | 'zIndex' | 'layerId'>> = {
+export const VIEW_ITEM_DEFAULTS: Required<
+  Omit<ViewItem, 'id' | 'tile' | 'zIndex' | 'layerId'>
+> = {
   labelHeight: 80,
   labelFontSize: 14,
   labelColor: ''
 };
 
-export const CONNECTOR_DEFAULTS: Required<Omit<Connector, 'id' | 'color' | 'layerId'>> = {
+export const CONNECTOR_DEFAULTS: Required<
+  Omit<Connector, 'id' | 'color' | 'layerId'>
+> = {
   width: 10,
   description: '',
   startLabel: '',
@@ -67,7 +71,9 @@ export const CONNECTOR_DEFAULTS: Required<Omit<Connector, 'id' | 'color' | 'laye
 // is the grid that encompasses the two nodes + the offset below.
 export const CONNECTOR_SEARCH_OFFSET = { x: 1, y: 1 };
 
-export const TEXTBOX_DEFAULTS: Required<Omit<TextBox, 'id' | 'tile' | 'layerId'>> = {
+export const TEXTBOX_DEFAULTS: Required<
+  Omit<TextBox, 'id' | 'tile' | 'layerId'>
+> = {
   orientation: 'X',
   fontSize: 0.6,
   content: 'Text',

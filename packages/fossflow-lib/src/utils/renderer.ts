@@ -87,7 +87,10 @@ export const getMouse = ({
 // Project bounds (tile-space bounding of all view content)
 // ---------------------------------------------------------------------------
 
-export const getProjectBounds = (view: View, padding = PROJECT_BOUNDING_BOX_PADDING): Coords[] => {
+export const getProjectBounds = (
+  view: View,
+  padding = PROJECT_BOUNDING_BOX_PADDING
+): Coords[] => {
   const itemTiles = view.items.map((item) => item.tile);
 
   const connectors = view.connectors ?? [];
@@ -104,10 +107,19 @@ export const getProjectBounds = (view: View, padding = PROJECT_BOUNDING_BOX_PADD
   const textBoxes = view.textBoxes ?? [];
   const textBoxTiles = textBoxes.reduce<Coords[]>((acc, textBox) => {
     const size = getTextBoxDimensions(textBox);
-    return [...acc, textBox.tile, CoordsUtils.add(textBox.tile, { x: size.width, y: size.height })];
+    return [
+      ...acc,
+      textBox.tile,
+      CoordsUtils.add(textBox.tile, { x: size.width, y: size.height })
+    ];
   }, []);
 
-  let allTiles = [...itemTiles, ...connectorTiles, ...rectangleTiles, ...textBoxTiles];
+  let allTiles = [
+    ...itemTiles,
+    ...connectorTiles,
+    ...rectangleTiles,
+    ...textBoxTiles
+  ];
 
   if (allTiles.length === 0) {
     const centerTile = CoordsUtils.zero();
@@ -122,7 +134,10 @@ export const getProjectBounds = (view: View, padding = PROJECT_BOUNDING_BOX_PADD
 // ---------------------------------------------------------------------------
 
 export const getVisualBounds = (view: View, padding = 50) => {
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  let minX = Infinity,
+    maxX = -Infinity,
+    minY = Infinity,
+    maxY = -Infinity;
 
   view.items.forEach((item) => {
     const pos = getTilePosition({ tile: item.tile });
@@ -148,7 +163,10 @@ export const getVisualBounds = (view: View, padding = 50) => {
   (view.textBoxes ?? []).forEach((textBox) => {
     const pos = getTilePosition({ tile: textBox.tile });
     const size = getTextBoxDimensions(textBox);
-    const endTile = CoordsUtils.add(textBox.tile, { x: size.width, y: size.height });
+    const endTile = CoordsUtils.add(textBox.tile, {
+      x: size.width,
+      y: size.height
+    });
     const endPos = getTilePosition({ tile: endTile });
     minX = Math.min(minX, pos.x, endPos.x);
     maxX = Math.max(maxX, pos.x, endPos.x);
@@ -181,7 +199,9 @@ export const getVisualBounds = (view: View, padding = 50) => {
 
 export const getUnprojectedBounds = (view: View) => {
   const projectBounds = getProjectBounds(view);
-  const cornerPositions = projectBounds.map((corner) => getTilePosition({ tile: corner }));
+  const cornerPositions = projectBounds.map((corner) =>
+    getTilePosition({ tile: corner })
+  );
   const sortedCorners = sortByPosition(cornerPositions);
   const topLeft = { x: sortedCorners.lowX, y: sortedCorners.lowY };
   const size = getBoundingBoxSize(cornerPositions);

@@ -18,10 +18,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const APP_PATH = path.resolve(
-  __dirname,
-  '../../../fossflow-app/src/App.tsx'
-);
+const APP_PATH = path.resolve(__dirname, '../../../fossflow-app/src/App.tsx');
 
 describe('Save tracking — isAfterLoadRef pattern', () => {
   let src: string;
@@ -40,13 +37,14 @@ describe('Save tracking — isAfterLoadRef pattern', () => {
   });
 
   it('sets isAfterLoadRef.current = true before every isoflowRef.current.load() call', () => {
-    const setTrueCount = (src.match(/isAfterLoadRef\.current\s*=\s*true/g) || []).length;
+    const setTrueCount = (
+      src.match(/isAfterLoadRef\.current\s*=\s*true/g) || []
+    ).length;
     // Count only non-comment lines containing a load call
     const loadCallCount = src
       .split('\n')
       .filter((line) => !line.trimStart().startsWith('//'))
-      .filter((line) => /isoflowRef\.current[?.].*?load\(/.test(line))
-      .length;
+      .filter((line) => /isoflowRef\.current[?.].*?load\(/.test(line)).length;
     // Every load call must be guarded by a preceding ref assignment
     expect(setTrueCount).toBeGreaterThanOrEqual(loadCallCount);
     expect(setTrueCount).toBeGreaterThan(0);
@@ -66,6 +64,8 @@ describe('Save tracking — isAfterLoadRef pattern', () => {
     // What must NOT exist is a setTimeout whose arrow-function callback calls it —
     // that would be a background timer silently clearing the dirty flag.
     // Match: setTimeout(<whitespace>(<whitespace>)<whitespace>=><whitespace>{?<whitespace>setHasUnsavedChanges(false)
-    expect(src).not.toMatch(/setTimeout\s*\(\s*\(\s*\)\s*=>\s*\{?\s*setHasUnsavedChanges\s*\(\s*false\s*\)/);
+    expect(src).not.toMatch(
+      /setTimeout\s*\(\s*\(\s*\)\s*=>\s*\{?\s*setHasUnsavedChanges\s*\(\s*false\s*\)/
+    );
   });
 });

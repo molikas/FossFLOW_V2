@@ -18,7 +18,10 @@ interface DblClickDetail {
 
 export const QuickAddNodePopover = () => {
   const { t } = useTranslation('quickAddNodePopover');
-  const [anchorPosition, setAnchorPosition] = useState<{ top: number; left: number } | null>(null);
+  const [anchorPosition, setAnchorPosition] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
   const [targetTile, setTargetTile] = useState<Coords | null>(null);
   const scene = useScene();
   const icons = useModelStore((state) => state.icons);
@@ -27,7 +30,8 @@ export const QuickAddNodePopover = () => {
 
   useEffect(() => {
     const handler = (e: Event) => {
-      const { tile, screenX, screenY } = (e as CustomEvent<DblClickDetail>).detail;
+      const { tile, screenX, screenY } = (e as CustomEvent<DblClickDetail>)
+        .detail;
       setTargetTile(tile);
       setAnchorPosition({ top: screenY, left: screenX });
     };
@@ -87,10 +91,31 @@ export const QuickAddNodePopover = () => {
       anchorReference="anchorPosition"
       anchorPosition={anchorPosition}
       onClose={handleClose}
-      PaperProps={{ sx: { width: 300, maxHeight: 480, overflow: 'hidden', display: 'flex', flexDirection: 'column' } }}
+      PaperProps={{
+        sx: {
+          width: 300,
+          maxHeight: 480,
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column'
+        }
+      }}
     >
-      <Box sx={{ px: 2, pt: 1.5, pb: 0.5, borderBottom: '1px solid', borderColor: 'divider' }}>
-        <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+      <Box
+        sx={{
+          px: 2,
+          pt: 1.5,
+          pb: 0.5,
+          borderBottom: '1px solid',
+          borderColor: 'divider'
+        }}
+      >
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          fontWeight={600}
+          sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}
+        >
           {t('add')}
         </Typography>
       </Box>

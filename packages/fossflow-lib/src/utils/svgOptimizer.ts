@@ -19,44 +19,102 @@
 /** Exact property names to strip (case-insensitive match on the key). */
 const STRIP_EXACT = new Set([
   // Animation / transition
-  'animation', 'animation-name', 'animation-duration', 'animation-timing-function',
-  'animation-delay', 'animation-iteration-count', 'animation-direction',
-  'animation-fill-mode', 'animation-play-state',
-  'transition', 'transition-property', 'transition-duration',
-  'transition-timing-function', 'transition-delay',
+  'animation',
+  'animation-name',
+  'animation-duration',
+  'animation-timing-function',
+  'animation-delay',
+  'animation-iteration-count',
+  'animation-direction',
+  'animation-fill-mode',
+  'animation-play-state',
+  'transition',
+  'transition-property',
+  'transition-duration',
+  'transition-timing-function',
+  'transition-delay',
   'will-change',
   // Interaction
-  'touch-action', 'caret-color', 'resize',
+  'touch-action',
+  'caret-color',
+  'resize',
   // Print
-  'orphans', 'widows', 'page-break-before', 'page-break-after',
-  'page-break-inside', 'break-before', 'break-after', 'break-inside',
+  'orphans',
+  'widows',
+  'page-break-before',
+  'page-break-after',
+  'page-break-inside',
+  'break-before',
+  'break-after',
+  'break-inside',
   // Scroll
-  'scroll-behavior', 'overscroll-behavior', 'overscroll-behavior-x',
-  'overscroll-behavior-y', 'overscroll-behavior-block', 'overscroll-behavior-inline',
-  'scroll-snap-type', 'scroll-snap-align', 'scroll-snap-stop',
+  'scroll-behavior',
+  'overscroll-behavior',
+  'overscroll-behavior-x',
+  'overscroll-behavior-y',
+  'overscroll-behavior-block',
+  'overscroll-behavior-inline',
+  'scroll-snap-type',
+  'scroll-snap-align',
+  'scroll-snap-stop',
   // Misc
-  'tab-size', 'appearance', '-webkit-appearance',
+  'tab-size',
+  'appearance',
+  '-webkit-appearance',
   // Logical CSS props — physical equivalents are present AND the logical sizing
   // props (inline-size/block-size) are intentionally kept because in
   // position:absolute elements inside transformed coordinate spaces the browser
   // may resolve available inline space from the logical property, not width alone.
   // Margin/padding/border logical props are safe to strip — their physical
   // counterparts (margin-top, padding-left, etc.) remain.
-  'margin-block', 'margin-block-start', 'margin-block-end',
-  'margin-inline', 'margin-inline-start', 'margin-inline-end',
-  'padding-block', 'padding-block-start', 'padding-block-end',
-  'padding-inline', 'padding-inline-start', 'padding-inline-end',
-  'inset-block', 'inset-block-start', 'inset-block-end',
-  'inset-inline', 'inset-inline-start', 'inset-inline-end',
-  'border-block', 'border-block-color', 'border-block-style', 'border-block-width',
-  'border-block-start', 'border-block-start-color', 'border-block-start-style', 'border-block-start-width',
-  'border-block-end', 'border-block-end-color', 'border-block-end-style', 'border-block-end-width',
-  'border-inline', 'border-inline-color', 'border-inline-style', 'border-inline-width',
-  'border-inline-start', 'border-inline-start-color', 'border-inline-start-style', 'border-inline-start-width',
-  'border-inline-end', 'border-inline-end-color', 'border-inline-end-style', 'border-inline-end-width',
-  'border-start-start-radius', 'border-start-end-radius',
-  'border-end-start-radius', 'border-end-end-radius',
-  'overflow-block', 'overflow-inline',
+  'margin-block',
+  'margin-block-start',
+  'margin-block-end',
+  'margin-inline',
+  'margin-inline-start',
+  'margin-inline-end',
+  'padding-block',
+  'padding-block-start',
+  'padding-block-end',
+  'padding-inline',
+  'padding-inline-start',
+  'padding-inline-end',
+  'inset-block',
+  'inset-block-start',
+  'inset-block-end',
+  'inset-inline',
+  'inset-inline-start',
+  'inset-inline-end',
+  'border-block',
+  'border-block-color',
+  'border-block-style',
+  'border-block-width',
+  'border-block-start',
+  'border-block-start-color',
+  'border-block-start-style',
+  'border-block-start-width',
+  'border-block-end',
+  'border-block-end-color',
+  'border-block-end-style',
+  'border-block-end-width',
+  'border-inline',
+  'border-inline-color',
+  'border-inline-style',
+  'border-inline-width',
+  'border-inline-start',
+  'border-inline-start-color',
+  'border-inline-start-style',
+  'border-inline-start-width',
+  'border-inline-end',
+  'border-inline-end-color',
+  'border-inline-end-style',
+  'border-inline-end-width',
+  'border-start-start-radius',
+  'border-start-end-radius',
+  'border-end-start-radius',
+  'border-end-end-radius',
+  'overflow-block',
+  'overflow-inline'
 ]);
 
 /** Prefix patterns to strip (property starts with one of these). */
@@ -67,9 +125,9 @@ const STRIP_PREFIXES = ['-webkit-', '-moz-', '-ms-', '-o-'];
  * and must be preserved to keep text fitting its measured container.
  */
 const VENDOR_KEEP = new Set([
-  '-webkit-font-smoothing',  // changes antialiasing → affects text width on some systems
-  '-webkit-locale',          // affects font selection for character sets
-  '-webkit-font-feature-settings', // affects ligatures / kern
+  '-webkit-font-smoothing', // changes antialiasing → affects text width on some systems
+  '-webkit-locale', // affects font selection for character sets
+  '-webkit-font-feature-settings' // affects ligatures / kern
 ]);
 
 function shouldStripProperty(prop: string): boolean {
@@ -91,8 +149,8 @@ export function stripIrrelevantProperties(styleStr: string): string {
   if (!styleStr) return styleStr;
   return styleStr
     .split(';')
-    .map(decl => decl.trim())
-    .filter(decl => {
+    .map((decl) => decl.trim())
+    .filter((decl) => {
       if (!decl) return false;
       const colonIdx = decl.indexOf(':');
       if (colonIdx === -1) return true; // keep malformed declarations
@@ -109,7 +167,11 @@ export function stripIrrelevantProperties(styleStr: string): string {
 const FLOAT_RE = /(-?\d+\.\d{3,})/g;
 
 function roundFloat(s: string): string {
-  return parseFloat(s).toFixed(2).replace(/\.?0+$/, '') || '0';
+  return (
+    parseFloat(s)
+      .toFixed(2)
+      .replace(/\.?0+$/, '') || '0'
+  );
 }
 
 /**
@@ -129,15 +191,43 @@ export function roundNumbers(s: string): string {
  * We preserve exact values for these — only SVG coordinate attrs get rounded.
  */
 const LAYOUT_PROPS = new Set([
-  'width', 'height', 'min-width', 'min-height', 'max-width', 'max-height',
+  'width',
+  'height',
+  'min-width',
+  'min-height',
+  'max-width',
+  'max-height',
   // Logical sizing props — kept alongside physical width/height (see STRIP_EXACT comment)
-  'inline-size', 'block-size', 'min-inline-size', 'max-inline-size', 'min-block-size', 'max-block-size',
-  'top', 'right', 'bottom', 'left', 'inset',
-  'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
-  'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
-  'border-width', 'border-top-width', 'border-right-width',
-  'border-bottom-width', 'border-left-width',
-  'font-size', 'line-height', 'letter-spacing', 'word-spacing',
+  'inline-size',
+  'block-size',
+  'min-inline-size',
+  'max-inline-size',
+  'min-block-size',
+  'max-block-size',
+  'top',
+  'right',
+  'bottom',
+  'left',
+  'inset',
+  'margin',
+  'margin-top',
+  'margin-right',
+  'margin-bottom',
+  'margin-left',
+  'padding',
+  'padding-top',
+  'padding-right',
+  'padding-bottom',
+  'padding-left',
+  'border-width',
+  'border-top-width',
+  'border-right-width',
+  'border-bottom-width',
+  'border-left-width',
+  'font-size',
+  'line-height',
+  'letter-spacing',
+  'word-spacing'
 ]);
 
 /**
@@ -149,7 +239,7 @@ export function roundStyleDeclarations(styleStr: string): string {
   if (!styleStr) return styleStr;
   return styleStr
     .split(';')
-    .map(decl => {
+    .map((decl) => {
       const colonIdx = decl.indexOf(':');
       if (colonIdx === -1) return decl;
       const prop = decl.slice(0, colonIdx).trim().toLowerCase();
@@ -177,13 +267,18 @@ function isDisplayNone(el: Element): boolean {
 export function pruneHiddenElements(doc: Document): void {
   // Collect first so we don't mutate during traversal
   const toRemove: Element[] = [];
-  const walker = doc.createTreeWalker(doc.documentElement, 0x1 /* SHOW_ELEMENT */);
+  const walker = doc.createTreeWalker(
+    doc.documentElement,
+    0x1 /* SHOW_ELEMENT */
+  );
   let node = walker.nextNode() as Element | null;
   while (node) {
     if (isDisplayNone(node)) {
       toRemove.push(node);
       // Skip children — they'll be removed with the parent
-      node = walker.nextSibling() as Element | null ?? walker.nextNode() as Element | null;
+      node =
+        (walker.nextSibling() as Element | null) ??
+        (walker.nextNode() as Element | null);
     } else {
       node = walker.nextNode() as Element | null;
     }
@@ -237,17 +332,34 @@ export async function optimizeSvgDataUrl(svgDataUrl: string): Promise<string> {
     const el = allElements[i];
     const style = el.getAttribute('style');
     if (style) {
-      let cleaned = stripIrrelevantProperties(style);  // Phase 1
-      cleaned = roundStyleDeclarations(cleaned);        // Phase 2 (layout-safe)
+      let cleaned = stripIrrelevantProperties(style); // Phase 1
+      cleaned = roundStyleDeclarations(cleaned); // Phase 2 (layout-safe)
       if (cleaned !== style) {
         el.setAttribute('style', cleaned);
       }
     }
 
     // Phase 2: round SVG coordinate attributes (safe — these are geometry, not box layout)
-    for (const attr of ['d', 'transform', 'viewBox', 'x', 'y', 'x1', 'y1', 'x2', 'y2',
-                         'cx', 'cy', 'r', 'rx', 'ry',
-                         'points', 'stroke-width', 'stroke-dasharray', 'stroke-dashoffset']) {
+    for (const attr of [
+      'd',
+      'transform',
+      'viewBox',
+      'x',
+      'y',
+      'x1',
+      'y1',
+      'x2',
+      'y2',
+      'cx',
+      'cy',
+      'r',
+      'rx',
+      'ry',
+      'points',
+      'stroke-width',
+      'stroke-dasharray',
+      'stroke-dashoffset'
+    ]) {
       const val = el.getAttribute(attr);
       if (val) {
         const rounded = roundNumbers(val);

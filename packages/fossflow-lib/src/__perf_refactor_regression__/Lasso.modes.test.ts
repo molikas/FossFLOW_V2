@@ -32,9 +32,19 @@ jest.mock('src/utils', () => ({
 // Helpers
 // ---------------------------------------------------------------------------
 function makeUiState(overrides: any = {}) {
-  const mode = overrides.mode ?? { type: 'LASSO', selection: null, isDragging: false };
-  const mouse = overrides.mouse ?? { position: { tile: { x: 5, y: 5 } }, mousedown: null };
-  const actions = overrides.actions ?? { setMode: jest.fn(), setItemControls: jest.fn() };
+  const mode = overrides.mode ?? {
+    type: 'LASSO',
+    selection: null,
+    isDragging: false
+  };
+  const mouse = overrides.mouse ?? {
+    position: { tile: { x: 5, y: 5 } },
+    mousedown: null
+  };
+  const actions = overrides.actions ?? {
+    setMode: jest.fn(),
+    setItemControls: jest.fn()
+  };
   return { mode, mouse, actions };
 }
 
@@ -43,15 +53,27 @@ function makeScene() {
 }
 
 function callMousedown(uiState: any, isRendererInteraction: boolean) {
-  Lasso.mousedown!({ uiState, scene: makeScene(), isRendererInteraction } as any);
+  Lasso.mousedown!({
+    uiState,
+    scene: makeScene(),
+    isRendererInteraction
+  } as any);
 }
 
 function callMouseup(uiState: any) {
-  Lasso.mouseup!({ uiState, scene: makeScene(), isRendererInteraction: true } as any);
+  Lasso.mouseup!({
+    uiState,
+    scene: makeScene(),
+    isRendererInteraction: true
+  } as any);
 }
 
 function callMousemove(uiState: any) {
-  Lasso.mousemove!({ uiState, scene: makeScene(), isRendererInteraction: true } as any);
+  Lasso.mousemove!({
+    uiState,
+    scene: makeScene(),
+    isRendererInteraction: true
+  } as any);
 }
 
 // ---------------------------------------------------------------------------
@@ -70,7 +92,9 @@ describe('Lasso.mousedown (real module)', () => {
   });
 
   it('does nothing when mode type is not LASSO', () => {
-    const uiState = makeUiState({ mode: { type: 'CURSOR', showCursor: true, mousedownItem: null } });
+    const uiState = makeUiState({
+      mode: { type: 'CURSOR', showCursor: true, mousedownItem: null }
+    });
     callMousedown(uiState, true);
     expect(uiState.actions.setMode).not.toHaveBeenCalled();
   });
@@ -86,7 +110,11 @@ describe('Lasso.mousedown (real module)', () => {
     const uiState = makeUiState({
       mode: {
         type: 'LASSO',
-        selection: { startTile: { x: 0, y: 0 }, endTile: { x: 10, y: 10 }, items: [] },
+        selection: {
+          startTile: { x: 0, y: 0 },
+          endTile: { x: 10, y: 10 },
+          items: []
+        },
         isDragging: false
       }
     });
@@ -104,7 +132,11 @@ describe('Lasso.mousedown (real module)', () => {
     const uiState = makeUiState({
       mode: {
         type: 'LASSO',
-        selection: { startTile: { x: 0, y: 0 }, endTile: { x: 10, y: 10 }, items: [{ type: 'ITEM', id: 'a' }] },
+        selection: {
+          startTile: { x: 0, y: 0 },
+          endTile: { x: 10, y: 10 },
+          items: [{ type: 'ITEM', id: 'a' }]
+        },
         isDragging: false
       }
     });
@@ -126,7 +158,9 @@ describe('Lasso.mouseup (real module)', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('does nothing when mode type is not LASSO', () => {
-    const uiState = makeUiState({ mode: { type: 'CURSOR', showCursor: true, mousedownItem: null } });
+    const uiState = makeUiState({
+      mode: { type: 'CURSOR', showCursor: true, mousedownItem: null }
+    });
     callMouseup(uiState);
     expect(uiState.actions.setMode).not.toHaveBeenCalled();
   });
@@ -155,7 +189,11 @@ describe('Lasso.mouseup (real module)', () => {
     const uiState = makeUiState({
       mode: {
         type: 'LASSO',
-        selection: { startTile: { x: 0, y: 0 }, endTile: { x: 5, y: 5 }, items: [] },
+        selection: {
+          startTile: { x: 0, y: 0 },
+          endTile: { x: 5, y: 5 },
+          items: []
+        },
         isDragging: false
       },
       mouse: {
@@ -208,7 +246,9 @@ describe('Lasso.mousemove (real module)', () => {
   });
 
   it('does nothing when mode type is not LASSO', () => {
-    const uiState = makeUiState({ mode: { type: 'CURSOR', showCursor: true, mousedownItem: null } });
+    const uiState = makeUiState({
+      mode: { type: 'CURSOR', showCursor: true, mousedownItem: null }
+    });
     callMousemove(uiState);
     expect(uiState.actions.setMode).not.toHaveBeenCalled();
   });
@@ -255,7 +295,7 @@ describe('Lasso.mousemove (real module)', () => {
         type: 'DRAG_ITEMS',
         showCursor: true,
         items: [{ type: 'ITEM', id: 'n1' }],
-        initialTiles: {},        // getItemByIdOrThrow throws (n1 not in scene) → caught silently
+        initialTiles: {}, // getItemByIdOrThrow throws (n1 not in scene) → caught silently
         initialRectangles: {}
       })
     );
@@ -305,18 +345,22 @@ describe('Lasso connector anchor — selection and DRAG_ITEMS initialTiles', () 
       items: [],
       rectangles: [],
       textBoxes: [],
-      connectors: [{
-        id: 'c1',
-        anchors: [
-          { id: 'a-item', ref: { item: 'node1' } },        // item-based — NOT collected
-          { id: 'a-tile', ref: { tile: { x: 5, y: 5 } } } // tile-based — SHOULD be collected
-        ]
-      }]
+      connectors: [
+        {
+          id: 'c1',
+          anchors: [
+            { id: 'a-item', ref: { item: 'node1' } }, // item-based — NOT collected
+            { id: 'a-tile', ref: { tile: { x: 5, y: 5 } } } // tile-based — SHOULD be collected
+          ]
+        }
+      ]
     };
     Lasso.mousemove!({ uiState, scene, isRendererInteraction: true } as any);
 
     const call = uiState.actions.setMode.mock.calls[0][0];
-    const anchorRefs = call.selection.items.filter((i: any) => i.type === 'CONNECTOR_ANCHOR');
+    const anchorRefs = call.selection.items.filter(
+      (i: any) => i.type === 'CONNECTOR_ANCHOR'
+    );
     expect(anchorRefs.map((i: any) => i.id)).toContain('a-tile');
     expect(anchorRefs.map((i: any) => i.id)).not.toContain('a-item');
   });
@@ -341,10 +385,12 @@ describe('Lasso connector anchor — selection and DRAG_ITEMS initialTiles', () 
       items: [],
       rectangles: [],
       textBoxes: [],
-      connectors: [{
-        id: 'c1',
-        anchors: [{ id: 'a-tile', ref: { tile: { x: 4, y: 6 } } }]
-      }]
+      connectors: [
+        {
+          id: 'c1',
+          anchors: [{ id: 'a-tile', ref: { tile: { x: 4, y: 6 } } }]
+        }
+      ]
     };
     Lasso.mousemove!({ uiState, scene, isRendererInteraction: true } as any);
 
@@ -376,10 +422,12 @@ describe('Lasso connector anchor — selection and DRAG_ITEMS initialTiles', () 
       items: [],
       rectangles: [],
       textBoxes: [],
-      connectors: [{
-        id: 'c1',
-        anchors: [{ id: 'a-item-ref', ref: { item: 'node1' } }] // item-based, no tile
-      }]
+      connectors: [
+        {
+          id: 'c1',
+          anchors: [{ id: 'a-item-ref', ref: { item: 'node1' } }] // item-based, no tile
+        }
+      ]
     };
     Lasso.mousemove!({ uiState, scene, isRendererInteraction: true } as any);
 

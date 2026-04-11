@@ -29,7 +29,7 @@ const CONNECTOR = {
   id: 'c1',
   anchors: [
     { id: 'a1', ref: { item: 'item1' }, face: 'right' },
-    { id: 'a2', ref: { item: 'item2' }, face: 'left'  }
+    { id: 'a2', ref: { item: 'item2' }, face: 'left' }
   ]
 };
 
@@ -57,21 +57,24 @@ function makeModelState(viewOverrides = {}, topLevelOverrides = {}) {
 }
 
 let modelState: ReturnType<typeof makeModelState>;
-let sceneState: { connectors: Record<string, any>; textBoxes: Record<string, any> };
+let sceneState: {
+  connectors: Record<string, any>;
+  textBoxes: Record<string, any>;
+};
 
 beforeEach(() => {
   jest.clearAllMocks();
   modelState = makeModelState();
   sceneState = { connectors: {}, textBoxes: {} };
 
-  (modelStoreModule.useModelStore as jest.Mock).mockImplementation((selector: any) =>
-    selector(modelState)
+  (modelStoreModule.useModelStore as jest.Mock).mockImplementation(
+    (selector: any) => selector(modelState)
   );
-  (uiStateStoreModule.useUiStateStore as jest.Mock).mockImplementation((selector: any) =>
-    selector({ view: 'view-1' })
+  (uiStateStoreModule.useUiStateStore as jest.Mock).mockImplementation(
+    (selector: any) => selector({ view: 'view-1' })
   );
-  (sceneStoreModule.useSceneStore as jest.Mock).mockImplementation((selector: any) =>
-    selector(sceneState)
+  (sceneStoreModule.useSceneStore as jest.Mock).mockImplementation(
+    (selector: any) => selector(sceneState)
   );
   (sceneStoreModule.useSceneStoreApi as jest.Mock).mockReturnValue({
     getState: jest.fn().mockReturnValue(sceneState)
@@ -79,7 +82,9 @@ beforeEach(() => {
   (modelStoreModule.useModelStoreApi as jest.Mock).mockReturnValue({
     getState: jest.fn().mockReturnValue(modelState)
   });
-  (useViewModule.useView as jest.Mock).mockReturnValue({ changeView: jest.fn() });
+  (useViewModule.useView as jest.Mock).mockReturnValue({
+    changeView: jest.fn()
+  });
 });
 
 describe('useScene reference stability — C-2 regression', () => {
@@ -100,8 +105,8 @@ describe('useScene reference stability — C-2 regression', () => {
       // connectors array is the same object reference as before
       newView.connectors = modelState.views[0].connectors;
       modelState = { ...modelState, views: [newView] };
-      (modelStoreModule.useModelStore as jest.Mock).mockImplementation((selector: any) =>
-        selector(modelState)
+      (modelStoreModule.useModelStore as jest.Mock).mockImplementation(
+        (selector: any) => selector(modelState)
       );
     });
 
@@ -115,8 +120,8 @@ describe('useScene reference stability — C-2 regression', () => {
 
     act(() => {
       modelState = { ...modelState, title: 'New Diagram Title' };
-      (modelStoreModule.useModelStore as jest.Mock).mockImplementation((selector: any) =>
-        selector(modelState)
+      (modelStoreModule.useModelStore as jest.Mock).mockImplementation(
+        (selector: any) => selector(modelState)
       );
     });
 
@@ -135,8 +140,8 @@ describe('useScene reference stability — C-2 regression', () => {
         connectors: [...modelState.views[0].connectors, newConnector]
       };
       modelState = { ...modelState, views: [newView] };
-      (modelStoreModule.useModelStore as jest.Mock).mockImplementation((selector: any) =>
-        selector(modelState)
+      (modelStoreModule.useModelStore as jest.Mock).mockImplementation(
+        (selector: any) => selector(modelState)
       );
     });
 
@@ -152,8 +157,8 @@ describe('useScene reference stability — C-2 regression', () => {
     act(() => {
       const newView = { ...modelState.views[0], connectors: [] };
       modelState = { ...modelState, views: [newView] };
-      (modelStoreModule.useModelStore as jest.Mock).mockImplementation((selector: any) =>
-        selector(modelState)
+      (modelStoreModule.useModelStore as jest.Mock).mockImplementation(
+        (selector: any) => selector(modelState)
       );
     });
 
@@ -169,8 +174,8 @@ describe('useScene reference stability — C-2 regression', () => {
 
     act(() => {
       sceneState = { ...sceneState, connectors: { c1: { width: 20 } } };
-      (sceneStoreModule.useSceneStore as jest.Mock).mockImplementation((selector: any) =>
-        selector(sceneState)
+      (sceneStoreModule.useSceneStore as jest.Mock).mockImplementation(
+        (selector: any) => selector(sceneState)
       );
     });
 
@@ -184,8 +189,8 @@ describe('useScene reference stability — C-2 regression', () => {
       items: [{ id: 'item1', tile: { x: 0, y: 0 } }]
     };
     modelState = { ...modelState, views: [viewWithItems] };
-    (modelStoreModule.useModelStore as jest.Mock).mockImplementation((selector: any) =>
-      selector(modelState)
+    (modelStoreModule.useModelStore as jest.Mock).mockImplementation(
+      (selector: any) => selector(modelState)
     );
 
     const { result, rerender } = renderHook(() => useScene());
@@ -194,11 +199,14 @@ describe('useScene reference stability — C-2 regression', () => {
     act(() => {
       const newView = {
         ...modelState.views[0],
-        connectors: [...modelState.views[0].connectors, { id: 'c2', anchors: [] }]
+        connectors: [
+          ...modelState.views[0].connectors,
+          { id: 'c2', anchors: [] }
+        ]
       };
       modelState = { ...modelState, views: [newView] };
-      (modelStoreModule.useModelStore as jest.Mock).mockImplementation((selector: any) =>
-        selector(modelState)
+      (modelStoreModule.useModelStore as jest.Mock).mockImplementation(
+        (selector: any) => selector(modelState)
       );
     });
 

@@ -84,105 +84,116 @@ export const useIconPackManager = (coreIcons: any[]) => {
     loadEnabledPacks()
   );
 
-  const [packInfo, setPackInfo] = useState<Record<IconPackName, IconPackInfo>>(() => {
-    const info: Record<string, IconPackInfo> = {};
-    const packNames: IconPackName[] = ['aws', 'gcp', 'azure', 'kubernetes'];
-    packNames.forEach(name => {
-      info[name] = {
-        name,
-        displayName: PACK_METADATA[name],
-        loaded: false,
-        loading: false,
-        error: null,
-        iconCount: 0
-      };
-    });
-    return info as Record<IconPackName, IconPackInfo>;
-  });
+  const [packInfo, setPackInfo] = useState<Record<IconPackName, IconPackInfo>>(
+    () => {
+      const info: Record<string, IconPackInfo> = {};
+      const packNames: IconPackName[] = ['aws', 'gcp', 'azure', 'kubernetes'];
+      packNames.forEach((name) => {
+        info[name] = {
+          name,
+          displayName: PACK_METADATA[name],
+          loaded: false,
+          loading: false,
+          error: null,
+          iconCount: 0
+        };
+      });
+      return info as Record<IconPackName, IconPackInfo>;
+    }
+  );
 
   const [loadedIcons, setLoadedIcons] = useState<any[]>(coreIcons);
-  const [loadedPackData, setLoadedPackData] = useState<Record<IconPackName, any>>({} as Record<IconPackName, any>);
+  const [loadedPackData, setLoadedPackData] = useState<
+    Record<IconPackName, any>
+  >({} as Record<IconPackName, any>);
 
   // Load a specific pack
-  const loadPack = useCallback(async (packName: IconPackName) => {
-    // Already loaded?
-    if (packInfo[packName].loaded || packInfo[packName].loading) {
-      return;
-    }
+  const loadPack = useCallback(
+    async (packName: IconPackName) => {
+      // Already loaded?
+      if (packInfo[packName].loaded || packInfo[packName].loading) {
+        return;
+      }
 
-    // Set loading state
-    setPackInfo(prev => ({
-      ...prev,
-      [packName]: { ...prev[packName], loading: true, error: null }
-    }));
-
-    try {
-      const pack = await loadIconPack(packName);
-      const flattenedIcons = flattenCollections([pack]);
-
-      // Store the loaded pack data
-      setLoadedPackData(prev => ({
+      // Set loading state
+      setPackInfo((prev) => ({
         ...prev,
-        [packName]: pack
+        [packName]: { ...prev[packName], loading: true, error: null }
       }));
 
-      // Update pack info
-      setPackInfo(prev => ({
-        ...prev,
-        [packName]: {
-          ...prev[packName],
-          loaded: true,
-          loading: false,
-          iconCount: flattenedIcons.length,
-          error: null
-        }
-      }));
+      try {
+        const pack = await loadIconPack(packName);
+        const flattenedIcons = flattenCollections([pack]);
 
-      // Add icons to the loaded icons array
-      setLoadedIcons(prev => [...prev, ...flattenedIcons]);
+        // Store the loaded pack data
+        setLoadedPackData((prev) => ({
+          ...prev,
+          [packName]: pack
+        }));
 
-      return flattenedIcons;
-    } catch (error) {
-      console.error(`Failed to load ${packName} icon pack:`, error);
-      setPackInfo(prev => ({
-        ...prev,
-        [packName]: {
-          ...prev[packName],
-          loading: false,
-          error: error instanceof Error ? error.message : 'Failed to load pack'
-        }
-      }));
-      throw error;
-    }
-  }, [packInfo]);
+        // Update pack info
+        setPackInfo((prev) => ({
+          ...prev,
+          [packName]: {
+            ...prev[packName],
+            loaded: true,
+            loading: false,
+            iconCount: flattenedIcons.length,
+            error: null
+          }
+        }));
+
+        // Add icons to the loaded icons array
+        setLoadedIcons((prev) => [...prev, ...flattenedIcons]);
+
+        return flattenedIcons;
+      } catch (error) {
+        console.error(`Failed to load ${packName} icon pack:`, error);
+        setPackInfo((prev) => ({
+          ...prev,
+          [packName]: {
+            ...prev[packName],
+            loading: false,
+            error:
+              error instanceof Error ? error.message : 'Failed to load pack'
+          }
+        }));
+        throw error;
+      }
+    },
+    [packInfo]
+  );
 
   // Enable/disable a pack
-  const togglePack = useCallback(async (packName: IconPackName, enabled: boolean) => {
-    if (enabled) {
-      // Add to enabled packs
-      const newEnabledPacks = [...enabledPacks, packName];
-      setEnabledPacks(newEnabledPacks);
-      saveEnabledPacks(newEnabledPacks);
+  const togglePack = useCallback(
+    async (packName: IconPackName, enabled: boolean) => {
+      if (enabled) {
+        // Add to enabled packs
+        const newEnabledPacks = [...enabledPacks, packName];
+        setEnabledPacks(newEnabledPacks);
+        saveEnabledPacks(newEnabledPacks);
 
-      // Load the pack
-      await loadPack(packName);
-    } else {
-      // Remove from enabled packs
-      const newEnabledPacks = enabledPacks.filter(p => p !== packName);
-      setEnabledPacks(newEnabledPacks);
-      saveEnabledPacks(newEnabledPacks);
+        // Load the pack
+        await loadPack(packName);
+      } else {
+        // Remove from enabled packs
+        const newEnabledPacks = enabledPacks.filter((p) => p !== packName);
+        setEnabledPacks(newEnabledPacks);
+        saveEnabledPacks(newEnabledPacks);
 
-      // Remove icons from loaded icons
-      // We need to rebuild the icons array from core + enabled packs
-      const newIcons = [coreIcons];
-      for (const pack of newEnabledPacks) {
-        if (loadedPackData[pack]) {
-          newIcons.push(flattenCollections([loadedPackData[pack]]));
+        // Remove icons from loaded icons
+        // We need to rebuild the icons array from core + enabled packs
+        const newIcons = [coreIcons];
+        for (const pack of newEnabledPacks) {
+          if (loadedPackData[pack]) {
+            newIcons.push(flattenCollections([loadedPackData[pack]]));
+          }
         }
+        setLoadedIcons(newIcons.flat());
       }
-      setLoadedIcons(newIcons.flat());
-    }
-  }, [enabledPacks, loadPack, coreIcons, loadedPackData]);
+    },
+    [enabledPacks, loadPack, coreIcons, loadedPackData]
+  );
 
   // Toggle lazy loading
   const toggleLazyLoading = useCallback((enabled: boolean) => {
@@ -201,41 +212,44 @@ export const useIconPackManager = (coreIcons: any[]) => {
   }, [packInfo, loadPack]);
 
   // Auto-detect required packs from diagram data
-  const loadPacksForDiagram = useCallback(async (diagramItems: any[]) => {
-    if (!diagramItems || diagramItems.length === 0) return;
+  const loadPacksForDiagram = useCallback(
+    async (diagramItems: any[]) => {
+      if (!diagramItems || diagramItems.length === 0) return;
 
-    // Extract unique collections from diagram items
-    const collections = new Set<string>();
-    diagramItems.forEach(item => {
-      if (item.icon?.collection) {
-        collections.add(item.icon.collection);
-      }
-    });
+      // Extract unique collections from diagram items
+      const collections = new Set<string>();
+      diagramItems.forEach((item) => {
+        if (item.icon?.collection) {
+          collections.add(item.icon.collection);
+        }
+      });
 
-    // Load any missing packs
-    const packsToLoad: IconPackName[] = [];
-    collections.forEach(collection => {
-      if (collection !== 'isoflow' && collection !== 'imported') {
-        const packName = collection as IconPackName;
-        if (['aws', 'gcp', 'azure', 'kubernetes'].includes(packName)) {
-          if (!packInfo[packName].loaded && !packInfo[packName].loading) {
-            packsToLoad.push(packName);
+      // Load any missing packs
+      const packsToLoad: IconPackName[] = [];
+      collections.forEach((collection) => {
+        if (collection !== 'isoflow' && collection !== 'imported') {
+          const packName = collection as IconPackName;
+          if (['aws', 'gcp', 'azure', 'kubernetes'].includes(packName)) {
+            if (!packInfo[packName].loaded && !packInfo[packName].loading) {
+              packsToLoad.push(packName);
+            }
           }
         }
-      }
-    });
+      });
 
-    // Load required packs
-    for (const pack of packsToLoad) {
-      await loadPack(pack);
-      // Also add to enabled packs
-      if (!enabledPacks.includes(pack)) {
-        const newEnabledPacks = [...enabledPacks, pack];
-        setEnabledPacks(newEnabledPacks);
-        saveEnabledPacks(newEnabledPacks);
+      // Load required packs
+      for (const pack of packsToLoad) {
+        await loadPack(pack);
+        // Also add to enabled packs
+        if (!enabledPacks.includes(pack)) {
+          const newEnabledPacks = [...enabledPacks, pack];
+          setEnabledPacks(newEnabledPacks);
+          saveEnabledPacks(newEnabledPacks);
+        }
       }
-    }
-  }, [packInfo, enabledPacks, loadPack]);
+    },
+    [packInfo, enabledPacks, loadPack]
+  );
 
   const [isInitialized, setIsInitialized] = useState(false);
 

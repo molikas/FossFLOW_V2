@@ -17,10 +17,16 @@ export interface PendingMouseUpdate {
 export const useRAFThrottle = () => {
   const rafIdRef = useRef<number | null>(null);
   const pendingUpdateRef = useRef<PendingMouseUpdate | null>(null);
-  const callbackRef = useRef<((update: PendingMouseUpdate) => void) | null>(null);
+  const callbackRef = useRef<((update: PendingMouseUpdate) => void) | null>(
+    null
+  );
 
   const scheduleUpdate = useCallback(
-    (mouse: Mouse, event: SlimMouseEvent, callback: (update: PendingMouseUpdate) => void) => {
+    (
+      mouse: Mouse,
+      event: SlimMouseEvent,
+      callback: (update: PendingMouseUpdate) => void
+    ) => {
       pendingUpdateRef.current = { mouse, event };
       callbackRef.current = callback;
 

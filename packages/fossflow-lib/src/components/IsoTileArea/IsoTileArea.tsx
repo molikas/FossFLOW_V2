@@ -16,42 +16,38 @@ interface Props {
   };
 }
 
-export const IsoTileArea = memo(({
-  from,
-  to,
-  fill = 'none',
-  cornerRadius = 0,
-  stroke
-}: Props) => {
-  const { css, pxSize } = useIsoProjection({
-    from,
-    to
-  });
+export const IsoTileArea = memo(
+  ({ from, to, fill = 'none', cornerRadius = 0, stroke }: Props) => {
+    const { css, pxSize } = useIsoProjection({
+      from,
+      to
+    });
 
-  const strokeParams = useMemo(() => {
-    if (!stroke) return {};
+    const strokeParams = useMemo(() => {
+      if (!stroke) return {};
 
-    const params: Record<string, any> = {
-      stroke: stroke.color,
-      strokeWidth: stroke.width
-    };
+      const params: Record<string, any> = {
+        stroke: stroke.color,
+        strokeWidth: stroke.width
+      };
 
-    if (stroke.dashArray) {
-      params.strokeDasharray = stroke.dashArray;
-    }
+      if (stroke.dashArray) {
+        params.strokeDasharray = stroke.dashArray;
+      }
 
-    return params;
-  }, [stroke]);
+      return params;
+    }, [stroke]);
 
-  return (
-    <Svg viewboxSize={pxSize} style={css}>
-      <rect
-        width={pxSize.width}
-        height={pxSize.height}
-        fill={fill}
-        rx={cornerRadius}
-        {...strokeParams}
-      />
-    </Svg>
-  );
-});
+    return (
+      <Svg viewboxSize={pxSize} style={css}>
+        <rect
+          width={pxSize.width}
+          height={pxSize.height}
+          fill={fill}
+          rx={cornerRadius}
+          {...strokeParams}
+        />
+      </Svg>
+    );
+  }
+);

@@ -29,7 +29,11 @@ export const ElementsPanel = () => {
 
   const handleIconMouseDown = useCallback(
     (icon: Icon) => {
-      uiStateActions.setMode({ type: 'PLACE_ICON', showCursor: true, id: icon.id });
+      uiStateActions.setMode({
+        type: 'PLACE_ICON',
+        showCursor: true,
+        id: icon.id
+      });
     },
     [uiStateActions]
   );
@@ -40,7 +44,9 @@ export const ElementsPanel = () => {
       const files = event.target.files;
       if (!files || files.length === 0) return;
 
-      const imageFiles = Array.from(files).filter((f) => f.type.startsWith('image/'));
+      const imageFiles = Array.from(files).filter((f) =>
+        f.type.startsWith('image/')
+      );
       if (imageFiles.length > 0) setPendingFiles(imageFiles);
 
       // Reset input so the same file can be re-selected
@@ -53,7 +59,9 @@ export const ElementsPanel = () => {
   const handleImportConfirm = useCallback(
     async (isIsometric: boolean) => {
       const newIcons: Icon[] = [];
-      const existingNames = new Set(currentIcons.map((icon) => icon.name.toLowerCase()));
+      const existingNames = new Set(
+        currentIcons.map((icon) => icon.name.toLowerCase())
+      );
 
       for (const file of pendingFiles) {
         let baseName = file.name.replace(/\.[^/.]+$/, '');
@@ -69,16 +77,24 @@ export const ElementsPanel = () => {
           const reader = new FileReader();
           reader.onload = async (e) => {
             const original = e.target?.result as string;
-            if (file.type === 'image/svg+xml') { resolve(original); return; }
+            if (file.type === 'image/svg+xml') {
+              resolve(original);
+              return;
+            }
             const img = new Image();
             img.onload = () => {
               const canvas = document.createElement('canvas');
               const ctx = canvas.getContext('2d');
-              if (!ctx) { resolve(original); return; }
+              if (!ctx) {
+                resolve(original);
+                return;
+              }
               const TARGET = 128;
               const s = Math.min(TARGET / img.width, TARGET / img.height);
-              const w = img.width * s, h = img.height * s;
-              canvas.width = TARGET; canvas.height = TARGET;
+              const w = img.width * s,
+                h = img.height * s;
+              canvas.width = TARGET;
+              canvas.height = TARGET;
               ctx.clearRect(0, 0, TARGET, TARGET);
               ctx.imageSmoothingEnabled = true;
               ctx.imageSmoothingQuality = 'high';
@@ -103,7 +119,9 @@ export const ElementsPanel = () => {
 
       if (newIcons.length > 0) {
         modelActions.set({ icons: [...currentIcons, ...newIcons] });
-        const hasImported = iconCategoriesState.some((cat) => cat.id === 'imported');
+        const hasImported = iconCategoriesState.some(
+          (cat) => cat.id === 'imported'
+        );
         if (!hasImported) {
           uiStateActions.setIconCategoriesState([
             ...iconCategoriesState,
@@ -114,7 +132,13 @@ export const ElementsPanel = () => {
 
       setPendingFiles([]);
     },
-    [pendingFiles, currentIcons, modelActions, iconCategoriesState, uiStateActions]
+    [
+      pendingFiles,
+      currentIcons,
+      modelActions,
+      iconCategoriesState,
+      uiStateActions
+    ]
   );
 
   const handleImportCancel = useCallback(() => {
@@ -122,14 +146,34 @@ export const ElementsPanel = () => {
   }, []);
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        overflow: 'hidden'
+      }}
+    >
       {/* Common elements: Rectangle, Text, Connector */}
-      <Box sx={{ flexShrink: 0, borderBottom: '1px solid', borderColor: 'divider' }}>
+      <Box
+        sx={{
+          flexShrink: 0,
+          borderBottom: '1px solid',
+          borderColor: 'divider'
+        }}
+      >
         <CommonElements />
       </Box>
 
       {/* Search */}
-      <Box sx={{ p: 1.5, borderBottom: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
+      <Box
+        sx={{
+          p: 1.5,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          flexShrink: 0
+        }}
+      >
         <Searchbox value={filter} onChange={setFilter} />
       </Box>
 
@@ -140,7 +184,10 @@ export const ElementsPanel = () => {
             <IconGrid icons={filteredIcons} onMouseDown={handleIconMouseDown} />
           </Box>
         ) : (
-          <Icons iconCategories={iconCategories} onMouseDown={handleIconMouseDown} />
+          <Icons
+            iconCategories={iconCategories}
+            onMouseDown={handleIconMouseDown}
+          />
         )}
       </Box>
 

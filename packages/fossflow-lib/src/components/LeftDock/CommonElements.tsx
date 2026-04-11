@@ -7,21 +7,72 @@ import { TEXTBOX_DEFAULTS } from 'src/config';
 
 // Simple flat SVG thumbnails matching the tool icons
 const RectangleSvg = () => (
-  <svg viewBox="0 0 28 28" width="28" height="28" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <rect x="3" y="3" width="22" height="22" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none" />
+  <svg
+    viewBox="0 0 28 28"
+    width="28"
+    height="28"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <rect
+      x="3"
+      y="3"
+      width="22"
+      height="22"
+      rx="2"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      fill="none"
+    />
   </svg>
 );
 
 const TextSvg = () => (
-  <svg viewBox="0 0 28 28" width="28" height="28" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <text x="7" y="20" fontFamily="serif" fontSize="18" fill="currentColor" fontWeight="bold">T</text>
+  <svg
+    viewBox="0 0 28 28"
+    width="28"
+    height="28"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <text
+      x="7"
+      y="20"
+      fontFamily="serif"
+      fontSize="18"
+      fill="currentColor"
+      fontWeight="bold"
+    >
+      T
+    </text>
   </svg>
 );
 
 const ConnectorSvg = () => (
-  <svg viewBox="0 0 28 28" width="28" height="28" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <line x1="5" y1="14" x2="20" y2="14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    <polyline points="16,10 22,14 16,18" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinejoin="round" strokeLinecap="round" />
+  <svg
+    viewBox="0 0 28 28"
+    width="28"
+    height="28"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <line
+      x1="5"
+      y1="14"
+      x2="20"
+      y2="14"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    />
+    <polyline
+      points="16,10 22,14 16,18"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      fill="none"
+      strokeLinejoin="round"
+      strokeLinecap="round"
+    />
   </svg>
 );
 
@@ -32,7 +83,12 @@ interface ElementCardProps {
   onMouseDown: () => void;
 }
 
-const ElementCard = ({ label, icon, isActive, onMouseDown }: ElementCardProps) => (
+const ElementCard = ({
+  label,
+  icon,
+  isActive,
+  onMouseDown
+}: ElementCardProps) => (
   <Tooltip title={label} placement="top">
     <Box
       onMouseDown={onMouseDown}

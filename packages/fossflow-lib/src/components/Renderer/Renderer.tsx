@@ -58,7 +58,10 @@ const computeTileBounds = (
 };
 
 const tileBoundsEqual = (a: TileBounds, b: TileBounds) =>
-  a.minX === b.minX && a.maxX === b.maxX && a.minY === b.minY && a.maxY === b.maxY;
+  a.minX === b.minX &&
+  a.maxX === b.maxX &&
+  a.minY === b.minY &&
+  a.maxY === b.maxY;
 
 export const Renderer = ({ showGrid, backgroundColor }: RendererProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -68,7 +71,14 @@ export const Renderer = ({ showGrid, backgroundColor }: RendererProps) => {
   const showCursor = useUiStateStore((state) => state.mode.showCursor);
   const uiStateActions = useUiStateStore((state) => state.actions);
   const { setInteractionsElement } = useInteractionManager();
-  const { items, rectangles, connectors, hitConnectors, textBoxes, currentView } = useScene();
+  const {
+    items,
+    rectangles,
+    connectors,
+    hitConnectors,
+    textBoxes,
+    currentView
+  } = useScene();
 
   // Tile-space visible bounds — updated by the store subscriber (no React renders on pan/zoom
   // unless the tile range actually changes). Coarse equality means re-renders only fire when
@@ -87,8 +97,14 @@ export const Renderer = ({ showGrid, backgroundColor }: RendererProps) => {
       ) {
         return;
       }
-      const newBounds = computeTileBounds(state.scroll, state.zoom, state.rendererSize);
-      setCoarseBounds((cur) => (tileBoundsEqual(cur, newBounds) ? cur : newBounds));
+      const newBounds = computeTileBounds(
+        state.scroll,
+        state.zoom,
+        state.rendererSize
+      );
+      setCoarseBounds((cur) =>
+        tileBoundsEqual(cur, newBounds) ? cur : newBounds
+      );
     });
     return unsubscribe;
   }, [uiStateApi]);
@@ -99,7 +115,10 @@ export const Renderer = ({ showGrid, backgroundColor }: RendererProps) => {
     uiStateActions.setRendererEl(containerRef.current);
   }, [setInteractionsElement, uiStateActions]);
 
-  const isShowGrid = useMemo(() => showGrid === undefined || showGrid, [showGrid]);
+  const isShowGrid = useMemo(
+    () => showGrid === undefined || showGrid,
+    [showGrid]
+  );
 
   const visibleItems = useMemo(() => {
     const { minX, maxX, minY, maxY } = coarseBounds;
@@ -127,7 +146,9 @@ export const Renderer = ({ showGrid, backgroundColor }: RendererProps) => {
           const cMaxX = Math.max(from.x, to.x);
           const cMinY = Math.min(from.y, to.y);
           const cMaxY = Math.max(from.y, to.y);
-          return cMaxX >= minX && cMinX <= maxX && cMaxY >= minY && cMinY <= maxY;
+          return (
+            cMaxX >= minX && cMinX <= maxX && cMaxY >= minY && cMinY <= maxY
+          );
         })
         .map((c) => c.id)
     );
@@ -148,7 +169,7 @@ export const Renderer = ({ showGrid, backgroundColor }: RendererProps) => {
         bgcolor: (theme) =>
           backgroundColor === 'transparent'
             ? 'transparent'
-            : backgroundColor ?? theme.customVars.customPalette.diagramBg
+            : (backgroundColor ?? theme.customVars.customPalette.diagramBg)
       }}
     >
       <SceneLayer>

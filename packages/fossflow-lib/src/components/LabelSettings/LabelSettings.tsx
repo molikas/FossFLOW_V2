@@ -1,16 +1,14 @@
 import React from 'react';
-import {
-  Box,
-  Typography,
-  Slider
-} from '@mui/material';
+import { Box, Typography, Slider } from '@mui/material';
 import { useUiStateStore } from 'src/stores/uiStateStore';
 import { useTranslation } from 'src/stores/localeStore';
 
 export const LabelSettings = () => {
   const { t } = useTranslation('labelSettings');
   const labelSettings = useUiStateStore((state) => state.labelSettings);
-  const setLabelSettings = useUiStateStore((state) => state.actions.setLabelSettings);
+  const setLabelSettings = useUiStateStore(
+    (state) => state.actions.setLabelSettings
+  );
 
   const handlePaddingChange = (_event: Event, value: number | number[]) => {
     setLabelSettings({
@@ -29,7 +27,11 @@ export const LabelSettings = () => {
         <Typography variant="body1" gutterBottom>
           {t('expandButtonPadding')}
         </Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ mb: 1, display: 'block' }}
+        >
           {t('expandButtonPaddingDesc')}
         </Typography>
         <Slider

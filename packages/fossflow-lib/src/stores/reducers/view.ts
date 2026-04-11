@@ -1,5 +1,12 @@
 import { produce } from 'immer';
-import { View, Layer, ViewItem, Connector, Rectangle, TextBox } from 'src/types';
+import {
+  View,
+  Layer,
+  ViewItem,
+  Connector,
+  Rectangle,
+  TextBox
+} from 'src/types';
 import { getItemByIdOrThrow, generateId } from 'src/utils';
 import { VIEW_DEFAULTS, INITIAL_SCENE_STATE } from 'src/config';
 import type { ViewReducerContext, State, ViewReducerParams } from './types';
@@ -264,13 +271,26 @@ export const view = ({ action, payload, ctx }: ViewReducerParams) => {
   }
 
   const TIMESTAMPED_ACTIONS = new Set([
-    'CREATE_VIEW', 'UPDATE_VIEW',
-    'CREATE_VIEWITEM', 'UPDATE_VIEWITEM', 'DELETE_VIEWITEM',
-    'CREATE_CONNECTOR', 'UPDATE_CONNECTOR', 'DELETE_CONNECTOR',
-    'CREATE_TEXTBOX', 'UPDATE_TEXTBOX', 'DELETE_TEXTBOX',
-    'CREATE_RECTANGLE', 'UPDATE_RECTANGLE', 'DELETE_RECTANGLE',
-    'CREATE_LAYER', 'UPDATE_LAYER', 'DELETE_LAYER', 'REORDER_LAYERS',
-    'ASSIGN_LAYER_TO_ITEMS', 'REORDER_VIEWITEM'
+    'CREATE_VIEW',
+    'UPDATE_VIEW',
+    'CREATE_VIEWITEM',
+    'UPDATE_VIEWITEM',
+    'DELETE_VIEWITEM',
+    'CREATE_CONNECTOR',
+    'UPDATE_CONNECTOR',
+    'DELETE_CONNECTOR',
+    'CREATE_TEXTBOX',
+    'UPDATE_TEXTBOX',
+    'DELETE_TEXTBOX',
+    'CREATE_RECTANGLE',
+    'UPDATE_RECTANGLE',
+    'DELETE_RECTANGLE',
+    'CREATE_LAYER',
+    'UPDATE_LAYER',
+    'DELETE_LAYER',
+    'REORDER_LAYERS',
+    'ASSIGN_LAYER_TO_ITEMS',
+    'REORDER_VIEWITEM'
   ]);
 
   if (TIMESTAMPED_ACTIONS.has(action)) {

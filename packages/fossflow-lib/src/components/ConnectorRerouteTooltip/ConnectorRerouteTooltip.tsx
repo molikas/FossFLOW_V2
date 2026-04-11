@@ -49,7 +49,10 @@ export const ConnectorRerouteTooltip = () => {
       // Find the most recently created connector
       const latestConnector = connectors[connectors.length - 1];
 
-      if (latestConnector && latestConnector.id !== shownForConnectorRef.current) {
+      if (
+        latestConnector &&
+        latestConnector.id !== shownForConnectorRef.current
+      ) {
         // Show tooltip near the mouse position (read imperatively)
         const currentMousePosition = storeApi.getState().mouse.position.screen;
         setTooltipPosition({
@@ -128,7 +131,9 @@ export const ConnectorRerouteTooltip = () => {
           </Typography>
 
           <Typography variant="body2" color="text.secondary">
-            <strong>{t('instructionSelect')}</strong> {t('instructionMiddle')} <strong>{t('instructionClick')}</strong> {t('instructionAnd')} <strong>{t('instructionDrag')}</strong> {t('instructionEnd')}
+            <strong>{t('instructionSelect')}</strong> {t('instructionMiddle')}{' '}
+            <strong>{t('instructionClick')}</strong> {t('instructionAnd')}{' '}
+            <strong>{t('instructionDrag')}</strong> {t('instructionEnd')}
           </Typography>
         </Paper>
       </Box>

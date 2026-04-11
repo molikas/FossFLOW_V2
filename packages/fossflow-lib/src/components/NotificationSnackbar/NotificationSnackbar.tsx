@@ -6,7 +6,9 @@ const AUTO_HIDE_MS = 3000;
 
 export const NotificationSnackbar = () => {
   const notification = useUiStateStore((state) => state.notification);
-  const setNotification = useUiStateStore((state) => state.actions.setNotification);
+  const setNotification = useUiStateStore(
+    (state) => state.actions.setNotification
+  );
 
   useEffect(() => {
     if (!notification) return;

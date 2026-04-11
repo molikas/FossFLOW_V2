@@ -80,7 +80,11 @@ describe('Connector.mousedown guards', () => {
   it('does nothing when mode type is not CONNECTOR', () => {
     const uiState = makeUiState({ mode: { type: 'CURSOR', showCursor: true } });
     const scene = makeScene();
-    Connector.mousedown!({ uiState, scene, isRendererInteraction: true } as any);
+    Connector.mousedown!({
+      uiState,
+      scene,
+      isRendererInteraction: true
+    } as any);
     expect(scene.createConnector).not.toHaveBeenCalled();
     expect(uiState.actions.setMode).not.toHaveBeenCalled();
   });
@@ -88,7 +92,11 @@ describe('Connector.mousedown guards', () => {
   it('does nothing when isRendererInteraction is false', () => {
     const uiState = makeUiState();
     const scene = makeScene();
-    Connector.mousedown!({ uiState, scene, isRendererInteraction: false } as any);
+    Connector.mousedown!({
+      uiState,
+      scene,
+      isRendererInteraction: false
+    } as any);
     expect(scene.createConnector).not.toHaveBeenCalled();
   });
 });
@@ -105,11 +113,21 @@ describe('Connector.mousedown click mode — first click', () => {
 
   it('creates connector with tile anchors on empty space and sets isConnecting=true', () => {
     const uiState = makeUiState({
-      mode: { type: 'CONNECTOR', showCursor: true, id: null, startAnchor: undefined, isConnecting: false },
+      mode: {
+        type: 'CONNECTOR',
+        showCursor: true,
+        id: null,
+        startAnchor: undefined,
+        isConnecting: false
+      },
       connectorInteractionMode: 'click'
     });
     const scene = makeScene();
-    Connector.mousedown!({ uiState, scene, isRendererInteraction: true } as any);
+    Connector.mousedown!({
+      uiState,
+      scene,
+      isRendererInteraction: true
+    } as any);
 
     expect(scene.createConnector).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -119,18 +137,32 @@ describe('Connector.mousedown click mode — first click', () => {
       })
     );
     expect(uiState.actions.setMode).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'CONNECTOR', isConnecting: true, startAnchor: { tile: { x: 5, y: 5 } } })
+      expect.objectContaining({
+        type: 'CONNECTOR',
+        isConnecting: true,
+        startAnchor: { tile: { x: 5, y: 5 } }
+      })
     );
   });
 
   it('creates connector with item anchors when clicking on a node', () => {
     mockGetItemAtTile.mockReturnValue({ type: 'ITEM', id: 'node1' });
     const uiState = makeUiState({
-      mode: { type: 'CONNECTOR', showCursor: true, id: null, startAnchor: undefined, isConnecting: false },
+      mode: {
+        type: 'CONNECTOR',
+        showCursor: true,
+        id: null,
+        startAnchor: undefined,
+        isConnecting: false
+      },
       connectorInteractionMode: 'click'
     });
     const scene = makeScene();
-    Connector.mousedown!({ uiState, scene, isRendererInteraction: true } as any);
+    Connector.mousedown!({
+      uiState,
+      scene,
+      isRendererInteraction: true
+    } as any);
 
     expect(scene.createConnector).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -169,7 +201,11 @@ describe('Connector.mousedown click mode — second click', () => {
       connectorInteractionMode: 'click'
     });
     const scene = makeScene({ connectors: [] });
-    Connector.mousedown!({ uiState, scene, isRendererInteraction: true } as any);
+    Connector.mousedown!({
+      uiState,
+      scene,
+      isRendererInteraction: true
+    } as any);
 
     // id is null → the if (currentMode.id) guard fails → setMode not called
     expect(uiState.actions.setMode).not.toHaveBeenCalled();
@@ -196,7 +232,11 @@ describe('Connector.mousedown click mode — second click', () => {
       connectorInteractionMode: 'click'
     });
     const scene = makeScene({ connectors: [existingConnector] });
-    Connector.mousedown!({ uiState, scene, isRendererInteraction: true } as any);
+    Connector.mousedown!({
+      uiState,
+      scene,
+      isRendererInteraction: true
+    } as any);
 
     expect(scene.updateConnector).toHaveBeenCalledWith(
       connectorId,
@@ -207,7 +247,11 @@ describe('Connector.mousedown click mode — second click', () => {
       })
     );
     expect(uiState.actions.setMode).toHaveBeenCalledWith(
-      expect.objectContaining({ isConnecting: false, id: null, startAnchor: undefined })
+      expect.objectContaining({
+        isConnecting: false,
+        id: null,
+        startAnchor: undefined
+      })
     );
   });
 
@@ -228,15 +272,23 @@ describe('Connector.mousedown click mode — second click', () => {
         id: connectorId,
         startAnchor: { itemId: 'node-A' },
         isConnecting: true,
-        returnToCursor: true   // set by NodeActionBar "Start connector" button
+        returnToCursor: true // set by NodeActionBar "Start connector" button
       },
       connectorInteractionMode: 'click'
     });
     const scene = makeScene({ connectors: [existingConnector] });
-    Connector.mousedown!({ uiState, scene, isRendererInteraction: true } as any);
+    Connector.mousedown!({
+      uiState,
+      scene,
+      isRendererInteraction: true
+    } as any);
 
     expect(uiState.actions.setMode).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'CURSOR', showCursor: true, mousedownItem: null })
+      expect.objectContaining({
+        type: 'CURSOR',
+        showCursor: true,
+        mousedownItem: null
+      })
     );
     // Must NOT reset back to CONNECTOR mode
     expect(uiState.actions.setMode).not.toHaveBeenCalledWith(
@@ -266,10 +318,18 @@ describe('Connector.mousedown click mode — second click', () => {
       connectorInteractionMode: 'click'
     });
     const scene = makeScene({ connectors: [existingConnector] });
-    Connector.mousedown!({ uiState, scene, isRendererInteraction: true } as any);
+    Connector.mousedown!({
+      uiState,
+      scene,
+      isRendererInteraction: true
+    } as any);
 
     expect(uiState.actions.setMode).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'CONNECTOR', id: null, isConnecting: false })
+      expect.objectContaining({
+        type: 'CONNECTOR',
+        id: null,
+        isConnecting: false
+      })
     );
     expect(uiState.actions.setMode).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: 'CURSOR' })
@@ -293,7 +353,11 @@ describe('Connector.mousedown drag mode', () => {
       connectorInteractionMode: 'drag'
     });
     const scene = makeScene();
-    Connector.mousedown!({ uiState, scene, isRendererInteraction: true } as any);
+    Connector.mousedown!({
+      uiState,
+      scene,
+      isRendererInteraction: true
+    } as any);
 
     expect(scene.createConnector).toHaveBeenCalled();
     const [createdConnector] = scene.createConnector.mock.calls[0];
@@ -316,7 +380,11 @@ describe('Connector.mousedown drag mode', () => {
       connectorInteractionMode: 'drag'
     });
     const scene = makeScene();
-    Connector.mousedown!({ uiState, scene, isRendererInteraction: true } as any);
+    Connector.mousedown!({
+      uiState,
+      scene,
+      isRendererInteraction: true
+    } as any);
 
     const [createdConnector] = scene.createConnector.mock.calls[0];
     expect(createdConnector.anchors[0].ref).toEqual({ item: 'nodeA' });
@@ -346,7 +414,12 @@ describe('Connector.mouseup drag mode', () => {
 
   it('resets id to null in drag mode', () => {
     const uiState = makeUiState({
-      mode: { type: 'CONNECTOR', showCursor: true, id: 'conn-1', isConnecting: false },
+      mode: {
+        type: 'CONNECTOR',
+        showCursor: true,
+        id: 'conn-1',
+        isConnecting: false
+      },
       connectorInteractionMode: 'drag'
     });
     Connector.mouseup!({ uiState, scene: makeScene() } as any);
@@ -357,7 +430,12 @@ describe('Connector.mouseup drag mode', () => {
 
   it('does NOT reset mode in click mode (click mode completes on second mousedown)', () => {
     const uiState = makeUiState({
-      mode: { type: 'CONNECTOR', showCursor: true, id: 'conn-1', isConnecting: true },
+      mode: {
+        type: 'CONNECTOR',
+        showCursor: true,
+        id: 'conn-1',
+        isConnecting: true
+      },
       connectorInteractionMode: 'click'
     });
     Connector.mouseup!({ uiState, scene: makeScene() } as any);
@@ -395,13 +473,21 @@ describe('Connector.mousemove', () => {
     mockHasMovedTile.mockReturnValue(false);
     const connectorId = 'conn-1';
     const uiState = makeUiState({
-      mode: { type: 'CONNECTOR', showCursor: true, id: connectorId, isConnecting: true },
+      mode: {
+        type: 'CONNECTOR',
+        showCursor: true,
+        id: connectorId,
+        isConnecting: true
+      },
       connectorInteractionMode: 'drag'
     });
     const existingConnector = {
       id: connectorId,
       color: 'color-1',
-      anchors: [{ id: 'a1', ref: { tile: { x: 2, y: 2 } } }, { id: 'a2', ref: { tile: { x: 2, y: 2 } } }]
+      anchors: [
+        { id: 'a1', ref: { tile: { x: 2, y: 2 } } },
+        { id: 'a2', ref: { tile: { x: 2, y: 2 } } }
+      ]
     };
     const scene = makeScene({ connectors: [existingConnector] });
     Connector.mousemove!({ uiState, scene } as any);
@@ -413,10 +499,18 @@ describe('Connector.mousemove', () => {
     const existingConnector = {
       id: connectorId,
       color: 'color-1',
-      anchors: [{ id: 'a1', ref: { tile: { x: 2, y: 2 } } }, { id: 'a2', ref: { tile: { x: 2, y: 2 } } }]
+      anchors: [
+        { id: 'a1', ref: { tile: { x: 2, y: 2 } } },
+        { id: 'a2', ref: { tile: { x: 2, y: 2 } } }
+      ]
     };
     const uiState = makeUiState({
-      mode: { type: 'CONNECTOR', showCursor: true, id: connectorId, isConnecting: false },
+      mode: {
+        type: 'CONNECTOR',
+        showCursor: true,
+        id: connectorId,
+        isConnecting: false
+      },
       connectorInteractionMode: 'drag',
       mouse: { position: { tile: { x: 8, y: 8 } } }
     });
@@ -439,10 +533,18 @@ describe('Connector.mousemove', () => {
     const existingConnector = {
       id: connectorId,
       color: 'color-1',
-      anchors: [{ id: 'a1', ref: { tile: { x: 2, y: 2 } } }, { id: 'a2', ref: { tile: { x: 2, y: 2 } } }]
+      anchors: [
+        { id: 'a1', ref: { tile: { x: 2, y: 2 } } },
+        { id: 'a2', ref: { tile: { x: 2, y: 2 } } }
+      ]
     };
     const uiState = makeUiState({
-      mode: { type: 'CONNECTOR', showCursor: true, id: connectorId, isConnecting: true },
+      mode: {
+        type: 'CONNECTOR',
+        showCursor: true,
+        id: connectorId,
+        isConnecting: true
+      },
       connectorInteractionMode: 'click',
       mouse: { position: { tile: { x: 8, y: 8 } } }
     });

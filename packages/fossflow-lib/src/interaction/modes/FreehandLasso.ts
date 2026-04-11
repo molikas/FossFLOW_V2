@@ -1,11 +1,27 @@
 import { produce } from 'immer';
-import { ModeActions, ItemReference, Coords } from 'src/types';
+import {
+  ModeActions,
+  ItemReference,
+  Coords,
+  ViewItem,
+  Rectangle,
+  TextBox,
+  Connector,
+  ConnectorAnchor
+} from 'src/types';
 import { screenToIso, isPointInPolygon, getItemByIdOrThrow } from 'src/utils';
+
+interface FreehandScene {
+  items: ViewItem[];
+  rectangles: Rectangle[];
+  textBoxes: TextBox[];
+  connectors: Connector[];
+}
 
 // Helper to find all items whose centers are within the freehand polygon
 const getItemsInFreehandBounds = (
   pathTiles: Coords[],
-  scene: any
+  scene: FreehandScene
 ): ItemReference[] => {
   const items: ItemReference[] = [];
 
@@ -13,7 +29,7 @@ const getItemsInFreehandBounds = (
 
   // Check all nodes/items
   const selectedNodeIds = new Set<string>();
-  scene.items.forEach((item: any) => {
+  scene.items.forEach((item: ViewItem) => {
     if (isPointInPolygon(item.tile, pathTiles)) {
       items.push({ type: 'ITEM', id: item.id });
       selectedNodeIds.add(item.id);
@@ -21,7 +37,7 @@ const getItemsInFreehandBounds = (
   });
 
   // Check all rectangles - they must be FULLY enclosed (all 4 corners inside)
-  scene.rectangles.forEach((rectangle: any) => {
+  scene.rectangles.forEach((rectangle: Rectangle) => {
     const corners = [
       rectangle.from,
       { x: rectangle.to.x, y: rectangle.from.y },
@@ -30,7 +46,9 @@ const getItemsInFreehandBounds = (
     ];
 
     // Rectangle is only selected if ALL corners are inside the polygon
-    const allCornersInside = corners.every(corner => isPointInPolygon(corner, pathTiles));
+    const allCornersInside = corners.every((corner) =>
+      isPointInPolygon(corner, pathTiles)
+    );
 
     if (allCornersInside) {
       items.push({ type: 'RECTANGLE', id: rectangle.id });
@@ -38,20 +56,20 @@ const getItemsInFreehandBounds = (
   });
 
   // Check all text boxes
-  scene.textBoxes.forEach((textBox: any) => {
+  scene.textBoxes.forEach((textBox: TextBox) => {
     if (isPointInPolygon(textBox.tile, pathTiles)) {
       items.push({ type: 'TEXTBOX', id: textBox.id });
     }
   });
 
   // Include a connector if both its endpoint anchors are within the selection.
-  scene.connectors.forEach((connector: any) => {
+  scene.connectors.forEach((connector: Connector) => {
     if (!connector.anchors || connector.anchors.length < 2) return;
 
     const first = connector.anchors[0];
     const last = connector.anchors[connector.anchors.length - 1];
 
-    const anchorInBounds = (anchor: any): boolean => {
+    const anchorInBounds = (anchor: ConnectorAnchor): boolean => {
       if (anchor.ref?.item) return selectedNodeIds.has(anchor.ref.item);
       if (anchor.ref?.tile) return isPointInPolygon(anchor.ref.tile, pathTiles);
       return false;
@@ -61,7 +79,7 @@ const getItemsInFreehandBounds = (
       items.push({ type: 'CONNECTOR', id: connector.id });
     } else {
       // Still capture any free-floating waypoint anchors
-      connector.anchors.forEach((anchor: any) => {
+      connector.anchors.forEach((anchor: ConnectorAnchor) => {
         if (anchor.ref?.tile && isPointInPolygon(anchor.ref.tile, pathTiles)) {
           items.push({ type: 'CONNECTOR_ANCHOR', id: anchor.id });
         }
@@ -74,24 +92,34 @@ const getItemsInFreehandBounds = (
 
 export const FreehandLasso: ModeActions = {
   mousemove: ({ uiState, scene }) => {
-    if (uiState.mode.type !== 'FREEHAND_LASSO' || !uiState.mouse.mousedown) return;
+    if (uiState.mode.type !== 'FREEHAND_LASSO' || !uiState.mouse.mousedown)
+      return;
 
     // If user is dragging an existing selection, switch to DRAG_ITEMS mode
     if (uiState.mode.isDragging && uiState.mode.selection) {
       const initialTiles: Record<string, Coords> = {};
-      const initialRectangles: Record<string, { from: Coords; to: Coords }> = {};
+      const initialRectangles: Record<string, { from: Coords; to: Coords }> =
+        {};
       uiState.mode.selection.items.forEach((item) => {
         try {
           if (item.type === 'ITEM') {
-            initialTiles[item.id] = getItemByIdOrThrow(scene.items, item.id).value.tile;
+            initialTiles[item.id] = getItemByIdOrThrow(
+              scene.items,
+              item.id
+            ).value.tile;
           } else if (item.type === 'TEXTBOX') {
-            initialTiles[item.id] = getItemByIdOrThrow(scene.textBoxes, item.id).value.tile;
+            initialTiles[item.id] = getItemByIdOrThrow(
+              scene.textBoxes,
+              item.id
+            ).value.tile;
           } else if (item.type === 'RECTANGLE') {
             const r = getItemByIdOrThrow(scene.rectangles, item.id).value;
             initialRectangles[item.id] = { from: r.from, to: r.to };
           } else if (item.type === 'CONNECTOR_ANCHOR') {
             for (const connector of scene.connectors) {
-              const anchor = connector.anchors.find((a: any) => a.id === item.id);
+              const anchor = connector.anchors.find(
+                (a: ConnectorAnchor) => a.id === item.id
+              );
               if (anchor?.ref?.tile) {
                 initialTiles[item.id] = anchor.ref.tile;
                 break;
@@ -118,9 +146,11 @@ export const FreehandLasso: ModeActions = {
         if (draft.type === 'FREEHAND_LASSO') {
           // Add point to path if it's far enough from the last point (throttle)
           const lastPoint = draft.path[draft.path.length - 1];
-          if (!lastPoint ||
-              Math.abs(newScreenPoint.x - lastPoint.x) > 5 ||
-              Math.abs(newScreenPoint.y - lastPoint.y) > 5) {
+          if (
+            !lastPoint ||
+            Math.abs(newScreenPoint.x - lastPoint.x) > 5 ||
+            Math.abs(newScreenPoint.y - lastPoint.y) > 5
+          ) {
             draft.path.push(newScreenPoint);
           }
         }

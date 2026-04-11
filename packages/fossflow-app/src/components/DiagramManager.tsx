@@ -33,7 +33,11 @@ export const DiagramManager: React.FC<Props> = ({
       const list = await storage.listDiagrams();
       setDiagrams(list);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('dialog.diagramManager.failedLoad'));
+      setError(
+        err instanceof Error
+          ? err.message
+          : t('dialog.diagramManager.failedLoad')
+      );
     } finally {
       setLoading(false);
     }
@@ -47,19 +51,28 @@ export const DiagramManager: React.FC<Props> = ({
       onLoadDiagram(id, data);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('dialog.diagramManager.failedLoadDiagram'));
+      setError(
+        err instanceof Error
+          ? err.message
+          : t('dialog.diagramManager.failedLoadDiagram')
+      );
     } finally {
       setLoading(false);
     }
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (!window.confirm(t('dialog.diagramManager.deleteConfirm', { name }))) return;
+    if (!window.confirm(t('dialog.diagramManager.deleteConfirm', { name })))
+      return;
     try {
       await storage.deleteDiagram(id);
       await loadDiagrams();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('dialog.diagramManager.failedDelete'));
+      setError(
+        err instanceof Error
+          ? err.message
+          : t('dialog.diagramManager.failedDelete')
+      );
     }
   };
 
@@ -82,12 +95,18 @@ export const DiagramManager: React.FC<Props> = ({
       <div className="diagram-manager">
         <div className="diagram-manager-header">
           <h2>{t('dialog.diagramManager.title')}</h2>
-          <button className="close-button" onClick={onClose}>×</button>
+          <button className="close-button" onClick={onClose}>
+            ×
+          </button>
         </div>
 
         <div className="storage-info">
-          <span className={`storage-badge ${isServerStorage ? 'server' : 'local'}`}>
-            {isServerStorage ? t('dialog.diagramManager.serverStorage') : t('dialog.diagramManager.localStorageBadge')}
+          <span
+            className={`storage-badge ${isServerStorage ? 'server' : 'local'}`}
+          >
+            {isServerStorage
+              ? t('dialog.diagramManager.serverStorage')
+              : t('dialog.diagramManager.localStorageBadge')}
           </span>
         </div>
 
@@ -108,8 +127,10 @@ export const DiagramManager: React.FC<Props> = ({
                   <div className="diagram-info">
                     <h3>{diagram.name}</h3>
                     <span className="diagram-meta">
-                      {t('dialog.diagramManager.lastModified')}: {diagram.lastModified.toLocaleString()}
-                      {diagram.size && ` • ${(diagram.size / 1024).toFixed(1)} KB`}
+                      {t('dialog.diagramManager.lastModified')}:{' '}
+                      {diagram.lastModified.toLocaleString()}
+                      {diagram.size &&
+                        ` • ${(diagram.size / 1024).toFixed(1)} KB`}
                     </span>
                   </div>
                   <div className="diagram-actions">

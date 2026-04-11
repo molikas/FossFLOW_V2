@@ -12,7 +12,11 @@
 
 import { renderHook } from '@testing-library/react';
 import { useScene } from 'src/hooks/useScene';
-import { CONNECTOR_DEFAULTS, RECTANGLE_DEFAULTS, TEXTBOX_DEFAULTS } from 'src/config';
+import {
+  CONNECTOR_DEFAULTS,
+  RECTANGLE_DEFAULTS,
+  TEXTBOX_DEFAULTS
+} from 'src/config';
 
 // ---------------------------------------------------------------------------
 // Store mocks
@@ -42,28 +46,30 @@ const makeView = (overrides = {}) => ({
 const setupMocks = (viewOverrides = {}, sceneOverrides: any = {}) => {
   const view = makeView(viewOverrides);
 
-  (modelStoreModule.useModelStore as jest.Mock).mockImplementation((selector: any) =>
-    selector({
-      views: [view],
-      colors: [],
-      icons: [],
-      items: [],
-      version: '1.0',
-      title: 'Test',
-      description: '',
-      actions: { get: jest.fn(), set: jest.fn(), clearHistory: jest.fn() }
-    })
+  (modelStoreModule.useModelStore as jest.Mock).mockImplementation(
+    (selector: any) =>
+      selector({
+        views: [view],
+        colors: [],
+        icons: [],
+        items: [],
+        version: '1.0',
+        title: 'Test',
+        description: '',
+        actions: { get: jest.fn(), set: jest.fn(), clearHistory: jest.fn() }
+      })
   );
 
-  (uiStateStoreModule.useUiStateStore as jest.Mock).mockImplementation((selector: any) =>
-    selector({ view: VIEW_ID })
+  (uiStateStoreModule.useUiStateStore as jest.Mock).mockImplementation(
+    (selector: any) => selector({ view: VIEW_ID })
   );
 
-  (sceneStoreModule.useSceneStore as jest.Mock).mockImplementation((selector: any) =>
-    selector({
-      connectors: sceneOverrides.connectors ?? {},
-      textBoxes:  sceneOverrides.textBoxes  ?? {}
-    })
+  (sceneStoreModule.useSceneStore as jest.Mock).mockImplementation(
+    (selector: any) =>
+      selector({
+        connectors: sceneOverrides.connectors ?? {},
+        textBoxes: sceneOverrides.textBoxes ?? {}
+      })
   );
 
   (sceneStoreModule.useSceneStoreApi as jest.Mock).mockReturnValue({
@@ -71,10 +77,22 @@ const setupMocks = (viewOverrides = {}, sceneOverrides: any = {}) => {
   });
 
   (modelStoreModule.useModelStoreApi as jest.Mock).mockReturnValue({
-    getState: jest.fn().mockReturnValue({ views: [view], items: [], colors: [], icons: [], version: '1.0', title: 'Test', description: '' })
+    getState: jest
+      .fn()
+      .mockReturnValue({
+        views: [view],
+        items: [],
+        colors: [],
+        icons: [],
+        version: '1.0',
+        title: 'Test',
+        description: ''
+      })
   });
 
-  (useViewModule.useView as jest.Mock).mockReturnValue({ changeView: jest.fn() });
+  (useViewModule.useView as jest.Mock).mockReturnValue({
+    changeView: jest.fn()
+  });
 };
 
 beforeEach(() => jest.clearAllMocks());
@@ -115,7 +133,7 @@ describe('useScene list shape — C-2 regression', () => {
       id: 'c1',
       anchors: [
         { id: 'a1', ref: { item: 'item1' }, face: 'right' },
-        { id: 'a2', ref: { item: 'item2' }, face: 'left'  }
+        { id: 'a2', ref: { item: 'item2' }, face: 'left' }
       ]
     };
 
@@ -228,37 +246,69 @@ describe('useScene list shape — C-2 regression', () => {
     });
 
     it('falls back to first view when active view id is not found', () => {
-      (uiStateStoreModule.useUiStateStore as jest.Mock).mockImplementation((selector: any) =>
-        selector({ view: 'nonexistent-id' })
+      (uiStateStoreModule.useUiStateStore as jest.Mock).mockImplementation(
+        (selector: any) => selector({ view: 'nonexistent-id' })
       );
       const view = makeView({ name: 'Fallback' });
-      (modelStoreModule.useModelStore as jest.Mock).mockImplementation((selector: any) =>
-        selector({ views: [view], colors: [], icons: [], items: [], version: '1.0', title: '', description: '', actions: {} })
+      (modelStoreModule.useModelStore as jest.Mock).mockImplementation(
+        (selector: any) =>
+          selector({
+            views: [view],
+            colors: [],
+            icons: [],
+            items: [],
+            version: '1.0',
+            title: '',
+            description: '',
+            actions: {}
+          })
       );
-      (sceneStoreModule.useSceneStore as jest.Mock).mockImplementation((selector: any) =>
-        selector({ connectors: {}, textBoxes: {} })
+      (sceneStoreModule.useSceneStore as jest.Mock).mockImplementation(
+        (selector: any) => selector({ connectors: {}, textBoxes: {} })
       );
-      (sceneStoreModule.useSceneStoreApi as jest.Mock).mockReturnValue({ getState: jest.fn().mockReturnValue({}) });
-      (modelStoreModule.useModelStoreApi as jest.Mock).mockReturnValue({ getState: jest.fn().mockReturnValue({ views: [view], items: [] }) });
-      (useViewModule.useView as jest.Mock).mockReturnValue({ changeView: jest.fn() });
+      (sceneStoreModule.useSceneStoreApi as jest.Mock).mockReturnValue({
+        getState: jest.fn().mockReturnValue({})
+      });
+      (modelStoreModule.useModelStoreApi as jest.Mock).mockReturnValue({
+        getState: jest.fn().mockReturnValue({ views: [view], items: [] })
+      });
+      (useViewModule.useView as jest.Mock).mockReturnValue({
+        changeView: jest.fn()
+      });
 
       const { result } = renderHook(() => useScene());
       expect(result.current.currentView).toBeDefined();
     });
 
     it('returns a stable empty fallback when views array is empty', () => {
-      (modelStoreModule.useModelStore as jest.Mock).mockImplementation((selector: any) =>
-        selector({ views: [], colors: [], icons: [], items: [], version: '1.0', title: '', description: '', actions: {} })
+      (modelStoreModule.useModelStore as jest.Mock).mockImplementation(
+        (selector: any) =>
+          selector({
+            views: [],
+            colors: [],
+            icons: [],
+            items: [],
+            version: '1.0',
+            title: '',
+            description: '',
+            actions: {}
+          })
       );
-      (uiStateStoreModule.useUiStateStore as jest.Mock).mockImplementation((selector: any) =>
-        selector({ view: null })
+      (uiStateStoreModule.useUiStateStore as jest.Mock).mockImplementation(
+        (selector: any) => selector({ view: null })
       );
-      (sceneStoreModule.useSceneStore as jest.Mock).mockImplementation((selector: any) =>
-        selector({ connectors: {}, textBoxes: {} })
+      (sceneStoreModule.useSceneStore as jest.Mock).mockImplementation(
+        (selector: any) => selector({ connectors: {}, textBoxes: {} })
       );
-      (sceneStoreModule.useSceneStoreApi as jest.Mock).mockReturnValue({ getState: jest.fn().mockReturnValue({}) });
-      (modelStoreModule.useModelStoreApi as jest.Mock).mockReturnValue({ getState: jest.fn().mockReturnValue({ views: [], items: [] }) });
-      (useViewModule.useView as jest.Mock).mockReturnValue({ changeView: jest.fn() });
+      (sceneStoreModule.useSceneStoreApi as jest.Mock).mockReturnValue({
+        getState: jest.fn().mockReturnValue({})
+      });
+      (modelStoreModule.useModelStoreApi as jest.Mock).mockReturnValue({
+        getState: jest.fn().mockReturnValue({ views: [], items: [] })
+      });
+      (useViewModule.useView as jest.Mock).mockReturnValue({
+        changeView: jest.fn()
+      });
 
       const { result } = renderHook(() => useScene());
       expect(result.current.currentView.items).toEqual([]);

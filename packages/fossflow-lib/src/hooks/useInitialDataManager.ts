@@ -1,6 +1,10 @@
 import { useCallback, useState } from 'react';
 import { InitialData, IconCollectionState } from 'src/types';
-import { INITIAL_DATA, INITIAL_SCENE_STATE, INITIAL_UI_STATE } from 'src/config';
+import {
+  INITIAL_DATA,
+  INITIAL_SCENE_STATE,
+  INITIAL_UI_STATE
+} from 'src/config';
 import {
   getFitToViewParams,
   CoordsUtils,
@@ -43,23 +47,31 @@ export const useInitialDataManager = () => {
 
           if (!normView.connectors) return normView;
 
-          const validConnectors = (normView.connectors as any[]).filter((connector: any) => {
-            const hasValidAnchors = (connector.anchors as any[]).every((anchor: any) => {
-              // Reject anchors with empty refs (can happen from a broken paste operation)
-              const refKeys = Object.keys(anchor.ref ?? {});
-              if (refKeys.length === 0) return false;
-              if (anchor.ref.item) {
-                return (normView.items as any[]).some((item: any) => item.id === anchor.ref.item);
+          const validConnectors = (normView.connectors as any[]).filter(
+            (connector: any) => {
+              const hasValidAnchors = (connector.anchors as any[]).every(
+                (anchor: any) => {
+                  // Reject anchors with empty refs (can happen from a broken paste operation)
+                  const refKeys = Object.keys(anchor.ref ?? {});
+                  if (refKeys.length === 0) return false;
+                  if (anchor.ref.item) {
+                    return (normView.items as any[]).some(
+                      (item: any) => item.id === anchor.ref.item
+                    );
+                  }
+                  return true;
+                }
+              );
+
+              if (!hasValidAnchors) {
+                console.warn(
+                  `Removing connector ${connector.id} due to invalid item references`
+                );
               }
-              return true;
-            });
 
-            if (!hasValidAnchors) {
-              console.warn(`Removing connector ${connector.id} due to invalid item references`);
+              return hasValidAnchors;
             }
-
-            return hasValidAnchors;
-          });
+          );
 
           return { ...normView, connectors: validConnectors };
         });
@@ -71,8 +83,14 @@ export const useInitialDataManager = () => {
         const validationResult = modelSchema.safeParse(initialData);
 
         if (!validationResult.success) {
-          console.error('[useInitialDataManager] Model validation failed:', validationResult.error.issues);
-          console.error('[useInitialDataManager] Validation error detail:', JSON.stringify(validationResult.error.issues, null, 2));
+          console.error(
+            '[useInitialDataManager] Model validation failed:',
+            validationResult.error.issues
+          );
+          console.error(
+            '[useInitialDataManager] Validation error detail:',
+            JSON.stringify(validationResult.error.issues, null, 2)
+          );
           setIsReady(false);
           return;
         }
@@ -101,8 +119,9 @@ export const useInitialDataManager = () => {
         uiStateActions.setZoom(INITIAL_UI_STATE.zoom);
 
         const activeViewId = uiStateStoreApi.getState().view;
-        const targetViewId = initialData.view
-          ?? (activeViewId && initialData.views.some((v) => v.id === activeViewId)
+        const targetViewId =
+          initialData.view ??
+          (activeViewId && initialData.views.some((v) => v.id === activeViewId)
             ? activeViewId
             : initialData.views[0].id);
         const view = getItemByIdOrThrow(initialData.views, targetViewId);
@@ -138,7 +157,6 @@ export const useInitialDataManager = () => {
         uiStateActions.setIconCategoriesState(categoriesState);
 
         setIsReady(true);
-
       } catch (err) {
         console.error('[useInitialDataManager] load threw unexpectedly:', err);
         setIsReady(false);

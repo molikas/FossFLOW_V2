@@ -9,19 +9,14 @@ interface Props {
   disableAnimation?: boolean; // kept for API compatibility, no longer used
 }
 
-export const SceneLayer = memo(({
-  children,
-  order = 0,
-  sx
-}: Props) => {
+export const SceneLayer = memo(({ children, order = 0, sx }: Props) => {
   const elementRef = useRef<HTMLDivElement>(null);
   const storeApi = useUiStateStoreApi();
 
   useEffect(() => {
     const applyTransform = (x: number, y: number, scale: number) => {
       if (!elementRef.current) return;
-      elementRef.current.style.transform =
-        `translateX(${x}px) translateY(${y}px) scale(${scale})`;
+      elementRef.current.style.transform = `translateX(${x}px) translateY(${y}px) scale(${scale})`;
     };
 
     // Apply current values immediately on mount

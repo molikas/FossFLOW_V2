@@ -1,7 +1,19 @@
 import { Coords, Size, Scroll } from 'src/types';
 import { CoordsUtils, SizeUtils } from 'src/utils';
-import { PROJECTED_TILE_SIZE, MIN_ZOOM, MAX_ZOOM, ZOOM_INCREMENT } from 'src/config';
-import { getGridSubset, isWithinBounds, screenToIso, incrementZoom, decrementZoom, getItemAtTile } from '../renderer';
+import {
+  PROJECTED_TILE_SIZE,
+  MIN_ZOOM,
+  MAX_ZOOM,
+  ZOOM_INCREMENT
+} from 'src/config';
+import {
+  getGridSubset,
+  isWithinBounds,
+  screenToIso,
+  incrementZoom,
+  decrementZoom,
+  getItemAtTile
+} from '../renderer';
 
 const getRendererSize = (tileSize: Size, zoom: number = 1): Size => {
   const projectedTileSize = SizeUtils.multiply(PROJECTED_TILE_SIZE, zoom);
@@ -212,14 +224,20 @@ describe('incrementZoom / decrementZoom — boundary enforcement', () => {
 // getItemAtTile() — stacked rectangle selection (Bug fix: z-order hit-test)
 // ---------------------------------------------------------------------------
 describe('getItemAtTile() — stacked rectangle z-order', () => {
-  const emptyScene = { items: [], textBoxes: [], connectors: [], hitConnectors: [], rectangles: [] };
+  const emptyScene = {
+    items: [],
+    textBoxes: [],
+    connectors: [],
+    hitConnectors: [],
+    rectangles: []
+  };
 
   test('stacked rectangles — returns the last in array (visually topmost)', () => {
     const scene = {
       ...emptyScene,
       rectangles: [
         { id: 'r-bottom', from: { x: 0, y: 0 }, to: { x: 5, y: 5 } },
-        { id: 'r-top',    from: { x: 0, y: 0 }, to: { x: 5, y: 5 } }
+        { id: 'r-top', from: { x: 0, y: 0 }, to: { x: 5, y: 5 } }
       ]
     };
     const result = getItemAtTile({ tile: { x: 2, y: 2 }, scene } as any);
@@ -231,7 +249,7 @@ describe('getItemAtTile() — stacked rectangle z-order', () => {
       ...emptyScene,
       rectangles: [
         { id: 'r-bottom', from: { x: 0, y: 0 }, to: { x: 5, y: 5 } },
-        { id: 'r-top',    from: { x: 0, y: 0 }, to: { x: 5, y: 5 } }
+        { id: 'r-top', from: { x: 0, y: 0 }, to: { x: 5, y: 5 } }
       ]
     };
     const result = getItemAtTile({ tile: { x: 2, y: 2 }, scene } as any);
@@ -243,7 +261,10 @@ describe('getItemAtTile() — stacked rectangle z-order', () => {
       ...emptyScene,
       rectangles: [{ id: 'solo', from: { x: 1, y: 1 }, to: { x: 4, y: 4 } }]
     };
-    expect(getItemAtTile({ tile: { x: 2, y: 2 }, scene } as any)).toEqual({ type: 'RECTANGLE', id: 'solo' });
+    expect(getItemAtTile({ tile: { x: 2, y: 2 }, scene } as any)).toEqual({
+      type: 'RECTANGLE',
+      id: 'solo'
+    });
     expect(getItemAtTile({ tile: { x: 5, y: 5 }, scene } as any)).toBeNull();
   });
 

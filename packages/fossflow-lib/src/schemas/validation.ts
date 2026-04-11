@@ -8,8 +8,6 @@ import type {
 } from 'src/types';
 import { getAllAnchors, getItemByIdOrThrow } from 'src/utils';
 
-
-
 type IssueType =
   | {
       type: 'INVALID_ANCHOR_TO_VIEW_ITEM_REF';

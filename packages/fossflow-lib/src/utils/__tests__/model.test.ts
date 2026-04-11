@@ -24,7 +24,7 @@ function makeModel(overrides: Partial<Model> = {}): Model {
     version: '1.0',
     title: 'Test',
     description: '',
-    colors: [{ id: 'color-1', value: '#ffffff', label: 'White' }],
+    colors: [{ id: 'color-1', value: '#ffffff' }],
     icons: [],
     items: [],
     views: [],
@@ -66,7 +66,9 @@ describe('fixModel — CONNECTOR_TOO_FEW_ANCHORS', () => {
     const model = makeModel({
       views: [
         makeView('v1', [
-          makeConnector('single-anchor', [{ id: 'a1', ref: { tile: { x: 0, y: 0 } } }])
+          makeConnector('single-anchor', [
+            { id: 'a1', ref: { tile: { x: 0, y: 0 } } }
+          ])
         ])
       ]
     }) as Model;
@@ -106,7 +108,9 @@ describe('fixModel — CONNECTOR_TOO_FEW_ANCHORS', () => {
     const model = makeModel({
       views: [
         makeView('v1', [makeConnector('bad1', [])]),
-        makeView('v2', [makeConnector('bad2', [{ id: 'a1', ref: { tile: { x: 0, y: 0 } } }])])
+        makeView('v2', [
+          makeConnector('bad2', [{ id: 'a1', ref: { tile: { x: 0, y: 0 } } }])
+        ])
       ]
     }) as Model;
 
@@ -125,9 +129,11 @@ describe('modelFromModelStore', () => {
       version: '2.0',
       title: 'My Diagram',
       description: 'A test diagram',
-      colors: [{ id: 'c1', value: '#000', label: 'Black' }],
-      icons: [{ id: 'icon1', name: 'aws-s3', category: 'AWS' }],
-      items: [{ id: 'item1', ref: 'icon1', label: 'S3 Bucket' }],
+      colors: [{ id: 'c1', value: '#000' }],
+      icons: [
+        { id: 'icon1', name: 'aws-s3', url: 'https://example.com/icon.svg' }
+      ],
+      items: [{ id: 'item1', name: 'S3 Bucket' }],
       views: [makeView('v1')],
       // ModelStore may have additional store-only fields
       actions: {} as any

@@ -18,7 +18,12 @@ interface Props {
   onCancel: () => void;
 }
 
-export const ImportIconsDialog = ({ open, fileCount, onConfirm, onCancel }: Props) => {
+export const ImportIconsDialog = ({
+  open,
+  fileCount,
+  onConfirm,
+  onCancel
+}: Props) => {
   const [isIsometric, setIsIsometric] = useState(false);
 
   const handleConfirm = () => {
@@ -51,7 +56,9 @@ export const ImportIconsDialog = ({ open, fileCount, onConfirm, onCancel }: Prop
             }
             label={
               <Box>
-                <Typography variant="body2">Apply isometric projection</Typography>
+                <Typography variant="body2">
+                  Apply isometric projection
+                </Typography>
                 <Typography variant="caption" color="text.secondary">
                   For 3D-style icons. Uncheck for flat logos (AWS, Azure, etc.)
                 </Typography>
@@ -62,8 +69,12 @@ export const ImportIconsDialog = ({ open, fileCount, onConfirm, onCancel }: Prop
         </Box>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button variant="text" onClick={handleCancel}>Cancel</Button>
-        <Button variant="contained" onClick={handleConfirm}>Import</Button>
+        <Button variant="text" onClick={handleCancel}>
+          Cancel
+        </Button>
+        <Button variant="contained" onClick={handleConfirm}>
+          Import
+        </Button>
       </DialogActions>
     </Dialog>
   );

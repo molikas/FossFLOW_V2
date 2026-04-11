@@ -37,14 +37,16 @@ describe('ExpandableLabel selector consolidation — N-4 regression', () => {
   });
 
   it('ExpandableLabel uses shallow equality in its useUiStateStore call', () => {
-    const hasShallow = /useUiStateStore\s*\([^)]*,[^)]*shallow/.test(source) ||
+    const hasShallow =
+      /useUiStateStore\s*\([^)]*,[^)]*shallow/.test(source) ||
       // Multi-line form
       /useUiStateStore[\s\S]{0,200}shallow/.test(source);
     expect(hasShallow).toBe(true);
   });
 
   it('shallow is imported in ExpandableLabel', () => {
-    const importsShallow = /import\s+[^;]*\bshallow\b[^;]*from\s+['"]zustand/.test(source);
+    const importsShallow =
+      /import\s+[^;]*\bshallow\b[^;]*from\s+['"]zustand/.test(source);
     expect(importsShallow).toBe(true);
   });
 });

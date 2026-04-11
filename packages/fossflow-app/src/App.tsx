@@ -23,9 +23,7 @@ import {
   Close as CloseIcon,
   VisibilityOutlined as PreviewIcon
 } from '@mui/icons-material';
-import {
-  DiagramData
-} from './diagramUtils';
+import { DiagramData } from './diagramUtils';
 import { StorageManager } from './StorageManager';
 import { DiagramManager } from './components/DiagramManager';
 import { DiagnosticsOverlay } from './components/DiagnosticsOverlay';
@@ -52,7 +50,11 @@ function App() {
   // Get base path from PUBLIC_URL, ensure no trailing slash for React Router
   const publicUrl = process.env.PUBLIC_URL || '';
   // React Router basename should not have trailing slash
-  const basename = publicUrl ? (publicUrl.endsWith('/') ? publicUrl.slice(0, -1) : publicUrl) : '/';
+  const basename = publicUrl
+    ? publicUrl.endsWith('/')
+      ? publicUrl.slice(0, -1)
+      : publicUrl
+    : '/';
 
   return (
     <BrowserRouter basename={basename}>
@@ -71,12 +73,19 @@ function EditorPage() {
 
   const isoflowRef = useRef<IsoflowRef>(null);
   const shareButtonRef = useRef<HTMLButtonElement>(null);
-  const [toolbarPortalTarget, setMenuPortalTarget] = useState<HTMLElement | null>(null);
-  const [sidebarTogglePortalTarget, setSidebarTogglePortalTarget] = useState<HTMLElement | null>(null);
-  const { storage, isServerStorage: isStorageServer, isInitialized: isStorageInitialized } = useStorage();
+  const [toolbarPortalTarget, setMenuPortalTarget] =
+    useState<HTMLElement | null>(null);
+  const [sidebarTogglePortalTarget, setSidebarTogglePortalTarget] =
+    useState<HTMLElement | null>(null);
+  const {
+    storage,
+    isServerStorage: isStorageServer,
+    isInitialized: isStorageInitialized
+  } = useStorage();
 
   const [diagrams, setDiagrams] = useState<SavedDiagram[]>([]);
-  const [isDiagramsInitialized, setIsDiagramsInitialized] = useState<boolean>(false);
+  const [isDiagramsInitialized, setIsDiagramsInitialized] =
+    useState<boolean>(false);
   const [currentDiagram, setCurrentDiagram] = useState<SavedDiagram | null>(
     null
   );
@@ -158,9 +167,12 @@ function EditorPage() {
           name: diagramInfo?.name || data.title || 'Readonly Diagram',
           data: data,
           createdAt: new Date().toISOString(),
-          updatedAt: diagramInfo?.lastModified.toISOString() || new Date().toISOString()
+          updatedAt:
+            diagramInfo?.lastModified.toISOString() || new Date().toISOString()
         };
-        const importedIcons = (data.icons || []).filter((icon: any) => icon.collection === 'imported');
+        const importedIcons = (data.icons || []).filter(
+          (icon: any) => icon.collection === 'imported'
+        );
         const mergedIcons = [...iconPackManager.loadedIcons, ...importedIcons];
         const dataWithIcons = { ...data, icons: mergedIcons };
         setCurrentDiagram(readonlyDiagram);
@@ -178,7 +190,9 @@ function EditorPage() {
   }, [readonlyDiagramId, storage]);
 
   const currentModelRef = useRef<DiagramData | null>(null);
-  useEffect(() => { currentModelRef.current = currentModel; }, [currentModel]);
+  useEffect(() => {
+    currentModelRef.current = currentModel;
+  }, [currentModel]);
 
   // Format lastSaved timestamp: time only for today, "yesterday" for yesterday, short date for older.
   const formatSavedAt = (d: Date): string => {
@@ -186,13 +200,24 @@ function EditorPage() {
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const yesterday = new Date(today.getTime() - 86400000);
     const dDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    if (dDay.getTime() === today.getTime()) return t('status.savedAt', { time });
-    if (dDay.getTime() === yesterday.getTime()) return t('status.savedYesterdayAt', { time });
+    const time = d.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    if (dDay.getTime() === today.getTime())
+      return t('status.savedAt', { time });
+    if (dDay.getTime() === yesterday.getTime())
+      return t('status.savedYesterdayAt', { time });
     const month = d.toLocaleString([], { month: 'short' });
     const day = d.getDate();
-    if (d.getFullYear() === now.getFullYear()) return t('status.savedOnDate', { month, day, time });
-    return t('status.savedOnDateYear', { month, day, year: d.getFullYear(), time });
+    if (d.getFullYear() === now.getFullYear())
+      return t('status.savedOnDate', { month, day, time });
+    return t('status.savedOnDateYear', {
+      month,
+      day,
+      year: d.getFullYear(),
+      time
+    });
   };
 
   // Suppress the spurious onModelUpdated that fires immediately after isoflowRef.current.load().
@@ -208,7 +233,9 @@ function EditorPage() {
       return;
     }
     if (!isoflowRef.current || !currentModelRef.current) return;
-    const importedIcons = (currentModelRef.current.icons || []).filter((icon: any) => icon.collection === 'imported');
+    const importedIcons = (currentModelRef.current.icons || []).filter(
+      (icon: any) => icon.collection === 'imported'
+    );
     const mergedIcons = [...iconPackManager.loadedIcons, ...importedIcons];
     isAfterLoadRef.current = true;
     isoflowRef.current.load({ ...currentModelRef.current, icons: mergedIcons });
@@ -538,7 +565,10 @@ function EditorPage() {
     // Old format: only imported icons were saved. New format: all icons (default + imported) are saved.
     // Detect by checking for any default-collection icon in the saved data.
     const hasDefaultIcons = loadedIcons.some(
-      (icon: any) => icon.collection === 'isoflow' || icon.collection === 'aws' || icon.collection === 'gcp'
+      (icon: any) =>
+        icon.collection === 'isoflow' ||
+        icon.collection === 'aws' ||
+        icon.collection === 'gcp'
     );
 
     let finalIcons;
@@ -546,7 +576,9 @@ function EditorPage() {
       finalIcons = loadedIcons;
     } else {
       // Old format — merge and silently re-save so subsequent loads skip this path.
-      const importedIcons = loadedIcons.filter((icon: any) => icon.collection === 'imported');
+      const importedIcons = loadedIcons.filter(
+        (icon: any) => icon.collection === 'imported'
+      );
       finalIcons = [...iconPackManager.loadedIcons, ...importedIcons];
     }
 
@@ -586,7 +618,8 @@ function EditorPage() {
   const { t, i18n } = useTranslation('app');
 
   // Get locale with fallback to en-US if not found
-  const currentLocale = allLocales[i18n.language as keyof typeof allLocales] || allLocales['en-US'];
+  const currentLocale =
+    allLocales[i18n.language as keyof typeof allLocales] || allLocales['en-US'];
 
   // Stable callback for iconPackManager to avoid recreating the prop object every render.
   const handleTogglePack = useCallback(
@@ -606,7 +639,7 @@ function EditorPage() {
     );
     frozenInitialDataRef.current = {
       ...diagramData,
-      icons: [...iconPackManager.loadedIcons, ...importedIcons],
+      icons: [...iconPackManager.loadedIcons, ...importedIcons]
     };
   }
 
@@ -632,9 +665,11 @@ function EditorPage() {
 
   // Build save payload from current model state
   const buildSaveData = useCallback(() => {
-    const importedIcons = (currentModel?.icons || diagramData.icons || []).filter(
-      (icon: any) => icon.collection === 'imported'
-    );
+    const importedIcons = (
+      currentModel?.icons ||
+      diagramData.icons ||
+      []
+    ).filter((icon: any) => icon.collection === 'imported');
     return {
       title: currentModel?.title || diagramName || 'Untitled Diagram',
       icons: importedIcons,
@@ -673,7 +708,13 @@ function EditorPage() {
         setShowSaveDialog(true);
       }
     }
-  }, [serverStorageAvailable, storage, currentDiagram, buildSaveData, currentModel]);
+  }, [
+    serverStorageAvailable,
+    storage,
+    currentDiagram,
+    buildSaveData,
+    currentModel
+  ]);
 
   const handleSaveAs = async () => {
     if (!saveAsName.trim() || !storage) return;
@@ -751,7 +792,13 @@ function EditorPage() {
       }
     }
     window.open(`/display/${currentDiagram.id}`, '_blank');
-  }, [serverStorageAvailable, currentDiagram, storage, hasUnsavedChanges, buildSaveData]);
+  }, [
+    serverStorageAvailable,
+    currentDiagram,
+    storage,
+    hasUnsavedChanges,
+    buildSaveData
+  ]);
 
   // Close share popover on outside click
   useEffect(() => {
@@ -827,12 +874,28 @@ function EditorPage() {
         }}
       >
         {/* LEFT: menu + save + diagrams */}
-        <Box className="toolbar-left" sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
-          <Box ref={(el: HTMLDivElement | null) => { if (el && !toolbarPortalTarget) setMenuPortalTarget(el); }} sx={{ display: 'inline-flex', alignItems: 'center' }} />
+        <Box
+          className="toolbar-left"
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.25,
+            flexShrink: 0
+          }}
+        >
+          <Box
+            ref={(el: HTMLDivElement | null) => {
+              if (el && !toolbarPortalTarget) setMenuPortalTarget(el);
+            }}
+            sx={{ display: 'inline-flex', alignItems: 'center' }}
+          />
           {!isReadonlyUrl && (
             <>
               <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-              <Tooltip title={t('nav.save', 'Save') + ' (Ctrl+S)'} placement="bottom">
+              <Tooltip
+                title={t('nav.save', 'Save') + ' (Ctrl+S)'}
+                placement="bottom"
+              >
                 <span>
                   <IconButton
                     size="small"
@@ -844,7 +907,10 @@ function EditorPage() {
                   </IconButton>
                 </span>
               </Tooltip>
-              <Tooltip title={t('nav.diagrams', 'Diagrams') + ' (Ctrl+O)'} placement="bottom">
+              <Tooltip
+                title={t('nav.diagrams', 'Diagrams') + ' (Ctrl+O)'}
+                placement="bottom"
+              >
                 <IconButton
                   size="small"
                   onClick={handleOpenClick}
@@ -856,21 +922,49 @@ function EditorPage() {
             </>
           )}
           {isReadonlyUrl && (
-            <Chip label={t('dialog.readOnly.mode')} variant="outlined" size="small" sx={{ ml: 1 }} />
+            <Chip
+              label={t('dialog.readOnly.mode')}
+              variant="outlined"
+              size="small"
+              sx={{ ml: 1 }}
+            />
           )}
         </Box>
 
         {/* CENTER: diagram name */}
-        <Box className="toolbar-center" sx={{ flex: 1, display: 'flex', justifyContent: 'center', px: 1, overflow: 'hidden' }}>
+        <Box
+          className="toolbar-center"
+          sx={{
+            flex: 1,
+            display: 'flex',
+            justifyContent: 'center',
+            px: 1,
+            overflow: 'hidden'
+          }}
+        >
           {diagramName && (
-            <Typography variant="body2" fontWeight={500} color="text.secondary" noWrap sx={{ userSelect: 'none' }}>
+            <Typography
+              variant="body2"
+              fontWeight={500}
+              color="text.secondary"
+              noWrap
+              sx={{ userSelect: 'none' }}
+            >
               {diagramName}
             </Typography>
           )}
         </Box>
 
         {/* RIGHT: status | share + preview | sidebar toggles */}
-        <Box className="toolbar-right" sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
+        <Box
+          className="toolbar-right"
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.25,
+            flexShrink: 0
+          }}
+        >
           {!isReadonlyUrl && (
             <>
               <Typography
@@ -885,11 +979,19 @@ function EditorPage() {
               >
                 {lastSaved
                   ? `${formatSavedAt(lastSaved)}${hasUnsavedChanges ? ' •' : ''}`
-                  : hasUnsavedChanges ? t('status.unsaved', 'Unsaved') : ''
-                }
+                  : hasUnsavedChanges
+                    ? t('status.unsaved', 'Unsaved')
+                    : ''}
               </Typography>
               <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-              <Tooltip title={!serverStorageAvailable || !currentDiagram ? t('nav.share', 'Share') + ' (requires server)' : t('nav.share', 'Share')} placement="bottom">
+              <Tooltip
+                title={
+                  !serverStorageAvailable || !currentDiagram
+                    ? t('nav.share', 'Share') + ' (requires server)'
+                    : t('nav.share', 'Share')
+                }
+                placement="bottom"
+              >
                 <span>
                   <IconButton
                     ref={shareButtonRef}
@@ -902,7 +1004,16 @@ function EditorPage() {
                   </IconButton>
                 </span>
               </Tooltip>
-              <Tooltip title={!serverStorageAvailable || !currentDiagram ? t('toolbar.previewSaveFirst', 'Save first to preview') : hasUnsavedChanges ? t('toolbar.saveAndPreview', 'Save & Preview') : t('toolbar.preview', 'Preview')} placement="bottom">
+              <Tooltip
+                title={
+                  !serverStorageAvailable || !currentDiagram
+                    ? t('toolbar.previewSaveFirst', 'Save first to preview')
+                    : hasUnsavedChanges
+                      ? t('toolbar.saveAndPreview', 'Save & Preview')
+                      : t('toolbar.preview', 'Preview')
+                }
+                placement="bottom"
+              >
                 <span>
                   <IconButton
                     size="small"
@@ -917,7 +1028,10 @@ function EditorPage() {
               <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
               {/* Sidebar toggle portal target — Layers + Properties injected here by Isoflow */}
               <Box
-                ref={(el: HTMLDivElement | null) => { if (el && !sidebarTogglePortalTarget) setSidebarTogglePortalTarget(el); }}
+                ref={(el: HTMLDivElement | null) => {
+                  if (el && !sidebarTogglePortalTarget)
+                    setSidebarTogglePortalTarget(el);
+                }}
                 sx={{ display: 'inline-flex', alignItems: 'center' }}
               />
             </>
@@ -935,51 +1049,77 @@ function EditorPage() {
             PaperProps={{ sx: { p: 2, width: 380, mt: 0.5 } }}
           >
             <Stack spacing={1.5}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center">
-                <Typography variant="subtitle2">{t('share.title', 'Share Diagram')}</Typography>
-                <IconButton size="small" onClick={() => setShowSharePopover(false)}>
+              <Stack
+                direction="row"
+                justifyContent="space-between"
+                alignItems="center"
+              >
+                <Typography variant="subtitle2">
+                  {t('share.title', 'Share Diagram')}
+                </Typography>
+                <IconButton
+                  size="small"
+                  onClick={() => setShowSharePopover(false)}
+                >
                   <CloseIcon />
                 </IconButton>
               </Stack>
               <Typography variant="body2" color="text.secondary">
-                {t('share.hint', 'Anyone with this link can view the diagram in read-only mode.')}
-                  </Typography>
-                  <Stack direction="row" spacing={1}>
-                    <TextField
-                      size="small"
-                      fullWidth
-                      value={currentDiagram ? `${window.location.origin}/display/${currentDiagram.id}` : ''}
-                      inputProps={{ readOnly: true, style: { fontFamily: 'monospace', fontSize: 12 } }}
-                      onClick={handleShareUrlClick}
-                    />
-                    <Button
-                      variant={shareCopied ? 'contained' : 'outlined'}
-                      color={shareCopied ? 'success' : 'primary'}
-                      size="small"
-                      onClick={handleShareClick}
-                      sx={{ whiteSpace: 'nowrap', minWidth: 80 }}
-                    >
-                      {shareCopied ? t('share.copied', '✓ Copied!') : t('share.copy', 'Copy')}
-                    </Button>
-                  </Stack>
-                </Stack>
+                {t(
+                  'share.hint',
+                  'Anyone with this link can view the diagram in read-only mode.'
+                )}
+              </Typography>
+              <Stack direction="row" spacing={1}>
+                <TextField
+                  size="small"
+                  fullWidth
+                  value={
+                    currentDiagram
+                      ? `${window.location.origin}/display/${currentDiagram.id}`
+                      : ''
+                  }
+                  inputProps={{
+                    readOnly: true,
+                    style: { fontFamily: 'monospace', fontSize: 12 }
+                  }}
+                  onClick={handleShareUrlClick}
+                />
+                <Button
+                  variant={shareCopied ? 'contained' : 'outlined'}
+                  color={shareCopied ? 'success' : 'primary'}
+                  size="small"
+                  onClick={handleShareClick}
+                  sx={{ whiteSpace: 'nowrap', minWidth: 80 }}
+                >
+                  {shareCopied
+                    ? t('share.copied', '✓ Copied!')
+                    : t('share.copy', 'Copy')}
+                </Button>
+              </Stack>
+            </Stack>
           </Popover>
         )}
       </Box>
 
       {/* Session storage banner — shown once per session, dismissible */}
-      {!serverStorageAvailable && !isReadonlyUrl && !sessionWarningDismissed && (
-        <Alert
-          severity="warning"
-          onClose={() => {
-            setSessionWarningDismissed(true);
-            sessionStorage.setItem('foss-session-warning-dismissed', '1');
-          }}
-          sx={{ borderRadius: 0, py: 0.5, fontSize: 12 }}
-        >
-          {t('status.sessionStorageNote', 'Session storage only — diagrams will be lost when you close this tab. Use a server backend for persistence.')}
-        </Alert>
-      )}
+      {!serverStorageAvailable &&
+        !isReadonlyUrl &&
+        !sessionWarningDismissed && (
+          <Alert
+            severity="warning"
+            onClose={() => {
+              setSessionWarningDismissed(true);
+              sessionStorage.setItem('foss-session-warning-dismissed', '1');
+            }}
+            sx={{ borderRadius: 0, py: 0.5, fontSize: 12 }}
+          >
+            {t(
+              'status.sessionStorageNote',
+              'Session storage only — diagrams will be lost when you close this tab. Use a server backend for persistence.'
+            )}
+          </Alert>
+        )}
 
       <div className="fossflow-container">
         {iconPackManager.isInitialized && frozenInitialDataRef.current ? (
@@ -1136,8 +1276,13 @@ function EditorPage() {
         <div className="dialog-overlay">
           <div className="dialog">
             <h2>{t('dialog.saveAs.title', 'Save Diagram')}</h2>
-            <p style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#666' }}>
-              {t('dialog.saveAs.subtitle', 'Choose a name to save this diagram.')}
+            <p
+              style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#666' }}
+            >
+              {t(
+                'dialog.saveAs.subtitle',
+                'Choose a name to save this diagram.'
+              )}
             </p>
             <input
               type="text"
@@ -1148,8 +1293,17 @@ function EditorPage() {
               autoFocus
             />
             <div className="dialog-buttons">
-              <button onClick={handleSaveAs}>{t('dialog.saveAs.btnSave', 'Save')}</button>
-              <button onClick={() => { setShowSaveAsDialog(false); setSaveAsName(''); }}>{t('dialog.saveAs.btnCancel', 'Cancel')}</button>
+              <button onClick={handleSaveAs}>
+                {t('dialog.saveAs.btnSave', 'Save')}
+              </button>
+              <button
+                onClick={() => {
+                  setShowSaveAsDialog(false);
+                  setSaveAsName('');
+                }}
+              >
+                {t('dialog.saveAs.btnCancel', 'Cancel')}
+              </button>
             </div>
           </div>
         </div>
@@ -1168,9 +1322,7 @@ function EditorPage() {
       <DiagnosticsOverlay />
 
       {/* Save confirmation toast */}
-      {saveToast && (
-        <div className="save-toast">✓ {saveToast} saved</div>
-      )}
+      {saveToast && <div className="save-toast">✓ {saveToast} saved</div>}
     </div>
   );
 }

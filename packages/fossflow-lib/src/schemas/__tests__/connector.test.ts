@@ -1,5 +1,8 @@
-import { anchorSchema, connectorLabelSchema, connectorSchema } from '../connector';
-
+import {
+  anchorSchema,
+  connectorLabelSchema,
+  connectorSchema
+} from '../connector';
 
 describe('anchorSchema', () => {
   it('validates a correct anchor', () => {
@@ -22,7 +25,10 @@ describe('anchorSchema', () => {
 
 describe('anchorSchema — ref field contracts', () => {
   it('accepts anchor with only tile ref', () => {
-    expect(anchorSchema.safeParse({ id: 'a1', ref: { tile: { x: 5, y: 10 } } }).success).toBe(true);
+    expect(
+      anchorSchema.safeParse({ id: 'a1', ref: { tile: { x: 5, y: 10 } } })
+        .success
+    ).toBe(true);
   });
 
   it('accepts anchor with empty ref (all ref fields are optional)', () => {
@@ -69,19 +75,35 @@ describe('connectorLabelSchema', () => {
   });
 
   it('accepts optional fontSize within range', () => {
-    expect(connectorLabelSchema.safeParse({ ...baseLabel, fontSize: 8 }).success).toBe(true);
-    expect(connectorLabelSchema.safeParse({ ...baseLabel, fontSize: 24 }).success).toBe(true);
-    expect(connectorLabelSchema.safeParse({ ...baseLabel, fontSize: 14 }).success).toBe(true);
+    expect(
+      connectorLabelSchema.safeParse({ ...baseLabel, fontSize: 8 }).success
+    ).toBe(true);
+    expect(
+      connectorLabelSchema.safeParse({ ...baseLabel, fontSize: 24 }).success
+    ).toBe(true);
+    expect(
+      connectorLabelSchema.safeParse({ ...baseLabel, fontSize: 14 }).success
+    ).toBe(true);
   });
 
   it('rejects fontSize outside 8–24', () => {
-    expect(connectorLabelSchema.safeParse({ ...baseLabel, fontSize: 7 }).success).toBe(false);
-    expect(connectorLabelSchema.safeParse({ ...baseLabel, fontSize: 25 }).success).toBe(false);
+    expect(
+      connectorLabelSchema.safeParse({ ...baseLabel, fontSize: 7 }).success
+    ).toBe(false);
+    expect(
+      connectorLabelSchema.safeParse({ ...baseLabel, fontSize: 25 }).success
+    ).toBe(false);
   });
 
   it('accepts optional labelColor as hex string', () => {
-    expect(connectorLabelSchema.safeParse({ ...baseLabel, labelColor: '#ff0000' }).success).toBe(true);
-    expect(connectorLabelSchema.safeParse({ ...baseLabel, labelColor: '#000000' }).success).toBe(true);
+    expect(
+      connectorLabelSchema.safeParse({ ...baseLabel, labelColor: '#ff0000' })
+        .success
+    ).toBe(true);
+    expect(
+      connectorLabelSchema.safeParse({ ...baseLabel, labelColor: '#000000' })
+        .success
+    ).toBe(true);
   });
 
   it('fontSize and labelColor are fully optional', () => {
@@ -89,7 +111,10 @@ describe('connectorLabelSchema', () => {
   });
 
   it('fails if id is missing', () => {
-    const result = connectorLabelSchema.safeParse({ text: 'Label', position: 50 });
+    const result = connectorLabelSchema.safeParse({
+      text: 'Label',
+      position: 50
+    });
     expect(result.success).toBe(false);
   });
 });
@@ -98,7 +123,9 @@ describe('connectorSchema — anchor count at schema level', () => {
   it('accepts connector with 0 anchors (no minimum enforced at schema level)', () => {
     // The 2-anchor minimum is an application-level invariant, not a Zod constraint.
     // If z.array(anchorSchema).min(2) is added in the future, update this test.
-    expect(connectorSchema.safeParse({ id: 'c1', anchors: [] }).success).toBe(true);
+    expect(connectorSchema.safeParse({ id: 'c1', anchors: [] }).success).toBe(
+      true
+    );
   });
 
   it('accepts connector with exactly 1 anchor', () => {

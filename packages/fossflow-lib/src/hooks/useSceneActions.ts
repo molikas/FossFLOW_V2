@@ -21,7 +21,7 @@ import * as reducers from 'src/stores/reducers';
 import type { State, ViewReducerContext } from 'src/stores/reducers/types';
 import { generateId } from 'src/utils';
 import { useView } from 'src/hooks/useView';
-import { RECTANGLE_DEFAULTS, TEXTBOX_DEFAULTS, VIEW_DEFAULTS } from 'src/config';
+import { VIEW_DEFAULTS } from 'src/config';
 
 export const useSceneActions = () => {
   const { changeView } = useView();
@@ -108,8 +108,12 @@ export const useSceneActions = () => {
       try {
         operations();
         if (pendingStateRef.current) {
-          modelStoreApi.getState().actions.set(pendingStateRef.current.model, true);
-          sceneStoreApi.getState().actions.set(pendingStateRef.current.scene, true);
+          modelStoreApi
+            .getState()
+            .actions.set(pendingStateRef.current.model, true);
+          sceneStoreApi
+            .getState()
+            .actions.set(pendingStateRef.current.scene, true);
         }
       } finally {
         pendingStateRef.current = null;
@@ -410,7 +414,15 @@ export const useSceneActions = () => {
         }
       }
     },
-    [currentViewId, getState, setState, saveToHistoryBeforeChange, changeView, modelStoreApi, sceneStoreApi]
+    [
+      currentViewId,
+      getState,
+      setState,
+      saveToHistoryBeforeChange,
+      changeView,
+      modelStoreApi,
+      sceneStoreApi
+    ]
   );
 
   const updateView = useCallback(
@@ -435,23 +447,42 @@ export const useSceneActions = () => {
           .filter((ref) => ref.type === 'ITEM')
           .forEach((ref) => deleteViewItem(ref.id));
 
-        const liveView = getState().model.views.find((v) => v.id === currentViewId);
-        const existingConnectors = new Set((liveView?.connectors ?? []).map((c) => c.id));
-        const existingTextBoxes = new Set((liveView?.textBoxes ?? []).map((t) => t.id));
-        const existingRectangles = new Set((liveView?.rectangles ?? []).map((r) => r.id));
+        const liveView = getState().model.views.find(
+          (v) => v.id === currentViewId
+        );
+        const existingConnectors = new Set(
+          (liveView?.connectors ?? []).map((c) => c.id)
+        );
+        const existingTextBoxes = new Set(
+          (liveView?.textBoxes ?? []).map((t) => t.id)
+        );
+        const existingRectangles = new Set(
+          (liveView?.rectangles ?? []).map((r) => r.id)
+        );
 
         selectedItems.forEach((ref) => {
           if (ref.type === 'CONNECTOR' && existingConnectors.has(ref.id)) {
             deleteConnector(ref.id);
           } else if (ref.type === 'TEXTBOX' && existingTextBoxes.has(ref.id)) {
             deleteTextBox(ref.id);
-          } else if (ref.type === 'RECTANGLE' && existingRectangles.has(ref.id)) {
+          } else if (
+            ref.type === 'RECTANGLE' &&
+            existingRectangles.has(ref.id)
+          ) {
             deleteRectangle(ref.id);
           }
         });
       });
     },
-    [currentViewId, transaction, deleteViewItem, deleteConnector, deleteTextBox, deleteRectangle, getState]
+    [
+      currentViewId,
+      transaction,
+      deleteViewItem,
+      deleteConnector,
+      deleteTextBox,
+      deleteRectangle,
+      getState
+    ]
   );
 
   // -------------------------------------------------------------------------
@@ -459,7 +490,10 @@ export const useSceneActions = () => {
   // -------------------------------------------------------------------------
 
   const computePathsAsync = useCallback(
-    (connectorIds: string[], onProgress?: (done: number, total: number) => void) => {
+    (
+      connectorIds: string[],
+      onProgress?: (done: number, total: number) => void
+    ) => {
       if (!currentViewId || connectorIds.length === 0) return;
 
       const BATCH_SIZE = 25;
@@ -483,13 +517,19 @@ export const useSceneActions = () => {
             items: modelState.items,
             views: modelState.views
           },
-          scene: { connectors: sceneState.connectors, textBoxes: sceneState.textBoxes }
+          scene: {
+            connectors: sceneState.connectors,
+            textBoxes: sceneState.textBoxes
+          }
         };
 
         let currentState = fullState;
         for (const id of batch) {
           try {
-            currentState = reducers.syncConnector(id, { viewId: currentViewId, state: currentState });
+            currentState = reducers.syncConnector(id, {
+              viewId: currentViewId,
+              state: currentState
+            });
           } catch {
             // connector may have been deleted before the batch ran
           }
@@ -506,7 +546,10 @@ export const useSceneActions = () => {
   );
 
   const pasteItems = useCallback(
-    (payload: PastePayload, onPathProgress?: (done: number, total: number) => void) => {
+    (
+      payload: PastePayload,
+      onPathProgress?: (done: number, total: number) => void
+    ) => {
       if (!currentViewId) return;
 
       const viewId = currentViewId;
@@ -523,13 +566,26 @@ export const useSceneActions = () => {
           setState(newState);
         });
 
-        ;[...payload.rectangles].reverse().forEach((r) => createRectangle(r));
+        [...payload.rectangles].reverse().forEach((r) => createRectangle(r));
         payload.textBoxes.forEach((tb) => createTextBox(tb));
       });
 
-      computePathsAsync(payload.connectors.map((c) => c.id), onPathProgress);
+      computePathsAsync(
+        payload.connectors.map((c) => c.id),
+        onPathProgress
+      );
     },
-    [currentViewId, transaction, createModelItem, createViewItem, getState, setState, computePathsAsync, createRectangle, createTextBox]
+    [
+      currentViewId,
+      transaction,
+      createModelItem,
+      createViewItem,
+      getState,
+      setState,
+      computePathsAsync,
+      createRectangle,
+      createTextBox
+    ]
   );
 
   return {

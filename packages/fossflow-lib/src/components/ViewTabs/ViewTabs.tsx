@@ -130,12 +130,15 @@ export const ViewTabs = () => {
         </Typography>
       </Card>
 
-      <ChevronRight sx={{ color: 'text.disabled', width: 18, height: 18, flexShrink: 0 }} />
+      <ChevronRight
+        sx={{ color: 'text.disabled', width: 18, height: 18, flexShrink: 0 }}
+      />
 
       {/* View tabs */}
       {views.map((view) => {
         const isActive = view.id === currentViewId;
-        const isViewEditing = editing?.kind === 'view' && editing.id === view.id;
+        const isViewEditing =
+          editing?.kind === 'view' && editing.id === view.id;
 
         return (
           <Box
@@ -146,7 +149,9 @@ export const ViewTabs = () => {
             <Card
               sx={{
                 ...cardBase,
-                backgroundColor: isActive ? theme.palette.primary.main : '#ffffff',
+                backgroundColor: isActive
+                  ? theme.palette.primary.main
+                  : '#ffffff',
                 '&:hover': isViewEditing
                   ? { backgroundColor: '#ffffff' }
                   : {
@@ -166,10 +171,19 @@ export const ViewTabs = () => {
                   onClick={(e) => e.stopPropagation()}
                   size="small"
                   variant="standard"
-                  sx={{ flexGrow: 1, minWidth: 70, backgroundColor: 'transparent' }}
+                  sx={{
+                    flexGrow: 1,
+                    minWidth: 70,
+                    backgroundColor: 'transparent'
+                  }}
                   slotProps={{
                     htmlInput: {
-                      style: { fontSize: '0.875rem', padding: 0, background: 'transparent', color: '#000000' }
+                      style: {
+                        fontSize: '0.875rem',
+                        padding: 0,
+                        background: 'transparent',
+                        color: '#000000'
+                      }
                     }
                   }}
                 />
@@ -189,41 +203,54 @@ export const ViewTabs = () => {
                 </Typography>
               )}
 
-              {!isReadonly && (isViewEditing ? (
-                <Tooltip title={t('renameDiagram')}>
-                  <IconButton
-                    size="small"
-                    onClick={(e) => { e.stopPropagation(); commitEdit(); }}
-                    sx={{ ml: 0.5, p: 0.25 }}
-                  >
-                    <Check sx={{ width: 14, height: 14 }} />
-                  </IconButton>
-                </Tooltip>
-              ) : (
-                <Tooltip title={t('renameDiagram')}>
-                  <IconButton
-                    size="small"
-                    onClick={(e) =>
-                      startEdit({ kind: 'view', id: view.id }, view.name, e)
-                    }
-                    sx={{
-                      ml: 0.5,
-                      p: 0.25,
-                      opacity: 0,
-                      '&:hover': { opacity: 1 },
-                      '.MuiCard-root:hover &': { opacity: 0.7 }
-                    }}
-                  >
-                    <Edit sx={{ width: 13, height: 13, color: isActive ? 'white' : 'action' }} />
-                  </IconButton>
-                </Tooltip>
-              ))}
+              {!isReadonly &&
+                (isViewEditing ? (
+                  <Tooltip title={t('renameDiagram')}>
+                    <IconButton
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        commitEdit();
+                      }}
+                      sx={{ ml: 0.5, p: 0.25 }}
+                    >
+                      <Check sx={{ width: 14, height: 14 }} />
+                    </IconButton>
+                  </Tooltip>
+                ) : (
+                  <Tooltip title={t('renameDiagram')}>
+                    <IconButton
+                      size="small"
+                      onClick={(e) =>
+                        startEdit({ kind: 'view', id: view.id }, view.name, e)
+                      }
+                      sx={{
+                        ml: 0.5,
+                        p: 0.25,
+                        opacity: 0,
+                        '&:hover': { opacity: 1 },
+                        '.MuiCard-root:hover &': { opacity: 0.7 }
+                      }}
+                    >
+                      <Edit
+                        sx={{
+                          width: 13,
+                          height: 13,
+                          color: isActive ? 'white' : 'action'
+                        }}
+                      />
+                    </IconButton>
+                  </Tooltip>
+                ))}
 
               {!isReadonly && canDelete && !isViewEditing && (
                 <Tooltip title={t('deletePage')}>
                   <IconButton
                     size="small"
-                    onClick={(e) => { e.stopPropagation(); deleteView(view.id); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteView(view.id);
+                    }}
                     sx={{
                       ml: 0.25,
                       p: 0.25,
@@ -232,7 +259,13 @@ export const ViewTabs = () => {
                       '.MuiCard-root:hover &': { opacity: 0.7 }
                     }}
                   >
-                    <Close sx={{ width: 13, height: 13, color: isActive ? 'white' : 'action' }} />
+                    <Close
+                      sx={{
+                        width: 13,
+                        height: 13,
+                        color: isActive ? 'white' : 'action'
+                      }}
+                    />
                   </IconButton>
                 </Tooltip>
               )}

@@ -1,6 +1,9 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Stack, Box, Slider, Collapse, Button } from '@mui/material';
-import { ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon } from '@mui/icons-material';
+import {
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon
+} from '@mui/icons-material';
 import { ModelItem, ViewItem } from 'src/types';
 import { useModelItem } from 'src/hooks/useModelItem';
 import { useModelStore } from 'src/stores/modelStore';
@@ -116,7 +119,9 @@ export const NodeStyleTab = ({
             min={10}
             max={24}
             value={node.labelFontSize ?? 14}
-            onChange={(_, v) => onViewItemUpdated({ labelFontSize: v as number })}
+            onChange={(_, v) =>
+              onViewItemUpdated({ labelFontSize: v as number })
+            }
           />
         </Section>
       )}

@@ -1,4 +1,11 @@
-import { ModelItem, ViewItem, Connector, Rectangle, TextBox, Coords } from 'src/types';
+import {
+  ModelItem,
+  ViewItem,
+  Connector,
+  Rectangle,
+  TextBox,
+  Coords
+} from 'src/types';
 
 export interface ClipboardItem {
   modelItem: ModelItem;

@@ -105,10 +105,18 @@ jest.mock('src/utils/findNearestUnoccupiedTile', () => ({
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-function makeModelItem(id: string) { return { id, name: 'Node' }; }
-function makeViewItem(id: string, x: number, y: number) { return { id, tile: { x, y } }; }
-function makeConnector(id: string, anchors: any[]) { return { id, anchors }; }
-function setup() { return renderHook(() => useCopyPaste()); }
+function makeModelItem(id: string) {
+  return { id, name: 'Node' };
+}
+function makeViewItem(id: string, x: number, y: number) {
+  return { id, tile: { x, y } };
+}
+function makeConnector(id: string, anchors: any[]) {
+  return { id, anchors };
+}
+function setup() {
+  return renderHook(() => useCopyPaste());
+}
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -118,11 +126,18 @@ beforeEach(() => {
   mockUiState.itemControls = null;
   mockUiState.mouse.position.tile = { x: 10, y: 10 };
   mockModelState.items = [];
-  mockScene.currentView = { items: [], connectors: [], rectangles: [], textBoxes: [] };
+  mockScene.currentView = {
+    items: [],
+    connectors: [],
+    rectangles: [],
+    textBoxes: []
+  };
   // Re-bind mock so closure captures fresh _mockClipboard each test
   mockGetClipboard.mockImplementation(() => _mockClipboard);
   // setClipboard mock: also store into _mockClipboard so handlePaste can read it back
-  mockSetClipboard.mockImplementation((payload: any) => { _mockClipboard = payload; });
+  mockSetClipboard.mockImplementation((payload: any) => {
+    _mockClipboard = payload;
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -131,7 +146,10 @@ beforeEach(() => {
 describe('useCopyPaste.handleCopy', () => {
   test('1. LASSO selection — items written to clipboard with correct centroid', () => {
     mockModelState.items = [makeModelItem('item-1'), makeModelItem('item-2')];
-    mockScene.currentView.items = [makeViewItem('item-1', 4, 6), makeViewItem('item-2', 8, 10)];
+    mockScene.currentView.items = [
+      makeViewItem('item-1', 4, 6),
+      makeViewItem('item-2', 8, 10)
+    ];
     mockUiState.mode = {
       type: 'LASSO',
       selection: {
@@ -143,12 +161,17 @@ describe('useCopyPaste.handleCopy', () => {
     } as any;
 
     const { result } = setup();
-    act(() => { result.current.handleCopy(); });
+    act(() => {
+      result.current.handleCopy();
+    });
 
     expect(mockSetClipboard).toHaveBeenCalledTimes(1);
     const payload = mockSetClipboard.mock.calls[0][0];
     expect(payload.items).toHaveLength(2);
-    expect(payload.items.map((ci: any) => ci.viewItem.id).sort()).toEqual(['item-1', 'item-2']);
+    expect(payload.items.map((ci: any) => ci.viewItem.id).sort()).toEqual([
+      'item-1',
+      'item-2'
+    ]);
     // centroid: avg of (4,6) and (8,10) = (6,8)
     expect(payload.centroid).toEqual({ x: 6, y: 8 });
     expect(mockSetNotification).toHaveBeenCalledWith(
@@ -163,7 +186,9 @@ describe('useCopyPaste.handleCopy', () => {
     mockUiState.itemControls = { type: 'ITEM', id: 'solo' };
 
     const { result } = setup();
-    act(() => { result.current.handleCopy(); });
+    act(() => {
+      result.current.handleCopy();
+    });
 
     const payload = mockSetClipboard.mock.calls[0][0];
     expect(payload.items).toHaveLength(1);
@@ -176,7 +201,9 @@ describe('useCopyPaste.handleCopy', () => {
     mockUiState.itemControls = null;
 
     const { result } = setup();
-    act(() => { result.current.handleCopy(); });
+    act(() => {
+      result.current.handleCopy();
+    });
 
     expect(mockSetClipboard).not.toHaveBeenCalled();
     expect(mockSetNotification).not.toHaveBeenCalledWith(
@@ -188,7 +215,9 @@ describe('useCopyPaste.handleCopy', () => {
     // item at (0,0), rect midpoint (6,6), textbox at (6,2) → centroid (4,3)
     mockModelState.items = [makeModelItem('item-1')];
     mockScene.currentView.items = [makeViewItem('item-1', 0, 0)];
-    mockScene.currentView.rectangles = [{ id: 'rect-1', from: { x: 4, y: 4 }, to: { x: 8, y: 8 } }];
+    mockScene.currentView.rectangles = [
+      { id: 'rect-1', from: { x: 4, y: 4 }, to: { x: 8, y: 8 } }
+    ];
     mockScene.currentView.textBoxes = [{ id: 'tb-1', tile: { x: 6, y: 2 } }];
     mockUiState.mode = {
       type: 'LASSO',
@@ -202,7 +231,9 @@ describe('useCopyPaste.handleCopy', () => {
     } as any;
 
     const { result } = setup();
-    act(() => { result.current.handleCopy(); });
+    act(() => {
+      result.current.handleCopy();
+    });
 
     const payload = mockSetClipboard.mock.calls[0][0];
     // allPoints = [(0,0), (6,6), (6,2)] → avg x=4, avg y=2.67→3
@@ -211,7 +242,10 @@ describe('useCopyPaste.handleCopy', () => {
 
   test('5. connector auto-include when both item-anchors are in the selection', () => {
     mockModelState.items = [makeModelItem('item-1'), makeModelItem('item-2')];
-    mockScene.currentView.items = [makeViewItem('item-1', 0, 0), makeViewItem('item-2', 2, 2)];
+    mockScene.currentView.items = [
+      makeViewItem('item-1', 0, 0),
+      makeViewItem('item-2', 2, 2)
+    ];
     mockScene.currentView.connectors = [
       makeConnector('conn-1', [
         { id: 'a1', ref: { item: 'item-1' } },
@@ -229,7 +263,9 @@ describe('useCopyPaste.handleCopy', () => {
     } as any;
 
     const { result } = setup();
-    act(() => { result.current.handleCopy(); });
+    act(() => {
+      result.current.handleCopy();
+    });
 
     const payload = mockSetClipboard.mock.calls[0][0];
     expect(payload.connectors).toHaveLength(1);
@@ -245,17 +281,27 @@ describe('useCopyPaste.handlePaste', () => {
     _mockClipboard = null; // getClipboard() returns null
 
     const { result } = setup();
-    act(() => { result.current.handlePaste(); });
+    act(() => {
+      result.current.handlePaste();
+    });
 
     expect(mockPasteItems).not.toHaveBeenCalled();
     expect(mockSetNotification).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'Nothing to paste', severity: 'warning' })
+      expect.objectContaining({
+        message: 'Nothing to paste',
+        severity: 'warning'
+      })
     );
   });
 
   test('7. IDs are remapped — pasted items get new unique IDs', () => {
     _mockClipboard = {
-      items: [{ modelItem: makeModelItem('orig-1'), viewItem: makeViewItem('orig-1', 5, 5) }],
+      items: [
+        {
+          modelItem: makeModelItem('orig-1'),
+          viewItem: makeViewItem('orig-1', 5, 5)
+        }
+      ],
       connectors: [],
       rectangles: [],
       textBoxes: [],
@@ -264,7 +310,9 @@ describe('useCopyPaste.handlePaste', () => {
     mockUiState.mouse.position.tile = { x: 5, y: 5 }; // offset = (0,0)
 
     const { result } = setup();
-    act(() => { result.current.handlePaste(); });
+    act(() => {
+      result.current.handlePaste();
+    });
 
     const call = mockPasteItems.mock.calls[0][0];
     expect(call.items[0].viewItem.id).not.toBe('orig-1');
@@ -275,11 +323,16 @@ describe('useCopyPaste.handlePaste', () => {
 
   test('8. orphan detach — anchor referencing item NOT in clipboard loses item ref', () => {
     _mockClipboard = {
-      items: [{ modelItem: makeModelItem('item-A'), viewItem: makeViewItem('item-A', 0, 0) }],
+      items: [
+        {
+          modelItem: makeModelItem('item-A'),
+          viewItem: makeViewItem('item-A', 0, 0)
+        }
+      ],
       connectors: [
         makeConnector('conn-1', [
-          { id: 'a1', ref: { item: 'item-A' } },        // in clipboard → remapped
-          { id: 'a2', ref: { item: 'item-ORPHAN' } }    // NOT in clipboard → detached
+          { id: 'a1', ref: { item: 'item-A' } }, // in clipboard → remapped
+          { id: 'a2', ref: { item: 'item-ORPHAN' } } // NOT in clipboard → detached
         ])
       ],
       rectangles: [],
@@ -289,18 +342,25 @@ describe('useCopyPaste.handlePaste', () => {
     mockUiState.mouse.position.tile = { x: 0, y: 0 };
 
     const { result } = setup();
-    act(() => { result.current.handlePaste(); });
+    act(() => {
+      result.current.handlePaste();
+    });
 
     const connector = mockPasteItems.mock.calls[0][0].connectors[0];
     expect(connector.anchors[0].ref.item).toBeDefined();
     expect(connector.anchors[0].ref.item).not.toBe('item-A'); // remapped
-    expect(connector.anchors[1].ref.item).toBeUndefined();    // detached — no item ref
-    expect(connector.anchors[1].ref.tile).toBeDefined();      // converted to tile ref
+    expect(connector.anchors[1].ref.item).toBeUndefined(); // detached — no item ref
+    expect(connector.anchors[1].ref.tile).toBeDefined(); // converted to tile ref
   });
 
   test('9. offset applied correctly — pasted tile = original + (mouse − centroid)', () => {
     _mockClipboard = {
-      items: [{ modelItem: makeModelItem('item-X'), viewItem: makeViewItem('item-X', 3, 4) }],
+      items: [
+        {
+          modelItem: makeModelItem('item-X'),
+          viewItem: makeViewItem('item-X', 3, 4)
+        }
+      ],
       connectors: [],
       rectangles: [],
       textBoxes: [],
@@ -309,7 +369,9 @@ describe('useCopyPaste.handlePaste', () => {
     mockUiState.mouse.position.tile = { x: 8, y: 9 }; // offset = (5,5)
 
     const { result } = setup();
-    act(() => { result.current.handlePaste(); });
+    act(() => {
+      result.current.handlePaste();
+    });
 
     const pasted = mockPasteItems.mock.calls[0][0];
     // (3+5, 4+5) = (8, 9)
@@ -318,7 +380,12 @@ describe('useCopyPaste.handlePaste', () => {
 
   test('10. paste sets CURSOR mode after paste', () => {
     _mockClipboard = {
-      items: [{ modelItem: makeModelItem('item-P'), viewItem: makeViewItem('item-P', 1, 1) }],
+      items: [
+        {
+          modelItem: makeModelItem('item-P'),
+          viewItem: makeViewItem('item-P', 1, 1)
+        }
+      ],
       connectors: [],
       rectangles: [{ id: 'rect-P', from: { x: 0, y: 0 }, to: { x: 2, y: 2 } }],
       textBoxes: [],
@@ -327,7 +394,9 @@ describe('useCopyPaste.handlePaste', () => {
     mockUiState.mouse.position.tile = { x: 1, y: 1 };
 
     const { result } = setup();
-    act(() => { result.current.handlePaste(); });
+    act(() => {
+      result.current.handlePaste();
+    });
 
     expect(mockSetMode).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -338,24 +407,32 @@ describe('useCopyPaste.handlePaste', () => {
     );
     expect(mockSetItemControls).toHaveBeenCalledWith(null);
     expect(mockSetNotification).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'Pasted 2 items', severity: 'success' })
+      expect.objectContaining({
+        message: 'Pasted 2 items',
+        severity: 'success'
+      })
     );
   });
 
   test('11. connector tile waypoints are offset by the paste offset', () => {
-
     // Connector: item-anchor at item-A, tile waypoint at (3, 3), item-anchor at item-B
     // Paste offset: mouse (10,10) - centroid (5,5) = (5,5)
     // Tile waypoint should move from (3,3) to (8,8)
     _mockClipboard = {
       items: [
-        { modelItem: makeModelItem('item-A'), viewItem: makeViewItem('item-A', 5, 5) },
-        { modelItem: makeModelItem('item-B'), viewItem: makeViewItem('item-B', 5, 5) }
+        {
+          modelItem: makeModelItem('item-A'),
+          viewItem: makeViewItem('item-A', 5, 5)
+        },
+        {
+          modelItem: makeModelItem('item-B'),
+          viewItem: makeViewItem('item-B', 5, 5)
+        }
       ],
       connectors: [
         makeConnector('conn-1', [
           { id: 'a1', ref: { item: 'item-A' } },
-          { id: 'a2', ref: { tile: { x: 3, y: 3 } } },  // tile waypoint
+          { id: 'a2', ref: { tile: { x: 3, y: 3 } } }, // tile waypoint
           { id: 'a3', ref: { item: 'item-B' } }
         ])
       ],
@@ -366,7 +443,9 @@ describe('useCopyPaste.handlePaste', () => {
     mockUiState.mouse.position.tile = { x: 10, y: 10 }; // offset = (5,5)
 
     const { result } = setup();
-    act(() => { result.current.handlePaste(); });
+    act(() => {
+      result.current.handlePaste();
+    });
 
     const connector = mockPasteItems.mock.calls[0][0].connectors[0];
     // anchor[0]: item ref — remapped
@@ -387,7 +466,10 @@ describe('useCopyPaste.handlePaste', () => {
 describe('useCopyPaste.handleCut', () => {
   test('12. LASSO selection — items written to clipboard (same payload as copy)', () => {
     mockModelState.items = [makeModelItem('item-1'), makeModelItem('item-2')];
-    mockScene.currentView.items = [makeViewItem('item-1', 4, 6), makeViewItem('item-2', 8, 10)];
+    mockScene.currentView.items = [
+      makeViewItem('item-1', 4, 6),
+      makeViewItem('item-2', 8, 10)
+    ];
     mockUiState.mode = {
       type: 'LASSO',
       selection: {
@@ -399,12 +481,17 @@ describe('useCopyPaste.handleCut', () => {
     } as any;
 
     const { result } = setup();
-    act(() => { result.current.handleCut(); });
+    act(() => {
+      result.current.handleCut();
+    });
 
     expect(mockSetClipboard).toHaveBeenCalledTimes(1);
     const payload = mockSetClipboard.mock.calls[0][0];
     expect(payload.items).toHaveLength(2);
-    expect(payload.items.map((ci: any) => ci.viewItem.id).sort()).toEqual(['item-1', 'item-2']);
+    expect(payload.items.map((ci: any) => ci.viewItem.id).sort()).toEqual([
+      'item-1',
+      'item-2'
+    ]);
     expect(payload.centroid).toEqual({ x: 6, y: 8 });
   });
 
@@ -418,7 +505,9 @@ describe('useCopyPaste.handleCut', () => {
     } as any;
 
     const { result } = setup();
-    act(() => { result.current.handleCut(); });
+    act(() => {
+      result.current.handleCut();
+    });
 
     expect(mockDeleteSelectedItems).toHaveBeenCalledTimes(1);
     expect(mockDeleteSelectedItems).toHaveBeenCalledWith(selectionItems);
@@ -433,10 +522,16 @@ describe('useCopyPaste.handleCut', () => {
     } as any;
 
     const { result } = setup();
-    act(() => { result.current.handleCut(); });
+    act(() => {
+      result.current.handleCut();
+    });
 
     expect(mockSetMode).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'CURSOR', showCursor: true, mousedownItem: null })
+      expect.objectContaining({
+        type: 'CURSOR',
+        showCursor: true,
+        mousedownItem: null
+      })
     );
     expect(mockSetItemControls).toHaveBeenCalledWith(null);
   });
@@ -448,7 +543,9 @@ describe('useCopyPaste.handleCut', () => {
     mockUiState.itemControls = { type: 'ITEM', id: 'solo' };
 
     const { result } = setup();
-    act(() => { result.current.handleCut(); });
+    act(() => {
+      result.current.handleCut();
+    });
 
     // Clipboard written
     const payload = mockSetClipboard.mock.calls[0][0];
@@ -465,7 +562,9 @@ describe('useCopyPaste.handleCut', () => {
     mockUiState.itemControls = null;
 
     const { result } = setup();
-    act(() => { result.current.handleCut(); });
+    act(() => {
+      result.current.handleCut();
+    });
 
     expect(mockSetClipboard).not.toHaveBeenCalled();
     expect(mockDeleteSelectedItems).not.toHaveBeenCalled();
@@ -479,14 +578,18 @@ describe('useCopyPaste.handleCut', () => {
     const r1 = { id: 'r1', from: { x: 0, y: 0 }, to: { x: 2, y: 2 } };
     const r2 = { id: 'r2', from: { x: 1, y: 1 }, to: { x: 3, y: 3 } };
     _mockClipboard = {
-      items: [], connectors: [], textBoxes: [],
+      items: [],
+      connectors: [],
+      textBoxes: [],
       rectangles: [r1, r2],
       centroid: { x: 1, y: 1 }
     };
     mockUiState.mouse.position.tile = { x: 1, y: 1 }; // offset = (0,0)
 
     const { result } = setup();
-    act(() => { result.current.handlePaste(); });
+    act(() => {
+      result.current.handlePaste();
+    });
 
     const payload = mockPasteItems.mock.calls[0][0];
     // Two rectangles forwarded; IDs remapped but order preserved by useCopyPaste
@@ -498,7 +601,10 @@ describe('useCopyPaste.handleCut', () => {
 
   test('17. shows "Cut N items" success notification', () => {
     mockModelState.items = [makeModelItem('item-1'), makeModelItem('item-2')];
-    mockScene.currentView.items = [makeViewItem('item-1', 0, 0), makeViewItem('item-2', 2, 2)];
+    mockScene.currentView.items = [
+      makeViewItem('item-1', 0, 0),
+      makeViewItem('item-2', 2, 2)
+    ];
     mockUiState.mode = {
       type: 'LASSO',
       selection: {
@@ -510,7 +616,9 @@ describe('useCopyPaste.handleCut', () => {
     } as any;
 
     const { result } = setup();
-    act(() => { result.current.handleCut(); });
+    act(() => {
+      result.current.handleCut();
+    });
 
     expect(mockSetNotification).toHaveBeenCalledWith(
       expect.objectContaining({ message: 'Cut 2 items', severity: 'success' })

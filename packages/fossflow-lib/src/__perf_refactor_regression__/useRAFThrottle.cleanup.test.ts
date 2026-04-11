@@ -21,11 +21,13 @@ import { renderHook, act } from '@testing-library/react';
 
 // NOTE: This import will fail until the extraction is done (M-2 first step).
 // That is by design — the failing import acts as a TODO gate.
-let useRAFThrottle: (() => {
-  scheduleUpdate: (mouse: any, event: any, cb: (u: any) => void) => void;
-  flushUpdate: () => void;
-  cleanup: () => void;
-}) | null = null;
+let useRAFThrottle:
+  | (() => {
+      scheduleUpdate: (mouse: any, event: any, cb: (u: any) => void) => void;
+      flushUpdate: () => void;
+      cleanup: () => void;
+    })
+  | null = null;
 
 let moduleAvailable = false;
 try {
@@ -73,108 +75,151 @@ function flushRAF(id: number) {
 // Tests
 // ---------------------------------------------------------------------------
 // eslint-disable-next-line jest/valid-describe-callback
-(moduleAvailable ? describe : describe.skip)('useRAFThrottle cleanup — M-2 regression', () => {
-  it('scheduleUpdate registers a requestAnimationFrame', () => {
-    const { result } = renderHook(() => useRAFThrottle!());
-    act(() => {
-      result.current.scheduleUpdate({}, {}, jest.fn());
-    });
-    expect(requestAnimationFrame).toHaveBeenCalledTimes(1);
-  });
-
-  it('callback fires when the RAF executes', () => {
-    const cb = jest.fn();
-    const { result } = renderHook(() => useRAFThrottle!());
-    let rafId = 0;
-    (requestAnimationFrame as jest.Mock).mockImplementation((fn) => {
-      rafId = ++rafIdCounter;
-      rafCallbacks.set(rafId, fn);
-      return rafId;
+(moduleAvailable ? describe : describe.skip)(
+  'useRAFThrottle cleanup — M-2 regression',
+  () => {
+    it('scheduleUpdate registers a requestAnimationFrame', () => {
+      const { result } = renderHook(() => useRAFThrottle!());
+      act(() => {
+        result.current.scheduleUpdate({}, {}, jest.fn());
+      });
+      expect(requestAnimationFrame).toHaveBeenCalledTimes(1);
     });
 
-    act(() => { result.current.scheduleUpdate({ tile: { x: 1, y: 2 } }, { type: 'mousemove' }, cb); });
-    act(() => { flushRAF(rafId); });
+    it('callback fires when the RAF executes', () => {
+      const cb = jest.fn();
+      const { result } = renderHook(() => useRAFThrottle!());
+      let rafId = 0;
+      (requestAnimationFrame as jest.Mock).mockImplementation((fn) => {
+        rafId = ++rafIdCounter;
+        rafCallbacks.set(rafId, fn);
+        return rafId;
+      });
 
-    expect(cb).toHaveBeenCalledTimes(1);
-  });
+      act(() => {
+        result.current.scheduleUpdate(
+          { tile: { x: 1, y: 2 } },
+          { type: 'mousemove' },
+          cb
+        );
+      });
+      act(() => {
+        flushRAF(rafId);
+      });
 
-  it('multiple scheduleUpdate calls before next RAF fire only the last callback once', () => {
-    const cb1 = jest.fn();
-    const cb2 = jest.fn();
-    const cb3 = jest.fn();
-    const { result } = renderHook(() => useRAFThrottle!());
-    let rafId = 0;
-    (requestAnimationFrame as jest.Mock).mockImplementation((fn) => {
-      rafId = ++rafIdCounter;
-      rafCallbacks.set(rafId, fn);
-      return rafId;
+      expect(cb).toHaveBeenCalledTimes(1);
     });
 
-    act(() => {
-      result.current.scheduleUpdate({ tile: { x: 1, y: 1 } }, { type: 'mousemove' }, cb1);
-      result.current.scheduleUpdate({ tile: { x: 2, y: 2 } }, { type: 'mousemove' }, cb2);
-      result.current.scheduleUpdate({ tile: { x: 3, y: 3 } }, { type: 'mousemove' }, cb3);
+    it('multiple scheduleUpdate calls before next RAF fire only the last callback once', () => {
+      const cb1 = jest.fn();
+      const cb2 = jest.fn();
+      const cb3 = jest.fn();
+      const { result } = renderHook(() => useRAFThrottle!());
+      let rafId = 0;
+      (requestAnimationFrame as jest.Mock).mockImplementation((fn) => {
+        rafId = ++rafIdCounter;
+        rafCallbacks.set(rafId, fn);
+        return rafId;
+      });
+
+      act(() => {
+        result.current.scheduleUpdate(
+          { tile: { x: 1, y: 1 } },
+          { type: 'mousemove' },
+          cb1
+        );
+        result.current.scheduleUpdate(
+          { tile: { x: 2, y: 2 } },
+          { type: 'mousemove' },
+          cb2
+        );
+        result.current.scheduleUpdate(
+          { tile: { x: 3, y: 3 } },
+          { type: 'mousemove' },
+          cb3
+        );
+      });
+      act(() => {
+        flushRAF(rafId);
+      });
+
+      // Only the last registered callback should fire (latest mouse position wins)
+      expect(cb3).toHaveBeenCalledTimes(1);
+      expect(cb1).not.toHaveBeenCalled();
+      expect(cb2).not.toHaveBeenCalled();
     });
-    act(() => { flushRAF(rafId); });
 
-    // Only the last registered callback should fire (latest mouse position wins)
-    expect(cb3).toHaveBeenCalledTimes(1);
-    expect(cb1).not.toHaveBeenCalled();
-    expect(cb2).not.toHaveBeenCalled();
-  });
+    it('cleanup() calls cancelAnimationFrame for any pending RAF', () => {
+      const { result } = renderHook(() => useRAFThrottle!());
+      let rafId = 0;
+      (requestAnimationFrame as jest.Mock).mockImplementation((fn) => {
+        rafId = ++rafIdCounter;
+        rafCallbacks.set(rafId, fn);
+        return rafId;
+      });
 
-  it('cleanup() calls cancelAnimationFrame for any pending RAF', () => {
-    const { result } = renderHook(() => useRAFThrottle!());
-    let rafId = 0;
-    (requestAnimationFrame as jest.Mock).mockImplementation((fn) => {
-      rafId = ++rafIdCounter;
-      rafCallbacks.set(rafId, fn);
-      return rafId;
+      act(() => {
+        result.current.scheduleUpdate({}, {}, jest.fn());
+      });
+      act(() => {
+        result.current.cleanup();
+      });
+
+      expect(cancelAnimationFrame).toHaveBeenCalledWith(rafId);
     });
 
-    act(() => { result.current.scheduleUpdate({}, {}, jest.fn()); });
-    act(() => { result.current.cleanup(); });
+    it('cleanup() prevents the callback from firing even if RAF executes afterwards', () => {
+      const cb = jest.fn();
+      const { result } = renderHook(() => useRAFThrottle!());
+      let rafId = 0;
+      (requestAnimationFrame as jest.Mock).mockImplementation((fn) => {
+        rafId = ++rafIdCounter;
+        rafCallbacks.set(rafId, fn);
+        return rafId;
+      });
 
-    expect(cancelAnimationFrame).toHaveBeenCalledWith(rafId);
-  });
+      act(() => {
+        result.current.scheduleUpdate({}, {}, cb);
+      });
+      act(() => {
+        result.current.cleanup();
+      });
+      // Simulate a stale RAF that fires after cleanup (platform may not honour cancel immediately)
+      act(() => {
+        flushRAF(rafId);
+      });
 
-  it('cleanup() prevents the callback from firing even if RAF executes afterwards', () => {
-    const cb = jest.fn();
-    const { result } = renderHook(() => useRAFThrottle!());
-    let rafId = 0;
-    (requestAnimationFrame as jest.Mock).mockImplementation((fn) => {
-      rafId = ++rafIdCounter;
-      rafCallbacks.set(rafId, fn);
-      return rafId;
+      expect(cb).not.toHaveBeenCalled();
     });
 
-    act(() => { result.current.scheduleUpdate({}, {}, cb); });
-    act(() => { result.current.cleanup(); });
-    // Simulate a stale RAF that fires after cleanup (platform may not honour cancel immediately)
-    act(() => { flushRAF(rafId); });
+    it('flushUpdate fires the pending callback synchronously', () => {
+      const cb = jest.fn();
+      const { result } = renderHook(() => useRAFThrottle!());
 
-    expect(cb).not.toHaveBeenCalled();
-  });
+      act(() => {
+        result.current.scheduleUpdate({}, {}, cb);
+      });
+      act(() => {
+        result.current.flushUpdate();
+      });
 
-  it('flushUpdate fires the pending callback synchronously', () => {
-    const cb = jest.fn();
-    const { result } = renderHook(() => useRAFThrottle!());
+      expect(cb).toHaveBeenCalledTimes(1);
+    });
 
-    act(() => { result.current.scheduleUpdate({}, {}, cb); });
-    act(() => { result.current.flushUpdate(); });
+    it('cleanup() after flushUpdate() does not throw', () => {
+      const { result } = renderHook(() => useRAFThrottle!());
+      act(() => {
+        result.current.scheduleUpdate({}, {}, jest.fn());
+      });
+      act(() => {
+        result.current.flushUpdate();
+      });
+      expect(() => act(() => result.current.cleanup())).not.toThrow();
+    });
 
-    expect(cb).toHaveBeenCalledTimes(1);
-  });
-
-  it('cleanup() after flushUpdate() does not throw', () => {
-    const { result } = renderHook(() => useRAFThrottle!());
-    act(() => { result.current.scheduleUpdate({}, {}, jest.fn()); });
-    act(() => { result.current.flushUpdate(); });
-    expect(() => act(() => result.current.cleanup())).not.toThrow();
-  });
-
-  it('calling cleanup() with no pending RAF does not throw', () => {
-    const { result } = renderHook(() => useRAFThrottle!());
-    expect(() => act(() => result.current.cleanup())).not.toThrow();
-  });
-});
+    it('calling cleanup() with no pending RAF does not throw', () => {
+      const { result } = renderHook(() => useRAFThrottle!());
+      expect(() => act(() => result.current.cleanup())).not.toThrow();
+    });
+  }
+);

@@ -29,7 +29,17 @@ describe('RichTextEditor — Quill formats config', () => {
   });
 
   it('contains all expected base formats', () => {
-    const expected = ['bold', 'italic', 'underline', 'strike', 'link', 'header', 'list', 'blockquote', 'code-block'];
+    const expected = [
+      'bold',
+      'italic',
+      'underline',
+      'strike',
+      'link',
+      'header',
+      'list',
+      'blockquote',
+      'code-block'
+    ];
     expected.forEach((f) => expect(formats).toContain(f));
   });
 

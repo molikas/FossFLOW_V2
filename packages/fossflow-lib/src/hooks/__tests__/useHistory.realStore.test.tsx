@@ -23,9 +23,7 @@ import { useHistory } from '../useHistory';
 // ---------------------------------------------------------------------------
 const AllProviders = ({ children }: { children: React.ReactNode }) => (
   <ModelProvider>
-    <SceneProvider>
-      {children}
-    </SceneProvider>
+    <SceneProvider>{children}</SceneProvider>
   </ModelProvider>
 );
 
@@ -48,13 +46,19 @@ describe('modelStore history — real store', () => {
     const { result } = setupModelApi();
     const api = result.current;
 
-    act(() => { api.getState().actions.set({ title: 'Version A' }); });
-    act(() => { api.getState().actions.set({ title: 'Version B' }); });
+    act(() => {
+      api.getState().actions.set({ title: 'Version A' });
+    });
+    act(() => {
+      api.getState().actions.set({ title: 'Version B' });
+    });
 
     expect(api.getState().title).toBe('Version B');
     expect(api.getState().actions.canUndo()).toBe(true);
 
-    act(() => { api.getState().actions.undo(); });
+    act(() => {
+      api.getState().actions.undo();
+    });
     expect(api.getState().title).toBe('Version A');
   });
 
@@ -64,7 +68,9 @@ describe('modelStore history — real store', () => {
 
     expect(api.getState().actions.canUndo()).toBe(false);
 
-    act(() => { api.getState().actions.set({ title: 'Changed' }); });
+    act(() => {
+      api.getState().actions.set({ title: 'Changed' });
+    });
     expect(api.getState().actions.canUndo()).toBe(true);
   });
 
@@ -72,15 +78,23 @@ describe('modelStore history — real store', () => {
     const { result } = setupModelApi();
     const api = result.current;
 
-    act(() => { api.getState().actions.set({ title: 'A' }); });
-    act(() => { api.getState().actions.set({ title: 'B' }); });
-    act(() => { api.getState().actions.undo(); });
+    act(() => {
+      api.getState().actions.set({ title: 'A' });
+    });
+    act(() => {
+      api.getState().actions.set({ title: 'B' });
+    });
+    act(() => {
+      api.getState().actions.undo();
+    });
 
     // Now there's a future entry
     expect(api.getState().actions.canRedo()).toBe(true);
 
     // New mutation clears redo stack
-    act(() => { api.getState().actions.set({ title: 'C' }); });
+    act(() => {
+      api.getState().actions.set({ title: 'C' });
+    });
     expect(api.getState().actions.canRedo()).toBe(false);
   });
 
@@ -90,7 +104,9 @@ describe('modelStore history — real store', () => {
 
     // Trigger 51 mutations (each calls saveToHistory before the set)
     for (let i = 0; i < 51; i++) {
-      act(() => { api.getState().actions.set({ title: `Step ${i}` }); });
+      act(() => {
+        api.getState().actions.set({ title: `Step ${i}` });
+      });
     }
 
     // past should be capped at 50 (oldest entry was shifted off)
@@ -101,13 +117,21 @@ describe('modelStore history — real store', () => {
     const { result } = setupModelApi();
     const api = result.current;
 
-    act(() => { api.getState().actions.set({ title: 'First' }); });
-    act(() => { api.getState().actions.set({ title: 'Second' }); });
-    act(() => { api.getState().actions.undo(); });
+    act(() => {
+      api.getState().actions.set({ title: 'First' });
+    });
+    act(() => {
+      api.getState().actions.set({ title: 'Second' });
+    });
+    act(() => {
+      api.getState().actions.undo();
+    });
     expect(api.getState().title).toBe('First');
     expect(api.getState().actions.canRedo()).toBe(true);
 
-    act(() => { api.getState().actions.redo(); });
+    act(() => {
+      api.getState().actions.redo();
+    });
     expect(api.getState().title).toBe('Second');
     expect(api.getState().actions.canRedo()).toBe(false);
   });
@@ -152,12 +176,16 @@ describe('useHistory.transaction — real store', () => {
         // Outer transaction saves 1 checkpoint
         result.current.history.transaction(() => {
           // Nested — should NOT save another checkpoint
-          result.current.modelApi.getState().actions.set({ title: 'Nested' }, true);
+          result.current.modelApi
+            .getState()
+            .actions.set({ title: 'Nested' }, true);
         });
       });
     });
 
     // Still only 1 checkpoint saved (not 2)
-    expect(result.current.modelApi.getState().history.past.length).toBe(pastBefore + 1);
+    expect(result.current.modelApi.getState().history.past.length).toBe(
+      pastBefore + 1
+    );
   });
 });

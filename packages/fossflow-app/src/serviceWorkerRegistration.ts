@@ -15,7 +15,11 @@ export function register(config?: Config) {
   if ('serviceWorker' in navigator) {
     // Ensure PUBLIC_URL ends with slash for consistent path construction
     const publicUrlPath = process.env.PUBLIC_URL || '';
-    const basePath = publicUrlPath ? (publicUrlPath.endsWith('/') ? publicUrlPath : publicUrlPath + '/') : '/';
+    const basePath = publicUrlPath
+      ? publicUrlPath.endsWith('/')
+        ? publicUrlPath
+        : publicUrlPath + '/'
+      : '/';
 
     const publicUrl = new URL(basePath, window.location.href);
     if (publicUrl.origin !== window.location.origin) {
@@ -76,7 +80,7 @@ function registerValidSW(swUrl: string, config?: Config) {
 
 function checkValidServiceWorker(swUrl: string, config?: Config) {
   fetch(swUrl, {
-    headers: { 'Service-Worker': 'script' },
+    headers: { 'Service-Worker': 'script' }
   })
     .then((response) => {
       const contentType = response.headers.get('content-type');

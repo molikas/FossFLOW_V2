@@ -1,7 +1,11 @@
 import React, { useMemo } from 'react';
 import { useUiStateStore } from 'src/stores/uiStateStore';
 import { useScene } from 'src/hooks/useScene';
-import { getTilePosition, getAnchorTile, connectorPathTileToGlobal } from 'src/utils';
+import {
+  getTilePosition,
+  getAnchorTile,
+  connectorPathTileToGlobal
+} from 'src/utils';
 import { Coords } from 'src/types';
 
 // App accent color, matching the default connector/node palette
@@ -30,7 +34,8 @@ export const ConnectorAnchorOverlay = () => {
     return null;
   }, [mode, itemControls]);
 
-  const reconnectingAnchorId = mode.type === 'RECONNECT_ANCHOR' ? mode.anchorId : null;
+  const reconnectingAnchorId =
+    mode.type === 'RECONNECT_ANCHOR' ? mode.anchorId : null;
 
   const connector = useMemo(() => {
     if (!selectedId) return null;
@@ -55,7 +60,10 @@ export const ConnectorAnchorOverlay = () => {
             index === 0
               ? connector.path.tiles[0]
               : connector.path.tiles[connector.path.tiles.length - 1];
-          globalTile = connectorPathTileToGlobal(pathTile, connector.path.rectangle.from);
+          globalTile = connectorPathTileToGlobal(
+            pathTile,
+            connector.path.rectangle.from
+          );
         } else {
           globalTile = getAnchorTile(anchor, currentView);
         }
@@ -79,7 +87,9 @@ export const ConnectorAnchorOverlay = () => {
               boxShadow: isReconnecting
                 ? `0 0 0 0 rgba(165,184,243,0.55), 0 2px 8px rgba(0,0,0,0.18)`
                 : `0 1px 4px rgba(0,0,0,0.14), 0 0 0 1px rgba(255,255,255,0.6)`,
-              animation: isReconnecting ? 'fossflow-anchor-pulse 1.2s ease-out infinite' : 'none',
+              animation: isReconnecting
+                ? 'fossflow-anchor-pulse 1.2s ease-out infinite'
+                : 'none',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -89,31 +99,37 @@ export const ConnectorAnchorOverlay = () => {
             {/* Inner dot: filled for source, hollow ring for target, small square for waypoint */}
             {isEndpoint ? (
               isSource ? (
-                <div style={{
-                  width: INNER_RADIUS * 2,
-                  height: INNER_RADIUS * 2,
-                  borderRadius: '50%',
-                  backgroundColor: isReconnecting ? ACCENT_DARK : ACCENT,
-                  flexShrink: 0
-                }} />
+                <div
+                  style={{
+                    width: INNER_RADIUS * 2,
+                    height: INNER_RADIUS * 2,
+                    borderRadius: '50%',
+                    backgroundColor: isReconnecting ? ACCENT_DARK : ACCENT,
+                    flexShrink: 0
+                  }}
+                />
               ) : (
-                <div style={{
-                  width: INNER_RADIUS * 2,
-                  height: INNER_RADIUS * 2,
-                  borderRadius: '50%',
-                  border: `2px solid ${isReconnecting ? ACCENT_DARK : ACCENT}`,
-                  backgroundColor: 'transparent',
-                  flexShrink: 0
-                }} />
+                <div
+                  style={{
+                    width: INNER_RADIUS * 2,
+                    height: INNER_RADIUS * 2,
+                    borderRadius: '50%',
+                    border: `2px solid ${isReconnecting ? ACCENT_DARK : ACCENT}`,
+                    backgroundColor: 'transparent',
+                    flexShrink: 0
+                  }}
+                />
               )
             ) : (
-              <div style={{
-                width: 5,
-                height: 5,
-                borderRadius: 1,
-                backgroundColor: 'rgba(0,0,0,0.25)',
-                flexShrink: 0
-              }} />
+              <div
+                style={{
+                  width: 5,
+                  height: 5,
+                  borderRadius: 1,
+                  backgroundColor: 'rgba(0,0,0,0.25)',
+                  flexShrink: 0
+                }}
+              />
             )}
           </div>
         );

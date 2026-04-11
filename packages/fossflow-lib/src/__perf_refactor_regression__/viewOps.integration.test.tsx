@@ -48,12 +48,28 @@ jest.mock('src/stores/reducers/textBox', () => ({
 // Helpers
 // ---------------------------------------------------------------------------
 function makeView(id: string, name: string, extra = {}) {
-  return { id, name, items: [], connectors: [], rectangles: [], textBoxes: [], ...extra };
+  return {
+    id,
+    name,
+    items: [],
+    connectors: [],
+    rectangles: [],
+    textBoxes: [],
+    ...extra
+  };
 }
 
 function makeState(views: any[]): State {
   return {
-    model: { version: '1.0', title: 'Test', description: '', colors: [], icons: [], items: [], views },
+    model: {
+      version: '1.0',
+      title: 'Test',
+      description: '',
+      colors: [],
+      icons: [],
+      items: [],
+      views
+    },
     scene: INITIAL_SCENE_STATE as any
   };
 }
@@ -106,7 +122,9 @@ describe('View operations integration — C-2 regression', () => {
     });
 
     it('does not change any other view property when renaming', () => {
-      const state = makeState([makeView('v1', 'View', { description: 'desc' })]);
+      const state = makeState([
+        makeView('v1', 'View', { description: 'desc' })
+      ]);
       const result = updateView({ name: 'Renamed' }, ctx(state, 'v1'));
       expect((result.model.views[0] as any).description).toBe('desc');
     });
@@ -125,7 +143,9 @@ describe('View operations integration — C-2 regression', () => {
 
     it('throws when the view id does not exist', () => {
       const state = makeState([makeView('v1', 'View')]);
-      expect(() => updateView({ name: 'X' }, ctx(state, 'nonexistent'))).toThrow();
+      expect(() =>
+        updateView({ name: 'X' }, ctx(state, 'nonexistent'))
+      ).toThrow();
     });
 
     it('returned state is a new object (Immer immutability)', () => {
@@ -149,7 +169,11 @@ describe('View operations integration — C-2 regression', () => {
     });
 
     it('does not affect remaining views', () => {
-      const state = makeState([makeView('v1', 'V1'), makeView('v2', 'V2'), makeView('v3', 'V3')]);
+      const state = makeState([
+        makeView('v1', 'V1'),
+        makeView('v2', 'V2'),
+        makeView('v3', 'V3')
+      ]);
       const result = deleteView(ctx(state, 'v2'));
       expect(result.model.views.map((v: any) => v.id)).toEqual(['v1', 'v3']);
     });
@@ -178,7 +202,10 @@ describe('View operations integration — C-2 regression', () => {
       expect(afterCreate.model.views).toHaveLength(2);
 
       // Rename
-      const afterRename = updateView({ name: 'Renamed View 2' }, ctx(afterCreate, 'v2'));
+      const afterRename = updateView(
+        { name: 'Renamed View 2' },
+        ctx(afterCreate, 'v2')
+      );
       expect(afterRename.model.views[1].name).toBe('Renamed View 2');
       expect(afterRename.model.views[0].name).toBe('View 1'); // untouched
 

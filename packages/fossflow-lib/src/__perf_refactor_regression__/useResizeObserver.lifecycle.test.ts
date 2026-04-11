@@ -41,8 +41,14 @@ class MockResizeObserver {
   // on every currently-observed element before invoking the callback.
   fire(width: number, height: number) {
     this.observedElements.forEach((el) => {
-      Object.defineProperty(el, 'clientWidth',  { value: width,  configurable: true });
-      Object.defineProperty(el, 'clientHeight', { value: height, configurable: true });
+      Object.defineProperty(el, 'clientWidth', {
+        value: width,
+        configurable: true
+      });
+      Object.defineProperty(el, 'clientHeight', {
+        value: height,
+        configurable: true
+      });
     });
     this.callback([
       { contentRect: { width, height } } as unknown as ResizeObserverEntry
@@ -94,7 +100,8 @@ describe('useResizeObserver — H-2 regression', () => {
     // The first observer must have been disconnected
     expect(firstObserver.observedElements).toHaveLength(0);
     // A new observer watches the new element
-    const latestObserver = MockResizeObserver.instances[MockResizeObserver.instances.length - 1];
+    const latestObserver =
+      MockResizeObserver.instances[MockResizeObserver.instances.length - 1];
     expect(latestObserver.observedElements).toContain(el2);
   });
 
@@ -116,8 +123,12 @@ describe('useResizeObserver — H-2 regression', () => {
     const el = document.createElement('div');
     const { result } = renderHook(() => useResizeObserver(el));
 
-    act(() => { MockResizeObserver.instances[0].fire(640, 480); });
-    act(() => { MockResizeObserver.instances[0].fire(1280, 720); });
+    act(() => {
+      MockResizeObserver.instances[0].fire(640, 480);
+    });
+    act(() => {
+      MockResizeObserver.instances[0].fire(1280, 720);
+    });
 
     expect(result.current.size).toEqual({ width: 1280, height: 720 });
   });
@@ -126,7 +137,9 @@ describe('useResizeObserver — H-2 regression', () => {
     const el = document.createElement('div');
     const { result } = renderHook(() => useResizeObserver(el));
 
-    act(() => { MockResizeObserver.instances[0].fire(100, 200); });
+    act(() => {
+      MockResizeObserver.instances[0].fire(100, 200);
+    });
 
     expect(result.current.size.width).toBe(100);
     expect(result.current.size.height).toBe(200);
@@ -147,14 +160,18 @@ describe('useResizeObserver — H-2 regression', () => {
 
   it('does not update size after unmount (no setState on unmounted hook)', () => {
     const el = document.createElement('div');
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
     const { result, unmount } = renderHook(() => useResizeObserver(el));
 
     const observer = MockResizeObserver.instances[0];
     unmount();
 
     // Fire after unmount — should not trigger a React setState warning
-    act(() => { observer.fire(999, 999); });
+    act(() => {
+      observer.fire(999, 999);
+    });
 
     // size should not have changed from its last value before unmount
     expect(result.current.size).toEqual({ width: 0, height: 0 });

@@ -54,15 +54,24 @@ export const transformToCompactFormat = (model: Model) => {
 
   const compactViews = views.map((view) => {
     const positions = view.items.map((viewItem) => {
-      const itemIndex = items.findIndex(item => item.id === viewItem.id);
+      const itemIndex = items.findIndex((item) => item.id === viewItem.id);
       return [itemIndex, viewItem.tile.x, viewItem.tile.y];
     });
 
-    const connections = view.connectors?.map((connector) => {
-      const fromIndex = items.findIndex(item => item.id === connector.anchors[0]?.ref.item);
-      const toIndex = items.findIndex(item => item.id === connector.anchors[connector.anchors.length - 1]?.ref.item);
-      return [fromIndex, toIndex];
-    }).filter(conn => conn[0] !== -1 && conn[1] !== -1) || [];
+    const connections =
+      view.connectors
+        ?.map((connector) => {
+          const fromIndex = items.findIndex(
+            (item) => item.id === connector.anchors[0]?.ref.item
+          );
+          const toIndex = items.findIndex(
+            (item) =>
+              item.id ===
+              connector.anchors[connector.anchors.length - 1]?.ref.item
+          );
+          return [fromIndex, toIndex];
+        })
+        .filter((conn) => conn[0] !== -1 && conn[1] !== -1) || [];
 
     return [positions, connections];
   });
@@ -92,10 +101,12 @@ export const transformFromCompactFormat = (compactModel: any): Model => {
     if (item[1]) iconSet.add(item[1]);
   });
 
-  const fullIcons = Array.from(iconSet).map(iconName => {
+  const fullIcons = Array.from(iconSet).map((iconName) => {
     // Find the icon in the available icons library
-    const existingIcon = availableIcons.find(icon => icon.id === iconName || icon.name === iconName);
-    
+    const existingIcon = availableIcons.find(
+      (icon) => icon.id === iconName || icon.name === iconName
+    );
+
     if (existingIcon) {
       // Use the existing icon data with proper URL
       return {
@@ -134,8 +145,14 @@ export const transformFromCompactFormat = (compactModel: any): Model => {
         id: `conn_${viewIndex}_${connIndex}`,
         color: 'color1',
         anchors: [
-          { id: `a_${viewIndex}_${connIndex}_0`, ref: { item: `item_${fromIndex}` } },
-          { id: `a_${viewIndex}_${connIndex}_1`, ref: { item: `item_${toIndex}` } }
+          {
+            id: `a_${viewIndex}_${connIndex}_0`,
+            ref: { item: `item_${fromIndex}` }
+          },
+          {
+            id: `a_${viewIndex}_${connIndex}_1`,
+            ref: { item: `item_${toIndex}` }
+          }
         ],
         width: 10,
         description: '',
@@ -198,10 +215,13 @@ export const exportAsImage = async (
     bgcolor,
     quality: 1.0,
     // Apply CSS transform for high-quality scaling
-    style: scale !== 1 ? {
-      transform: `scale(${scale})`,
-      transformOrigin: 'top left'
-    } : undefined
+    style:
+      scale !== 1
+        ? {
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left'
+          }
+        : undefined
   };
 
   try {

@@ -21,7 +21,13 @@ export const useTextBoxProps = (textBox: TextBox) => {
       lineHeight: 1,
       '& p': { margin: 0, padding: 0 }
     };
-  }, [textBox.fontSize, textBox.isBold, textBox.isItalic, textBox.isUnderline, textBox.color]);
+  }, [
+    textBox.fontSize,
+    textBox.isBold,
+    textBox.isItalic,
+    textBox.isUnderline,
+    textBox.color
+  ]);
 
   const paddingX = useMemo(() => {
     return UNPROJECTED_TILE_SIZE * TEXTBOX_PADDING;

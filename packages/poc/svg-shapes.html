@@ -1,0 +1,117 @@
+cylinder, cone, cube, sphere, tetrahedron, square pyramid, hexagonal pyramid, octahedron, dodecahedron, rectangular prism, pentagramix prism, triangular prism, hemisphere, pentagonal prism, hexagonal prism, icosahedron, ellipsoid
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Isometric Shapes (Clean)</title>
+<style>
+  body {
+    background: #f5f5f5;
+    font-family: Arial;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    padding: 20px;
+  }
+
+  .shape {
+    width: 150px;
+    text-align: center;
+  }
+
+  svg {
+    width: 140px;
+    height: 140px;
+  }
+
+  .label {
+    font-size: 12px;
+    margin-top: 6px;
+  }
+
+  /* Material-like shading */
+  .top    { fill: #90caf9; }
+  .left   { fill: #42a5f5; }
+  .right  { fill: #1e88e5; }
+
+  .edge {
+    stroke: #0d47a1;
+    stroke-width: 1.2;
+    fill-opacity: 1;
+  }
+
+  .wire {
+    fill: none;
+    stroke: #0d47a1;
+    stroke-width: 1;
+    opacity: 0.6;
+  }
+</style>
+</head>
+<body>
+
+<!-- CUBE -->
+<div class="shape">
+<svg viewBox="0 0 120 120">
+  <polygon points="60,20 100,40 60,60 20,40" class="top edge"/>
+  <polygon points="20,40 60,60 60,100 20,80" class="left edge"/>
+  <polygon points="100,40 60,60 60,100 100,80" class="right edge"/>
+</svg>
+<div class="label">Cube</div>
+</div>
+
+<!-- CYLINDER -->
+<div class="shape">
+<svg viewBox="0 0 120 120">
+  <rect x="30" y="35" width="60" height="45" class="left edge"/>
+  <ellipse cx="60" cy="80" rx="30" ry="12" class="right edge"/>
+  <ellipse cx="60" cy="35" rx="30" ry="12" class="top edge"/>
+</svg>
+<div class="label">Cylinder</div>
+</div>
+
+<!-- CONE -->
+<div class="shape">
+<svg viewBox="0 0 120 120">
+  <polygon points="60,25 30,85 90,85" class="left edge"/>
+  <ellipse cx="60" cy="85" rx="30" ry="10" class="right edge"/>
+</svg>
+<div class="label">Cone</div>
+</div>
+
+<!-- HEXAGONAL PRISM (fixed proportions) -->
+<div class="shape">
+<svg viewBox="0 0 120 120">
+  <polygon points="40,25 80,25 100,45 80,65 40,65 20,45" class="top edge"/>
+  <polygon points="20,45 40,65 40,100 20,80" class="left edge"/>
+  <polygon points="100,45 80,65 80,100 100,80" class="right edge"/>
+  <polygon points="40,65 80,65 80,100 40,100" class="left edge"/>
+</svg>
+<div class="label">Hexagonal Prism</div>
+</div>
+
+<!-- TETRAHEDRON (pointing down) -->
+<div class="shape">
+<svg viewBox="0 0 120 120">
+  <polygon points="60,95 30,40 90,40" class="top edge"/>
+  <polygon points="60,95 30,40 60,65" class="left edge"/>
+  <polygon points="60,95 90,40 60,65" class="right edge"/>
+</svg>
+<div class="label">Tetrahedron</div>
+</div>
+
+
+<!-- SPHERE -->
+<div class="shape">
+<svg viewBox="0 0 120 120">
+  <circle cx="60" cy="60" r="30" fill="#42a5f5" stroke="#0d47a1"/>
+  <ellipse cx="60" cy="60" rx="30" ry="10" class="wire"/>
+  <ellipse cx="60" cy="60" rx="12" ry="30" class="wire"/>
+</svg>
+<div class="label">Sphere</div>
+</div>
+
+
+</body>
+</html>

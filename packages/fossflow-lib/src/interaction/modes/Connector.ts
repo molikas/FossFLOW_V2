@@ -25,14 +25,17 @@ export const Connector: ModeActions = {
 
     // TypeScript type guard - we know mode is CONNECTOR type here
     const connectorMode = uiState.mode;
-    
+
     // Only update connector position in drag mode or when connecting in click mode
-    if (uiState.connectorInteractionMode === 'drag' || connectorMode.isConnecting) {
+    if (
+      uiState.connectorInteractionMode === 'drag' ||
+      connectorMode.isConnecting
+    ) {
       // Try to find the connector - it might not exist yet
       const connectorItem = (scene.currentView.connectors ?? []).find(
-        c => c.id === connectorMode.id
+        (c) => c.id === connectorMode.id
       );
-      
+
       // If connector doesn't exist yet, return early
       if (!connectorItem) {
         return;
@@ -73,9 +76,10 @@ export const Connector: ModeActions = {
       // Click mode: handle first and second clicks
       if (!uiState.mode.startAnchor) {
         // First click: store the start position
-        const startAnchor = itemAtTile?.type === 'ITEM' 
-          ? { itemId: itemAtTile.id }
-          : { tile: uiState.mouse.position.tile };
+        const startAnchor =
+          itemAtTile?.type === 'ITEM'
+            ? { itemId: itemAtTile.id }
+            : { tile: uiState.mouse.position.tile };
 
         // Create a connector but don't finalize it yet
         const newConnector: ConnectorI = {
@@ -104,7 +108,10 @@ export const Connector: ModeActions = {
           id: newConnector.id,
           startAnchor,
           isConnecting: true,
-          returnToCursor: uiState.mode.type === 'CONNECTOR' ? uiState.mode.returnToCursor : undefined
+          returnToCursor:
+            uiState.mode.type === 'CONNECTOR'
+              ? uiState.mode.returnToCursor
+              : undefined
         });
       } else {
         // Second click: complete the connection
@@ -113,9 +120,9 @@ export const Connector: ModeActions = {
         if (currentMode.id) {
           // Try to find the connector - it might not exist
           const connector = (scene.currentView.connectors ?? []).find(
-            c => c.id === currentMode.id
+            (c) => c.id === currentMode.id
           );
-          
+
           // If connector doesn't exist, reset mode and return
           if (!connector) {
             uiState.actions.setMode({
@@ -127,11 +134,14 @@ export const Connector: ModeActions = {
             });
             return;
           }
-          
+
           // Update the second anchor to the click position
           const newConnector = produce(connector, (draft) => {
             if (itemAtTile?.type === 'ITEM') {
-              draft.anchors[1] = { id: generateId(), ref: { item: itemAtTile.id } };
+              draft.anchors[1] = {
+                id: generateId(),
+                ref: { item: itemAtTile.id }
+              };
             } else {
               draft.anchors[1] = {
                 id: generateId(),
@@ -143,7 +153,11 @@ export const Connector: ModeActions = {
           scene.updateConnector(currentMode.id, newConnector);
 
           if (currentMode.returnToCursor) {
-            uiState.actions.setMode({ type: 'CURSOR', showCursor: true, mousedownItem: null });
+            uiState.actions.setMode({
+              type: 'CURSOR',
+              showCursor: true,
+              mousedownItem: null
+            });
           } else {
             uiState.actions.setMode({
               type: 'CONNECTOR',
@@ -190,7 +204,11 @@ export const Connector: ModeActions = {
     // Only handle mouseup for drag mode
     if (uiState.connectorInteractionMode === 'drag') {
       if (uiState.mode.type === 'CONNECTOR' && uiState.mode.returnToCursor) {
-        uiState.actions.setMode({ type: 'CURSOR', showCursor: true, mousedownItem: null });
+        uiState.actions.setMode({
+          type: 'CURSOR',
+          showCursor: true,
+          mousedownItem: null
+        });
       } else {
         uiState.actions.setMode({
           type: 'CONNECTOR',

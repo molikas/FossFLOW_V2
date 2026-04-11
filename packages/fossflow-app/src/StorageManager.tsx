@@ -6,7 +6,9 @@ interface StorageInfo {
   otherData: number;
 }
 
-export const StorageManager: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+export const StorageManager: React.FC<{ onClose: () => void }> = ({
+  onClose
+}) => {
   const [storageInfo, setStorageInfo] = useState<StorageInfo>({
     used: 0,
     diagrams: 0,
@@ -27,7 +29,7 @@ export const StorageManager: React.FC<{ onClose: () => void }> = ({ onClose }) =
       if (value) {
         const size = new Blob([value]).size;
         totalSize += size;
-        
+
         if (key.startsWith('fossflow-')) {
           diagramsSize += size;
         } else {
@@ -59,7 +61,7 @@ export const StorageManager: React.FC<{ onClose: () => void }> = ({ onClose }) =
           keysToRemove.push(key);
         }
       }
-      keysToRemove.forEach(key => localStorage.removeItem(key));
+      keysToRemove.forEach((key) => localStorage.removeItem(key));
       calculateStorage();
       alert('All diagrams cleared. Please reload the page.');
       window.location.reload();
@@ -82,44 +84,60 @@ export const StorageManager: React.FC<{ onClose: () => void }> = ({ onClose }) =
   const storagePercentage = (storageInfo.used / (5 * 1024 * 1024)) * 100; // Assume 5MB limit
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1001
-    }}>
-      <div style={{
-        backgroundColor: 'white',
-        padding: '30px',
-        borderRadius: '8px',
-        maxWidth: '500px',
-        width: '90%'
-      }}>
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1001
+      }}
+    >
+      <div
+        style={{
+          backgroundColor: 'white',
+          padding: '30px',
+          borderRadius: '8px',
+          maxWidth: '500px',
+          width: '90%'
+        }}
+      >
         <h2 style={{ marginTop: 0 }}>Storage Manager</h2>
-        
+
         <div style={{ marginBottom: '20px' }}>
           <h3>Storage Usage</h3>
-          <div style={{
-            backgroundColor: '#e0e0e0',
-            borderRadius: '4px',
-            height: '20px',
-            overflow: 'hidden',
-            marginBottom: '10px'
-          }}>
-            <div style={{
-              backgroundColor: storagePercentage > 80 ? '#f44336' : storagePercentage > 60 ? '#ff9800' : '#4caf50',
-              height: '100%',
-              width: `${Math.min(storagePercentage, 100)}%`,
-              transition: 'width 0.3s'
-            }} />
+          <div
+            style={{
+              backgroundColor: '#e0e0e0',
+              borderRadius: '4px',
+              height: '20px',
+              overflow: 'hidden',
+              marginBottom: '10px'
+            }}
+          >
+            <div
+              style={{
+                backgroundColor:
+                  storagePercentage > 80
+                    ? '#f44336'
+                    : storagePercentage > 60
+                      ? '#ff9800'
+                      : '#4caf50',
+                height: '100%',
+                width: `${Math.min(storagePercentage, 100)}%`,
+                transition: 'width 0.3s'
+              }}
+            />
           </div>
-          <p>Used: {formatBytes(storageInfo.used)} / ~5 MB ({storagePercentage.toFixed(1)}%)</p>
+          <p>
+            Used: {formatBytes(storageInfo.used)} / ~5 MB (
+            {storagePercentage.toFixed(1)}%)
+          </p>
           <ul style={{ fontSize: '14px' }}>
             <li>FossFLOW diagrams: {formatBytes(storageInfo.diagrams)}</li>
             <li>Other data: {formatBytes(storageInfo.otherData)}</li>
@@ -128,7 +146,7 @@ export const StorageManager: React.FC<{ onClose: () => void }> = ({ onClose }) =
 
         <div style={{ marginBottom: '20px' }}>
           <h3>Actions</h3>
-          <button 
+          <button
             onClick={exportAllDiagrams}
             style={{
               padding: '10px 20px',
@@ -142,7 +160,7 @@ export const StorageManager: React.FC<{ onClose: () => void }> = ({ onClose }) =
           >
             Export All Diagrams
           </button>
-          <button 
+          <button
             onClick={clearOldDiagrams}
             style={{
               padding: '10px 20px',
@@ -157,13 +175,15 @@ export const StorageManager: React.FC<{ onClose: () => void }> = ({ onClose }) =
           </button>
         </div>
 
-        <div style={{ 
-          backgroundColor: '#f8f9fa',
-          padding: '15px',
-          borderRadius: '4px',
-          marginBottom: '20px',
-          fontSize: '14px'
-        }}>
+        <div
+          style={{
+            backgroundColor: '#f8f9fa',
+            padding: '15px',
+            borderRadius: '4px',
+            marginBottom: '20px',
+            fontSize: '14px'
+          }}
+        >
           <strong>Tips to save space:</strong>
           <ul style={{ marginBottom: 0 }}>
             <li>Export diagrams you don't need immediately</li>
@@ -172,7 +192,7 @@ export const StorageManager: React.FC<{ onClose: () => void }> = ({ onClose }) =
           </ul>
         </div>
 
-        <button 
+        <button
           onClick={onClose}
           style={{
             padding: '10px 20px',

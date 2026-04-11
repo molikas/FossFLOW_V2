@@ -1,4 +1,7 @@
-import { findNearestUnoccupiedTile, findNearestUnoccupiedTilesForGroup } from '../findNearestUnoccupiedTile';
+import {
+  findNearestUnoccupiedTile,
+  findNearestUnoccupiedTilesForGroup
+} from '../findNearestUnoccupiedTile';
 
 // ---------------------------------------------------------------------------
 // Mock renderer (getItemAtTile used in findNearestUnoccupiedTile)
@@ -12,7 +15,9 @@ jest.mock('../renderer', () => ({
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-function makeScene(items: Array<{ id: string; tile: { x: number; y: number } }> = []) {
+function makeScene(
+  items: Array<{ id: string; tile: { x: number; y: number } }> = []
+) {
   return { items, textBoxes: [], connectors: [], rectangles: [] } as any;
 }
 
@@ -20,8 +25,10 @@ function makeScene(items: Array<{ id: string; tile: { x: number; y: number } }> 
  * Returns a mockGetItemAtTile implementation that returns an ITEM for any
  * tile occupied by one of the given items.
  */
-function occupyTiles(items: Array<{ id: string; tile: { x: number; y: number } }>) {
-  const map = new Map(items.map(i => [`${i.tile.x},${i.tile.y}`, i]));
+function occupyTiles(
+  items: Array<{ id: string; tile: { x: number; y: number } }>
+) {
+  const map = new Map(items.map((i) => [`${i.tile.x},${i.tile.y}`, i]));
   return ({ tile }: any) => {
     const item = map.get(`${tile.x},${tile.y}`);
     return item ? { type: 'ITEM', id: item.id } : null;
@@ -70,7 +77,11 @@ describe('findNearestUnoccupiedTile', () => {
     }
     mockGetItemAtTile.mockImplementation(occupyTiles(allTiles));
 
-    const result = findNearestUnoccupiedTile({ x: 5, y: 5 }, makeScene(allTiles), 1);
+    const result = findNearestUnoccupiedTile(
+      { x: 5, y: 5 },
+      makeScene(allTiles),
+      1
+    );
     expect(result).toBeNull();
   });
 
@@ -80,19 +91,26 @@ describe('findNearestUnoccupiedTile', () => {
     const ring1: typeof ring0 = [];
     for (let x = 4; x <= 6; x++) {
       for (let y = 4; y <= 6; y++) {
-        if (x !== 5 || y !== 5) ring1.push({ id: `r1-${x}-${y}`, tile: { x, y } });
+        if (x !== 5 || y !== 5)
+          ring1.push({ id: `r1-${x}-${y}`, tile: { x, y } });
       }
     }
     const allOccupied = [...ring0, ...ring1];
     mockGetItemAtTile.mockImplementation(occupyTiles(allOccupied));
 
     // maxDistance 1 → cannot find a free tile → null
-    expect(findNearestUnoccupiedTile({ x: 5, y: 5 }, makeScene(allOccupied), 1)).toBeNull();
+    expect(
+      findNearestUnoccupiedTile({ x: 5, y: 5 }, makeScene(allOccupied), 1)
+    ).toBeNull();
 
     // maxDistance 2 → finds a tile in the outer ring
     jest.clearAllMocks();
     mockGetItemAtTile.mockImplementation(occupyTiles(allOccupied));
-    const result = findNearestUnoccupiedTile({ x: 5, y: 5 }, makeScene(allOccupied), 2);
+    const result = findNearestUnoccupiedTile(
+      { x: 5, y: 5 },
+      makeScene(allOccupied),
+      2
+    );
     expect(result).not.toBeNull();
   });
 
@@ -100,7 +118,11 @@ describe('findNearestUnoccupiedTile', () => {
     const items = [{ id: 'n1', tile: { x: 5, y: 5 } }];
     mockGetItemAtTile.mockImplementation(occupyTiles(items));
 
-    const result = findNearestUnoccupiedTile({ x: 5, y: 5 }, makeScene(items), 3);
+    const result = findNearestUnoccupiedTile(
+      { x: 5, y: 5 },
+      makeScene(items),
+      3
+    );
     expect(result).not.toBeNull();
     const dx = Math.abs(result!.x - 5);
     const dy = Math.abs(result!.y - 5);
@@ -124,7 +146,10 @@ describe('findNearestUnoccupiedTilesForGroup', () => {
       { id: 'b', targetTile: { x: 3, y: 3 } }
     ];
     const result = findNearestUnoccupiedTilesForGroup(items, scene);
-    expect(result).toEqual([{ x: 1, y: 1 }, { x: 3, y: 3 }]);
+    expect(result).toEqual([
+      { x: 1, y: 1 },
+      { x: 3, y: 3 }
+    ]);
   });
 
   it('returns empty array for empty input', () => {
@@ -162,7 +187,8 @@ describe('findNearestUnoccupiedTilesForGroup', () => {
 
   it('returns null when cannot place all items within search distance', () => {
     // Fill a large area so no free tiles exist
-    const sceneItems: Array<{ id: string; tile: { x: number; y: number } }> = [];
+    const sceneItems: Array<{ id: string; tile: { x: number; y: number } }> =
+      [];
     for (let x = -15; x <= 25; x++) {
       for (let y = -15; y <= 25; y++) {
         sceneItems.push({ id: `n-${x}-${y}`, tile: { x, y } });

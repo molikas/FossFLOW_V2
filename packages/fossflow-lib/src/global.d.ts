@@ -36,6 +36,8 @@ declare module 'react-quill' {
     onKeyUp?: (event: React.KeyboardEvent) => void;
   }
 
-  const ReactQuill: React.ForwardRefExoticComponent<ReactQuillProps & React.RefAttributes<any>>;
+  const ReactQuill: React.ForwardRefExoticComponent<
+    ReactQuillProps & React.RefAttributes<any>
+  >;
   export default ReactQuill;
 }

@@ -35,7 +35,7 @@ describe('Connector render isolation — N-2/N-3 regression', () => {
   let connectorsSource: string;
 
   beforeAll(() => {
-    connectorSource  = fs.readFileSync(CONNECTOR_PATH,  'utf8');
+    connectorSource = fs.readFileSync(CONNECTOR_PATH, 'utf8');
     connectorsSource = fs.readFileSync(CONNECTORS_PATH, 'utf8');
   });
 
@@ -60,12 +60,16 @@ describe('Connector render isolation — N-2/N-3 regression', () => {
 
   it('Connector is exported as a React.memo component', () => {
     // memo() wrapping is visible as: export const Connector = memo(
-    const isMemo = /export\s+const\s+Connector\s*=\s*memo\s*\(/.test(connectorSource);
+    const isMemo = /export\s+const\s+Connector\s*=\s*memo\s*\(/.test(
+      connectorSource
+    );
     expect(isMemo).toBe(true);
   });
 
   it('Connectors is exported as a React.memo component', () => {
-    const isMemo = /export\s+const\s+Connectors\s*=\s*memo\s*\(/.test(connectorsSource);
+    const isMemo = /export\s+const\s+Connectors\s*=\s*memo\s*\(/.test(
+      connectorsSource
+    );
     expect(isMemo).toBe(true);
   });
 });

@@ -73,7 +73,9 @@ describe('useInteractionManager dep stability — M-1 regression', () => {
     );
     if (keydownEffectMatch) {
       const depArray = keydownEffectMatch[1];
-      expect(depArray).toMatch(/deleteSelectedItems|deleteViewItem|createTextBox/);
+      expect(depArray).toMatch(
+        /deleteSelectedItems|deleteViewItem|createTextBox/
+      );
     }
   });
 });

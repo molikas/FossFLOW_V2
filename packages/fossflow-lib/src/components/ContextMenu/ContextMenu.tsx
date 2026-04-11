@@ -12,11 +12,7 @@ interface Props {
   menuItems: MenuItemI[];
 }
 
-export const ContextMenu = ({
-  onClose,
-  anchorEl,
-  menuItems
-}: Props) => {
+export const ContextMenu = ({ onClose, anchorEl, menuItems }: Props) => {
   return (
     <Menu
       open={!!anchorEl}

@@ -1,4 +1,9 @@
-import { createView, updateView, deleteView, view as viewReducer } from '../view';
+import {
+  createView,
+  updateView,
+  deleteView,
+  view as viewReducer
+} from '../view';
 import { State, ViewReducerContext } from '../types';
 import { INITIAL_SCENE_STATE } from 'src/config';
 
@@ -97,20 +102,28 @@ describe('view reducer - updateView', () => {
 
   it('throws when view id does not exist', () => {
     const state = makeState([makeView('view1', 'View 1')]);
-    expect(() => updateView({ name: 'X' }, makeCtx(state, 'nonexistent'))).toThrow();
+    expect(() =>
+      updateView({ name: 'X' }, makeCtx(state, 'nonexistent'))
+    ).toThrow();
   });
 });
 
 describe('view reducer - deleteView', () => {
   it('removes the view with matching id', () => {
-    const state = makeState([makeView('view1', 'View 1'), makeView('view2', 'View 2')]);
+    const state = makeState([
+      makeView('view1', 'View 1'),
+      makeView('view2', 'View 2')
+    ]);
     const result = deleteView(makeCtx(state, 'view1'));
     expect(result.model.views).toHaveLength(1);
     expect(result.model.views[0].id).toBe('view2');
   });
 
   it('does not mutate original state', () => {
-    const state = makeState([makeView('view1', 'View 1'), makeView('view2', 'View 2')]);
+    const state = makeState([
+      makeView('view1', 'View 1'),
+      makeView('view2', 'View 2')
+    ]);
     deleteView(makeCtx(state, 'view1'));
     expect(state.model.views).toHaveLength(2);
   });

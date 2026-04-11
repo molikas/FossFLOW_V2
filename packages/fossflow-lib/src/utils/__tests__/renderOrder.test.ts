@@ -17,18 +17,20 @@ describe('resolveRenderOrder', () => {
 
   it('layer bucket dominates over zIndex and isoDepth', () => {
     const higher = resolveRenderOrder(2, 0, 0);
-    const lower  = resolveRenderOrder(1, 999, 999);
+    const lower = resolveRenderOrder(1, 999, 999);
     expect(higher).toBeGreaterThan(lower);
   });
 
   it('within same layer, explicit zIndex dominates over isoDepth', () => {
     const higher = resolveRenderOrder(0, 2, 0);
-    const lower  = resolveRenderOrder(0, 1, 999);
+    const lower = resolveRenderOrder(0, 1, 999);
     expect(higher).toBeGreaterThan(lower);
   });
 
   it('within same layer and zIndex, isoDepth acts as tiebreaker', () => {
-    expect(resolveRenderOrder(0, 0, 5)).toBeGreaterThan(resolveRenderOrder(0, 0, 4));
+    expect(resolveRenderOrder(0, 0, 5)).toBeGreaterThan(
+      resolveRenderOrder(0, 0, 4)
+    );
   });
 
   it('two items at same position produce identical order', () => {

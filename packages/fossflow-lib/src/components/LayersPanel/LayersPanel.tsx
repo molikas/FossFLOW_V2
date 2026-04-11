@@ -16,17 +16,27 @@ import { LayerRow } from './LayerRow';
 import { LayerItemRow } from './LayerItemRow';
 
 export const LayersPanel = () => {
-  const { layers, itemCountByLayerId, unassignedCount, itemsByLayerId } = useLayerContext();
-  const { createLayer, updateLayer, deleteLayer, reorderLayers, assignLayerToItems } = useLayerActions();
+  const { layers, itemCountByLayerId, unassignedCount, itemsByLayerId } =
+    useLayerContext();
+  const {
+    createLayer,
+    updateLayer,
+    deleteLayer,
+    reorderLayers,
+    assignLayerToItems
+  } = useLayerActions();
   const { updateModelItem } = useScene();
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
-  const [expandedLayerIds, setExpandedLayerIds] = useState<Set<string>>(new Set());
+  const [expandedLayerIds, setExpandedLayerIds] = useState<Set<string>>(
+    new Set()
+  );
 
   // Bidirectional: read current canvas selection
   const itemControls = useUiStateStore((s) => s.itemControls);
   const uiStateActions = useUiStateStore((s) => s.actions);
 
-  const selectedItemId = itemControls && itemControls.type !== 'ADD_ITEM' ? itemControls.id : null;
+  const selectedItemId =
+    itemControls && itemControls.type !== 'ADD_ITEM' ? itemControls.id : null;
 
   // Layers displayed top-to-bottom = highest order first
   const sortedLayers = [...layers].sort((a, b) => b.order - a.order);
@@ -113,12 +123,14 @@ export const LayersPanel = () => {
   }, []);
 
   const handleItemDragOverLayer = useCallback((layerId: string) => {
-    setItemDragState((s) => s ? { ...s, overLayerId: layerId } : null);
+    setItemDragState((s) => (s ? { ...s, overLayerId: layerId } : null));
   }, []);
 
   const handleItemDragEnd = useCallback(() => {
     if (itemDragState?.overLayerId) {
-      assignLayerToItems(itemDragState.overLayerId, [{ type: itemDragState.item.type, id: itemDragState.item.id }]);
+      assignLayerToItems(itemDragState.overLayerId, [
+        { type: itemDragState.item.type, id: itemDragState.item.id }
+      ]);
     }
     setItemDragState(null);
   }, [itemDragState, assignLayerToItems]);
@@ -136,7 +148,7 @@ export const LayersPanel = () => {
   const handleDragOver = useCallback(
     (layerId: string) => {
       if (dragState && dragState.dragId !== layerId) {
-        setDragState((s) => s ? { ...s, overId: layerId } : null);
+        setDragState((s) => (s ? { ...s, overId: layerId } : null));
       }
     },
     [dragState]
@@ -169,8 +181,14 @@ export const LayersPanel = () => {
         height: '100%',
         minHeight: 0
       }}
-      onMouseUp={() => { handleDragEnd(); handleItemDragEnd(); }}
-      onMouseLeave={() => { handleDragEnd(); handleItemDragEnd(); }}
+      onMouseUp={() => {
+        handleDragEnd();
+        handleItemDragEnd();
+      }}
+      onMouseLeave={() => {
+        handleDragEnd();
+        handleItemDragEnd();
+      }}
     >
       {/* Header */}
       <Stack
@@ -229,7 +247,11 @@ export const LayersPanel = () => {
                     if (itemDragState) handleItemDragOverLayer(layer.id);
                   }}
                   sx={{
-                    outline: (dragState?.overId === layer.id || itemDragState?.overLayerId === layer.id) ? '2px solid' : 'none',
+                    outline:
+                      dragState?.overId === layer.id ||
+                      itemDragState?.overLayerId === layer.id
+                        ? '2px solid'
+                        : 'none',
                     outlineColor: 'primary.main',
                     borderRadius: 1
                   }}
@@ -269,7 +291,6 @@ export const LayersPanel = () => {
                 </Box>
               );
             })}
-
           </>
         )}
 
@@ -279,7 +300,14 @@ export const LayersPanel = () => {
             <Typography
               variant="caption"
               color="text.disabled"
-              sx={{ display: 'block', px: 0.5, pt: 0.5, pb: 0.25, fontSize: '0.65rem', fontWeight: 600 }}
+              sx={{
+                display: 'block',
+                px: 0.5,
+                pt: 0.5,
+                pb: 0.25,
+                fontSize: '0.65rem',
+                fontWeight: 600
+              }}
             >
               UNASSIGNED ({unassignedCount})
             </Typography>

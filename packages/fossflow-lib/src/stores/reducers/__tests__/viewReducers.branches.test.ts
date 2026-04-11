@@ -71,7 +71,15 @@ function makeView(id: string, name = 'View') {
 
 function makeState(views: any[]): State {
   return {
-    model: { version: '1.0', title: 'T', description: '', colors: [], icons: [], items: [], views },
+    model: {
+      version: '1.0',
+      title: 'T',
+      description: '',
+      colors: [],
+      icons: [],
+      items: [],
+      views
+    },
     scene: INITIAL_SCENE_STATE as any
   };
 }
@@ -174,7 +182,9 @@ describe('view dispatcher — mutating actions set lastUpdated', () => {
     const newView = result.model.views[1];
     expect((newView as any).lastUpdated).toBeDefined();
     // Must be a valid ISO 8601 date
-    expect(() => new Date((newView as any).lastUpdated).toISOString()).not.toThrow();
+    expect(() =>
+      new Date((newView as any).lastUpdated).toISOString()
+    ).not.toThrow();
   });
 
   it('UPDATE_VIEW result has lastUpdated set', () => {
@@ -202,13 +212,15 @@ describe('syncScene', () => {
     const { syncConnector } = require('../connector');
     (syncConnector as jest.Mock).mockClear();
 
-    const state = makeState([{
-      ...makeView('v1'),
-      connectors: [
-        { id: 'c1', anchors: [], color: 'color-1' },
-        { id: 'c2', anchors: [], color: 'color-1' }
-      ]
-    }]);
+    const state = makeState([
+      {
+        ...makeView('v1'),
+        connectors: [
+          { id: 'c1', anchors: [], color: 'color-1' },
+          { id: 'c2', anchors: [], color: 'color-1' }
+        ]
+      }
+    ]);
     syncScene(makeCtx(state, 'v1'));
     expect(syncConnector).toHaveBeenCalledTimes(2);
   });
@@ -217,10 +229,12 @@ describe('syncScene', () => {
     const { syncTextBox } = require('../textBox');
     (syncTextBox as jest.Mock).mockClear();
 
-    const state = makeState([{
-      ...makeView('v1'),
-      textBoxes: [{ id: 'tb1' }, { id: 'tb2' }]
-    }]);
+    const state = makeState([
+      {
+        ...makeView('v1'),
+        textBoxes: [{ id: 'tb1' }, { id: 'tb2' }]
+      }
+    ]);
     syncScene(makeCtx(state, 'v1'));
     expect(syncTextBox).toHaveBeenCalledTimes(2);
   });

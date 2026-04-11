@@ -37,16 +37,15 @@ export const Pan: ModeActions = {
     if (uiState.editorMode === 'EXPLORABLE_READONLY') {
       const mousedownTile = uiState.mouse.mousedown?.tile;
       const currentTile = uiState.mouse.position.tile;
-      if (
-        mousedownTile &&
-        CoordsUtils.isEqual(mousedownTile, currentTile)
-      ) {
+      if (mousedownTile && CoordsUtils.isEqual(mousedownTile, currentTile)) {
         const item = getItemAtTile({ tile: currentTile, scene });
         if (item?.type === 'ITEM') {
           const modelItem = model.items.find((i) => i.id === item.id);
           const hasContent =
-            (!!modelItem?.description && modelItem.description.replace(/<[^>]*>/g, '').trim() !== '') ||
-            (!!modelItem?.notes && modelItem.notes.replace(/<[^>]*>/g, '').trim() !== '');
+            (!!modelItem?.description &&
+              modelItem.description.replace(/<[^>]*>/g, '').trim() !== '') ||
+            (!!modelItem?.notes &&
+              modelItem.notes.replace(/<[^>]*>/g, '').trim() !== '');
           if (hasContent) {
             uiState.actions.setItemControls({ type: 'ITEM', id: item.id });
           } else {

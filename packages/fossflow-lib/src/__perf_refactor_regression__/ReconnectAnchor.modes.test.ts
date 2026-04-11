@@ -68,12 +68,18 @@ describe('ReconnectAnchor.entry / exit', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('entry sets crosshair cursor', () => {
-    ReconnectAnchor.entry!({ uiState: makeUiState(), scene: makeScene() } as any);
+    ReconnectAnchor.entry!({
+      uiState: makeUiState(),
+      scene: makeScene()
+    } as any);
     expect(mockSetWindowCursor).toHaveBeenCalledWith('crosshair');
   });
 
   it('exit sets default cursor', () => {
-    ReconnectAnchor.exit!({ uiState: makeUiState(), scene: makeScene() } as any);
+    ReconnectAnchor.exit!({
+      uiState: makeUiState(),
+      scene: makeScene()
+    } as any);
     expect(mockSetWindowCursor).toHaveBeenCalledWith('default');
   });
 });
@@ -85,7 +91,9 @@ describe('ReconnectAnchor.mousemove guards', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('does nothing when mode type is not RECONNECT_ANCHOR', () => {
-    const uiState = makeUiState({ mode: { type: 'CURSOR', showCursor: true, mousedownItem: null } });
+    const uiState = makeUiState({
+      mode: { type: 'CURSOR', showCursor: true, mousedownItem: null }
+    });
     const scene = makeScene();
     ReconnectAnchor.mousemove!({ uiState, scene } as any);
     expect(scene.updateConnector).not.toHaveBeenCalled();
@@ -178,31 +186,56 @@ describe('ReconnectAnchor.mouseup', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('does nothing when mode type is not RECONNECT_ANCHOR', () => {
-    const uiState = makeUiState({ mode: { type: 'CURSOR', showCursor: true, mousedownItem: null } });
+    const uiState = makeUiState({
+      mode: { type: 'CURSOR', showCursor: true, mousedownItem: null }
+    });
     const actions = { setMode: jest.fn(), setItemControls: jest.fn() };
     uiState.actions = actions;
-    ReconnectAnchor.mouseup!({ uiState, scene: makeScene(), isRendererInteraction: true } as any);
+    ReconnectAnchor.mouseup!({
+      uiState,
+      scene: makeScene(),
+      isRendererInteraction: true
+    } as any);
     expect(actions.setMode).not.toHaveBeenCalled();
   });
 
   it('does nothing when isRendererInteraction is false', () => {
     const uiState = makeUiState();
-    ReconnectAnchor.mouseup!({ uiState, scene: makeScene(), isRendererInteraction: false } as any);
+    ReconnectAnchor.mouseup!({
+      uiState,
+      scene: makeScene(),
+      isRendererInteraction: false
+    } as any);
     expect(uiState.actions.setMode).not.toHaveBeenCalled();
     expect(uiState.actions.setItemControls).not.toHaveBeenCalled();
   });
 
   it('switches to CURSOR mode on mouseup', () => {
     const uiState = makeUiState();
-    ReconnectAnchor.mouseup!({ uiState, scene: makeScene(), isRendererInteraction: true } as any);
+    ReconnectAnchor.mouseup!({
+      uiState,
+      scene: makeScene(),
+      isRendererInteraction: true
+    } as any);
     expect(uiState.actions.setMode).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'CURSOR', showCursor: true, mousedownItem: null })
+      expect.objectContaining({
+        type: 'CURSOR',
+        showCursor: true,
+        mousedownItem: null
+      })
     );
   });
 
   it('keeps connector selected (setItemControls with connector id) on mouseup', () => {
     const uiState = makeUiState();
-    ReconnectAnchor.mouseup!({ uiState, scene: makeScene(), isRendererInteraction: true } as any);
-    expect(uiState.actions.setItemControls).toHaveBeenCalledWith({ type: 'CONNECTOR', id: 'conn-1' });
+    ReconnectAnchor.mouseup!({
+      uiState,
+      scene: makeScene(),
+      isRendererInteraction: true
+    } as any);
+    expect(uiState.actions.setItemControls).toHaveBeenCalledWith({
+      type: 'CONNECTOR',
+      id: 'conn-1'
+    });
   });
 });

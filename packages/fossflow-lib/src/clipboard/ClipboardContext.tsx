@@ -13,23 +13,34 @@ interface ClipboardContextValue {
 
 const ClipboardContext = createContext<ClipboardContextValue | null>(null);
 
-export const ClipboardProvider = ({ children }: { children: React.ReactNode }) => {
+export const ClipboardProvider = ({
+  children
+}: {
+  children: React.ReactNode;
+}) => {
   const clipboardRef = useRef<ClipboardPayload | null>(null);
 
   const value = useMemo<ClipboardContextValue>(
     () => ({
       get: () => clipboardRef.current,
-      set: (payload) => { clipboardRef.current = payload; },
+      set: (payload) => {
+        clipboardRef.current = payload;
+      },
       has: () => clipboardRef.current !== null
     }),
     []
   );
 
-  return <ClipboardContext.Provider value={value}>{children}</ClipboardContext.Provider>;
+  return (
+    <ClipboardContext.Provider value={value}>
+      {children}
+    </ClipboardContext.Provider>
+  );
 };
 
 export const useClipboard = (): ClipboardContextValue => {
   const ctx = useContext(ClipboardContext);
-  if (!ctx) throw new Error('useClipboard must be used inside <ClipboardProvider>');
+  if (!ctx)
+    throw new Error('useClipboard must be used inside <ClipboardProvider>');
   return ctx;
 };

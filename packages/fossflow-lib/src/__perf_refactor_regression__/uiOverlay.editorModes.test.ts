@@ -43,22 +43,30 @@ describe('UiOverlay editor mode mapping', () => {
 
     it('includes MAIN_MENU', () => expect(tools).toContain('MAIN_MENU'));
     it('includes TOOL_MENU', () => expect(tools).toContain('TOOL_MENU'));
-    it('includes ZOOM_CONTROLS', () => expect(tools).toContain('ZOOM_CONTROLS'));
-    it('includes ITEM_CONTROLS', () => expect(tools).toContain('ITEM_CONTROLS'));
+    it('includes ZOOM_CONTROLS', () =>
+      expect(tools).toContain('ZOOM_CONTROLS'));
+    it('includes ITEM_CONTROLS', () =>
+      expect(tools).toContain('ITEM_CONTROLS'));
     it('includes VIEW_TABS', () => expect(tools).toContain('VIEW_TABS'));
-    it('does NOT include VIEW_TITLE', () => expect(tools).not.toContain('VIEW_TITLE'));
+    it('does NOT include VIEW_TITLE', () =>
+      expect(tools).not.toContain('VIEW_TITLE'));
     it('contains exactly 5 tools', () => expect(tools).toHaveLength(5));
   });
 
   describe('EXPLORABLE_READONLY mode', () => {
     const tools = EDITOR_MODE_MAPPING[EditorModeEnum.EXPLORABLE_READONLY];
 
-    it('includes ZOOM_CONTROLS', () => expect(tools).toContain('ZOOM_CONTROLS'));
+    it('includes ZOOM_CONTROLS', () =>
+      expect(tools).toContain('ZOOM_CONTROLS'));
     it('includes VIEW_TITLE', () => expect(tools).toContain('VIEW_TITLE'));
-    it('does NOT include MAIN_MENU', () => expect(tools).not.toContain('MAIN_MENU'));
-    it('does NOT include TOOL_MENU', () => expect(tools).not.toContain('TOOL_MENU'));
-    it('does NOT include ITEM_CONTROLS', () => expect(tools).not.toContain('ITEM_CONTROLS'));
-    it('does NOT include VIEW_TABS', () => expect(tools).not.toContain('VIEW_TABS'));
+    it('does NOT include MAIN_MENU', () =>
+      expect(tools).not.toContain('MAIN_MENU'));
+    it('does NOT include TOOL_MENU', () =>
+      expect(tools).not.toContain('TOOL_MENU'));
+    it('does NOT include ITEM_CONTROLS', () =>
+      expect(tools).not.toContain('ITEM_CONTROLS'));
+    it('does NOT include VIEW_TABS', () =>
+      expect(tools).not.toContain('VIEW_TABS'));
     it('contains exactly 2 tools', () => expect(tools).toHaveLength(2));
   });
 
@@ -71,7 +79,9 @@ describe('UiOverlay editor mode mapping', () => {
   describe('invariants across all modes', () => {
     it('VIEW_TITLE and VIEW_TABS are never both present in the same mode', () => {
       Object.values(EDITOR_MODE_MAPPING).forEach((tools) => {
-        expect(tools.includes('VIEW_TITLE') && tools.includes('VIEW_TABS')).toBe(false);
+        expect(
+          tools.includes('VIEW_TITLE') && tools.includes('VIEW_TABS')
+        ).toBe(false);
       });
     });
 
@@ -92,7 +102,11 @@ describe('UiOverlay editor mode mapping', () => {
     });
 
     it('all three modes are defined and are arrays', () => {
-      [EditorModeEnum.EDITABLE, EditorModeEnum.EXPLORABLE_READONLY, EditorModeEnum.NON_INTERACTIVE].forEach((mode) => {
+      [
+        EditorModeEnum.EDITABLE,
+        EditorModeEnum.EXPLORABLE_READONLY,
+        EditorModeEnum.NON_INTERACTIVE
+      ].forEach((mode) => {
         expect(EDITOR_MODE_MAPPING[mode]).toBeDefined();
         expect(Array.isArray(EDITOR_MODE_MAPPING[mode])).toBe(true);
       });

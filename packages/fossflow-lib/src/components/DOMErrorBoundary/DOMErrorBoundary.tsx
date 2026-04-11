@@ -15,7 +15,10 @@ interface DOMErrorBoundaryState {
  * Error boundary that catches and handles DOM manipulation errors
  * such as "Failed to execute 'removeChild' on 'Node'"
  */
-class DOMErrorBoundary extends Component<DOMErrorBoundaryProps, DOMErrorBoundaryState> {
+class DOMErrorBoundary extends Component<
+  DOMErrorBoundaryProps,
+  DOMErrorBoundaryState
+> {
   constructor(props: DOMErrorBoundaryProps) {
     super(props);
     this.state = {
@@ -24,7 +27,9 @@ class DOMErrorBoundary extends Component<DOMErrorBoundaryProps, DOMErrorBoundary
     };
   }
 
-  static getDerivedStateFromError(error: Error): Partial<DOMErrorBoundaryState> | null {
+  static getDerivedStateFromError(
+    error: Error
+  ): Partial<DOMErrorBoundaryState> | null {
     // Check if this is a DOM manipulation error we're trying to handle
     if (
       error.message.includes('removeChild') ||
@@ -80,7 +85,10 @@ class DOMErrorBoundary extends Component<DOMErrorBoundaryProps, DOMErrorBoundary
     }
   }
 
-  componentDidUpdate(_prevProps: DOMErrorBoundaryProps, prevState: DOMErrorBoundaryState) {
+  componentDidUpdate(
+    _prevProps: DOMErrorBoundaryProps,
+    prevState: DOMErrorBoundaryState
+  ) {
     // Reset error state if we successfully rendered after an error
     if (prevState.hasError && !this.state.hasError) {
       this.setState({ errorCount: 0 });

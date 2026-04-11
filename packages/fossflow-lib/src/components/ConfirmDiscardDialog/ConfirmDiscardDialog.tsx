@@ -17,7 +17,12 @@ interface Props {
   onCancel: () => void;
 }
 
-export const ConfirmDiscardDialog = ({ open, onSave, onDiscard, onCancel }: Props) => {
+export const ConfirmDiscardDialog = ({
+  open,
+  onSave,
+  onDiscard,
+  onCancel
+}: Props) => {
   return (
     <Dialog open={open} onClose={onCancel} maxWidth="xs" fullWidth>
       <DialogTitle sx={{ pb: 1 }}>
@@ -31,7 +36,15 @@ export const ConfirmDiscardDialog = ({ open, onSave, onDiscard, onCancel }: Prop
           Your diagram has unsaved changes. What would you like to do?
         </Typography>
       </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2, gap: 1, flexDirection: 'column', alignItems: 'stretch' }}>
+      <DialogActions
+        sx={{
+          px: 3,
+          pb: 2,
+          gap: 1,
+          flexDirection: 'column',
+          alignItems: 'stretch'
+        }}
+      >
         <Button variant="contained" onClick={onSave} fullWidth>
           Save & continue
         </Button>

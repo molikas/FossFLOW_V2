@@ -6,10 +6,23 @@ describe('textBoxSchema', () => {
     expect(textBoxSchema.safeParse(valid).success).toBe(true);
   });
   it('accepts optional color field', () => {
-    expect(textBoxSchema.safeParse({ id: 'tb1', tile: { x: 0, y: 0 }, content: 'Text', color: '#ff0000' }).success).toBe(true);
+    expect(
+      textBoxSchema.safeParse({
+        id: 'tb1',
+        tile: { x: 0, y: 0 },
+        content: 'Text',
+        color: '#ff0000'
+      }).success
+    ).toBe(true);
   });
   it('color is optional — omitting it still passes', () => {
-    expect(textBoxSchema.safeParse({ id: 'tb1', tile: { x: 0, y: 0 }, content: 'Text' }).success).toBe(true);
+    expect(
+      textBoxSchema.safeParse({
+        id: 'tb1',
+        tile: { x: 0, y: 0 },
+        content: 'Text'
+      }).success
+    ).toBe(true);
   });
   it('fails if content is missing', () => {
     const invalid = { id: 'tb1', tile: { x: 0, y: 0 } };

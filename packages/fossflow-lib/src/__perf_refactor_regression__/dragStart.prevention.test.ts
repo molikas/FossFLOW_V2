@@ -22,7 +22,9 @@ describe('dragstart prevention — native drag regression', () => {
     // Should be on rendererEl
     expect(src).toMatch(/rendererEl\?\.addEventListener\(['"]dragstart['"]/);
     // Must NOT be on the bare window listener (el.addEventListener)
-    const windowDragStart = src.match(/\bel\.addEventListener\(['"]dragstart['"]/);
+    const windowDragStart = src.match(
+      /\bel\.addEventListener\(['"]dragstart['"]/
+    );
     expect(windowDragStart).toBeNull();
   });
 
@@ -31,7 +33,9 @@ describe('dragstart prevention — native drag regression', () => {
   });
 
   it('dragstart handler calls preventDefault', () => {
-    const handlerMatch = src.match(/const onDragStart\s*=\s*\(.*?\)\s*=>\s*\w+\.preventDefault\(\)/);
+    const handlerMatch = src.match(
+      /const onDragStart\s*=\s*\(.*?\)\s*=>\s*\w+\.preventDefault\(\)/
+    );
     expect(handlerMatch).not.toBeNull();
   });
 });

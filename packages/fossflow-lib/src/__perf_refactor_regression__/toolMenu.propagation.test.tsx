@@ -44,10 +44,7 @@ describe('ToolMenu — mousedown stopPropagation (fix A)', () => {
     window.addEventListener('mousedown', windowListener);
 
     const { getByTestId } = render(
-      <div
-        data-testid="toolbar-box"
-        onMouseDown={(e) => e.stopPropagation()}
-      >
+      <div data-testid="toolbar-box" onMouseDown={(e) => e.stopPropagation()}>
         <button data-testid="select-btn">Select</button>
       </div>
     );
@@ -81,8 +78,15 @@ describe('ToolMenu — mousedown stopPropagation (fix A)', () => {
 
 function makeUiState(overrides: any = {}) {
   return {
-    mode: overrides.mode ?? { type: 'LASSO', selection: null, isDragging: false },
-    mouse: overrides.mouse ?? { position: { tile: { x: 5, y: 5 } }, mousedown: null },
+    mode: overrides.mode ?? {
+      type: 'LASSO',
+      selection: null,
+      isDragging: false
+    },
+    mouse: overrides.mouse ?? {
+      position: { tile: { x: 5, y: 5 } },
+      mousedown: null
+    },
     actions: overrides.actions ?? { setMode: jest.fn() }
   };
 }
@@ -92,19 +96,33 @@ describe('Lasso.mousedown — isRendererInteraction guard (fix B, real module)',
 
   it('does NOT switch mode when isRendererInteraction is false (toolbar click)', () => {
     const uiState = makeUiState();
-    Lasso.mousedown!({ uiState, scene: { items: [], rectangles: [], textBoxes: [] }, isRendererInteraction: false } as any);
+    Lasso.mousedown!({
+      uiState,
+      scene: { items: [], rectangles: [], textBoxes: [] },
+      isRendererInteraction: false
+    } as any);
     expect(uiState.actions.setMode).not.toHaveBeenCalled();
   });
 
   it('does nothing on canvas click with no selection (lets mousemove build the box)', () => {
     const uiState = makeUiState();
-    Lasso.mousedown!({ uiState, scene: { items: [], rectangles: [], textBoxes: [] }, isRendererInteraction: true } as any);
+    Lasso.mousedown!({
+      uiState,
+      scene: { items: [], rectangles: [], textBoxes: [] },
+      isRendererInteraction: true
+    } as any);
     expect(uiState.actions.setMode).not.toHaveBeenCalled();
   });
 
   it('is a no-op when mode type is not LASSO even with renderer interaction', () => {
-    const uiState = makeUiState({ mode: { type: 'CURSOR', showCursor: true, mousedownItem: null } });
-    Lasso.mousedown!({ uiState, scene: { items: [], rectangles: [], textBoxes: [] }, isRendererInteraction: true } as any);
+    const uiState = makeUiState({
+      mode: { type: 'CURSOR', showCursor: true, mousedownItem: null }
+    });
+    Lasso.mousedown!({
+      uiState,
+      scene: { items: [], rectangles: [], textBoxes: [] },
+      isRendererInteraction: true
+    } as any);
     expect(uiState.actions.setMode).not.toHaveBeenCalled();
   });
 });

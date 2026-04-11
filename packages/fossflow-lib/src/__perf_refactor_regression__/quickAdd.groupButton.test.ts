@@ -16,8 +16,13 @@
 // Pure logic extracted from QuickAddNodePopover.handleAddRectangle
 // ---------------------------------------------------------------------------
 
-interface Tile { x: number; y: number }
-interface Color { id: string }
+interface Tile {
+  x: number;
+  y: number;
+}
+interface Color {
+  id: string;
+}
 
 function buildRectangleArgs(
   targetTile: Tile,
@@ -38,9 +43,18 @@ function buildRectangleArgs(
 // (verifies the node placement path is unaffected by Rectangle addition)
 // ---------------------------------------------------------------------------
 
-interface Icon { id: string }
-interface ModelItemArgs { id: string; name: string; icon: string }
-interface ViewItemArgs { id: string; tile: Tile }
+interface Icon {
+  id: string;
+}
+interface ModelItemArgs {
+  id: string;
+  name: string;
+  icon: string;
+}
+interface ViewItemArgs {
+  id: string;
+  tile: Tile;
+}
 
 function buildNodeArgs(
   targetTile: Tile,
@@ -86,7 +100,11 @@ describe('QuickAddNodePopover — Rectangle button logic', () => {
   });
 
   it('only uses colors[0] — does not iterate or randomise', () => {
-    const args1 = buildRectangleArgs(tile, [{ id: 'red' }, { id: 'blue' }], generateId);
+    const args1 = buildRectangleArgs(
+      tile,
+      [{ id: 'red' }, { id: 'blue' }],
+      generateId
+    );
     const args2 = buildRectangleArgs(tile, [{ id: 'green' }], generateId);
     expect(args1!.color).toBe('red');
     expect(args2!.color).toBe('green');
@@ -125,7 +143,9 @@ describe('Double-click disambiguation — context menu no longer fires on left-c
 
   it('canvasEmptyDblClick event carries tile and screen coords', () => {
     const received: any[] = [];
-    window.addEventListener('canvasEmptyDblClick', (e) => received.push((e as CustomEvent).detail));
+    window.addEventListener('canvasEmptyDblClick', (e) =>
+      received.push((e as CustomEvent).detail)
+    );
 
     window.dispatchEvent(
       new CustomEvent('canvasEmptyDblClick', {
@@ -134,7 +154,11 @@ describe('Double-click disambiguation — context menu no longer fires on left-c
     );
 
     expect(received).toHaveLength(1);
-    expect(received[0]).toEqual({ tile: { x: 4, y: 4 }, screenX: 200, screenY: 300 });
+    expect(received[0]).toEqual({
+      tile: { x: 4, y: 4 },
+      screenX: 200,
+      screenY: 300
+    });
 
     window.removeEventListener('canvasEmptyDblClick', () => {});
   });

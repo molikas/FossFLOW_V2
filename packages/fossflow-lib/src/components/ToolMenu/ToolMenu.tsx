@@ -32,8 +32,12 @@ export const ToolMenu = () => {
 
   const hotkeys = HOTKEY_PROFILES[hotkeyProfile];
 
-  const handleUndo = useCallback(() => { undo(); }, [undo]);
-  const handleRedo = useCallback(() => { redo(); }, [redo]);
+  const handleUndo = useCallback(() => {
+    undo();
+  }, [undo]);
+  const handleRedo = useCallback(() => {
+    redo();
+  }, [redo]);
 
   return (
     <UiElement>

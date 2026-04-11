@@ -31,12 +31,16 @@ describe('ExportImageDialog memo — H-3 regression', () => {
 
   it('ExportImageDialog is exported as a React.memo component', () => {
     // Must match: export const ExportImageDialog = memo(
-    const isMemo = /export\s+const\s+ExportImageDialog\s*=\s*memo\s*\(/.test(source);
+    const isMemo = /export\s+const\s+ExportImageDialog\s*=\s*memo\s*\(/.test(
+      source
+    );
     expect(isMemo).toBe(true);
   });
 
   it('memo is imported from react in ExportImageDialog', () => {
-    const importsMemo = /import\s+[^;]*\bmemo\b[^;]*from\s+['"]react['"]/.test(source);
+    const importsMemo = /import\s+[^;]*\bmemo\b[^;]*from\s+['"]react['"]/.test(
+      source
+    );
     expect(importsMemo).toBe(true);
   });
 });

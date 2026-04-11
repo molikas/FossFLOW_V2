@@ -25,7 +25,7 @@ export const syncConnector = (
   const newState = produce(state, (draft) => {
     const view = getItemByIdOrThrow(draft.model.views, viewId);
     const connector = getItemByIdOrThrow(view.value.connectors ?? [], id);
-    
+
     // Skip validation - allow all connectors regardless of position
     try {
       const path = getConnectorPath({
@@ -35,7 +35,10 @@ export const syncConnector = (
 
       draft.scene.connectors[connector.value.id] = { path };
     } catch (error) {
-      console.warn(`[fossflow] connector ${connector.value.id} could not be routed`, error);
+      console.warn(
+        `[fossflow] connector ${connector.value.id} could not be routed`,
+        error
+      );
       draft.scene.connectors[connector.value.id] = {
         path: {
           tiles: [],
@@ -98,7 +101,10 @@ export const createConnector = (
     if (skipPathfinding) {
       // Store a provisional empty path — will be computed asynchronously after paste.
       draft.scene.connectors[newConnector.id] = {
-        path: { tiles: [], rectangle: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } } }
+        path: {
+          tiles: [],
+          rectangle: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }
+        }
       };
     } else {
       const stateAfterSync = syncConnector(newConnector.id, {

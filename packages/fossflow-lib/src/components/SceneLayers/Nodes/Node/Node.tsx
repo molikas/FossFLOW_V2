@@ -1,9 +1,6 @@
 import React, { useMemo, memo } from 'react';
 import { Box, Typography, Stack } from '@mui/material';
-import {
-  PROJECTED_TILE_SIZE,
-  DEFAULT_LABEL_HEIGHT
-} from 'src/config';
+import { PROJECTED_TILE_SIZE, DEFAULT_LABEL_HEIGHT } from 'src/config';
 import { getTilePosition } from 'src/utils';
 import { useIcon } from 'src/hooks/useIcon';
 import { ViewItem } from 'src/types';
@@ -48,13 +45,13 @@ export const Node = memo(({ node, order }: Props) => {
       }}
     >
       <Box
-        sx={{ 
+        sx={{
           position: 'absolute',
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
           left: position.x,
-          top: position.y - (PROJECTED_TILE_SIZE.height / 2),
+          top: position.y - PROJECTED_TILE_SIZE.height / 2
         }}
       >
         {(modelItem?.name || description) && (
@@ -66,17 +63,27 @@ export const Node = memo(({ node, order }: Props) => {
             >
               <Stack spacing={1}>
                 {modelItem.name && (
-                  <Typography fontWeight={600} fontSize={node.labelFontSize ?? 14} color={node.labelColor || 'text.primary'}>
+                  <Typography
+                    fontWeight={600}
+                    fontSize={node.labelFontSize ?? 14}
+                    color={node.labelColor || 'text.primary'}
+                  >
                     {modelItem.headerLink ? (
                       <a
                         href="#"
                         data-testid="node-header-link"
-                        style={{ color: 'inherit', textDecoration: 'underline', cursor: 'pointer' }}
+                        style={{
+                          color: 'inherit',
+                          textDecoration: 'underline',
+                          cursor: 'pointer'
+                        }}
                         onMouseDown={(e) => e.stopPropagation()}
                         onClick={(e) => {
                           e.stopPropagation();
                           e.preventDefault();
-                          const url = /^https?:\/\//i.test(modelItem.headerLink!)
+                          const url = /^https?:\/\//i.test(
+                            modelItem.headerLink!
+                          )
                             ? modelItem.headerLink!
                             : `https://${modelItem.headerLink}`;
                           window.open(url, '_blank', 'noopener,noreferrer');
@@ -89,9 +96,7 @@ export const Node = memo(({ node, order }: Props) => {
                     )}
                   </Typography>
                 )}
-                {description && (
-                    <RichTextEditor value={description} readOnly />
-                  )}
+                {description && <RichTextEditor value={description} readOnly />}
               </Stack>
             </ExpandableLabel>
           </Box>
@@ -107,25 +112,26 @@ export const Node = memo(({ node, order }: Props) => {
             }}
           >
             {iconComponent}
-            {modelItem.notes && modelItem.notes.replace(/<[^>]*>/g, '').trim() && (
-              <Box
-                sx={{
-                  position: 'absolute',
-                  top: -6,
-                  right: -6,
-                  width: 14,
-                  height: 14,
-                  borderRadius: '50%',
-                  bgcolor: '#1565c0',
-                  border: '2px solid #fff',
-                  boxShadow: '0 1px 4px rgba(0,0,0,0.35)',
-                  pointerEvents: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              />
-            )}
+            {modelItem.notes &&
+              modelItem.notes.replace(/<[^>]*>/g, '').trim() && (
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: -6,
+                    right: -6,
+                    width: 14,
+                    height: 14,
+                    borderRadius: '50%',
+                    bgcolor: '#1565c0',
+                    border: '2px solid #fff',
+                    boxShadow: '0 1px 4px rgba(0,0,0,0.35)',
+                    pointerEvents: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                />
+              )}
           </Box>
         )}
       </Box>

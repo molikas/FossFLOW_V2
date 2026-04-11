@@ -63,7 +63,12 @@ const initialState = () => {
         const currentScene = extractSceneData(state);
         const [, redoPatches, redoInverse] = produceWithPatches(
           currentScene,
-          (draft: Scene) => { Object.assign(draft, applyPatches(currentScene, entry.inversePatches)); }
+          (draft: Scene) => {
+            Object.assign(
+              draft,
+              applyPatches(currentScene, entry.inversePatches)
+            );
+          }
         );
         const previousScene = applyPatches(currentScene, entry.inversePatches);
         return {
@@ -71,7 +76,10 @@ const initialState = () => {
           history: {
             ...state.history,
             past: newPast,
-            future: [{ patches: redoPatches, inversePatches: redoInverse }, ...state.history.future]
+            future: [
+              { patches: redoPatches, inversePatches: redoInverse },
+              ...state.history.future
+            ]
           }
         };
       });
@@ -90,14 +98,19 @@ const initialState = () => {
         const currentScene = extractSceneData(state);
         const [, undoPatches, undoInverse] = produceWithPatches(
           currentScene,
-          (draft: Scene) => { Object.assign(draft, applyPatches(currentScene, entry.patches)); }
+          (draft: Scene) => {
+            Object.assign(draft, applyPatches(currentScene, entry.patches));
+          }
         );
         const nextScene = applyPatches(currentScene, entry.patches);
         return {
           ...nextScene,
           history: {
             ...state.history,
-            past: [...state.history.past, { patches: undoPatches, inversePatches: undoInverse }],
+            past: [
+              ...state.history.past,
+              { patches: undoPatches, inversePatches: undoInverse }
+            ],
             future: newFuture
           }
         };
@@ -129,12 +142,19 @@ const initialState = () => {
             pendingPre = null;
             set((state) => {
               const next: Scene = { ...extractSceneData(state), ...updates };
-              const [, patches, inversePatches] = produceWithPatches(pre, (draft: Scene) => {
-                Object.assign(draft, next);
-              });
+              const [, patches, inversePatches] = produceWithPatches(
+                pre,
+                (draft: Scene) => {
+                  Object.assign(draft, next);
+                }
+              );
 
-              const newPast = [...state.history.past, { patches, inversePatches }];
-              if (newPast.length > state.history.maxHistorySize) newPast.shift();
+              const newPast = [
+                ...state.history.past,
+                { patches, inversePatches }
+              ];
+              if (newPast.length > state.history.maxHistorySize)
+                newPast.shift();
 
               return {
                 ...state,
@@ -161,14 +181,18 @@ const initialState = () => {
   });
 };
 
-const SceneContext = createContext<ReturnType<typeof initialState> | null>(null);
+const SceneContext = createContext<ReturnType<typeof initialState> | null>(
+  null
+);
 
 interface ProviderProps {
   children: React.ReactNode;
 }
 
 export const SceneProvider = ({ children }: ProviderProps) => {
-  const storeRef = useRef<ReturnType<typeof initialState> | undefined>(undefined);
+  const storeRef = useRef<ReturnType<typeof initialState> | undefined>(
+    undefined
+  );
 
   if (!storeRef.current) {
     storeRef.current = initialState();

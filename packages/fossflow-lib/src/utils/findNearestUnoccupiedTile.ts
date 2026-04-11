@@ -13,7 +13,9 @@ export const findNearestUnoccupiedTile = (
   maxDistance: number = 10
 ): Coords | null => {
   // Build a Set of all occupied item tiles once — O(N) upfront, O(1) per probe.
-  const occupiedTiles = new Set<string>(scene.items.map((i) => tileKey(i.tile)));
+  const occupiedTiles = new Set<string>(
+    scene.items.map((i) => tileKey(i.tile))
+  );
 
   if (!occupiedTiles.has(tileKey(targetTile))) {
     return targetTile;

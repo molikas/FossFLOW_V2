@@ -21,7 +21,9 @@ import { useTranslation } from 'src/stores/localeStore';
 
 export const HotkeySettings = () => {
   const hotkeyProfile = useUiStateStore((state) => state.hotkeyProfile);
-  const setHotkeyProfile = useUiStateStore((state) => state.actions.setHotkeyProfile);
+  const setHotkeyProfile = useUiStateStore(
+    (state) => state.actions.setHotkeyProfile
+  );
   const { t } = useTranslation();
 
   const currentMapping = HOTKEY_PROFILES[hotkeyProfile];
@@ -30,8 +32,14 @@ export const HotkeySettings = () => {
     { name: t('settings.hotkeys.toolSelect'), key: currentMapping.select },
     { name: t('settings.hotkeys.toolPan'), key: currentMapping.pan },
     { name: t('settings.hotkeys.toolAddItem'), key: currentMapping.addItem },
-    { name: t('settings.hotkeys.toolRectangle'), key: currentMapping.rectangle },
-    { name: t('settings.hotkeys.toolConnector'), key: currentMapping.connector },
+    {
+      name: t('settings.hotkeys.toolRectangle'),
+      key: currentMapping.rectangle
+    },
+    {
+      name: t('settings.hotkeys.toolConnector'),
+      key: currentMapping.connector
+    },
     { name: t('settings.hotkeys.toolText'), key: currentMapping.text }
   ];
 
@@ -48,21 +56,35 @@ export const HotkeySettings = () => {
           label={t('settings.hotkeys.profile')}
           onChange={(e) => setHotkeyProfile(e.target.value as HotkeyProfile)}
         >
-          <MenuItem value="qwerty">{t('settings.hotkeys.profileQwerty')}</MenuItem>
-          <MenuItem value="smnrct">{t('settings.hotkeys.profileSmnrct')}</MenuItem>
+          <MenuItem value="qwerty">
+            {t('settings.hotkeys.profileQwerty')}
+          </MenuItem>
+          <MenuItem value="smnrct">
+            {t('settings.hotkeys.profileSmnrct')}
+          </MenuItem>
           <MenuItem value="none">{t('settings.hotkeys.profileNone')}</MenuItem>
         </Select>
       </FormControl>
 
       {hotkeyProfile === 'smnrct' && (
-        <Typography variant="caption" color="text.secondary" sx={{ mb: 3, display: 'block' }}>
-          Keys S, M, N, R, C, T map to Select, Pan, Add item, Rectangle, Connector, Text —
-          designed for left-hand tool switching while the right hand stays on the mouse.
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ mb: 3, display: 'block' }}
+        >
+          Keys S, M, N, R, C, T map to Select, Pan, Add item, Rectangle,
+          Connector, Text — designed for left-hand tool switching while the
+          right hand stays on the mouse.
         </Typography>
       )}
       {hotkeyProfile === 'none' && (
-        <Typography variant="caption" color="text.secondary" sx={{ mb: 3, display: 'block' }}>
-          All tool hotkeys are disabled. Use the toolbar buttons to switch tools.
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ mb: 3, display: 'block' }}
+        >
+          All tool hotkeys are disabled. Use the toolbar buttons to switch
+          tools.
         </Typography>
       )}
       {hotkeyProfile === 'qwerty' && <Box sx={{ mb: 3 }} />}
@@ -81,7 +103,10 @@ export const HotkeySettings = () => {
                 <TableRow key={tool.name}>
                   <TableCell>{tool.name}</TableCell>
                   <TableCell>
-                    <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                    <Typography
+                      variant="body2"
+                      sx={{ fontFamily: 'monospace' }}
+                    >
                       {tool.key ? tool.key.toUpperCase() : '-'}
                     </Typography>
                   </TableCell>
@@ -92,7 +117,11 @@ export const HotkeySettings = () => {
         </TableContainer>
       )}
 
-      <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{ mt: 2, display: 'block' }}
+      >
         {t('settings.hotkeys.note')}
       </Typography>
 
@@ -109,11 +138,26 @@ export const HotkeySettings = () => {
           </TableHead>
           <TableBody>
             {[
-              { name: t('settings.hotkeys.fixedCut'), key: FIXED_SHORTCUTS.cut },
-              { name: t('settings.hotkeys.fixedCopy'), key: FIXED_SHORTCUTS.copy },
-              { name: t('settings.hotkeys.fixedPaste'), key: FIXED_SHORTCUTS.paste },
-              { name: t('settings.hotkeys.fixedUndo'), key: FIXED_SHORTCUTS.undo },
-              { name: t('settings.hotkeys.fixedRedo'), key: `${FIXED_SHORTCUTS.redo} / ${FIXED_SHORTCUTS.redoAlt}` }
+              {
+                name: t('settings.hotkeys.fixedCut'),
+                key: FIXED_SHORTCUTS.cut
+              },
+              {
+                name: t('settings.hotkeys.fixedCopy'),
+                key: FIXED_SHORTCUTS.copy
+              },
+              {
+                name: t('settings.hotkeys.fixedPaste'),
+                key: FIXED_SHORTCUTS.paste
+              },
+              {
+                name: t('settings.hotkeys.fixedUndo'),
+                key: FIXED_SHORTCUTS.undo
+              },
+              {
+                name: t('settings.hotkeys.fixedRedo'),
+                key: `${FIXED_SHORTCUTS.redo} / ${FIXED_SHORTCUTS.redoAlt}`
+              }
             ].map((item) => (
               <TableRow key={item.name}>
                 <TableCell>{item.name}</TableCell>

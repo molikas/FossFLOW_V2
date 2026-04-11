@@ -47,7 +47,8 @@ const DEFAULT_CONTEXT: LayerContextValue = {
 export const LayerContext = createContext<LayerContextValue>(DEFAULT_CONTEXT);
 
 /** Read the current layer context. Use inside any Renderer subtree. */
-export const useLayerContext = (): LayerContextValue => useContext(LayerContext);
+export const useLayerContext = (): LayerContextValue =>
+  useContext(LayerContext);
 
 // ---------------------------------------------------------------------------
 // Provider
@@ -59,10 +60,17 @@ interface LayerContextProviderProps {
 
 /** Strip HTML tags and return first N chars of plain text. */
 const stripHtml = (html: string, maxLen = 24): string => {
-  return html.replace(/<[^>]*>/g, '').trim().slice(0, maxLen) || '(empty)';
+  return (
+    html
+      .replace(/<[^>]*>/g, '')
+      .trim()
+      .slice(0, maxLen) || '(empty)'
+  );
 };
 
-export const LayerContextProvider = ({ children }: LayerContextProviderProps) => {
+export const LayerContextProvider = ({
+  children
+}: LayerContextProviderProps) => {
   const currentViewId = useUiStateStore((state) => state.view);
   const views = useModelStore((state) => state.views, shallow);
   const modelItems = useModelStore((state) => state.items, shallow);
@@ -109,7 +117,12 @@ export const LayerContextProvider = ({ children }: LayerContextProviderProps) =>
     };
 
     const processEntity = (
-      entity: { id: string; layerId?: string; label?: string; content?: string },
+      entity: {
+        id: string;
+        layerId?: string;
+        label?: string;
+        content?: string;
+      },
       type: LayerItemType,
       nameOverride?: string
     ) => {
@@ -117,7 +130,10 @@ export const LayerContextProvider = ({ children }: LayerContextProviderProps) =>
       if (!layer || layer.visible) visibleIds.add(entity.id);
       if (layer?.locked) lockedIds.add(entity.id);
 
-      const key = entity.layerId && layerById.has(entity.layerId) ? entity.layerId : UNASSIGNED;
+      const key =
+        entity.layerId && layerById.has(entity.layerId)
+          ? entity.layerId
+          : UNASSIGNED;
 
       if (key !== UNASSIGNED) {
         itemCountByLayerId.set(key, (itemCountByLayerId.get(key) ?? 0) + 1);
@@ -145,11 +161,22 @@ export const LayerContextProvider = ({ children }: LayerContextProviderProps) =>
       const name = modelItemNameById.get(item.id) ?? 'Untitled';
       processEntity(item, 'ITEM', name);
     });
-    (currentView.connectors ?? []).forEach((c) => processEntity(c, 'CONNECTOR'));
-    (currentView.rectangles ?? []).forEach((r) => processEntity(r, 'RECTANGLE'));
+    (currentView.connectors ?? []).forEach((c) =>
+      processEntity(c, 'CONNECTOR')
+    );
+    (currentView.rectangles ?? []).forEach((r) =>
+      processEntity(r, 'RECTANGLE')
+    );
     (currentView.textBoxes ?? []).forEach((t) => processEntity(t, 'TEXTBOX'));
 
-    return { visibleIds, lockedIds, layers, itemCountByLayerId, unassignedCount, itemsByLayerId };
+    return {
+      visibleIds,
+      lockedIds,
+      layers,
+      itemCountByLayerId,
+      unassignedCount,
+      itemsByLayerId
+    };
   }, [currentViewId, views, modelItems]);
 
   return React.createElement(LayerContext.Provider, { value }, children);

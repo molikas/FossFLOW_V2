@@ -5,7 +5,9 @@ import {
   ClipboardPayload
 } from '../clipboard';
 
-const makePayload = (overrides: Partial<ClipboardPayload> = {}): ClipboardPayload => ({
+const makePayload = (
+  overrides: Partial<ClipboardPayload> = {}
+): ClipboardPayload => ({
   items: [],
   connectors: [],
   rectangles: [],

@@ -28,7 +28,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
 // ── env / persistence ─────────────────────────────────────────────────────────
-const IS_DEV    = process.env.NODE_ENV !== 'production';
+const IS_DEV = process.env.NODE_ENV !== 'production';
 const STORE_KEY = 'fossflow_perf_enabled';
 
 function readEnabled(): boolean {
@@ -37,14 +37,14 @@ function readEnabled(): boolean {
 }
 function writeEnabled(v: boolean) {
   if (v) localStorage.setItem(STORE_KEY, '1');
-  else   localStorage.removeItem(STORE_KEY);
+  else localStorage.removeItem(STORE_KEY);
 }
 
 // ── hard limits ───────────────────────────────────────────────────────────────
-const MAX_SAMPLES = 600;  // circular — oldest dropped
-const MAX_EVENTS  = 300;  // circular — oldest dropped
+const MAX_SAMPLES = 600; // circular — oldest dropped
+const MAX_EVENTS = 300; // circular — oldest dropped
 
-const FIELDS = ['dt','fps','hu','ht','lt','ni','nc','ntb'] as const;
+const FIELDS = ['dt', 'fps', 'hu', 'ht', 'lt', 'ni', 'nc', 'ntb'] as const;
 
 // ── store accessors ───────────────────────────────────────────────────────────
 function getSceneCounts(): { ni: number; nc: number; ntb: number } {
@@ -55,36 +55,47 @@ function getSceneCounts(): { ni: number; nc: number; ntb: number } {
     const ni: number = ms?.items?.length ?? 0;
     const views: any[] = ms?.views ?? [];
     let nc = 0;
-    for (const v of views) nc += (v?.value?.connectors ?? v?.connectors ?? []).length;
-    const ss  = fw.scene?.getState?.();
+    for (const v of views)
+      nc += (v?.value?.connectors ?? v?.connectors ?? []).length;
+    const ss = fw.scene?.getState?.();
     const ntb: number = ss?.textBoxes ? Object.keys(ss.textBoxes).length : 0;
     return { ni, nc, ntb };
-  } catch { return { ni: 0, nc: 0, ntb: 0 }; }
+  } catch {
+    return { ni: 0, nc: 0, ntb: 0 };
+  }
 }
 
-function getUiSnapshot(): { zoom: number; viewId: string; isDragging: boolean } {
+function getUiSnapshot(): {
+  zoom: number;
+  viewId: string;
+  isDragging: boolean;
+} {
   try {
     const us = (window as any).__fossflow__?.ui?.getState?.();
     return {
-      zoom:       us?.zoom ?? 1,
-      viewId:     us?.view ?? '',
+      zoom: us?.zoom ?? 1,
+      viewId: us?.view ?? '',
       isDragging: us?.mouse?.mousedown != null
     };
-  } catch { return { zoom: 1, viewId: '', isDragging: false }; }
+  } catch {
+    return { zoom: 1, viewId: '', isDragging: false };
+  }
 }
 
 function getHistoryLengths(): { past: number; future: number } {
   try {
     const ms = (window as any).__fossflow__?.model?.getState?.();
     return {
-      past:   ms?.history?.past?.length   ?? 0,
+      past: ms?.history?.past?.length ?? 0,
       future: ms?.history?.future?.length ?? 0
     };
-  } catch { return { past: 0, future: 0 }; }
+  } catch {
+    return { past: 0, future: 0 };
+  }
 }
 
 // ── event helpers ─────────────────────────────────────────────────────────────
-type DiagEvent = [number, string, (number|string)?]; // [dt_ms, type, detail?]
+type DiagEvent = [number, string, (number | string)?]; // [dt_ms, type, detail?]
 
 function pushEvent(buf: DiagEvent[], ev: DiagEvent) {
   if (buf.length >= MAX_EVENTS) buf.shift();
@@ -93,8 +104,10 @@ function pushEvent(buf: DiagEvent[], ev: DiagEvent) {
 
 // ── download helpers ──────────────────────────────────────────────────────────
 function downloadFile(content: string, name: string) {
-  const a   = document.createElement('a');
-  a.href    = URL.createObjectURL(new Blob([content], { type: 'application/json' }));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(
+    new Blob([content], { type: 'application/json' })
+  );
   a.download = name;
   a.click();
   URL.revokeObjectURL(a.href);
@@ -106,48 +119,65 @@ function buildAi(samples: number[][], events: DiagEvent[], t0: number) {
   return JSON.stringify({
     meta: {
       fields: FIELDS,
-      units: 'dt=ms_since_start fps=frames/s hu/ht=heap_MB(-1=n/a) lt=cumul_long_tasks(>50ms) ni=nodes nc=connectors ntb=textboxes',
+      units:
+        'dt=ms_since_start fps=frames/s hu/ht=heap_MB(-1=n/a) lt=cumul_long_tasks(>50ms) ni=nodes nc=connectors ntb=textboxes',
       t0
     },
     samples,
-    events  // [dt_ms, type, detail?]
+    events // [dt_ms, type, detail?]
   });
 }
 
 function buildHuman(samples: number[][], events: DiagEvent[], t0: number) {
   if (!samples.length) return JSON.stringify({ error: 'no data' });
-  const fps  = samples.map(r => r[1]);
-  const hu   = samples.map(r => r[2]).filter(v => v >= 0);
-  const lt   = samples.map(r => r[4]);
-  const dur  = samples[samples.length - 1][0];
-  const avgFps  = +(fps.reduce((a,b) => a+b, 0) / fps.length).toFixed(1);
-  const totalLT = lt[lt.length-1] - lt[0];
-  return JSON.stringify({
-    session: {
-      startedAt:    new Date(t0).toISOString(),
-      durationSecs: +(dur / 1000).toFixed(1),
-      sampleCount:  samples.length,
-      memoryBudgetKB: { samples: 38, events: 18, totalCeiling: 56 }
+  const fps = samples.map((r) => r[1]);
+  const hu = samples.map((r) => r[2]).filter((v) => v >= 0);
+  const lt = samples.map((r) => r[4]);
+  const dur = samples[samples.length - 1][0];
+  const avgFps = +(fps.reduce((a, b) => a + b, 0) / fps.length).toFixed(1);
+  const totalLT = lt[lt.length - 1] - lt[0];
+  return JSON.stringify(
+    {
+      session: {
+        startedAt: new Date(t0).toISOString(),
+        durationSecs: +(dur / 1000).toFixed(1),
+        sampleCount: samples.length,
+        memoryBudgetKB: { samples: 38, events: 18, totalCeiling: 56 }
+      },
+      performance: {
+        fps: {
+          avg: avgFps,
+          min: Math.min(...fps),
+          good_secs: fps.filter((f) => f >= 50).length,
+          medium_secs: fps.filter((f) => f >= 30 && f < 50).length,
+          poor_secs: fps.filter((f) => f < 30).length
+        },
+        heapUsedMB: { peak: hu.length ? Math.max(...hu) : 'n/a' },
+        longTasks: {
+          total: totalLT,
+          perSecond: +((totalLT / dur) * 1000).toFixed(2)
+        }
+      },
+      events: events.map(([dt, type, detail]) => ({
+        timeMs: dt,
+        timeISO: new Date(t0 + dt).toISOString(),
+        type,
+        detail: detail ?? null
+      })),
+      samples: samples.map(([dt, fps, hu, ht, lt, ni, nc, ntb]) => ({
+        timeMs: dt,
+        fps,
+        heapUsedMB: hu >= 0 ? hu : null,
+        heapTotalMB: ht >= 0 ? ht : null,
+        longTasksCumul: lt,
+        nodes: ni,
+        connectors: nc,
+        textBoxes: ntb
+      }))
     },
-    performance: {
-      fps:       { avg: avgFps, min: Math.min(...fps),
-                   good_secs:   fps.filter(f => f>=50).length,
-                   medium_secs: fps.filter(f => f>=30 && f<50).length,
-                   poor_secs:   fps.filter(f => f<30).length },
-      heapUsedMB: { peak: hu.length ? Math.max(...hu) : 'n/a' },
-      longTasks:  { total: totalLT, perSecond: +((totalLT / dur) * 1000).toFixed(2) }
-    },
-    events: events.map(([dt, type, detail]) => ({
-      timeMs: dt, timeISO: new Date(t0+dt).toISOString(), type,
-      detail: detail ?? null
-    })),
-    samples: samples.map(([dt,fps,hu,ht,lt,ni,nc,ntb]) => ({
-      timeMs: dt, fps,
-      heapUsedMB:  hu >= 0 ? hu : null,
-      heapTotalMB: ht >= 0 ? ht : null,
-      longTasksCumul: lt, nodes: ni, connectors: nc, textBoxes: ntb
-    }))
-  }, null, 2);
+    null,
+    2
+  );
 }
 
 // ── ui helpers ────────────────────────────────────────────────────────────────
@@ -155,34 +185,39 @@ function fpsColor(fps: number) {
   return fps >= 50 ? '#4caf50' : fps >= 30 ? '#ff9800' : '#f44336';
 }
 const btnBase: React.CSSProperties = {
-  border: 'none', borderRadius: 3, color: '#fff',
-  padding: '3px 0', fontSize: 11, cursor: 'pointer', flex: 1
+  border: 'none',
+  borderRadius: 3,
+  color: '#fff',
+  padding: '3px 0',
+  fontSize: 11,
+  cursor: 'pointer',
+  flex: 1
 };
 
 // ── component ─────────────────────────────────────────────────────────────────
 export function DiagnosticsOverlay() {
   const [enabled, setEnabled] = useState(readEnabled);
-  const [open,    setOpen   ] = useState(false);
-  const [latest,  setLatest ] = useState<number[] | null>(null);
+  const [open, setOpen] = useState(false);
+  const [latest, setLatest] = useState<number[] | null>(null);
 
   // All mutable state lives in refs — avoids re-renders during collection
-  const samplesRef    = useRef<number[][]>([]);
-  const eventsRef     = useRef<DiagEvent[]>([]);
-  const ltRef         = useRef(0);       // cumulative long tasks
-  const rafRef        = useRef(0);
-  const frameRef      = useRef(0);
-  const lastFpsRef    = useRef(performance.now());
-  const t0Ref         = useRef(Date.now());
+  const samplesRef = useRef<number[][]>([]);
+  const eventsRef = useRef<DiagEvent[]>([]);
+  const ltRef = useRef(0); // cumulative long tasks
+  const rafRef = useRef(0);
+  const frameRef = useRef(0);
+  const lastFpsRef = useRef(performance.now());
+  const t0Ref = useRef(Date.now());
   // state tracking for event detection
-  const prevCounts    = useRef({ ni: 0, nc: 0, ntb: 0 });
-  const prevFpsOk     = useRef(true);    // true = fps was ≥ 30 last sample
-  const prevHu        = useRef(-1);
-  const prevZoom      = useRef(1);
-  const prevViewId    = useRef('');
-  const prevPastLen   = useRef(0);
+  const prevCounts = useRef({ ni: 0, nc: 0, ntb: 0 });
+  const prevFpsOk = useRef(true); // true = fps was ≥ 30 last sample
+  const prevHu = useRef(-1);
+  const prevZoom = useRef(1);
+  const prevViewId = useRef('');
+  const prevPastLen = useRef(0);
   const prevFutureLen = useRef(0);
-  const prevDragging  = useRef(false);
-  const memWarnFired  = useRef(false);   // memory_warning fires only once per session
+  const prevDragging = useRef(false);
+  const memWarnFired = useRef(false); // memory_warning fires only once per session
 
   // ── main collection loop ───────────────────────────────────────────────────
   useEffect(() => {
@@ -192,17 +227,17 @@ export function DiagnosticsOverlay() {
     }
 
     // Reset all buffers on (re-)enable
-    samplesRef.current  = [];
-    eventsRef.current   = [];
-    ltRef.current       = 0;
-    frameRef.current    = 0;
-    t0Ref.current       = Date.now();
-    lastFpsRef.current  = performance.now();
-    prevCounts.current  = { ni: 0, nc: 0, ntb: 0 };
-    prevFpsOk.current   = true;
-    prevHu.current      = -1;
-    prevZoom.current    = 1;
-    prevViewId.current  = '';
+    samplesRef.current = [];
+    eventsRef.current = [];
+    ltRef.current = 0;
+    frameRef.current = 0;
+    t0Ref.current = Date.now();
+    lastFpsRef.current = performance.now();
+    prevCounts.current = { ni: 0, nc: 0, ntb: 0 };
+    prevFpsOk.current = true;
+    prevHu.current = -1;
+    prevZoom.current = 1;
+    prevViewId.current = '';
     prevPastLen.current = 0;
     prevFutureLen.current = 0;
     prevDragging.current = false;
@@ -212,14 +247,21 @@ export function DiagnosticsOverlay() {
     // Long-task observer
     let observer: PerformanceObserver | null = null;
     try {
-      observer = new PerformanceObserver(list => { ltRef.current += list.getEntries().length; });
+      observer = new PerformanceObserver((list) => {
+        ltRef.current += list.getEntries().length;
+      });
       observer.observe({ type: 'longtask', buffered: true });
-    } catch { /* not supported */ }
+    } catch {
+      /* not supported */
+    }
 
     // Tab visibility events
     const onVis = () => {
       const dt = Date.now() - t0Ref.current;
-      pushEvent(eventsRef.current, [dt, document.hidden ? 'tab_hidden' : 'tab_visible']);
+      pushEvent(eventsRef.current, [
+        dt,
+        document.hidden ? 'tab_hidden' : 'tab_visible'
+      ]);
     };
     document.addEventListener('visibilitychange', onVis);
 
@@ -228,16 +270,16 @@ export function DiagnosticsOverlay() {
       const elapsed = now - lastFpsRef.current;
 
       if (elapsed >= 1000) {
-        const fps  = Math.round((frameRef.current * 1000) / elapsed);
-        frameRef.current   = 0;
+        const fps = Math.round((frameRef.current * 1000) / elapsed);
+        frameRef.current = 0;
         lastFpsRef.current = now;
-        const mem  = (performance as any).memory;
-        const hu   = mem ? +(mem.usedJSHeapSize  / 1048576).toFixed(1) : -1;
-        const ht   = mem ? +(mem.totalJSHeapSize / 1048576).toFixed(1) : -1;
-        const lt   = ltRef.current;
-        const dt   = Date.now() - t0Ref.current;
+        const mem = (performance as any).memory;
+        const hu = mem ? +(mem.usedJSHeapSize / 1048576).toFixed(1) : -1;
+        const ht = mem ? +(mem.totalJSHeapSize / 1048576).toFixed(1) : -1;
+        const lt = ltRef.current;
+        const dt = Date.now() - t0Ref.current;
         const curr = getSceneCounts();
-        const ui   = getUiSnapshot();
+        const ui = getUiSnapshot();
         const hist = getHistoryLengths();
 
         const ev = eventsRef.current;
@@ -245,15 +287,16 @@ export function DiagnosticsOverlay() {
         // ── scene change events ──────────────────────────────────────────────
         const dni = curr.ni - prevCounts.current.ni;
         const dnc = curr.nc - prevCounts.current.nc;
-        if      (Math.abs(dni) >= 5) pushEvent(ev, [dt, dni > 0 ? 'bulk_load'         : 'bulk_remove',        curr.ni]);
-        else if (dni ===  1)          pushEvent(ev, [dt, 'node_added',                                          curr.ni]);
-        else if (dni === -1)          pushEvent(ev, [dt, 'node_removed',                                        curr.ni]);
-        else if (dni >   1)           pushEvent(ev, [dt, 'nodes_added',                                         curr.ni]);
-        else if (dni <  -1)           pushEvent(ev, [dt, 'nodes_removed',                                       curr.ni]);
-        if      (dnc ===  1)          pushEvent(ev, [dt, 'connector_added',                                     curr.nc]);
-        else if (dnc === -1)          pushEvent(ev, [dt, 'connector_removed',                                   curr.nc]);
-        else if (dnc >   1)           pushEvent(ev, [dt, 'connectors_added',                                    curr.nc]);
-        else if (dnc <  -1)           pushEvent(ev, [dt, 'connectors_removed',                                  curr.nc]);
+        if (Math.abs(dni) >= 5)
+          pushEvent(ev, [dt, dni > 0 ? 'bulk_load' : 'bulk_remove', curr.ni]);
+        else if (dni === 1) pushEvent(ev, [dt, 'node_added', curr.ni]);
+        else if (dni === -1) pushEvent(ev, [dt, 'node_removed', curr.ni]);
+        else if (dni > 1) pushEvent(ev, [dt, 'nodes_added', curr.ni]);
+        else if (dni < -1) pushEvent(ev, [dt, 'nodes_removed', curr.ni]);
+        if (dnc === 1) pushEvent(ev, [dt, 'connector_added', curr.nc]);
+        else if (dnc === -1) pushEvent(ev, [dt, 'connector_removed', curr.nc]);
+        else if (dnc > 1) pushEvent(ev, [dt, 'connectors_added', curr.nc]);
+        else if (dnc < -1) pushEvent(ev, [dt, 'connectors_removed', curr.nc]);
         prevCounts.current = curr;
 
         // ── fps threshold events ─────────────────────────────────────────────
@@ -272,7 +315,7 @@ export function DiagnosticsOverlay() {
         if (lt - prevLt > 5) pushEvent(ev, [dt, 'longtask_burst', lt - prevLt]);
 
         // ── GC detection (heap drop > 20 MB) ────────────────────────────────
-        if (hu >= 0 && prevHu.current >= 0 && (prevHu.current - hu) > 20) {
+        if (hu >= 0 && prevHu.current >= 0 && prevHu.current - hu > 20) {
           pushEvent(ev, [dt, 'gc', `${prevHu.current}→${hu}MB`]);
         }
         prevHu.current = hu;
@@ -290,7 +333,11 @@ export function DiagnosticsOverlay() {
         }
 
         // ── view switch ───────────────────────────────────────────────────────
-        if (ui.viewId && prevViewId.current && ui.viewId !== prevViewId.current) {
+        if (
+          ui.viewId &&
+          prevViewId.current &&
+          ui.viewId !== prevViewId.current
+        ) {
           pushEvent(ev, [dt, 'view_changed', ui.viewId]);
         }
         if (ui.viewId) prevViewId.current = ui.viewId;
@@ -298,12 +345,18 @@ export function DiagnosticsOverlay() {
         // ── undo / redo ───────────────────────────────────────────────────────
         // undo: past shrinks and future grows
         // redo: future shrinks and past grows
-        if (hist.past < prevPastLen.current && hist.future > prevFutureLen.current) {
+        if (
+          hist.past < prevPastLen.current &&
+          hist.future > prevFutureLen.current
+        ) {
           pushEvent(ev, [dt, 'undo', hist.past]);
-        } else if (hist.future < prevFutureLen.current && hist.past > prevPastLen.current) {
+        } else if (
+          hist.future < prevFutureLen.current &&
+          hist.past > prevPastLen.current
+        ) {
           pushEvent(ev, [dt, 'redo', hist.past]);
         }
-        prevPastLen.current   = hist.past;
+        prevPastLen.current = hist.past;
         prevFutureLen.current = hist.future;
 
         // ── drag start / end (sustained drag = mousedown held across samples) ─
@@ -318,7 +371,8 @@ export function DiagnosticsOverlay() {
 
         // ── store sample ─────────────────────────────────────────────────────
         const row = [dt, fps, hu, ht, lt, curr.ni, curr.nc, curr.ntb];
-        if (samplesRef.current.length >= MAX_SAMPLES) samplesRef.current.shift();
+        if (samplesRef.current.length >= MAX_SAMPLES)
+          samplesRef.current.shift();
         samplesRef.current.push(row);
         setLatest(row);
       }
@@ -345,18 +399,37 @@ export function DiagnosticsOverlay() {
   // ── collapsed pill ─────────────────────────────────────────────────────────
   if (!open) {
     const fps = latest?.[1];
-    const bg  = !enabled  ? '#333'
-              : fps == null ? '#222'
-              : fps >= 50  ? '#1b5e20'
-              : fps >= 30  ? '#e65100'
-              : '#b71c1c';
+    const bg = !enabled
+      ? '#333'
+      : fps == null
+        ? '#222'
+        : fps >= 50
+          ? '#1b5e20'
+          : fps >= 30
+            ? '#e65100'
+            : '#b71c1c';
     return (
-      <button title={enabled ? 'Open diagnostics' : 'Performance monitoring (disabled)'}
+      <button
+        title={
+          enabled ? 'Open diagnostics' : 'Performance monitoring (disabled)'
+        }
         onClick={() => setOpen(true)}
-        style={{ position: 'fixed', bottom: 10, right: 10, zIndex: 9999,
-                 background: bg, color: '#eee', border: 'none', borderRadius: 4,
-                 padding: '3px 8px', cursor: 'pointer', fontSize: 11,
-                 fontFamily: 'monospace', opacity: 0.8 }}>
+        style={{
+          position: 'fixed',
+          bottom: 10,
+          right: 10,
+          zIndex: 9999,
+          background: bg,
+          color: '#eee',
+          border: 'none',
+          borderRadius: 4,
+          padding: '3px 8px',
+          cursor: 'pointer',
+          fontSize: 11,
+          fontFamily: 'monospace',
+          opacity: 0.8
+        }}
+      >
         DIAG {enabled && fps != null ? `${fps}fps` : enabled ? '…' : 'off'}
       </button>
     );
@@ -367,80 +440,195 @@ export function DiagnosticsOverlay() {
   const recentEvents = eventsRef.current.slice(-6);
 
   return (
-    <div style={{ position: 'fixed', bottom: 10, right: 10, zIndex: 9999,
-                  background: 'rgba(0,0,0,0.9)', color: '#eee',
-                  borderRadius: 6, padding: '8px 12px', fontSize: 12,
-                  fontFamily: 'monospace', lineHeight: 1.7, minWidth: 225,
-                  boxShadow: '0 2px 10px rgba(0,0,0,0.6)', userSelect: 'none' }}>
-
+    <div
+      style={{
+        position: 'fixed',
+        bottom: 10,
+        right: 10,
+        zIndex: 9999,
+        background: 'rgba(0,0,0,0.9)',
+        color: '#eee',
+        borderRadius: 6,
+        padding: '8px 12px',
+        fontSize: 12,
+        fontFamily: 'monospace',
+        lineHeight: 1.7,
+        minWidth: 225,
+        boxShadow: '0 2px 10px rgba(0,0,0,0.6)',
+        userSelect: 'none'
+      }}
+    >
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-        <span style={{ fontWeight: 'bold', color: '#aaa', fontSize: 10, letterSpacing: 1 }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 4
+        }}
+      >
+        <span
+          style={{
+            fontWeight: 'bold',
+            color: '#aaa',
+            fontSize: 10,
+            letterSpacing: 1
+          }}
+        >
           FOSSFLOW DIAG&nbsp;
           <span style={{ color: '#444' }}>{IS_DEV ? 'DEV' : 'PROD'}</span>
         </span>
-        <button onClick={() => setOpen(false)}
-          style={{ background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0 }}>
+        <button
+          onClick={() => setOpen(false)}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#aaa',
+            cursor: 'pointer',
+            fontSize: 16,
+            lineHeight: 1,
+            padding: 0
+          }}
+        >
           ×
         </button>
       </div>
 
       {/* Enable toggle */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6,
-                    borderBottom: '1px solid #333', paddingBottom: 6 }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 5,
-                        cursor: IS_DEV ? 'default' : 'pointer', fontSize: 11 }}>
-          <input type="checkbox" checked={enabled} disabled={IS_DEV}
-            onChange={e => toggleEnabled(e.target.checked)}
-            style={{ cursor: IS_DEV ? 'default' : 'pointer' }} />
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          marginBottom: 6,
+          borderBottom: '1px solid #333',
+          paddingBottom: 6
+        }}
+      >
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            cursor: IS_DEV ? 'default' : 'pointer',
+            fontSize: 11
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={enabled}
+            disabled={IS_DEV}
+            onChange={(e) => toggleEnabled(e.target.checked)}
+            style={{ cursor: IS_DEV ? 'default' : 'pointer' }}
+          />
           <span style={{ color: enabled ? '#4caf50' : '#888' }}>
             {enabled ? 'Monitoring ON' : 'Monitoring OFF'}
           </span>
-          {IS_DEV && <span style={{ color: '#444', fontSize: 10 }}>(always on in dev)</span>}
+          {IS_DEV && (
+            <span style={{ color: '#444', fontSize: 10 }}>
+              (always on in dev)
+            </span>
+          )}
         </label>
       </div>
 
-      {enabled && latest ? (<>
-        <div>FPS <span style={{ color: fpsColor(fps!), fontWeight: 'bold' }}>{fps}</span></div>
-        {hu! >= 0
-          ? <div>Heap <span style={{ color: '#64b5f6' }}>{hu} MB</span>
-                      <span style={{ color: '#555' }}> / {ht} MB</span></div>
-          : <div style={{ color: '#555' }}>Heap n/a (Chrome only)</div>}
-        <div>Long tasks <span style={{ color: lt! > 0 ? '#ff9800' : '#4caf50' }}>{lt}</span></div>
-
-        <div style={{ borderTop: '1px solid #333', marginTop: 4, paddingTop: 4 }}>
-          Nodes <span style={{ color: '#ce93d8' }}>{ni}</span>
-          {' · '}Conn <span style={{ color: '#80cbc4' }}>{nc}</span>
-          {' · '}TB <span style={{ color: '#80cbc4' }}>{ntb}</span>
-        </div>
-
-        {recentEvents.length > 0 && (
-          <div style={{ borderTop: '1px solid #333', marginTop: 4, paddingTop: 4, fontSize: 10, color: '#aaa' }}>
-            {recentEvents.map((ev, i) => (
-              <div key={i}>
-                <span style={{ color: '#555' }}>{ev[0]}ms</span>
-                {' '}{ev[1]}
-                {ev[2] != null ? <span style={{ color: '#777' }}> {ev[2]}</span> : null}
-              </div>
-            ))}
+      {enabled && latest ? (
+        <>
+          <div>
+            FPS{' '}
+            <span style={{ color: fpsColor(fps!), fontWeight: 'bold' }}>
+              {fps}
+            </span>
           </div>
-        )}
+          {hu! >= 0 ? (
+            <div>
+              Heap <span style={{ color: '#64b5f6' }}>{hu} MB</span>
+              <span style={{ color: '#555' }}> / {ht} MB</span>
+            </div>
+          ) : (
+            <div style={{ color: '#555' }}>Heap n/a (Chrome only)</div>
+          )}
+          <div>
+            Long tasks{' '}
+            <span style={{ color: lt! > 0 ? '#ff9800' : '#4caf50' }}>{lt}</span>
+          </div>
 
-        <div style={{ color: '#444', fontSize: 10, marginTop: 2 }}>
-          {samplesRef.current.length}/{MAX_SAMPLES} samples · {eventsRef.current.length}/{MAX_EVENTS} events · ~56 KB max
-        </div>
+          <div
+            style={{ borderTop: '1px solid #333', marginTop: 4, paddingTop: 4 }}
+          >
+            Nodes <span style={{ color: '#ce93d8' }}>{ni}</span>
+            {' · '}Conn <span style={{ color: '#80cbc4' }}>{nc}</span>
+            {' · '}TB <span style={{ color: '#80cbc4' }}>{ntb}</span>
+          </div>
 
-        <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
-          <button onClick={() => downloadFile(buildAi(samplesRef.current, eventsRef.current, t0Ref.current), `ff-diag-ai-${stamp()}.json`)}
-            disabled={!hasData}
-            style={{ ...btnBase, background: hasData ? '#1565c0' : '#333', opacity: hasData ? 1 : 0.4 }}
-            title="Compact arrays — minimum LLM tokens">↓ AI</button>
-          <button onClick={() => downloadFile(buildHuman(samplesRef.current, eventsRef.current, t0Ref.current), `ff-diag-human-${stamp()}.json`)}
-            disabled={!hasData}
-            style={{ ...btnBase, background: hasData ? '#4a148c' : '#333', opacity: hasData ? 1 : 0.4 }}
-            title="Readable JSON with labels and summary stats">↓ Human</button>
-        </div>
-      </>) : enabled ? (
+          {recentEvents.length > 0 && (
+            <div
+              style={{
+                borderTop: '1px solid #333',
+                marginTop: 4,
+                paddingTop: 4,
+                fontSize: 10,
+                color: '#aaa'
+              }}
+            >
+              {recentEvents.map((ev, i) => (
+                <div key={i}>
+                  <span style={{ color: '#555' }}>{ev[0]}ms</span> {ev[1]}
+                  {ev[2] != null ? (
+                    <span style={{ color: '#777' }}> {ev[2]}</span>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ color: '#444', fontSize: 10, marginTop: 2 }}>
+            {samplesRef.current.length}/{MAX_SAMPLES} samples ·{' '}
+            {eventsRef.current.length}/{MAX_EVENTS} events · ~56 KB max
+          </div>
+
+          <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+            <button
+              onClick={() =>
+                downloadFile(
+                  buildAi(samplesRef.current, eventsRef.current, t0Ref.current),
+                  `ff-diag-ai-${stamp()}.json`
+                )
+              }
+              disabled={!hasData}
+              style={{
+                ...btnBase,
+                background: hasData ? '#1565c0' : '#333',
+                opacity: hasData ? 1 : 0.4
+              }}
+              title="Compact arrays — minimum LLM tokens"
+            >
+              ↓ AI
+            </button>
+            <button
+              onClick={() =>
+                downloadFile(
+                  buildHuman(
+                    samplesRef.current,
+                    eventsRef.current,
+                    t0Ref.current
+                  ),
+                  `ff-diag-human-${stamp()}.json`
+                )
+              }
+              disabled={!hasData}
+              style={{
+                ...btnBase,
+                background: hasData ? '#4a148c' : '#333',
+                opacity: hasData ? 1 : 0.4
+              }}
+              title="Readable JSON with labels and summary stats"
+            >
+              ↓ Human
+            </button>
+          </div>
+        </>
+      ) : enabled ? (
         <div style={{ color: '#555' }}>Collecting first sample…</div>
       ) : (
         <div style={{ color: '#666', fontSize: 11 }}>

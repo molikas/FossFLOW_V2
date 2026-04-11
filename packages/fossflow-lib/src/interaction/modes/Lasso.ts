@@ -1,19 +1,38 @@
 import { produce } from 'immer';
-import { ModeActions, ItemReference } from 'src/types';
-import { CoordsUtils, isWithinBounds, hasMovedTile, getItemByIdOrThrow } from 'src/utils';
-import type { Coords } from 'src/types';
+import {
+  ModeActions,
+  ItemReference,
+  Coords,
+  ViewItem,
+  Rectangle,
+  TextBox,
+  Connector,
+  ConnectorAnchor
+} from 'src/types';
+import {
+  isWithinBounds,
+  hasMovedTile,
+  getItemByIdOrThrow
+} from 'src/utils';
+
+interface LassoScene {
+  items: ViewItem[];
+  rectangles: Rectangle[];
+  textBoxes: TextBox[];
+  connectors: Connector[];
+}
 
 // Helper to find all items within the lasso bounds
 const getItemsInBounds = (
-  startTile: { x: number; y: number },
-  endTile: { x: number; y: number },
-  scene: any
+  startTile: Coords,
+  endTile: Coords,
+  scene: LassoScene
 ): ItemReference[] => {
   const items: ItemReference[] = [];
 
   // Check all nodes/items
   const selectedNodeIds = new Set<string>();
-  scene.items.forEach((item: any) => {
+  scene.items.forEach((item: ViewItem) => {
     if (isWithinBounds(item.tile, [startTile, endTile])) {
       items.push({ type: 'ITEM', id: item.id });
       selectedNodeIds.add(item.id);
@@ -21,7 +40,7 @@ const getItemsInBounds = (
   });
 
   // Check all rectangles - they must be FULLY enclosed (all 4 corners inside)
-  scene.rectangles.forEach((rectangle: any) => {
+  scene.rectangles.forEach((rectangle: Rectangle) => {
     const corners = [
       rectangle.from,
       { x: rectangle.to.x, y: rectangle.from.y },
@@ -30,7 +49,7 @@ const getItemsInBounds = (
     ];
 
     // Rectangle is only selected if ALL corners are inside the bounds
-    const allCornersInside = corners.every(corner =>
+    const allCornersInside = corners.every((corner) =>
       isWithinBounds(corner, [startTile, endTile])
     );
 
@@ -40,7 +59,7 @@ const getItemsInBounds = (
   });
 
   // Check all text boxes
-  scene.textBoxes.forEach((textBox: any) => {
+  scene.textBoxes.forEach((textBox: TextBox) => {
     if (isWithinBounds(textBox.tile, [startTile, endTile])) {
       items.push({ type: 'TEXTBOX', id: textBox.id });
     }
@@ -49,15 +68,16 @@ const getItemsInBounds = (
   // Include a connector if both its endpoint anchors are within the selection.
   // An endpoint anchor is within bounds if it references a selected node, or
   // its free-floating tile is within bounds.
-  scene.connectors.forEach((connector: any) => {
+  scene.connectors.forEach((connector: Connector) => {
     if (!connector.anchors || connector.anchors.length < 2) return;
 
     const first = connector.anchors[0];
     const last = connector.anchors[connector.anchors.length - 1];
 
-    const anchorInBounds = (anchor: any): boolean => {
+    const anchorInBounds = (anchor: ConnectorAnchor): boolean => {
       if (anchor.ref?.item) return selectedNodeIds.has(anchor.ref.item);
-      if (anchor.ref?.tile) return isWithinBounds(anchor.ref.tile, [startTile, endTile]);
+      if (anchor.ref?.tile)
+        return isWithinBounds(anchor.ref.tile, [startTile, endTile]);
       return false;
     };
 
@@ -65,8 +85,11 @@ const getItemsInBounds = (
       items.push({ type: 'CONNECTOR', id: connector.id });
     } else {
       // Still capture any free-floating waypoint anchors
-      connector.anchors.forEach((anchor: any) => {
-        if (anchor.ref?.tile && isWithinBounds(anchor.ref.tile, [startTile, endTile])) {
+      connector.anchors.forEach((anchor: ConnectorAnchor) => {
+        if (
+          anchor.ref?.tile &&
+          isWithinBounds(anchor.ref.tile, [startTile, endTile])
+        ) {
           items.push({ type: 'CONNECTOR_ANCHOR', id: anchor.id });
         }
       });
@@ -85,19 +108,28 @@ export const Lasso: ModeActions = {
     if (uiState.mode.isDragging && uiState.mode.selection) {
       // User is dragging an existing selection - switch to DRAG_ITEMS mode
       const initialTiles: Record<string, Coords> = {};
-      const initialRectangles: Record<string, { from: Coords; to: Coords }> = {};
+      const initialRectangles: Record<string, { from: Coords; to: Coords }> =
+        {};
       uiState.mode.selection.items.forEach((item) => {
         try {
           if (item.type === 'ITEM') {
-            initialTiles[item.id] = getItemByIdOrThrow(scene.items, item.id).value.tile;
+            initialTiles[item.id] = getItemByIdOrThrow(
+              scene.items,
+              item.id
+            ).value.tile;
           } else if (item.type === 'TEXTBOX') {
-            initialTiles[item.id] = getItemByIdOrThrow(scene.textBoxes, item.id).value.tile;
+            initialTiles[item.id] = getItemByIdOrThrow(
+              scene.textBoxes,
+              item.id
+            ).value.tile;
           } else if (item.type === 'RECTANGLE') {
             const r = getItemByIdOrThrow(scene.rectangles, item.id).value;
             initialRectangles[item.id] = { from: r.from, to: r.to };
           } else if (item.type === 'CONNECTOR_ANCHOR') {
             for (const connector of scene.connectors) {
-              const anchor = connector.anchors.find((a: any) => a.id === item.id);
+              const anchor = connector.anchors.find(
+                (a: ConnectorAnchor) => a.id === item.id
+              );
               if (anchor?.ref?.tile) {
                 initialTiles[item.id] = anchor.ref.tile;
                 break;

@@ -1,5 +1,12 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { Menu, Typography, Divider, Card, IconButton, Tooltip } from '@mui/material';
+import {
+  Menu,
+  Typography,
+  Divider,
+  Card,
+  IconButton,
+  Tooltip
+} from '@mui/material';
 import {
   MenuOutlined as MenuIcon,
   GitHub as GitHubIcon,
@@ -63,24 +70,33 @@ export const MainMenu = () => {
   // ── Guard helpers ────────────────────────────────────────────────────────────
 
   /** Request an action — shows the discard guard if the model is dirty. */
-  const requestAction = useCallback((action: PendingAction) => {
-    closeMenu();
-    if (isDirty) {
-      setPendingAction(action);
-    } else {
-      executeAction(action);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDirty]);
+  const requestAction = useCallback(
+    (action: PendingAction) => {
+      closeMenu();
+      if (isDirty) {
+        setPendingAction(action);
+      } else {
+        executeAction(action);
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },
+    [isDirty]
+  );
 
   const executeAction = useCallback((action: PendingAction) => {
     setPendingAction(null);
     switch (action) {
-      case 'new':  performNew();  break;
-      case 'open': performOpen(); break;
-      case 'clear': performClear(); break;
+      case 'new':
+        performNew();
+        break;
+      case 'open':
+        performOpen();
+        break;
+      case 'clear':
+        performClear();
+        break;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleGuardSave = useCallback(() => {
@@ -167,11 +183,18 @@ export const MainMenu = () => {
 
   // ── Visibility ───────────────────────────────────────────────────────────────
 
-  const sectionVisibility = useMemo(() => ({
-    actions: Boolean(mainMenuOptions.find((opt) => opt.includes('ACTION') || opt.includes('EXPORT'))),
-    links: Boolean(mainMenuOptions.find((opt) => opt.includes('LINK'))),
-    version: Boolean(mainMenuOptions.includes('VERSION'))
-  }), [mainMenuOptions]);
+  const sectionVisibility = useMemo(
+    () => ({
+      actions: Boolean(
+        mainMenuOptions.find(
+          (opt) => opt.includes('ACTION') || opt.includes('EXPORT')
+        )
+      ),
+      links: Boolean(mainMenuOptions.find((opt) => opt.includes('LINK'))),
+      version: Boolean(mainMenuOptions.includes('VERSION'))
+    }),
+    [mainMenuOptions]
+  );
 
   if (mainMenuOptions.length === 0) return null;
 
@@ -210,14 +233,16 @@ export const MainMenu = () => {
           )}
 
           {mainMenuOptions.includes('ACTION.OPEN') && (
-            <MenuItem onClick={() => requestAction('open')} Icon={<FolderOpenIcon />}>
+            <MenuItem
+              onClick={() => requestAction('open')}
+              Icon={<FolderOpenIcon />}
+            >
               {t('open')}
             </MenuItem>
           )}
 
-          {(mainMenuOptions.includes('EXPORT.JSON') || mainMenuOptions.includes('EXPORT.PNG')) && (
-            <Divider />
-          )}
+          {(mainMenuOptions.includes('EXPORT.JSON') ||
+            mainMenuOptions.includes('EXPORT.PNG')) && <Divider />}
 
           {mainMenuOptions.includes('EXPORT.JSON') && (
             <MenuItem onClick={onExportAsJSON} Icon={<ExportJsonIcon />}>
@@ -240,7 +265,10 @@ export const MainMenu = () => {
           {mainMenuOptions.includes('ACTION.CLEAR_CANVAS') && (
             <>
               <Divider />
-              <MenuItem onClick={() => requestAction('clear')} Icon={<DeleteOutlineIcon />}>
+              <MenuItem
+                onClick={() => requestAction('clear')}
+                Icon={<DeleteOutlineIcon />}
+              >
                 {t('clearCanvas')}
               </MenuItem>
             </>
@@ -256,7 +284,10 @@ export const MainMenu = () => {
             <>
               <Divider />
               {mainMenuOptions.includes('LINK.GITHUB') && (
-                <MenuItem onClick={() => gotoUrl(`${REPOSITORY_URL}`)} Icon={<GitHubIcon />}>
+                <MenuItem
+                  onClick={() => gotoUrl(`${REPOSITORY_URL}`)}
+                  Icon={<GitHubIcon />}
+                >
                   {t('gitHub')}
                 </MenuItem>
               )}

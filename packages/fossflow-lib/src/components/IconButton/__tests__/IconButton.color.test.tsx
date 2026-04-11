@@ -37,12 +37,20 @@ describe('IconButton — iconColor logic', () => {
 
   it('disabled colour is lighter (higher MUI grey number) than enabled colour', () => {
     // grey.400 < grey.700 in darkness — disabled should look more muted than enabled
-    const disabledNum = parseInt(computeIconColor(false, true).replace('grey.', ''), 10);
-    const enabledNum = parseInt(computeIconColor(false, false).replace('grey.', ''), 10);
+    const disabledNum = parseInt(
+      computeIconColor(false, true).replace('grey.', ''),
+      10
+    );
+    const enabledNum = parseInt(
+      computeIconColor(false, false).replace('grey.', ''),
+      10
+    );
     expect(disabledNum).toBeLessThan(enabledNum);
   });
 
   it('disabled and enabled produce distinct colours', () => {
-    expect(computeIconColor(false, true)).not.toBe(computeIconColor(false, false));
+    expect(computeIconColor(false, true)).not.toBe(
+      computeIconColor(false, false)
+    );
   });
 });
