@@ -255,7 +255,8 @@ export const useIconPackManager = (coreIcons: any[]) => {
 
   // Initialize: when lazy loading is disabled, eagerly load all packs.
   // When lazy loading is enabled, skip startup loading entirely — packs are
-  // fetched on-demand via loadPacksForDiagram() or explicit user toggles.
+  // fetched on-demand via loadPacksForDiagram() or explicit user toggles in
+  // the Elements panel "More icons" section.
   useEffect(() => {
     const initialize = async () => {
       if (!lazyLoadingEnabled) {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Isoflow } from 'fossflow';
+import { Isoflow, transformFromCompactFormat } from 'fossflow';
 import { flattenCollections } from '@isoflow/isopacks/dist/utils';
 import isoflowIsopack from '@isoflow/isopacks/dist/isoflow';
 import { useTranslation } from 'react-i18next';
@@ -421,7 +421,14 @@ function EditorPage() {
   // ---------------------------------------------------------------------------
   // Server-mode diagram manager callbacks
   // ---------------------------------------------------------------------------
-  const handleDiagramManagerLoad = async (id: string, data: any) => {
+  const handleDiagramManagerLoad = async (id: string, rawData: any, listingName: string) => {
+    // Detect and expand compact format ({"t":..., "i":..., "v":..., "_":{"f":"compact"}})
+    const isCompact = rawData?._?.f === 'compact';
+    let data: any = rawData;
+    if (isCompact) {
+      data = transformFromCompactFormat(rawData);
+    }
+
     const loadedIcons = data.icons || [];
     await iconPackManager.loadPacksForDiagram(data.items || []);
     const hasDefaultIcons = loadedIcons.some(
@@ -435,21 +442,24 @@ function EditorPage() {
       : [...iconPackManager.loadedIcons,
          ...loadedIcons.filter((icon: any) => icon.collection === 'imported')];
 
+    // Use the listing name (always correct) rather than whatever field exists in raw data
+    const name = listingName || data.title || data.name || data.t || 'Untitled Diagram';
+
     const mergedData: DiagramData = {
       ...data,
-      title: data.title || data.name || 'Loaded Diagram',
+      title: name,
       icons: finalIcons,
       colors: data.colors?.length ? data.colors : defaultColors,
       fitToScreen: data.fitToScreen !== false
     };
     const newDiagram = {
       id,
-      name: data.name || 'Loaded Diagram',
+      name,
       data: mergedData,
       createdAt: data.created || new Date().toISOString(),
       updatedAt: data.lastModified || new Date().toISOString()
     };
-    setDiagramName(newDiagram.name);
+    setDiagramName(name);
     setCurrentDiagram(newDiagram);
     setCurrentModel(mergedData);
     setHasUnsavedChanges(false);
@@ -572,8 +582,11 @@ function EditorPage() {
     [iconPackManager.togglePack]
   );
 
+  // Set once on first render with whatever icons are available at that moment
+  // (core icons always, plus any packs already loaded). Subsequent pack loads
+  // update the canvas via the iconPackManager.loadedIcons effect below.
   const frozenInitialDataRef = useRef<DiagramData | null>(null);
-  if (iconPackManager.isInitialized && frozenInitialDataRef.current === null) {
+  if (frozenInitialDataRef.current === null) {
     const importedIcons = (diagramData.icons || []).filter(
       (icon: any) => icon.collection === 'imported'
     );
@@ -617,6 +630,14 @@ function EditorPage() {
       isAfterLoadRef.current = false;
       return;
     }
+    // Sync toolbar name when the library's own New/Open changed the model title.
+    // This happens when the user picks "New Diagram" or "Open file" from the
+    // library's MainMenu — those actions bypass App.tsx's handlers entirely.
+    if (model.title && model.title !== diagramName) {
+      setDiagramName(model.title);
+      setCurrentDiagram(null);  // old save reference is no longer valid
+      setLastSaved(null);
+    }
     if (!isReadonlyUrl) setHasUnsavedChanges(true);
   };
 
@@ -656,21 +677,17 @@ function EditorPage() {
       )}
 
       <div className="fossflow-container">
-        {iconPackManager.isInitialized && frozenInitialDataRef.current ? (
-          <Isoflow
-            ref={isoflowRef}
-            initialData={frozenInitialDataRef.current}
-            onModelUpdated={handleModelUpdated}
-            editorMode={isReadonlyUrl ? 'EXPLORABLE_READONLY' : 'EDITABLE'}
-            locale={currentLocale}
-            iconPackManager={iconPackManagerProp}
-            toolbarPortalTarget={toolbarPortalTarget}
-            sidebarTogglePortalTarget={sidebarTogglePortalTarget}
-            languageSelector={<ChangeLanguage />}
-          />
-        ) : (
-          <div className="loading-screen">Loading icons…</div>
-        )}
+        <Isoflow
+          ref={isoflowRef}
+          initialData={frozenInitialDataRef.current}
+          onModelUpdated={handleModelUpdated}
+          editorMode={isReadonlyUrl ? 'EXPLORABLE_READONLY' : 'EDITABLE'}
+          locale={currentLocale}
+          iconPackManager={iconPackManagerProp}
+          toolbarPortalTarget={toolbarPortalTarget}
+          sidebarTogglePortalTarget={sidebarTogglePortalTarget}
+          languageSelector={<ChangeLanguage />}
+        />
       </div>
 
       {showSaveDialog && (

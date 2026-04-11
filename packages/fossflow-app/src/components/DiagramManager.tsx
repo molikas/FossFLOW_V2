@@ -6,7 +6,7 @@ import './DiagramManager.css';
 interface Props {
   storage: StorageService;
   isServerStorage: boolean;
-  onLoadDiagram: (id: string, data: any) => void;
+  onLoadDiagram: (id: string, data: any, listingName: string) => void;
   onClose: () => void;
 }
 
@@ -43,12 +43,12 @@ export const DiagramManager: React.FC<Props> = ({
     }
   };
 
-  const handleLoad = async (id: string) => {
+  const handleLoad = async (id: string, listingName: string) => {
     try {
       setLoading(true);
       setError(null);
       const data = await storage.loadDiagram(id);
-      onLoadDiagram(id, data);
+      onLoadDiagram(id, data, listingName);
       onClose();
     } catch (err) {
       setError(
@@ -136,7 +136,7 @@ export const DiagramManager: React.FC<Props> = ({
                   <div className="diagram-actions">
                     <button
                       className="action-button primary"
-                      onClick={() => handleLoad(diagram.id)}
+                      onClick={() => handleLoad(diagram.id, diagram.name)}
                       disabled={loading}
                     >
                       {t('dialog.diagramManager.btnOpen')}

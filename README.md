@@ -43,6 +43,8 @@ An "experimental" community fork of [FossFLOW](https://github.com/stan-smith/Fos
 - **Save confirmation toast** — A brief `✓ [Name] saved` notification slides up from the bottom on every explicit save.
 - **Share link** — Generates a read-only URL for the current diagram (requires server storage).
 - **New diagram with unsaved-changes guard** — Hamburger menu → "New diagram" clears the canvas. Pending edits trigger a three-button dialog: *Save & continue* (autosaves to `localStorage`, falls back to a JSON download), *Discard changes*, or *Cancel*. Tab-close also shows a native browser warning when there are unsaved edits.
+- **Diagram name always in sync** — The toolbar name tracks the active diagram correctly across all flows: Save, Save As, Load (session and server), New Diagram, and file Open via the library's own menu. Stale names from previous diagrams can no longer bleed through after switching.
+- **Compact diagram format** — Diagrams exported in ultra-compact LLM-friendly format (`{"t":…,"i":…,"v":…,"_":{"f":"compact","v":"1.0"}}`) are fully supported when loading via the Diagrams panel or file Open. The format is auto-detected and expanded before rendering; names come from the storage listing (never from the compact payload).
 
 ### Performance
 
@@ -75,7 +77,7 @@ An "experimental" community fork of [FossFLOW](https://github.com/stan-smith/Fos
 
 ### Panels
 
-- **Left panel (Elements / Layers)** — 40 px icon strip on the left edge. Click **Elements** to open a 240 px sliding panel with: icon search and drag-to-canvas, Rectangle shape, Connector tool, and import icons button. Click **Layers** to open the Layers panel. Click the active tab again to close.
+- **Left panel (Elements / Layers)** — 40 px icon strip on the left edge. Click **Elements** to open a 240 px sliding panel with: icon search and drag-to-canvas, Rectangle shape, Connector tool, a "More icons" section listing unloaded packs as one-click load buttons, and an Import Icons button at the bottom. Click **Layers** to open the Layers panel. Click the active tab again to close.
 - **Right panel (Properties)** — 300 px panel on the right edge, toggled by a button in the top-right corner. Shows the Details / Style / Notes tabs for the selected item. Shows an empty-state hint when nothing is selected. Slides in/out without resizing the canvas.
 - **Icon drag-to-canvas** — Dragging an icon from the Elements panel shows a ghost icon following the cursor across the isometric grid until you drop it at the target tile.
 
@@ -90,6 +92,10 @@ An "experimental" community fork of [FossFLOW](https://github.com/stan-smith/Fos
 - **Connector — single-shot from Elements panel** — The Connector card in the Elements panel draws one connection then returns to the cursor tool. The toolbar Connector button stays in persistent mode as before.
 - **Import Icons dialog** — After selecting icon files, a dialog asks whether to treat them as isometric (3-D) or flat. Default is flat. Previously a persistent checkbox sat in the panel.
 - **ToolMenu cleanup** — Rectangle and Text removed from the top toolbar (both accessible from the Elements panel). Toolbar is now: Undo / Redo / Select / Lasso / Freehand / Pan / Connector.
+- **On-demand icon packs** — AWS, GCP, Azure, and Kubernetes icon packs are not loaded at startup. The Elements panel shows a "More icons" section listing each unloaded pack; clicking one loads it on the spot with an inline spinner. Once loaded, the icons appear in the grid immediately. Opening a diagram that references a pack triggers auto-loading silently. Canvas renders immediately with no blocking screen.
+- **Diagram name always in sync** — The toolbar name stays correct across all flows: Save, Save As, Load (session and server), New Diagram, and file Open via the library's hamburger menu. The old name can no longer bleed through after switching.
+- **Compact diagram format** — Diagrams exported in ultra-compact LLM-friendly format (`{"t":…,"i":…,"v":…,"_":{"f":"compact","v":"1.0"}}`) load correctly via the Diagrams panel or file Open. The format is auto-detected and expanded before rendering; the name always comes from the storage listing, not from the compact payload.
+- **Icon storage** — Full-format JSON is self-contained: the `icons` array carries each icon's full image data (base64 / SVG) so diagrams render offline. Compact format stores string references only and resolves them from the built-in library at load time — files are orders of magnitude smaller but require the app to be online.
 
 ---
 

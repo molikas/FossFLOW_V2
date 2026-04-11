@@ -35,7 +35,7 @@ export const LeftDock = () => {
         position: 'absolute',
         top: 0,
         left: 0,
-        bottom: 0,
+        bottom: 40, // stop above the BottomDock (height: 40)
         display: 'flex',
         zIndex: 10,
         pointerEvents: 'none'

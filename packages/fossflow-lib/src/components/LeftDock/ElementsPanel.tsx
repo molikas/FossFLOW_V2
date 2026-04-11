@@ -1,6 +1,9 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { Box, Button } from '@mui/material';
-import { FileUpload as FileUploadIcon } from '@mui/icons-material';
+import { Box, Button, CircularProgress, Stack, Typography } from '@mui/material';
+import {
+  FileUpload as FileUploadIcon,
+  CloudDownloadOutlined as LoadPackIcon
+} from '@mui/icons-material';
 import { useUiStateStore } from 'src/stores/uiStateStore';
 import { useModelStore } from 'src/stores/modelStore';
 import { Icon } from 'src/types';
@@ -18,6 +21,7 @@ export const ElementsPanel = () => {
   const { t } = useTranslation('iconSelectionControls');
   const uiStateActions = useUiStateStore((s) => s.actions);
   const iconCategoriesState = useUiStateStore((s) => s.iconCategoriesState);
+  const iconPackManager = useUiStateStore((s) => s.iconPackManager);
   const modelActions = useModelStore((s) => s.actions);
   const currentIcons = useModelStore((s) => s.icons);
   const { setFilter, filteredIcons, filter } = useIconFiltering();
@@ -190,6 +194,64 @@ export const ElementsPanel = () => {
           />
         )}
       </Box>
+
+      {/* More icons — unloaded icon packs */}
+      {iconPackManager && (() => {
+        const unloaded = iconPackManager.packInfo.filter(
+          (p) => !p.loaded && !p.loading
+        );
+        const loading = iconPackManager.packInfo.filter((p) => p.loading);
+        if (unloaded.length === 0 && loading.length === 0) return null;
+        return (
+          <Box
+            sx={{
+              flexShrink: 0,
+              borderTop: '1px solid',
+              borderColor: 'divider',
+              p: 1.5
+            }}
+          >
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              display="block"
+              sx={{ mb: 0.75, textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: 10 }}
+            >
+              More icons
+            </Typography>
+            <Stack spacing={0.5}>
+              {[...loading, ...unloaded].map((pack) => (
+                <Button
+                  key={pack.name}
+                  size="small"
+                  variant="text"
+                  fullWidth
+                  disabled={pack.loading}
+                  startIcon={
+                    pack.loading ? (
+                      <CircularProgress size={12} color="inherit" />
+                    ) : (
+                      <LoadPackIcon sx={{ fontSize: 16 }} />
+                    )
+                  }
+                  onClick={() => iconPackManager.onTogglePack(pack.name, true)}
+                  sx={{
+                    justifyContent: 'flex-start',
+                    color: 'text.secondary',
+                    fontSize: 12,
+                    py: 0.25,
+                    '&:hover': { color: 'text.primary' }
+                  }}
+                >
+                  {pack.loading
+                    ? `Loading ${pack.displayName}…`
+                    : pack.displayName}
+                </Button>
+              ))}
+            </Stack>
+          </Box>
+        );
+      })()}
 
       {/* Import section — just the button, no persistent checkbox */}
       <Box

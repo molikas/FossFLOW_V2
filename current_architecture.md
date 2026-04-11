@@ -1,6 +1,6 @@
 # FossFLOW Community Edition — Architecture Reference
 
-**Last updated:** 2026-04-10 (rev 8)
+**Last updated:** 2026-04-11 (rev 9)
 **Codebase root:** `packages/fossflow-lib/src` (library) · `packages/fossflow-app/src` (application shell)
 **Purpose:** Living architecture reference — feature inventory, store/reducer/mode architecture, test audit, gap analysis, lessons learned, and key APIs. Update this document whenever significant architectural changes are made.
 
@@ -131,6 +131,35 @@ Both model and scene have **independent** history stacks (past/present/future, m
 ### Icon Packs
 
 `IsoflowProps.iconPackManager` (type `IconPackManagerProps`) is passed from outside. Stored in `uiState.iconPackManager`. `IconSelectionControls` and `IconGrid` consume it. Lazy loading welcome notification shown when present.
+
+**App-side icon pack manager** (`fossflow-app/src/services/iconPackManager.ts` → `useIconPackManager` hook):
+
+| Setting | Storage key | Default |
+|---|---|---|
+| Lazy loading enabled | `fossflow-lazy-loading-enabled` | `true` |
+| Enabled packs | `fossflow-enabled-icon-packs` | `['aws','gcp','azure','kubernetes']` |
+
+**Initialization strategy (2026-04-11, revised):**
+- **Canvas always renders immediately** — `frozenInitialDataRef` is set on the very first render with whatever icons are in memory (core isoflow icons, always available). `<Isoflow>` is mounted unconditionally — no loading screen, no gate.
+- **Lazy mode** (`lazyLoadingEnabled=true`, default): `isInitialized` is set immediately. No packs are fetched at startup. Unloaded packs appear as one-click load buttons in the Elements panel "More icons" section (see below). When the user clicks a pack button, `togglePack(name, true)` is called → `loadPack(name)` fires → the button shows an inline MUI `CircularProgress` spinner (disabled) until the dynamic `import()` resolves → button disappears and icons appear in the grid above.
+- **Non-lazy mode**: `loadAllPacks()` is awaited before `isInitialized=true`. All packs are in memory before the hook returns; the canvas renders with all icons available.
+- **On diagram load**: `loadPacksForDiagram(items)` fires before applying the model. It inspects each item's `icon.collection` and loads any referenced pack not yet in memory — silent, automatic, no user action needed.
+- **When a pack finishes loading**: `setLoadedIcons(prev => [...prev, ...flattenedIcons])` triggers the `iconPackManager.loadedIcons` effect in `EditorPage`, which calls `isoflowRef.current.load({...currentModel, icons: merged})` with `isAfterLoadRef.current = true` to suppress the unsaved-changes flag.
+
+**LeftDock bottom offset (2026-04-11):** `LeftDock` now has `bottom: 40` (was `bottom: 0`) so it stops above the `BottomDock` (height 40 px, `position: absolute, bottom: 0`). This ensures the Import Icons button at the bottom of `ElementsPanel` is always fully visible and not clipped by the zoom/help bar.
+
+**Diagram name / title synchronization (2026-04-11):**
+
+`handleModelUpdated` in `EditorPage` now detects title drift — when the library fires `onModelUpdated` with a title that differs from `diagramName` and `isAfterLoadRef.current` is false, it means the library's own MainMenu triggered an action (New Diagram, Open file). In that case:
+- `setDiagramName(model.title)` — syncs toolbar name to the new canvas title
+- `setCurrentDiagram(null)` — invalidates the stale save reference
+- `setLastSaved(null)` — clears the stale save timestamp
+
+This prevents the old diagram name bleeding into the toolbar after "New Diagram" or file-open from the library's menu.
+
+**Compact format loading (2026-04-11):**
+
+`handleDiagramManagerLoad(id, rawData, listingName)` detects `rawData._?.f === 'compact'` and calls `transformFromCompactFormat(rawData)` (exported from `fossflow-lib`) before passing the model to Isoflow. The listing name (from the storage metadata) is used as the diagram name — always correct regardless of what field exists in the raw payload. `transformFromCompactFormat` is now exported from `fossflow-lib/src/index.ts`.
 
 ### Editor Modes
 
@@ -938,6 +967,19 @@ For pastes with ≥ 500 connectors, `useCopyPaste` passes an `onPathProgress(don
 | `__perf_refactor_regression__/toolMenu.i18n.test.ts` | 11 → 8 | 3 assertions flipped | `t('rectangle')`, `t('text')`, `t('addItem')` assertions changed from `toContain` to `not.toContain` — those tools were removed from ToolMenu |
 | `__perf_refactor_regression__/quickAdd.groupButton.test.ts` | 10 | comments only | "Group button" → "Rectangle button" in comments; logic unchanged |
 | `components/ItemControls/IconSelectionControls/__tests__/Icon.test.tsx` | 2 | test changed | `getByText('flat')` → `getByAltText('flat icon')` / `getByAltText('isometric icon')` — tests alt text since text labels were removed in a prior session |
+
+**Changes — round 11 (2026-04-11, icon loading + diagram name sync + compact format):**
+
+| Area | Change | File(s) |
+|---|---|---|
+| Canvas startup | `frozenInitialDataRef` set unconditionally on first render; `<Isoflow>` mounted without any loading gate — canvas shows immediately | `fossflow-app/src/App.tsx` |
+| "More icons" in Elements panel | Unloaded packs listed as one-click load buttons with inline `CircularProgress` spinner; disappear when loaded | `fossflow-lib/src/components/LeftDock/ElementsPanel.tsx` |
+| LeftDock bottom offset | `bottom: 40` stops panel above BottomDock; Import Icons button no longer clipped | `fossflow-lib/src/components/LeftDock/LeftDock.tsx` |
+| Diagram name sync | `handleModelUpdated` detects title drift from library's New/Open actions; resets `diagramName`, `currentDiagram`, `lastSaved` | `fossflow-app/src/App.tsx` |
+| Compact format loading | `handleDiagramManagerLoad` calls `transformFromCompactFormat` on compact payloads; listing name used as canonical name | `fossflow-app/src/App.tsx` |
+| `transformFromCompactFormat` export | Added to `fossflow-lib/src/index.ts` public exports | `fossflow-lib/src/index.ts` |
+| DiagramManager callback | `onLoadDiagram` gains `listingName` third arg; `handleLoad` passes `diagram.name` | `fossflow-app/src/components/DiagramManager.tsx` |
+| Debug logging | Temporary `console.log` in `handleModelUpdated`, `handleDiagramManagerLoad`, `loadDiagram` | `fossflow-app/src/App.tsx` |
 
 **Full regression suite documentation:** See `regression_tests.md` at repo root — suites listed with production targets, test counts, classifications, coverage notes, and known gaps.
 
