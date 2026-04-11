@@ -158,7 +158,6 @@ export const DragItems: ModeActions = {
       uiState.mouse.position.tile,
       uiState.mouse.mousedown.tile
     );
-    if (CoordsUtils.isEqual(mouseOffset, CoordsUtils.zero())) return;
 
     // Show not-allowed cursor only when a node is dragged onto another node
     const hasDraggedNode = uiState.mode.items.some((i) => i.type === 'ITEM');

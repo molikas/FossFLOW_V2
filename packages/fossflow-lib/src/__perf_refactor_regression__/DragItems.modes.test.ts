@@ -158,7 +158,11 @@ describe('DragItems.mousemove', () => {
     expect(scene.transaction).not.toHaveBeenCalled();
   });
 
-  it('does nothing when mouseOffset is zero (position === mousedown tile)', () => {
+  it('skips scene transaction but still sets cursor when mouseOffset is zero', () => {
+    // When user drags back to the original tile the offset is {0,0}.
+    // The fix: we no longer early-return so items can be repositioned back to
+    // their initial tiles. Cursor logic runs (sets grabbing); with no items in
+    // the selection the scene transaction is still skipped.
     const uiState = makeUiState({
       mouse: {
         position: { tile: { x: 5, y: 5 } },
@@ -168,7 +172,7 @@ describe('DragItems.mousemove', () => {
     const scene = makeScene();
     DragItems.mousemove!({ uiState, scene } as any);
     expect(scene.transaction).not.toHaveBeenCalled();
-    expect(mockSetWindowCursor).not.toHaveBeenCalled();
+    expect(mockSetWindowCursor).toHaveBeenCalledWith('grabbing');
   });
 
   it('sets not-allowed cursor when dragged node collides with external node', () => {

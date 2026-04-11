@@ -253,18 +253,15 @@ export const useIconPackManager = (coreIcons: any[]) => {
 
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Initialize: Load enabled packs or all packs depending on lazy loading setting
+  // Initialize: when lazy loading is disabled, eagerly load all packs.
+  // When lazy loading is enabled, skip startup loading entirely — packs are
+  // fetched on-demand via loadPacksForDiagram() or explicit user toggles.
   useEffect(() => {
     const initialize = async () => {
       if (!lazyLoadingEnabled) {
         await loadAllPacks();
-      } else {
-        for (const pack of enabledPacks) {
-          if (!packInfo[pack].loaded && !packInfo[pack].loading) {
-            await loadPack(pack);
-          }
-        }
       }
+      // lazyLoadingEnabled=true → nothing to load upfront; isInitialized immediately
       setIsInitialized(true);
     };
     initialize();
