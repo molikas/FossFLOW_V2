@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DiagramInfo, StorageService } from '../services/storageService';
+import { ConfirmDialog } from './ConfirmDialog';
 import './DiagramManager.css';
 
 interface Props {
@@ -21,6 +22,7 @@ export const DiagramManager: React.FC<Props> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     loadDiagrams();
@@ -61,9 +63,14 @@ export const DiagramManager: React.FC<Props> = ({
     }
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!window.confirm(t('dialog.diagramManager.deleteConfirm', { name })))
-      return;
+  const handleDelete = (id: string, name: string) => {
+    setPendingDelete({ id, name });
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    const { id } = pendingDelete;
+    setPendingDelete(null);
     try {
       await storage.deleteDiagram(id);
       await loadDiagrams();
@@ -164,6 +171,15 @@ export const DiagramManager: React.FC<Props> = ({
           </div>
         )}
       </div>
+
+      {pendingDelete && (
+        <ConfirmDialog
+          open
+          message={t('dialog.diagramManager.deleteConfirm', { name: pendingDelete.name })}
+          onConfirm={confirmDelete}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
     </div>
   );
 };

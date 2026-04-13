@@ -2,7 +2,8 @@
 import { FreehandLasso } from '../modes/FreehandLasso';
 
 const mockSetMode = jest.fn();
-const mockScreenToIso = jest.fn((args: { mouse: { x: number; y: number } }) => ({
+// screenToTile is now injected via state — no longer imported from src/utils.
+const mockScreenToTile = jest.fn((args: { mouse: { x: number; y: number } }) => ({
   x: args.mouse.x / 10,
   y: args.mouse.y / 10
 }));
@@ -10,7 +11,6 @@ const mockIsPointInPolygon = jest.fn(() => false);
 const mockGetItemByIdOrThrow = jest.fn();
 
 jest.mock('src/utils', () => ({
-  screenToIso: (args: unknown) => mockScreenToIso(args as any),
   isPointInPolygon: (point: unknown, path: unknown) =>
     mockIsPointInPolygon(point, path),
   getItemByIdOrThrow: (items: unknown[], id: string) =>
@@ -55,6 +55,19 @@ function makeScene(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** Build the base State shape expected by FreehandLasso mode actions. */
+function makeState(
+  uiStateOverrides: Record<string, unknown> = {},
+  sceneOverrides: Record<string, unknown> = {}
+) {
+  return {
+    uiState: makeUiState(uiStateOverrides),
+    scene: makeScene(sceneOverrides),
+    isRendererInteraction: true,
+    screenToTile: mockScreenToTile
+  };
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockIsPointInPolygon.mockReturnValue(false);
@@ -62,13 +75,7 @@ beforeEach(() => {
 
 describe('FreehandLasso.mousedown', () => {
   it('starts a new path on renderer interaction with no selection', () => {
-    const uiState = makeUiState();
-
-    FreehandLasso.mousedown?.({
-      uiState: uiState as any,
-      scene: makeScene() as any,
-      isRendererInteraction: true
-    });
+    FreehandLasso.mousedown?.(makeState() as any);
 
     expect(mockSetMode).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -81,20 +88,15 @@ describe('FreehandLasso.mousedown', () => {
   });
 
   it('does nothing on non-renderer interaction with no selection', () => {
-    const uiState = makeUiState();
-
-    FreehandLasso.mousedown?.({
-      uiState: uiState as any,
-      scene: makeScene() as any,
-      isRendererInteraction: false
-    });
+    const state = { ...makeState(), isRendererInteraction: false };
+    FreehandLasso.mousedown?.(state as any);
 
     expect(mockSetMode).not.toHaveBeenCalled();
   });
 
   it('sets isDragging when click is within an existing selection', () => {
     mockIsPointInPolygon.mockReturnValue(true);
-    const uiState = makeUiState({
+    const state = makeState({
       mode: {
         type: 'FREEHAND_LASSO',
         path: [],
@@ -107,11 +109,7 @@ describe('FreehandLasso.mousedown', () => {
       }
     });
 
-    FreehandLasso.mousedown?.({
-      uiState: uiState as any,
-      scene: makeScene() as any,
-      isRendererInteraction: true
-    });
+    FreehandLasso.mousedown?.(state as any);
 
     expect(mockSetMode).toHaveBeenCalledWith(
       expect.objectContaining({ isDragging: true })
@@ -120,7 +118,7 @@ describe('FreehandLasso.mousedown', () => {
 
   it('clears selection and starts new path when clicking outside existing selection on canvas', () => {
     mockIsPointInPolygon.mockReturnValue(false);
-    const uiState = makeUiState({
+    const state = makeState({
       mode: {
         type: 'FREEHAND_LASSO',
         path: [],
@@ -133,11 +131,7 @@ describe('FreehandLasso.mousedown', () => {
       }
     });
 
-    FreehandLasso.mousedown?.({
-      uiState: uiState as any,
-      scene: makeScene() as any,
-      isRendererInteraction: true
-    });
+    FreehandLasso.mousedown?.(state as any);
 
     expect(mockSetMode).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -150,39 +144,33 @@ describe('FreehandLasso.mousedown', () => {
 
   it('preserves selection on non-renderer click outside selection bounds', () => {
     mockIsPointInPolygon.mockReturnValue(false);
-    const existingSelection = {
-      pathTiles: [{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 1, y: 2 }],
-      items: []
-    };
-    const uiState = makeUiState({
-      mode: {
-        type: 'FREEHAND_LASSO',
-        path: [],
-        selection: existingSelection,
-        isDragging: false,
-        showCursor: true
-      }
-    });
-
-    FreehandLasso.mousedown?.({
-      uiState: uiState as any,
-      scene: makeScene() as any,
+    const state = {
+      ...makeState({
+        mode: {
+          type: 'FREEHAND_LASSO',
+          path: [],
+          selection: {
+            pathTiles: [{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 1, y: 2 }],
+            items: []
+          },
+          isDragging: false,
+          showCursor: true
+        }
+      }),
       isRendererInteraction: false
-    });
+    };
+
+    FreehandLasso.mousedown?.(state as any);
 
     expect(mockSetMode).not.toHaveBeenCalled();
   });
 
   it('does nothing when mode type is not FREEHAND_LASSO', () => {
-    const uiState = makeUiState({
+    const state = makeState({
       mode: { type: 'CURSOR', showCursor: true, mousedownItem: null }
     });
 
-    FreehandLasso.mousedown?.({
-      uiState: uiState as any,
-      scene: makeScene() as any,
-      isRendererInteraction: true
-    });
+    FreehandLasso.mousedown?.(state as any);
 
     expect(mockSetMode).not.toHaveBeenCalled();
   });
@@ -190,7 +178,7 @@ describe('FreehandLasso.mousedown', () => {
 
 describe('FreehandLasso.mousemove', () => {
   it('appends screen point to path while drawing', () => {
-    const uiState = makeUiState({
+    const state = makeState({
       mode: {
         type: 'FREEHAND_LASSO',
         path: [{ x: 40, y: 40 }],
@@ -207,11 +195,7 @@ describe('FreehandLasso.mousemove', () => {
       }
     });
 
-    FreehandLasso.mousemove?.({
-      uiState: uiState as any,
-      scene: makeScene() as any,
-      isRendererInteraction: true
-    });
+    FreehandLasso.mousemove?.(state as any);
 
     expect(mockSetMode).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -224,24 +208,20 @@ describe('FreehandLasso.mousemove', () => {
   });
 
   it('does nothing when mousedown is null (not dragging)', () => {
-    const uiState = makeUiState({
+    const state = makeState({
       mouse: {
         position: { tile: { x: 5, y: 5 }, screen: { x: 50, y: 50 } },
         mousedown: null
       }
     });
 
-    FreehandLasso.mousemove?.({
-      uiState: uiState as any,
-      scene: makeScene() as any,
-      isRendererInteraction: true
-    });
+    FreehandLasso.mousemove?.(state as any);
 
     expect(mockSetMode).not.toHaveBeenCalled();
   });
 
   it('does not add a point when movement is below throttle threshold', () => {
-    const uiState = makeUiState({
+    const state = makeState({
       mode: {
         type: 'FREEHAND_LASSO',
         path: [{ x: 50, y: 50 }],
@@ -258,11 +238,7 @@ describe('FreehandLasso.mousemove', () => {
       }
     });
 
-    FreehandLasso.mousemove?.({
-      uiState: uiState as any,
-      scene: makeScene() as any,
-      isRendererInteraction: true
-    });
+    FreehandLasso.mousemove?.(state as any);
 
     // setMode is called but path length stays 1 (point not added)
     const call = mockSetMode.mock.calls[0]?.[0];
@@ -271,21 +247,20 @@ describe('FreehandLasso.mousemove', () => {
 
   it('switches to DRAG_ITEMS mode when isDragging is true with a selection', () => {
     mockGetItemByIdOrThrow.mockReturnValue({ value: { tile: { x: 3, y: 3 } }, index: 0 });
-    const uiState = makeUiState({
-      mode: {
-        type: 'FREEHAND_LASSO',
-        path: [],
-        selection: { items: [{ type: 'ITEM', id: 'item-1' }], pathTiles: [] },
-        isDragging: true,
-        showCursor: true
-      }
-    });
+    const state = makeState(
+      {
+        mode: {
+          type: 'FREEHAND_LASSO',
+          path: [],
+          selection: { items: [{ type: 'ITEM', id: 'item-1' }], pathTiles: [] },
+          isDragging: true,
+          showCursor: true
+        }
+      },
+      { items: [{ id: 'item-1', tile: { x: 3, y: 3 } }] }
+    );
 
-    FreehandLasso.mousemove?.({
-      uiState: uiState as any,
-      scene: makeScene({ items: [{ id: 'item-1', tile: { x: 3, y: 3 } }] }) as any,
-      isRendererInteraction: true
-    });
+    FreehandLasso.mousemove?.(state as any);
 
     expect(mockSetMode).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'DRAG_ITEMS' })
@@ -295,24 +270,20 @@ describe('FreehandLasso.mousemove', () => {
 
 describe('FreehandLasso.mouseup', () => {
   it('does nothing when mousedown is null', () => {
-    const uiState = makeUiState({
+    const state = makeState({
       mouse: {
         position: { tile: { x: 5, y: 5 }, screen: { x: 50, y: 50 } },
         mousedown: null
       }
     });
 
-    FreehandLasso.mouseup?.({
-      uiState: uiState as any,
-      scene: makeScene() as any,
-      isRendererInteraction: true
-    });
+    FreehandLasso.mouseup?.(state as any);
 
     expect(mockSetMode).not.toHaveBeenCalled();
   });
 
   it('does not create a selection when path has fewer than 3 points', () => {
-    const uiState = makeUiState({
+    const state = makeState({
       mode: {
         type: 'FREEHAND_LASSO',
         path: [{ x: 10, y: 10 }, { x: 20, y: 20 }],
@@ -322,19 +293,15 @@ describe('FreehandLasso.mouseup', () => {
       }
     });
 
-    FreehandLasso.mouseup?.({
-      uiState: uiState as any,
-      scene: makeScene() as any,
-      isRendererInteraction: true
-    });
+    FreehandLasso.mouseup?.(state as any);
 
     // selection should not have been set (path too short to form a polygon)
     const call = mockSetMode.mock.calls[0]?.[0];
     expect(call?.selection).toBeNull();
   });
 
-  it('converts path to tile coordinates and sets selection when path has 3+ points', () => {
-    const uiState = makeUiState({
+  it('uses injected screenToTile to convert path and sets selection when path has 3+ points', () => {
+    const state = makeState({
       mode: {
         type: 'FREEHAND_LASSO',
         path: [
@@ -348,13 +315,10 @@ describe('FreehandLasso.mouseup', () => {
       }
     });
 
-    FreehandLasso.mouseup?.({
-      uiState: uiState as any,
-      scene: makeScene() as any,
-      isRendererInteraction: true
-    });
+    FreehandLasso.mouseup?.(state as any);
 
-    expect(mockScreenToIso).toHaveBeenCalledTimes(3);
+    // The injected screenToTile (mockScreenToTile) should have been called once per path point.
+    expect(mockScreenToTile).toHaveBeenCalledTimes(3);
     expect(mockSetMode).toHaveBeenCalledWith(
       expect.objectContaining({
         selection: expect.objectContaining({
@@ -366,15 +330,11 @@ describe('FreehandLasso.mouseup', () => {
   });
 
   it('does nothing when mode type is not FREEHAND_LASSO', () => {
-    const uiState = makeUiState({
+    const state = makeState({
       mode: { type: 'CURSOR', showCursor: true, mousedownItem: null }
     });
 
-    FreehandLasso.mouseup?.({
-      uiState: uiState as any,
-      scene: makeScene() as any,
-      isRendererInteraction: true
-    });
+    FreehandLasso.mouseup?.(state as any);
 
     expect(mockSetMode).not.toHaveBeenCalled();
   });

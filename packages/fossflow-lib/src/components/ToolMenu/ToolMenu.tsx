@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { Stack, Chip } from '@mui/material';
+import { Stack, Chip, Divider } from '@mui/material';
 import {
   PanToolOutlined as PanToolIcon,
   NearMeOutlined as NearMeIcon,
@@ -7,7 +7,9 @@ import {
   Undo as UndoIcon,
   Redo as RedoIcon,
   HighlightAltOutlined as LassoIcon,
-  GestureOutlined as FreehandLassoIcon
+  GestureOutlined as FreehandLassoIcon,
+  ViewInArOutlined as IsometricIcon,
+  GridOnOutlined as CartesianIcon
 } from '@mui/icons-material';
 import { useUiStateStore } from 'src/stores/uiStateStore';
 import { IconButton } from 'src/components/IconButton/IconButton';
@@ -29,6 +31,7 @@ export const ToolMenu = () => {
   const connectorInteractionMode = useUiStateStore((state) => {
     return state.connectorInteractionMode;
   });
+  const canvasMode = useUiStateStore((state) => state.canvasMode);
 
   const hotkeys = HOTKEY_PROFILES[hotkeyProfile];
 
@@ -38,6 +41,10 @@ export const ToolMenu = () => {
   const handleRedo = useCallback(() => {
     redo();
   }, [redo]);
+
+  const handleToggleCanvasMode = useCallback(() => {
+    uiStateStoreActions.setCanvasMode(canvasMode === 'ISOMETRIC' ? '2D' : 'ISOMETRIC');
+  }, [canvasMode, uiStateStoreActions]);
 
   return (
     <UiElement>
@@ -129,6 +136,15 @@ export const ToolMenu = () => {
             sx={{ fontSize: '0.65rem', height: 18, mx: 'auto' }}
           />
         )}
+
+        {/* Canvas mode toggle */}
+        <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+        <IconButton
+          name={canvasMode === 'ISOMETRIC' ? 'Switch to 2D view' : 'Switch to isometric view'}
+          Icon={canvasMode === 'ISOMETRIC' ? <CartesianIcon /> : <IsometricIcon />}
+          onClick={handleToggleCanvasMode}
+          isActive={false}
+        />
       </Stack>
     </UiElement>
   );

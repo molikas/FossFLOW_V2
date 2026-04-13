@@ -46,6 +46,7 @@ const initialState = () => {
       labelSettings: persisted?.labelSettings ?? DEFAULT_LABEL_SETTINGS,
       connectorInteractionMode: persisted?.connectorInteractionMode ?? 'click',
       expandLabels: persisted?.expandLabels ?? false,
+      canvasMode: persisted?.canvasMode ?? 'ISOMETRIC',
       iconPackManager: null, // Will be set by Isoflow if provided
       notification: null,
       activeLeftTab: null,
@@ -168,6 +169,9 @@ const initialState = () => {
         },
         setIsDirty: (isDirty) => {
           set({ isDirty });
+        },
+        setCanvasMode: (canvasMode) => {
+          set({ canvasMode });
         }
       }
     };

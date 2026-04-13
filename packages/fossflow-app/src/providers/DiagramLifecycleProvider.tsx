@@ -21,7 +21,9 @@ import { SaveDialog } from '../components/SaveDialog';
 import { LoadDialog } from '../components/LoadDialog';
 import { ExportDialog } from '../components/ExportDialog';
 import { SaveAsDialog } from '../components/SaveAsDialog';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { StorageManager } from '../StorageManager';
+import { notificationStore } from '../stores/notificationStore';
 
 // Core icons — loaded once at module level
 const coreIcons = flattenCollections([isoflowIsopack]);
@@ -44,6 +46,11 @@ export interface SavedDiagram {
   updatedAt: string;
 }
 
+interface PendingConfirm {
+  message: string;
+  onConfirm: () => void;
+}
+
 interface DiagramLifecycleContextValue {
   // Diagram state
   diagramName: string;
@@ -53,9 +60,6 @@ interface DiagramLifecycleContextValue {
   currentDiagram: SavedDiagram | null;
   diagrams: SavedDiagram[];
   currentModel: DiagramData | null;
-  saveToast: string | null;
-  sessionWarningDismissed: boolean;
-  setSessionWarningDismissed: (v: boolean) => void;
   isReadonlyUrl: boolean;
   // Dialog state
   showExportDialog: boolean;
@@ -121,6 +125,7 @@ export function DiagramLifecycleProvider({
   const [showDiagramManager, setShowDiagramManager] = useState(false);
   const [showSaveAsDialog, setShowSaveAsDialog] = useState(false);
   const [saveAsName, setSaveAsName] = useState('');
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
 
   // ---------------------------------------------------------------------------
   // Model / save state
@@ -128,10 +133,6 @@ export function DiagramLifecycleProvider({
   const [currentModel, setCurrentModel] = useState<DiagramData | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
-  const [saveToast, setSaveToast] = useState<string | null>(null);
-  const [sessionWarningDismissed, setSessionWarningDismissed] = useState(
-    () => sessionStorage.getItem('foss-session-warning-dismissed') === '1'
-  );
 
   // ---------------------------------------------------------------------------
   // Portal state
@@ -226,7 +227,10 @@ export function DiagramLifecycleProvider({
         isAfterLoadRef.current = true;
         isoflowRef.current?.load(dataWithIcons as any);
       } catch (_error) {
-        alert(t('dialog.readOnly.failed'));
+        notificationStore.push({
+          severity: 'error',
+          message: t('dialog.readOnly.failed')
+        });
         window.location.href = '/';
       }
     };
@@ -292,19 +296,13 @@ export function DiagramLifecycleProvider({
     } catch (e) {
       console.error('Failed to save diagrams:', e);
       if (e instanceof DOMException && e.name === 'QuotaExceededError') {
-        alert(t('alert.quotaExceeded'));
+        notificationStore.push({
+          severity: 'error',
+          message: t('alert.quotaExceeded')
+        });
       }
     }
   }, [diagrams]);
-
-  // ---------------------------------------------------------------------------
-  // Auto-dismiss save toast
-  // ---------------------------------------------------------------------------
-  useEffect(() => {
-    if (!saveToast) return;
-    const timer = setTimeout(() => setSaveToast(null), 2500);
-    return () => clearTimeout(timer);
-  }, [saveToast]);
 
   // ---------------------------------------------------------------------------
   // Warn before unload on unsaved changes
@@ -339,74 +337,85 @@ export function DiagramLifecycleProvider({
   }, [currentModel, diagramData, diagramName]);
 
   // ---------------------------------------------------------------------------
-  // Session-mode save/load/delete
+  // Session-mode save — core logic (after validation / confirm)
   // ---------------------------------------------------------------------------
+  const executeSave = useCallback(
+    (existingDiagram?: SavedDiagram) => {
+      const importedIcons = (currentModel?.icons || diagramData.icons || []).filter(
+        (icon) => icon.collection === 'imported'
+      );
+      const savedData = {
+        title: diagramName,
+        icons: importedIcons,
+        colors: currentModel?.colors || diagramData.colors || [],
+        items: currentModel?.items || diagramData.items || [],
+        views: currentModel?.views || diagramData.views || [],
+        fitToScreen: true
+      };
+      const newDiagram: SavedDiagram = {
+        id: currentDiagram?.id || Date.now().toString(),
+        name: diagramName,
+        data: savedData,
+        createdAt: currentDiagram?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      if (currentDiagram) {
+        setDiagrams(diagrams.map((d) => (d.id === currentDiagram.id ? newDiagram : d)));
+      } else if (existingDiagram) {
+        setDiagrams(
+          diagrams.map((d) =>
+            d.id === existingDiagram.id
+              ? { ...newDiagram, id: existingDiagram.id, createdAt: existingDiagram.createdAt }
+              : d
+          )
+        );
+        newDiagram.id = existingDiagram.id;
+        newDiagram.createdAt = existingDiagram.createdAt;
+      } else {
+        setDiagrams([...diagrams, newDiagram]);
+      }
+      setCurrentDiagram(newDiagram);
+      setShowSaveDialog(false);
+      setHasUnsavedChanges(false);
+      setLastSaved(new Date());
+      notificationStore.push({ severity: 'success', message: `"${diagramName}" saved` });
+      try {
+        localStorage.setItem('fossflow-last-opened', newDiagram.id);
+        localStorage.setItem('fossflow-last-opened-data', JSON.stringify(newDiagram.data));
+      } catch (e) {
+        console.error('Failed to save diagram:', e);
+        if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+          notificationStore.push({ severity: 'error', message: t('alert.storageFull') });
+          setShowStorageManager(true);
+        }
+      }
+    },
+    [diagramName, diagrams, currentDiagram, currentModel, diagramData, t]
+  );
+
   const saveDiagram = useCallback(() => {
     if (!diagramName.trim()) {
-      alert(t('alert.enterDiagramName'));
+      notificationStore.push({ severity: 'error', message: t('alert.enterDiagramName') });
       return;
     }
     const existingDiagram = diagrams.find(
       (d) => d.name === diagramName.trim() && d.id !== currentDiagram?.id
     );
     if (existingDiagram) {
-      if (!window.confirm(t('alert.diagramExists', { name: diagramName }))) return;
+      setPendingConfirm({
+        message: t('alert.diagramExists', { name: diagramName }),
+        onConfirm: () => executeSave(existingDiagram)
+      });
+      return;
     }
-    const importedIcons = (currentModel?.icons || diagramData.icons || []).filter(
-      (icon) => icon.collection === 'imported'
-    );
-    const savedData = {
-      title: diagramName,
-      icons: importedIcons,
-      colors: currentModel?.colors || diagramData.colors || [],
-      items: currentModel?.items || diagramData.items || [],
-      views: currentModel?.views || diagramData.views || [],
-      fitToScreen: true
-    };
-    const newDiagram: SavedDiagram = {
-      id: currentDiagram?.id || Date.now().toString(),
-      name: diagramName,
-      data: savedData,
-      createdAt: currentDiagram?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    if (currentDiagram) {
-      setDiagrams(diagrams.map((d) => (d.id === currentDiagram.id ? newDiagram : d)));
-    } else if (existingDiagram) {
-      setDiagrams(
-        diagrams.map((d) =>
-          d.id === existingDiagram.id
-            ? { ...newDiagram, id: existingDiagram.id, createdAt: existingDiagram.createdAt }
-            : d
-        )
-      );
-      newDiagram.id = existingDiagram.id;
-      newDiagram.createdAt = existingDiagram.createdAt;
-    } else {
-      setDiagrams([...diagrams, newDiagram]);
-    }
-    setCurrentDiagram(newDiagram);
-    setShowSaveDialog(false);
-    setHasUnsavedChanges(false);
-    setLastSaved(new Date());
-    setSaveToast(diagramName);
-    try {
-      localStorage.setItem('fossflow-last-opened', newDiagram.id);
-      localStorage.setItem('fossflow-last-opened-data', JSON.stringify(newDiagram.data));
-    } catch (e) {
-      console.error('Failed to save diagram:', e);
-      if (e instanceof DOMException && e.name === 'QuotaExceededError') {
-        alert(t('alert.storageFull'));
-        setShowStorageManager(true);
-      }
-    }
-  }, [diagramName, diagrams, currentDiagram, currentModel, diagramData, t]);
+    executeSave();
+  }, [diagramName, diagrams, currentDiagram, t, executeSave]);
 
-  const loadDiagram = useCallback(
-    async (diagram: SavedDiagram, skipUnsavedCheck = false) => {
-      if (!skipUnsavedCheck && hasUnsavedChanges && !window.confirm(t('alert.unsavedChanges'))) {
-        return;
-      }
+  // ---------------------------------------------------------------------------
+  // Session-mode load — core logic
+  // ---------------------------------------------------------------------------
+  const executeLoad = useCallback(
+    async (diagram: SavedDiagram) => {
       await iconPackManager.loadPacksForDiagram(diagram.data.items || []);
       const importedIcons = (diagram.data.icons || []).filter(
         (icon: any) => icon.collection === 'imported'
@@ -430,18 +439,35 @@ export function DiagramLifecycleProvider({
         console.error('Failed to save last opened:', e);
       }
     },
-    [hasUnsavedChanges, iconPackManager, t]
+    [iconPackManager]
+  );
+
+  const loadDiagram = useCallback(
+    async (diagram: SavedDiagram, skipUnsavedCheck = false) => {
+      if (!skipUnsavedCheck && hasUnsavedChanges) {
+        setPendingConfirm({
+          message: t('alert.unsavedChanges'),
+          onConfirm: () => executeLoad(diagram)
+        });
+        return;
+      }
+      await executeLoad(diagram);
+    },
+    [hasUnsavedChanges, executeLoad, t]
   );
 
   const deleteDiagram = useCallback(
     (id: string) => {
-      if (window.confirm(t('alert.confirmDelete'))) {
-        setDiagrams(diagrams.filter((d) => d.id !== id));
-        if (currentDiagram?.id === id) {
-          setCurrentDiagram(null);
-          setDiagramName('');
+      setPendingConfirm({
+        message: t('alert.confirmDelete'),
+        onConfirm: () => {
+          setDiagrams(diagrams.filter((d) => d.id !== id));
+          if (currentDiagram?.id === id) {
+            setCurrentDiagram(null);
+            setDiagramName('');
+          }
         }
-      }
+      });
     },
     [diagrams, currentDiagram, t]
   );
@@ -543,10 +569,13 @@ export function DiagramLifecycleProvider({
           await storage.saveDiagram(currentDiagram.id, data as any);
           setHasUnsavedChanges(false);
           setLastSaved(new Date());
-          setSaveToast(currentDiagram.name);
+          notificationStore.push({ severity: 'success', message: `"${currentDiagram.name}" saved` });
         } catch (e) {
           console.error('Save failed:', e);
-          alert('Failed to save diagram. Please try again.');
+          notificationStore.push({
+            severity: 'error',
+            message: t('alert.saveFailed', 'Failed to save diagram. Please try again.')
+          });
         }
       } else {
         setSaveAsName(currentModel?.title || 'Untitled Diagram');
@@ -559,7 +588,7 @@ export function DiagramLifecycleProvider({
         setShowSaveDialog(true);
       }
     }
-  }, [serverStorageAvailable, storage, currentDiagram, buildSaveData, currentModel, saveDiagram]);
+  }, [serverStorageAvailable, storage, currentDiagram, buildSaveData, currentModel, saveDiagram, t]);
 
   const handleSaveAs = useCallback(async () => {
     if (!saveAsName.trim() || !storage) return;
@@ -578,7 +607,7 @@ export function DiagramLifecycleProvider({
       setDiagramName(name);
       setHasUnsavedChanges(false);
       setLastSaved(new Date());
-      setSaveToast(name);
+      notificationStore.push({ severity: 'success', message: `"${name}" saved` });
       setShowSaveAsDialog(false);
       setSaveAsName('');
       if (isoflowRef.current && currentModel) {
@@ -587,9 +616,12 @@ export function DiagramLifecycleProvider({
       }
     } catch (e) {
       console.error('Save As failed:', e);
-      alert('Failed to save diagram. Please try again.');
+      notificationStore.push({
+        severity: 'error',
+        message: t('alert.saveFailed', 'Failed to save diagram. Please try again.')
+      });
     }
-  }, [saveAsName, storage, buildSaveData, currentModel]);
+  }, [saveAsName, storage, buildSaveData, currentModel, t]);
 
   const handleOpenClick = useCallback(() => {
     if (serverStorageAvailable) {
@@ -625,15 +657,18 @@ export function DiagramLifecycleProvider({
         await storage.saveDiagram(currentDiagram.id, data as any);
         setHasUnsavedChanges(false);
         setLastSaved(new Date());
-        setSaveToast(currentDiagram.name);
+        notificationStore.push({ severity: 'success', message: `"${currentDiagram.name}" saved` });
       } catch (e) {
         console.error('Save before preview failed:', e);
-        alert('Failed to save before preview. Please try again.');
+        notificationStore.push({
+          severity: 'error',
+          message: t('alert.saveBeforePreviewFailed', 'Failed to save before preview. Please try again.')
+        });
         return;
       }
     }
     window.open(`/display/${currentDiagram.id}`, '_blank');
-  }, [serverStorageAvailable, currentDiagram, storage, hasUnsavedChanges, buildSaveData]);
+  }, [serverStorageAvailable, currentDiagram, storage, hasUnsavedChanges, buildSaveData, t]);
 
   // ---------------------------------------------------------------------------
   // Model update handler
@@ -701,9 +736,6 @@ export function DiagramLifecycleProvider({
     currentDiagram,
     diagrams,
     currentModel,
-    saveToast,
-    sessionWarningDismissed,
-    setSessionWarningDismissed,
     isReadonlyUrl,
     showExportDialog,
     setShowExportDialog,
@@ -772,6 +804,19 @@ export function DiagramLifecycleProvider({
           isServerStorage={true}
           onLoadDiagram={handleDiagramManagerLoad}
           onClose={() => setShowDiagramManager(false)}
+        />
+      )}
+
+      {pendingConfirm && (
+        <ConfirmDialog
+          open
+          message={pendingConfirm.message}
+          onConfirm={() => {
+            const fn = pendingConfirm.onConfirm;
+            setPendingConfirm(null);
+            fn();
+          }}
+          onCancel={() => setPendingConfirm(null)}
         />
       )}
     </DiagramLifecycleContext.Provider>

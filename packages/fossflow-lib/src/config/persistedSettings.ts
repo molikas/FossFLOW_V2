@@ -7,7 +7,7 @@ import type {
   ZoomSettings,
   LabelSettings
 } from 'src/types/settings';
-import type { ConnectorInteractionMode } from 'src/types/ui';
+import type { CanvasMode, ConnectorInteractionMode } from 'src/types/ui';
 
 const STORAGE_KEY = 'fossflow_user_settings';
 
@@ -18,6 +18,7 @@ export interface PersistedSettings {
   labelSettings?: LabelSettings;
   connectorInteractionMode?: ConnectorInteractionMode;
   expandLabels?: boolean;
+  canvasMode?: CanvasMode;
 }
 
 export const loadPersistedSettings = (): PersistedSettings | null => {

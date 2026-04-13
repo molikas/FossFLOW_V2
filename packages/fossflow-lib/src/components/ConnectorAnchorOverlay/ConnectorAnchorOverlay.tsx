@@ -2,10 +2,10 @@ import React, { useMemo } from 'react';
 import { useUiStateStore } from 'src/stores/uiStateStore';
 import { useScene } from 'src/hooks/useScene';
 import {
-  getTilePosition,
   getAnchorTile,
   connectorPathTileToGlobal
 } from 'src/utils';
+import { useCanvasMode } from 'src/contexts/CanvasModeContext';
 import { Coords } from 'src/types';
 
 // App accent color, matching the default connector/node palette
@@ -26,6 +26,7 @@ export const ConnectorAnchorOverlay = () => {
   const itemControls = useUiStateStore((state) => state.itemControls);
   const mode = useUiStateStore((state) => state.mode);
   const { hitConnectors, currentView } = useScene();
+  const { getTilePosition } = useCanvasMode();
 
   const selectedId = useMemo(() => {
     if (mode.type === 'RECONNECT_ANCHOR') return mode.connectorId;

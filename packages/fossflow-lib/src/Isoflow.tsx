@@ -32,6 +32,7 @@ import { useInitialDataManager } from 'src/hooks/useInitialDataManager';
 import { useDirtyTracker } from 'src/hooks/useDirtyTracker';
 import { ClipboardProvider } from 'src/clipboard/ClipboardContext';
 import { LayerContextProvider } from 'src/hooks/useLayerContext';
+import { CanvasModeProvider } from 'src/contexts/CanvasModeContext';
 import { LeftDock } from 'src/components/LeftDock/LeftDock';
 import { RightSidebar } from 'src/components/Sidebars/RightSidebar';
 import { BottomDock } from 'src/components/BottomDock/BottomDock';
@@ -79,7 +80,8 @@ const App = forwardRef<IsoflowRef, IsoflowProps>(
         zoomSettings: state.zoomSettings,
         labelSettings: state.labelSettings,
         connectorInteractionMode: state.connectorInteractionMode,
-        expandLabels: state.expandLabels
+        expandLabels: state.expandLabels,
+        canvasMode: state.canvasMode
       }),
       shallow
     );
@@ -197,6 +199,7 @@ const App = forwardRef<IsoflowRef, IsoflowProps>(
             transform: 'translateZ(0)'
           }}
         >
+          <CanvasModeProvider>
           <LayerContextProvider>
             {/* Canvas always fills the full container — sidebars overlay on top */}
             <Box sx={{ position: 'absolute', inset: 0 }}>
@@ -211,6 +214,7 @@ const App = forwardRef<IsoflowRef, IsoflowProps>(
             <RightSidebarSlot editorMode={editorMode} />
             <BottomDockSlot />
           </LayerContextProvider>
+          </CanvasModeProvider>
         </Box>
       </>
     );

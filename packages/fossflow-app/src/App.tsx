@@ -1,6 +1,6 @@
+import { useEffect, useRef } from 'react';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Alert } from '@mui/material';
 import { Isoflow, allLocales } from 'fossflow';
 import { AppStorageProvider, useAppStorage } from './providers/AppStorageContext';
 import {
@@ -9,6 +9,8 @@ import {
 } from './providers/DiagramLifecycleProvider';
 import { AppToolbar } from './components/AppToolbar';
 import { DiagnosticsOverlay } from './components/DiagnosticsOverlay';
+import { NotificationStack } from './components/NotificationStack';
+import { notificationStore } from './stores/notificationStore';
 import ChangeLanguage from './components/ChangeLanguage';
 import './App.css';
 
@@ -50,34 +52,30 @@ function EditorShell() {
     handleModelUpdated,
     toolbarPortalTarget,
     sidebarTogglePortalTarget,
-    isReadonlyUrl,
-    sessionWarningDismissed,
-    setSessionWarningDismissed,
-    saveToast
+    isReadonlyUrl
   } = useDiagramLifecycle();
 
   const currentLocale =
     allLocales[i18n.language as keyof typeof allLocales] || allLocales['en-US'];
 
+  const sessionWarnPushedRef = useRef(false);
+  useEffect(() => {
+    if (!serverStorageAvailable && !isReadonlyUrl && !sessionWarnPushedRef.current) {
+      sessionWarnPushedRef.current = true;
+      notificationStore.push({
+        severity: 'warning',
+        persistent: true,
+        message: t(
+          'status.sessionStorageNote',
+          'Session storage only — diagrams will be lost when you close this tab. Use a server backend for persistence.'
+        )
+      });
+    }
+  }, [serverStorageAvailable, isReadonlyUrl, t]);
+
   return (
     <div className="App">
       <AppToolbar />
-
-      {!serverStorageAvailable && !isReadonlyUrl && !sessionWarningDismissed && (
-        <Alert
-          severity="warning"
-          onClose={() => {
-            setSessionWarningDismissed(true);
-            sessionStorage.setItem('foss-session-warning-dismissed', '1');
-          }}
-          sx={{ borderRadius: 0, py: 0.5, fontSize: 12 }}
-        >
-          {t(
-            'status.sessionStorageNote',
-            'Session storage only — diagrams will be lost when you close this tab. Use a server backend for persistence.'
-          )}
-        </Alert>
-      )}
 
       <div className="fossflow-container">
         <Isoflow
@@ -94,8 +92,7 @@ function EditorShell() {
       </div>
 
       <DiagnosticsOverlay />
-
-      {saveToast && <div className="save-toast">✓ {saveToast} saved</div>}
+      <NotificationStack />
     </div>
   );
 }

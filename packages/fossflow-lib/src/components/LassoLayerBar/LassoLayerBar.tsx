@@ -9,7 +9,7 @@ import {
   Divider
 } from '@mui/material';
 import { LayersOutlined } from '@mui/icons-material';
-import { getTilePosition } from 'src/utils';
+import { useCanvasMode } from 'src/contexts/CanvasModeContext';
 import { useUiStateStore } from 'src/stores/uiStateStore';
 import { useLayerContext } from 'src/hooks/useLayerContext';
 import { useLayerActions } from 'src/hooks/useLayerActions';
@@ -46,6 +46,7 @@ export const LassoLayerBar = () => {
   const selectionInfo = useSelectionInfo();
   const { layers } = useLayerContext();
   const { assignLayerToItems } = useLayerActions();
+  const { getTilePosition } = useCanvasMode();
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
 
   const handleAssign = useCallback(

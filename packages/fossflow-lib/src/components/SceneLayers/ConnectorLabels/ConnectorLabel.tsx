@@ -3,10 +3,10 @@ import { Box, Typography } from '@mui/material';
 import { useSceneStore } from 'src/stores/sceneStore';
 import {
   connectorPathTileToGlobal,
-  getTilePosition,
   getConnectorLabels,
   getLabelTileIndex
 } from 'src/utils';
+import { useCanvasMode } from 'src/contexts/CanvasModeContext';
 import { PROJECTED_TILE_SIZE, UNPROJECTED_TILE_SIZE } from 'src/config';
 import { Label } from 'src/components/Label/Label';
 import { Connector, ConnectorLabel as ConnectorLabelType } from 'src/types';
@@ -21,6 +21,7 @@ export const ConnectorLabel = memo(({ connector }: Props) => {
     (state) => state.connectors[connector.id]?.path,
     (a, b) => a === b
   );
+  const { getTilePosition } = useCanvasMode();
 
   const labels = useMemo(() => getConnectorLabels(connector), [connector]);
 
@@ -74,7 +75,7 @@ export const ConnectorLabel = memo(({ connector }: Props) => {
           position: { x: number; y: number };
         } => item !== null
       );
-  }, [labels, scenePath, connector.lineType, connector.width]);
+  }, [labels, scenePath, connector.lineType, connector.width, getTilePosition]);
 
   return (
     <>

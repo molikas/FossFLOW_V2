@@ -8,6 +8,7 @@ import {
   CoordsUtils
 } from 'src/utils';
 import { useScene } from 'src/hooks/useScene';
+import { useCanvasMode } from 'src/contexts/CanvasModeContext';
 
 export const useDiagramUtils = () => {
   const scene = useScene();
@@ -16,20 +17,21 @@ export const useDiagramUtils = () => {
   const uiStateActions = useUiStateStore((state) => {
     return state.actions;
   });
+  const { getTilePosition } = useCanvasMode();
 
   const getUnprojectedBounds = useCallback((): Size & Coords => {
-    return getUnprojectedBoundsUtil(scene.currentView);
-  }, [scene.currentView]);
+    return getUnprojectedBoundsUtil(scene.currentView, getTilePosition);
+  }, [scene.currentView, getTilePosition]);
 
   const getVisualBounds = useCallback((): Size & Coords => {
-    return getVisualBoundsUtil(scene.currentView);
-  }, [scene.currentView]);
+    return getVisualBoundsUtil(scene.currentView, getTilePosition);
+  }, [scene.currentView, getTilePosition]);
 
   const getFitToViewParams = useCallback(
     (viewportSize: Size) => {
-      return getFitToViewParamsUtil(scene.currentView, viewportSize);
+      return getFitToViewParamsUtil(scene.currentView, viewportSize, getTilePosition);
     },
-    [scene.currentView]
+    [scene.currentView, getTilePosition]
   );
 
   const fitToView = useCallback(async () => {

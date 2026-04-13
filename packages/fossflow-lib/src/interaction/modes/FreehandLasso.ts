@@ -9,7 +9,7 @@ import {
   Connector,
   ConnectorAnchor
 } from 'src/types';
-import { screenToIso, isPointInPolygon, getItemByIdOrThrow } from 'src/utils';
+import { isPointInPolygon, getItemByIdOrThrow } from 'src/utils';
 
 interface FreehandScene {
   items: ViewItem[];
@@ -213,7 +213,7 @@ export const FreehandLasso: ModeActions = {
     );
   },
 
-  mouseup: ({ uiState, scene }) => {
+  mouseup: ({ uiState, scene, screenToTile }) => {
     if (uiState.mode.type !== 'FREEHAND_LASSO') return;
     if (!uiState.mouse.mousedown) return; // toolbar click — mousedown was stopped, skip
 
@@ -222,9 +222,9 @@ export const FreehandLasso: ModeActions = {
       const rendererSize = uiState.rendererEl?.getBoundingClientRect();
       if (!rendererSize) return;
 
-      // Convert screen path to tile coordinates
+      // Convert screen path to tile coordinates using the injected mode-aware screenToTile.
       const pathTiles = uiState.mode.path.map((screenPoint) => {
-        return screenToIso({
+        return screenToTile({
           mouse: screenPoint,
           zoom: uiState.zoom,
           scroll: uiState.scroll,

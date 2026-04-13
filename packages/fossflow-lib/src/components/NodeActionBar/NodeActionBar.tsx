@@ -19,7 +19,8 @@ import {
   ArrowUpwardOutlined as BringForwardIcon,
   ArrowDownwardOutlined as SendBackIcon
 } from '@mui/icons-material';
-import { getTilePosition, generateId } from 'src/utils';
+import { generateId } from 'src/utils';
+import { useCanvasMode } from 'src/contexts/CanvasModeContext';
 import { useViewItem } from 'src/hooks/useViewItem';
 import { useModelItem } from 'src/hooks/useModelItem';
 import { useScene } from 'src/hooks/useScene';
@@ -44,6 +45,7 @@ export const NodeActionBar = ({ id }: Props) => {
   const uiStateActions = useUiStateStore((state) => state.actions);
   const { layers } = useLayerContext();
   const { assignLayerToItems } = useLayerActions();
+  const { getTilePosition } = useCanvasMode();
   const [layerMenuAnchor, setLayerMenuAnchor] = useState<HTMLElement | null>(
     null
   );

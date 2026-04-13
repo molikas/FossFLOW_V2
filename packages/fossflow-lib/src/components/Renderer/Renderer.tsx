@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Box } from '@mui/material';
 import { useUiStateStore, useUiStateStoreApi } from 'src/stores/uiStateStore';
 import { useInteractionManager } from 'src/interaction/useInteractionManager';
+import { useCanvasMode, CanvasModeContextValue } from 'src/contexts/CanvasModeContext';
 import { Grid } from 'src/components/Grid/Grid';
 import { Cursor } from 'src/components/Cursor/Cursor';
 import { Nodes } from 'src/components/SceneLayers/Nodes/Nodes';
@@ -18,7 +19,6 @@ import { FreehandLasso } from 'src/components/FreehandLasso/FreehandLasso';
 import { useScene } from 'src/hooks/useScene';
 import { RendererProps } from 'src/types/rendererProps';
 import { Scroll, Size } from 'src/types';
-import { screenToIso } from 'src/utils';
 
 // Extra tiles of padding around the screen edges to avoid visible pop-in.
 const VIEWPORT_TILE_PADDING = 4;
@@ -33,7 +33,8 @@ interface TileBounds {
 const computeTileBounds = (
   scroll: Scroll,
   zoom: number,
-  rendererSize: Size
+  rendererSize: Size,
+  screenToTile: CanvasModeContextValue['screenToTile']
 ): TileBounds => {
   if (rendererSize.width === 0 || rendererSize.height === 0) {
     return { minX: -Infinity, maxX: Infinity, minY: -Infinity, maxY: Infinity };
@@ -44,7 +45,7 @@ const computeTileBounds = (
     { x: rendererSize.width, y: 0 },
     { x: 0, y: rendererSize.height },
     { x: rendererSize.width, y: rendererSize.height }
-  ].map((mouse) => screenToIso({ mouse, zoom, scroll, rendererSize }));
+  ].map((mouse) => screenToTile({ mouse, zoom, scroll, rendererSize }));
 
   const xs = corners.map((t) => t.x);
   const ys = corners.map((t) => t.y);
@@ -67,6 +68,7 @@ export const Renderer = ({ showGrid, backgroundColor }: RendererProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const interactionsRef = useRef<HTMLDivElement>(null);
   const uiStateApi = useUiStateStoreApi();
+  const { screenToTile } = useCanvasMode();
   const enableDebugTools = useUiStateStore((state) => state.enableDebugTools);
   const showCursor = useUiStateStore((state) => state.mode.showCursor);
   const uiStateActions = useUiStateStore((state) => state.actions);
@@ -85,7 +87,7 @@ export const Renderer = ({ showGrid, backgroundColor }: RendererProps) => {
   // the user pans far enough to expose new tiles, not on every pixel.
   const [coarseBounds, setCoarseBounds] = useState<TileBounds>(() => {
     const s = uiStateApi.getState();
-    return computeTileBounds(s.scroll, s.zoom, s.rendererSize);
+    return computeTileBounds(s.scroll, s.zoom, s.rendererSize, screenToTile);
   });
 
   useEffect(() => {
@@ -100,14 +102,15 @@ export const Renderer = ({ showGrid, backgroundColor }: RendererProps) => {
       const newBounds = computeTileBounds(
         state.scroll,
         state.zoom,
-        state.rendererSize
+        state.rendererSize,
+        screenToTile
       );
       setCoarseBounds((cur) =>
         tileBoundsEqual(cur, newBounds) ? cur : newBounds
       );
     });
     return unsubscribe;
-  }, [uiStateApi]);
+  }, [uiStateApi, screenToTile]);
 
   useEffect(() => {
     if (!containerRef.current || !interactionsRef.current) return;

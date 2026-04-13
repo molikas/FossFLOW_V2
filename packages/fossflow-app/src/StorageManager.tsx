@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ConfirmDialog } from './components/ConfirmDialog';
 
 interface StorageInfo {
   used: number;
@@ -14,6 +15,7 @@ export const StorageManager: React.FC<{ onClose: () => void }> = ({
     diagrams: 0,
     otherData: 0
   });
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   useEffect(() => {
     calculateStorage();
@@ -54,18 +56,19 @@ export const StorageManager: React.FC<{ onClose: () => void }> = ({
   };
 
   const clearOldDiagrams = () => {
-    if (window.confirm('This will remove all saved diagrams. Are you sure?')) {
-      const keysToRemove = [];
-      for (const key in localStorage) {
-        if (key.startsWith('fossflow-')) {
-          keysToRemove.push(key);
-        }
+    setShowClearConfirm(true);
+  };
+
+  const confirmClear = () => {
+    setShowClearConfirm(false);
+    const keysToRemove = [];
+    for (const key in localStorage) {
+      if (key.startsWith('fossflow-')) {
+        keysToRemove.push(key);
       }
-      keysToRemove.forEach((key) => localStorage.removeItem(key));
-      calculateStorage();
-      alert('All diagrams cleared. Please reload the page.');
-      window.location.reload();
     }
+    keysToRemove.forEach((key) => localStorage.removeItem(key));
+    window.location.reload();
   };
 
   const exportAllDiagrams = () => {
@@ -207,6 +210,13 @@ export const StorageManager: React.FC<{ onClose: () => void }> = ({
           Close
         </button>
       </div>
+
+      <ConfirmDialog
+        open={showClearConfirm}
+        message="This will remove all saved diagrams. Are you sure?"
+        onConfirm={confirmClear}
+        onCancel={() => setShowClearConfirm(false)}
+      />
     </div>
   );
 };

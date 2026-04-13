@@ -14,6 +14,7 @@ import {
 import { useResizeObserver } from 'src/hooks/useResizeObserver';
 import { useScene } from 'src/hooks/useScene';
 import { useHistory } from 'src/hooks/useHistory';
+import { useCanvasMode } from 'src/contexts/CanvasModeContext';
 import { HOTKEY_PROFILES } from 'src/config/hotkeys';
 import { TEXTBOX_DEFAULTS } from 'src/config';
 import { useLayerContext } from 'src/hooks/useLayerContext';
@@ -76,6 +77,7 @@ export const useInteractionManager = () => {
   const { size: rendererSize } = useResizeObserver(rendererEl);
   const { undo, redo, canUndo, canRedo } = useHistory();
   const { handleCopy, handleCut, handlePaste } = useCopyPaste();
+  const { screenToTile } = useCanvasMode();
   const {
     createTextBox,
     deleteSelectedItems,
@@ -448,7 +450,8 @@ export const useInteractionManager = () => {
         rendererRef: rendererRef.current,
         rendererSize,
         isRendererInteraction: rendererRef.current === e.target,
-        isItemInteractable: (ref) => !lockedIds.has(ref.id)
+        isItemInteractable: (ref) => !lockedIds.has(ref.id),
+        screenToTile
       };
 
       if (reducerTypeRef.current !== uiState.mode.type) {
@@ -468,7 +471,7 @@ export const useInteractionManager = () => {
       modeFunction(baseState);
       reducerTypeRef.current = uiState.mode.type;
     },
-    [uiStateApi, modelStoreApi, scene, rendererSize, layerContext]
+    [uiStateApi, modelStoreApi, scene, rendererSize, layerContext, screenToTile]
   );
 
   const onMouseEvent = useCallback(
@@ -484,7 +487,8 @@ export const useInteractionManager = () => {
           scroll: uiState.scroll,
           lastMouse: uiState.mouse,
           mouseEvent: e,
-          rendererSize
+          rendererSize,
+          screenToTileFn: screenToTile
         });
         uiState.actions.setMouse(nextMouse);
         return;
@@ -501,7 +505,8 @@ export const useInteractionManager = () => {
         scroll: uiState.scroll,
         lastMouse: uiState.mouse,
         mouseEvent: e,
-        rendererSize
+        rendererSize,
+        screenToTileFn: screenToTile
       });
 
       if (e.type === 'mousemove') {

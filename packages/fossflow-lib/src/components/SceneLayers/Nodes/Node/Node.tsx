@@ -1,7 +1,7 @@
 import React, { useMemo, memo } from 'react';
 import { Box, Typography, Stack } from '@mui/material';
-import { PROJECTED_TILE_SIZE, DEFAULT_LABEL_HEIGHT } from 'src/config';
-import { getTilePosition } from 'src/utils';
+import { DEFAULT_LABEL_HEIGHT } from 'src/config';
+import { useCanvasMode } from 'src/contexts/CanvasModeContext';
 import { useIcon } from 'src/hooks/useIcon';
 import { ViewItem } from 'src/types';
 import { useModelItem } from 'src/hooks/useModelItem';
@@ -16,13 +16,18 @@ interface Props {
 export const Node = memo(({ node, order }: Props) => {
   const modelItem = useModelItem(node.id);
   const { iconComponent } = useIcon(modelItem?.icon);
+  const { getTilePosition } = useCanvasMode();
 
   const position = useMemo(() => {
+    // CENTER places the container's top-left at the tile's projected center —
+    // works for both ISO and 2D (inverted-Y) because both use the same center
+    // convention. The old BOTTOM + PROJECTED_TILE_SIZE.height/2 subtraction was
+    // an obfuscated way of computing the same thing.
     return getTilePosition({
       tile: node.tile,
-      origin: 'BOTTOM'
+      origin: 'CENTER'
     });
-  }, [node.tile]);
+  }, [getTilePosition, node.tile]);
 
   const description = useMemo(() => {
     if (!modelItem?.description) return null;
@@ -51,7 +56,7 @@ export const Node = memo(({ node, order }: Props) => {
           justifyContent: 'center',
           alignItems: 'center',
           left: position.x,
-          top: position.y - PROJECTED_TILE_SIZE.height / 2
+          top: position.y
         }}
       >
         {(modelItem?.name || description) && (

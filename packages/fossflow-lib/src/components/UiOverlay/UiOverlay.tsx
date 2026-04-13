@@ -31,7 +31,7 @@ import { ImportHintTooltip } from '../ImportHintTooltip/ImportHintTooltip';
 import { LassoHintTooltip } from '../LassoHintTooltip/LassoHintTooltip';
 import { LazyLoadingWelcomeNotification } from '../LazyLoadingWelcomeNotification/LazyLoadingWelcomeNotification';
 import { NotificationSnackbar } from '../NotificationSnackbar/NotificationSnackbar';
-import { getTilePosition } from 'src/utils';
+import { useCanvasMode } from 'src/contexts/CanvasModeContext';
 import { ViewTabs } from 'src/components/ViewTabs/ViewTabs';
 import { NodeActionBar } from 'src/components/NodeActionBar/NodeActionBar';
 import { LassoLayerBar } from 'src/components/LassoLayerBar/LassoLayerBar';
@@ -133,6 +133,7 @@ export const UiOverlay = ({
   );
 
   const { currentView } = useScene();
+  const { getTilePosition } = useCanvasMode();
   const availableTools = useMemo(() => {
     return getEditorModeMapping(editorMode);
   }, [editorMode]);

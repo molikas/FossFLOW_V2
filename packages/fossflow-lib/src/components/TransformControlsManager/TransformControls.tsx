@@ -6,9 +6,9 @@ import { useIsoProjection } from 'src/hooks/useIsoProjection';
 import {
   getBoundingBox,
   outermostCornerPositions,
-  getTilePosition,
   convertBoundsToNamedAnchors
 } from 'src/utils';
+import { useCanvasMode } from 'src/contexts/CanvasModeContext';
 import { TransformAnchor } from './TransformAnchor';
 
 interface Props {
@@ -24,6 +24,7 @@ export const TransformControls = ({ from, to, onAnchorMouseDown }: Props) => {
     from,
     to
   });
+  const { getTilePosition } = useCanvasMode();
 
   const anchors = useMemo(() => {
     if (!onAnchorMouseDown) return [];
@@ -47,7 +48,7 @@ export const TransformControls = ({ from, to, onAnchorMouseDown }: Props) => {
     );
 
     return cornerPositions;
-  }, [onAnchorMouseDown, from, to]);
+  }, [onAnchorMouseDown, from, to, getTilePosition]);
 
   return (
     <>

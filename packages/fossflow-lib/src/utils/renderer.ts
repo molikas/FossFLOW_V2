@@ -29,6 +29,22 @@ import {
   getTileScrollPosition
 } from 'src/utils/isoMath';
 
+// Type alias for a mode-aware getTilePosition function.
+// Callers (hooks/components) inject this from CanvasModeContext; pure utilities
+// default to the isometric implementation for backward compatibility.
+export type TilePositionFn = (args: {
+  tile: Coords;
+  origin?: import('src/types').TileOrigin;
+}) => Coords;
+
+// Type alias for a mode-aware screenToTile function.
+export type ScreenToTileFn = (args: {
+  mouse: Coords;
+  zoom: number;
+  scroll: Scroll;
+  rendererSize: Size;
+}) => Coords;
+
 // ---------------------------------------------------------------------------
 // Mouse position
 // ---------------------------------------------------------------------------
@@ -40,6 +56,8 @@ interface GetMouse {
   lastMouse: Mouse;
   mouseEvent: SlimMouseEvent;
   rendererSize: Size;
+  /** Injected by the caller from CanvasModeContext. Defaults to isometric. */
+  screenToTileFn?: ScreenToTileFn;
 }
 
 export const getMouse = ({
@@ -48,7 +66,8 @@ export const getMouse = ({
   scroll,
   lastMouse,
   mouseEvent,
-  rendererSize
+  rendererSize,
+  screenToTileFn = screenToIso
 }: GetMouse): Mouse => {
   const componentOffset = interactiveElement.getBoundingClientRect();
   const offset: Coords = {
@@ -61,7 +80,7 @@ export const getMouse = ({
 
   const newPosition: Mouse['position'] = {
     screen: mousePosition,
-    tile: screenToIso({ mouse: mousePosition, zoom, scroll, rendererSize })
+    tile: screenToTileFn({ mouse: mousePosition, zoom, scroll, rendererSize })
   };
 
   const newDelta: Mouse['delta'] = {
@@ -133,14 +152,18 @@ export const getProjectBounds = (
 // Visual bounds (screen-space, for export/fit-to-view)
 // ---------------------------------------------------------------------------
 
-export const getVisualBounds = (view: View, padding = 50) => {
+export const getVisualBounds = (
+  view: View,
+  getTilePositionFn: TilePositionFn = getTilePosition,
+  padding = 50
+) => {
   let minX = Infinity,
     maxX = -Infinity,
     minY = Infinity,
     maxY = -Infinity;
 
   view.items.forEach((item) => {
-    const pos = getTilePosition({ tile: item.tile });
+    const pos = getTilePositionFn({ tile: item.tile });
     const itemSize = 50;
     minX = Math.min(minX, pos.x - itemSize / 2);
     maxX = Math.max(maxX, pos.x + itemSize / 2);
@@ -152,7 +175,7 @@ export const getVisualBounds = (view: View, padding = 50) => {
     const path = getConnectorPath({ anchors: connector.anchors, view });
     path.tiles.forEach((tile) => {
       const globalTile = connectorPathTileToGlobal(tile, path.rectangle.from);
-      const pos = getTilePosition({ tile: globalTile });
+      const pos = getTilePositionFn({ tile: globalTile });
       minX = Math.min(minX, pos.x);
       maxX = Math.max(maxX, pos.x);
       minY = Math.min(minY, pos.y);
@@ -161,13 +184,13 @@ export const getVisualBounds = (view: View, padding = 50) => {
   });
 
   (view.textBoxes ?? []).forEach((textBox) => {
-    const pos = getTilePosition({ tile: textBox.tile });
+    const pos = getTilePositionFn({ tile: textBox.tile });
     const size = getTextBoxDimensions(textBox);
     const endTile = CoordsUtils.add(textBox.tile, {
       x: size.width,
       y: size.height
     });
-    const endPos = getTilePosition({ tile: endTile });
+    const endPos = getTilePositionFn({ tile: endTile });
     minX = Math.min(minX, pos.x, endPos.x);
     maxX = Math.max(maxX, pos.x, endPos.x);
     minY = Math.min(minY, pos.y, endPos.y);
@@ -175,8 +198,8 @@ export const getVisualBounds = (view: View, padding = 50) => {
   });
 
   (view.rectangles ?? []).forEach((rectangle) => {
-    const fromPos = getTilePosition({ tile: rectangle.from });
-    const toPos = getTilePosition({ tile: rectangle.to });
+    const fromPos = getTilePositionFn({ tile: rectangle.from });
+    const toPos = getTilePositionFn({ tile: rectangle.to });
     minX = Math.min(minX, fromPos.x, toPos.x);
     maxX = Math.max(maxX, fromPos.x, toPos.x);
     minY = Math.min(minY, fromPos.y, toPos.y);
@@ -197,10 +220,13 @@ export const getVisualBounds = (view: View, padding = 50) => {
 // Fit-to-view calculation
 // ---------------------------------------------------------------------------
 
-export const getUnprojectedBounds = (view: View) => {
+export const getUnprojectedBounds = (
+  view: View,
+  getTilePositionFn: TilePositionFn = getTilePosition
+) => {
   const projectBounds = getProjectBounds(view);
   const cornerPositions = projectBounds.map((corner) =>
-    getTilePosition({ tile: corner })
+    getTilePositionFn({ tile: corner })
   );
   const sortedCorners = sortByPosition(cornerPositions);
   const topLeft = { x: sortedCorners.lowX, y: sortedCorners.lowY };
@@ -208,11 +234,15 @@ export const getUnprojectedBounds = (view: View) => {
   return { width: size.width, height: size.height, x: topLeft.x, y: topLeft.y };
 };
 
-export const getFitToViewParams = (view: View, viewportSize: Size) => {
+export const getFitToViewParams = (
+  view: View,
+  viewportSize: Size,
+  getTilePositionFn: TilePositionFn = getTilePosition
+) => {
   const projectBounds = getProjectBounds(view);
   const sortedCornerPositions = sortByPosition(projectBounds);
   const boundingBoxSize = getBoundingBoxSize(projectBounds);
-  const unprojectedBounds = getUnprojectedBounds(view);
+  const unprojectedBounds = getUnprojectedBounds(view, getTilePositionFn);
   const zoom = clamp(
     Math.min(
       viewportSize.width / unprojectedBounds.width,

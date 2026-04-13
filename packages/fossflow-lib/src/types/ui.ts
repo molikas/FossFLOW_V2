@@ -182,6 +182,8 @@ export interface Notification {
   severity: 'info' | 'success' | 'warning';
 }
 
+export type CanvasMode = 'ISOMETRIC' | '2D';
+
 export interface UiState {
   view: string;
   mainMenuOptions: MainMenuOptions;
@@ -212,6 +214,7 @@ export interface UiState {
   rightSidebarAutoOpened: boolean;
   /** true when model has changed since last export-to-file or explicit save */
   isDirty: boolean;
+  canvasMode: CanvasMode;
 }
 
 export interface UiStateActions {
@@ -244,6 +247,7 @@ export interface UiStateActions {
   setActiveLeftTab: (tab: 'ELEMENTS' | 'LAYERS' | null) => void;
   setRightSidebarOpen: (open: boolean) => void;
   setIsDirty: (isDirty: boolean) => void;
+  setCanvasMode: (mode: CanvasMode) => void;
 }
 
 export type UiStateStore = UiState & {

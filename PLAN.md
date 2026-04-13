@@ -1,6 +1,6 @@
 # FossFlow — Implementation Plan
 > **Living document.** Point Claude to this file at the start of any session: "read PLAN.md and implement the next incomplete phase."
-> Last updated: 2026-04-12
+> Last updated: 2026-04-13
 
 ---
 
@@ -31,8 +31,8 @@ Claude should then:
 | Phase | Name | Status | Token Load | Notes |
 |---|---|---|---|---|
 | **0A** | App.tsx Decomposition | `[x]` | ⚠️ Very High | Prerequisite for all phases |
-| **0B** | Notification System (E7) | `[ ]` | Medium | Prerequisite for all phases |
-| **1A** | 2D Canvas Mode (E1) | `[ ]` | Medium | Self-contained |
+| **0B** | Notification System (E7) | `[x]` | Medium | Prerequisite for all phases |
+| **1A** | 2D Canvas Mode (E1) | `[x]` | Medium | Self-contained |
 | **1B** | Material Icons (E2) | `[ ]` | Low | Self-contained |
 | **2A** | Storage Interface Refactor (E4-local) | `[ ]` | High | Depends on 0A |
 | **2B** | File Explorer UI (E3) | `[ ]` | ⚠️ Very High | Depends on 2A |
@@ -174,7 +174,7 @@ packages/fossflow-app/src/
 ---
 
 ## Phase 0B — Notification System (E7)
-**Status:** `[ ]` | **Token load:** Medium | **Prerequisite for:** All phases that show user feedback
+**Status:** `[x]` | **Token load:** Medium | **Prerequisite for:** All phases that show user feedback
 
 ### Why this must go before features
 Current code has ~6 `alert()` calls and a custom inline toast. Every new feature (save failure, auth expiry, Drive errors) needs notifications. Build once, use everywhere.
@@ -231,13 +231,13 @@ interface NotificationStore {
 ```
 
 ### Sub-tasks
-- [ ] Create `stores/notificationStore.ts` with Zustand (not persisted)
-- [ ] Create `components/NotificationStack.tsx` using MUI `Snackbar` + `Alert` (max 3 visible, queue)
-- [ ] Mount `NotificationStack` in `App.tsx` at root level
-- [ ] Replace all `alert()` calls in App.tsx / AppToolbar.tsx with `notificationStore.push()`
-- [ ] Replace existing inline `saveToast` in AppToolbar with `notificationStore.push({ severity: 'success', ... })`
-- [ ] Replace existing MUI `Alert` session-storage warning with `notificationStore.push({ severity: 'warning', persistent: true, ... })`
-- [ ] Write unit tests: `stores/__tests__/notificationStore.test.ts`
+- [x] Create `stores/notificationStore.ts` with Zustand (not persisted)
+- [x] Create `components/NotificationStack.tsx` using MUI `Snackbar` + `Alert` (max 3 visible, queue)
+- [x] Mount `NotificationStack` in `App.tsx` at root level
+- [x] Replace all `alert()` calls in App.tsx / AppToolbar.tsx with `notificationStore.push()`
+- [x] Replace existing inline `saveToast` in AppToolbar with `notificationStore.push({ severity: 'success', ... })`
+- [x] Replace existing MUI `Alert` session-storage warning with `notificationStore.push({ severity: 'warning', persistent: true, ... })`
+- [x] Write unit tests: `stores/__tests__/notificationStore.test.ts`
 
 ### Unit tests (must write — not E2E)
 ```
@@ -251,15 +251,15 @@ notificationStore.test.ts:
 ```
 
 ### Done criteria
-- [ ] Zero `alert()` or `window.confirm()` calls remain in fossflow-app (except browser beforeunload which can't be replaced)
-- [ ] All save/load error feedback uses `notificationStore`
-- [ ] Unit tests pass
-- [ ] `yarn build` clean
+- [x] Zero `alert()` or `window.confirm()` calls remain in fossflow-app (except browser beforeunload which can't be replaced)
+- [x] All save/load error feedback uses `notificationStore`
+- [x] Unit tests pass (10/10)
+- [x] `yarn build` clean
 
 ---
 
 ## Phase 1A — 2D Canvas Mode (E1)
-**Status:** `[ ]` | **Token load:** Medium | **Depends on:** 0A, 0B
+**Status:** `[x]` | **Token load:** Medium | **Depends on:** 0A, 0B
 
 ### Behavior
 User toggles between isometric view (current) and standard 2D cartesian grid. Toggle lives in the floating `ToolMenu`. State persisted to localStorage. Export works in both modes.
@@ -310,17 +310,17 @@ setCanvasMode(mode: 'ISOMETRIC' | '2D'): void
 ```
 
 ### Sub-tasks
-- [ ] Add `canvasMode: 'ISOMETRIC' | '2D'` to `uiStateStore` persisted settings (default: `'ISOMETRIC'`)
-- [ ] Create `utils/coordinateTransforms.ts` with both strategies
-- [ ] Create `contexts/CanvasModeContext.tsx` — provides active strategy based on `canvasMode`
-- [ ] Wrap renderer root in `CanvasModeContext.Provider` (in `Isoflow.tsx` or `Renderer.tsx`)
-- [ ] Update all `isoToScreen` / `screenToIso` call sites to read from context
-- [ ] Update `Grid.tsx` to switch SVG tile background when mode changes
-- [ ] Create `assets/grid-tile-2d.svg` (standard square grid tile, matching existing tile dimensions)
-- [ ] Add 2D/ISO toggle icon button to `ToolMenu.tsx`
-- [ ] Verify connector routing (`pathfinding` library tile dimensions) is mode-aware
-- [ ] Verify `dom-to-image-more` export works in both modes
-- [ ] Write unit tests: `utils/__tests__/coordinateTransforms.test.ts`
+- [x] Add `canvasMode: 'ISOMETRIC' | '2D'` to `uiStateStore` persisted settings (default: `'ISOMETRIC'`)
+- [x] Create `utils/coordinateTransforms.ts` with both strategies
+- [x] Create `contexts/CanvasModeContext.tsx` — provides active strategy based on `canvasMode`
+- [x] Wrap renderer root in `CanvasModeContext.Provider` (in `Isoflow.tsx` or `Renderer.tsx`)
+- [x] Update all `isoToScreen` / `screenToIso` call sites to read from context
+- [x] Update `Grid.tsx` to switch SVG tile background when mode changes
+- [x] Create `assets/grid-tile-2d.svg` (standard square grid tile, matching existing tile dimensions)
+- [x] Add 2D/ISO toggle icon button to `ToolMenu.tsx`
+- [x] Verify connector routing (`pathfinding` library tile dimensions) is mode-aware
+- [x] Verify `dom-to-image-more` export works in both modes
+- [x] Write unit tests: `utils/__tests__/coordinateTransforms.test.ts`
 
 ### Unit tests (must write — not E2E)
 ```
@@ -333,12 +333,12 @@ coordinateTransforms.test.ts:
 ```
 
 ### Done criteria
-- [ ] Toggle button in ToolMenu switches grid rendering visually
-- [ ] Node/connector positions are consistent after mode switch (same diagram, different view)
-- [ ] `canvasMode` persists across page reload
-- [ ] Export produces valid image in both modes
-- [ ] Unit tests pass
-- [ ] `yarn build` clean
+- [x] Toggle button in ToolMenu switches grid rendering visually
+- [x] Node/connector positions are consistent after mode switch (same diagram, different view)
+- [x] `canvasMode` persists across page reload
+- [x] Export produces valid image in both modes
+- [x] Unit tests pass
+- [x] `yarn build` clean
 
 ---
 

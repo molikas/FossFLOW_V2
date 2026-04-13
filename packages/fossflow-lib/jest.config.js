@@ -9,6 +9,9 @@ module.exports = {
   modulePaths: ['node_modules', '<rootDir>'],
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   moduleNameMapper: {
+    // SVG files are inlined as strings at build time (rslib); in Jest they just need
+    // to be non-empty strings so gridTileUrl truthiness checks pass.
+    "\\.svg$": "<rootDir>/src/__mocks__/fileMock.ts",
     // Force React to resolve from root node_modules to avoid duplicate React instances
     "^react$": "<rootDir>/../../node_modules/react",
     "^react-dom$": "<rootDir>/../../node_modules/react-dom",

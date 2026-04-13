@@ -5,6 +5,7 @@ import { theme } from 'src/styles/theme';
 import { ModelProvider } from 'src/stores/modelStore';
 import { SceneProvider } from 'src/stores/sceneStore';
 import { UiStateProvider } from 'src/stores/uiStateStore';
+import { CanvasModeProvider } from 'src/contexts/CanvasModeContext';
 import { SizeIndicator } from '../SizeIndicator';
 
 describe('SizeIndicator', () => {
@@ -13,7 +14,9 @@ describe('SizeIndicator', () => {
       <ThemeProvider theme={theme}>
         <ModelProvider>
           <SceneProvider>
-            <UiStateProvider>{children}</UiStateProvider>
+            <UiStateProvider>
+              <CanvasModeProvider>{children}</CanvasModeProvider>
+            </UiStateProvider>
           </SceneProvider>
         </ModelProvider>
       </ThemeProvider>
