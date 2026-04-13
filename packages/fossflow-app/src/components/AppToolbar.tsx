@@ -19,43 +19,32 @@ import {
   Close as CloseIcon,
   VisibilityOutlined as PreviewIcon
 } from '@mui/icons-material';
+import { useAppStorage } from '../providers/AppStorageContext';
+import { useDiagramLifecycle } from '../providers/DiagramLifecycleProvider';
 
-interface Props {
-  diagramName: string;
-  hasUnsavedChanges: boolean;
-  lastSaved: Date | null;
-  isReadonlyUrl: boolean;
-  serverStorageAvailable: boolean;
-  currentDiagramId: string | null | undefined;
-  /** Portal container target for the library's MainMenu injection */
-  onToolbarPortalReady: (el: HTMLElement) => void;
-  /** Portal container target for the library's sidebar-toggle injection */
-  onSidebarTogglePortalReady: (el: HTMLElement) => void;
-  onSaveClick: () => void;
-  onOpenClick: () => void;
-  onPreviewClick: () => void;
-}
-
-export function AppToolbar({
-  diagramName,
-  hasUnsavedChanges,
-  lastSaved,
-  isReadonlyUrl,
-  serverStorageAvailable,
-  currentDiagramId,
-  onToolbarPortalReady,
-  onSidebarTogglePortalReady,
-  onSaveClick,
-  onOpenClick,
-  onPreviewClick
-}: Props) {
+export function AppToolbar() {
   const { t } = useTranslation('app');
+  const { serverStorageAvailable } = useAppStorage();
+  const {
+    diagramName,
+    hasUnsavedChanges,
+    lastSaved,
+    isReadonlyUrl,
+    currentDiagram,
+    setToolbarPortalTarget,
+    setSidebarTogglePortalTarget,
+    handleSaveClick,
+    handleOpenClick,
+    handlePreviewClick
+  } = useDiagramLifecycle();
+
   const shareButtonRef = useRef<HTMLButtonElement>(null);
   const [toolbarPortalSet, setToolbarPortalSet] = useState(false);
   const [sidebarPortalSet, setSidebarPortalSet] = useState(false);
   const [showSharePopover, setShowSharePopover] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
 
+  const currentDiagramId = currentDiagram?.id;
   const shareUrl = currentDiagramId
     ? `${window.location.origin}/display/${currentDiagramId}`
     : '';
@@ -131,7 +120,7 @@ export function AppToolbar({
           ref={(el: HTMLDivElement | null) => {
             if (el && !toolbarPortalSet) {
               setToolbarPortalSet(true);
-              onToolbarPortalReady(el);
+              setToolbarPortalTarget(el);
             }
           }}
           sx={{ display: 'inline-flex', alignItems: 'center' }}
@@ -143,7 +132,7 @@ export function AppToolbar({
               <span>
                 <IconButton
                   size="small"
-                  onClick={onSaveClick}
+                  onClick={handleSaveClick}
                   disabled={!!currentDiagramId && !hasUnsavedChanges}
                   sx={{ borderRadius: 1, color: 'inherit' }}
                 >
@@ -157,7 +146,7 @@ export function AppToolbar({
             >
               <IconButton
                 size="small"
-                onClick={onOpenClick}
+                onClick={handleOpenClick}
                 sx={{ borderRadius: 1, color: 'inherit' }}
               >
                 <FolderIcon sx={{ fontSize: 18 }} />
@@ -250,7 +239,7 @@ export function AppToolbar({
               <span>
                 <IconButton
                   size="small"
-                  onClick={onPreviewClick}
+                  onClick={handlePreviewClick}
                   disabled={!serverStorageAvailable || !currentDiagramId}
                   sx={{ borderRadius: 1, color: 'inherit' }}
                 >
@@ -263,7 +252,7 @@ export function AppToolbar({
               ref={(el: HTMLDivElement | null) => {
                 if (el && !sidebarPortalSet) {
                   setSidebarPortalSet(true);
-                  onSidebarTogglePortalReady(el);
+                  setSidebarTogglePortalTarget(el);
                 }
               }}
               sx={{ display: 'inline-flex', alignItems: 'center' }}
