@@ -12,13 +12,17 @@
  *   3. Auto-save has been removed entirely — only explicit Save clears the flag
  *      and sets lastSaved. No background timer touches save state.
  *
- * This test reads App.tsx source to pin all three parts of the contract.
+ * This test reads DiagramLifecycleProvider.tsx source to pin all three parts of the contract.
+ * (Logic moved from App.tsx to DiagramLifecycleProvider.tsx in Phase 0A refactor.)
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 
-const APP_PATH = path.resolve(__dirname, '../../../fossflow-app/src/App.tsx');
+const APP_PATH = path.resolve(
+  __dirname,
+  '../../../fossflow-app/src/providers/DiagramLifecycleProvider.tsx'
+);
 
 describe('Save tracking — isAfterLoadRef pattern', () => {
   let src: string;
@@ -27,7 +31,7 @@ describe('Save tracking — isAfterLoadRef pattern', () => {
     src = fs.readFileSync(APP_PATH, 'utf-8');
   });
 
-  it('App.tsx exists', () => {
+  it('DiagramLifecycleProvider.tsx exists', () => {
     expect(fs.existsSync(APP_PATH)).toBe(true);
   });
 

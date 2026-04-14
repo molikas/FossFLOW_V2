@@ -21,6 +21,8 @@
     "web-vitals": "^5.2.0"
   },
   "scripts": {
+    "prebuild": "node scripts/generateMaterialIconPack.js",
+    "prestart": "node scripts/generateMaterialIconPack.js",
     "start": "rsbuild dev",
     "build": "rsbuild build",
     "preview": "rsbuild preview",

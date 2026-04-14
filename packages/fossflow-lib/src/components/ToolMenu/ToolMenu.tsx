@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { Stack, Chip, Divider } from '@mui/material';
 import {
   PanToolOutlined as PanToolIcon,
@@ -17,6 +17,7 @@ import { UiElement } from 'src/components/UiElement/UiElement';
 import { useHistory } from 'src/hooks/useHistory';
 import { HOTKEY_PROFILES } from 'src/config/hotkeys';
 import { useTranslation } from 'src/stores/localeStore';
+import { useDiagramUtils } from 'src/hooks/useDiagramUtils';
 
 export const ToolMenu = () => {
   const { t } = useTranslation('toolMenu');
@@ -32,8 +33,18 @@ export const ToolMenu = () => {
     return state.connectorInteractionMode;
   });
   const canvasMode = useUiStateStore((state) => state.canvasMode);
+  const { fitToView } = useDiagramUtils();
 
   const hotkeys = HOTKEY_PROFILES[hotkeyProfile];
+
+  // Fit-to-screen after canvas mode switch so the diagram stays visible
+  const prevCanvasModeRef = useRef(canvasMode);
+  useEffect(() => {
+    if (prevCanvasModeRef.current !== canvasMode) {
+      prevCanvasModeRef.current = canvasMode;
+      fitToView();
+    }
+  }, [canvasMode, fitToView]);
 
   const handleUndo = useCallback(() => {
     undo();

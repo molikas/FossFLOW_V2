@@ -25,20 +25,11 @@
  *   AI    – compact array-of-arrays, no whitespace, minimum LLM tokens
  *   Human – pretty-printed JSON with labels, summary stats, ISO timestamps
  */
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useSyncExternalStore } from 'react';
+import { diagnosticsStore } from '../stores/diagnosticsStore';
 
 // ── env / persistence ─────────────────────────────────────────────────────────
 const IS_DEV = process.env.NODE_ENV !== 'production';
-const STORE_KEY = 'fossflow_perf_enabled';
-
-function readEnabled(): boolean {
-  if (IS_DEV) return true;
-  return localStorage.getItem(STORE_KEY) === '1';
-}
-function writeEnabled(v: boolean) {
-  if (v) localStorage.setItem(STORE_KEY, '1');
-  else localStorage.removeItem(STORE_KEY);
-}
 
 // ── hard limits ───────────────────────────────────────────────────────────────
 const MAX_SAMPLES = 600; // circular — oldest dropped
@@ -196,8 +187,15 @@ const btnBase: React.CSSProperties = {
 
 // ── component ─────────────────────────────────────────────────────────────────
 export function DiagnosticsOverlay() {
-  const [enabled, setEnabled] = useState(readEnabled);
-  const [open, setOpen] = useState(false);
+  // Use the shared store so DiagnosticsToggleButton (in BottomDock) stays in sync
+  const enabled = useSyncExternalStore(
+    diagnosticsStore.subscribe,
+    diagnosticsStore.getEnabled
+  );
+  const open = useSyncExternalStore(
+    diagnosticsStore.subscribe,
+    diagnosticsStore.getOpen
+  );
   const [latest, setLatest] = useState<number[] | null>(null);
 
   // All mutable state lives in refs — avoids re-renders during collection
@@ -389,51 +387,13 @@ export function DiagnosticsOverlay() {
   }, [enabled]);
 
   const toggleEnabled = useCallback((v: boolean) => {
-    writeEnabled(v);
-    setEnabled(v);
-    if (!v) setOpen(false);
+    diagnosticsStore.setEnabled(v);
   }, []);
 
   const hasData = samplesRef.current.length > 0;
 
-  // ── collapsed pill ─────────────────────────────────────────────────────────
-  if (!open) {
-    const fps = latest?.[1];
-    const bg = !enabled
-      ? '#333'
-      : fps == null
-        ? '#222'
-        : fps >= 50
-          ? '#1b5e20'
-          : fps >= 30
-            ? '#e65100'
-            : '#b71c1c';
-    return (
-      <button
-        title={
-          enabled ? 'Open diagnostics' : 'Performance monitoring (disabled)'
-        }
-        onClick={() => setOpen(true)}
-        style={{
-          position: 'fixed',
-          bottom: 10,
-          right: 10,
-          zIndex: 9999,
-          background: bg,
-          color: '#eee',
-          border: 'none',
-          borderRadius: 4,
-          padding: '3px 8px',
-          cursor: 'pointer',
-          fontSize: 11,
-          fontFamily: 'monospace',
-          opacity: 0.8
-        }}
-      >
-        DIAG {enabled && fps != null ? `${fps}fps` : enabled ? '…' : 'off'}
-      </button>
-    );
-  }
+  // Collapsed state: the toggle button is rendered by DiagnosticsToggleButton in BottomDock.
+  if (!open) return null;
 
   // ── expanded panel ─────────────────────────────────────────────────────────
   const [, fps, hu, ht, lt, ni, nc, ntb] = latest ?? [];
@@ -479,7 +439,7 @@ export function DiagnosticsOverlay() {
           <span style={{ color: '#444' }}>{IS_DEV ? 'DEV' : 'PROD'}</span>
         </span>
         <button
-          onClick={() => setOpen(false)}
+          onClick={() => diagnosticsStore.setOpen(false)}
           style={{
             background: 'none',
             border: 'none',

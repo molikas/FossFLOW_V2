@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { InitialData, IconCollectionState } from 'src/types';
+import type { LoadOptions } from 'src/types/isoflowProps';
 import {
   INITIAL_DATA,
   INITIAL_SCENE_STATE,
@@ -18,6 +19,10 @@ import { useView } from 'src/hooks/useView';
 import { useUiStateStore, useUiStateStoreApi } from 'src/stores/uiStateStore';
 import { modelSchema } from 'src/schemas/model';
 
+// Must match the threshold in IconCollection.tsx so newly-loaded large packs
+// (e.g. Material Icons) are not auto-expanded (which would freeze the browser).
+const LARGE_PACK_THRESHOLD = 100;
+
 export const useInitialDataManager = () => {
   const [isReady, setIsReady] = useState(false);
   const modelActions = useModelStore((state) => state.actions);
@@ -28,7 +33,7 @@ export const useInitialDataManager = () => {
   const uiStateStoreApi = useUiStateStoreApi();
 
   const load = useCallback(
-    (_initialData: InitialData) => {
+    (_initialData: InitialData, options?: LoadOptions) => {
       if (!_initialData) return;
 
       setIsReady(false);
@@ -111,12 +116,15 @@ export const useInitialDataManager = () => {
         modelActions.set(initialData, true);
         modelActions.clearHistory();
 
-        // Reset scroll/zoom for a clean slate on each load
-        uiStateActions.setScroll({
-          position: CoordsUtils.zero(),
-          offset: CoordsUtils.zero()
-        });
-        uiStateActions.setZoom(INITIAL_UI_STATE.zoom);
+        // Reset scroll/zoom for a clean slate on each load, unless the caller
+        // explicitly preserves the current viewport (e.g. icon-pack updates).
+        if (!options?.preserveViewport) {
+          uiStateActions.setScroll({
+            position: CoordsUtils.zero(),
+            offset: CoordsUtils.zero()
+          });
+          uiStateActions.setZoom(INITIAL_UI_STATE.zoom);
+        }
 
         const activeViewId = uiStateStoreApi.getState().view;
         const targetViewId =
@@ -145,12 +153,26 @@ export const useInitialDataManager = () => {
           uiStateActions.setZoom(zoom);
         }
 
+        // Build the new categories list from the incoming icons.
+        // Preserve `isExpanded` for collections that were already in the UI
+        // (so expanded sections survive icon-pack reloads).
+        // Auto-expand any newly-introduced collection so freshly loaded packs
+        // are immediately visible without the user having to click the header.
+        const existingCategoriesState = uiStateStoreApi.getState().iconCategoriesState ?? [];
+        const existingById = new Map(existingCategoriesState.map((c) => [c.id, c]));
+
         const categoriesState: IconCollectionState[] = categoriseIcons(
           initialData.icons
         ).map((collection) => {
+          const existing = existingById.get(collection.name ?? '');
           return {
             id: collection.name,
-            isExpanded: false
+            // New collection → auto-expand (unless it's a large pack, to
+            // avoid rendering thousands of icons automatically).
+            // Existing collection → preserve user's current expanded state.
+            isExpanded: existing
+              ? existing.isExpanded
+              : collection.icons.length <= LARGE_PACK_THRESHOLD
           };
         });
 

@@ -46,7 +46,9 @@ const RightSidebarSlot = ({ editorMode }: { editorMode: string }) => {
   return <RightSidebar open={open} editorMode={editorMode} />;
 };
 
-const BottomDockSlot = () => <BottomDock />;
+const BottomDockSlot = ({ endSlot }: { endSlot?: React.ReactNode }) => (
+  <BottomDock endSlot={endSlot} />
+);
 
 const App = forwardRef<IsoflowRef, IsoflowProps>(
   (
@@ -64,6 +66,7 @@ const App = forwardRef<IsoflowRef, IsoflowProps>(
       toolbarPortalTarget,
       sidebarTogglePortalTarget,
       languageSelector,
+      bottomDockEnd,
       /** @deprecated use toolbarPortalTarget */
       menuPortalTarget
     },
@@ -212,7 +215,7 @@ const App = forwardRef<IsoflowRef, IsoflowProps>(
             </Box>
             <LeftDockSlot />
             <RightSidebarSlot editorMode={editorMode} />
-            <BottomDockSlot />
+            <BottomDockSlot endSlot={bottomDockEnd} />
           </LayerContextProvider>
           </CanvasModeProvider>
         </Box>

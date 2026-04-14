@@ -392,8 +392,15 @@ export interface IsoflowProps {
   sidebarTogglePortalTarget?: HTMLElement | null;
   /** @deprecated use toolbarPortalTarget */
   menuPortalTarget?: HTMLElement | null;
+  /** Extra content rendered at the right end of the BottomDock (after the help icon). */
+  bottomDockEnd?: React.ReactNode;
+}
+
+export interface LoadOptions {
+  /** When true, zoom and scroll are preserved instead of being reset to defaults. */
+  preserveViewport?: boolean;
 }
 
 export interface IsoflowRef {
-  load: (data: InitialData) => void;
+  load: (data: InitialData, options?: LoadOptions) => void;
 }

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { flattenCollections } from '@isoflow/isopacks/dist/utils';
 
 // Available icon packs (excluding core isoflow which is always loaded)
-export type IconPackName = 'aws' | 'gcp' | 'azure' | 'kubernetes';
+export type IconPackName = 'aws' | 'gcp' | 'azure' | 'kubernetes' | 'material';
 
 export interface IconPackInfo {
   name: IconPackName;
@@ -29,7 +29,8 @@ const PACK_METADATA: Record<IconPackName, string> = {
   aws: 'AWS Icons',
   gcp: 'Google Cloud Icons',
   azure: 'Azure Icons',
-  kubernetes: 'Kubernetes Icons'
+  kubernetes: 'Kubernetes Icons',
+  material: 'Material Icons'
 };
 
 // Load preferences from localStorage
@@ -46,11 +47,11 @@ export const loadEnabledPacks = (): IconPackName[] => {
   const stored = localStorage.getItem(ENABLED_PACKS_KEY);
   // Default: all packs enabled so AWS/GCP/Azure/K8s icons are available out of the box.
   // Users can opt individual packs off in Settings → Icon Packs.
-  if (!stored) return ['aws', 'gcp', 'azure', 'kubernetes'];
+  if (!stored) return ['aws', 'gcp', 'azure', 'kubernetes', 'material'];
   try {
     return JSON.parse(stored) as IconPackName[];
   } catch {
-    return ['aws', 'gcp', 'azure', 'kubernetes'];
+    return ['aws', 'gcp', 'azure', 'kubernetes', 'material'];
   }
 };
 
@@ -69,6 +70,11 @@ export const loadIconPack = async (packName: IconPackName): Promise<any> => {
       return (await import('@isoflow/isopacks/dist/azure')).default;
     case 'kubernetes':
       return (await import('@isoflow/isopacks/dist/kubernetes')).default;
+    case 'material': {
+      // Generated at prebuild — imported as a JSON asset
+      const pack = await import('../assets/material-icons-pack.json');
+      return pack.default ?? pack;
+    }
     default:
       throw new Error(`Unknown icon pack: ${packName}`);
   }
@@ -87,7 +93,7 @@ export const useIconPackManager = (coreIcons: any[]) => {
   const [packInfo, setPackInfo] = useState<Record<IconPackName, IconPackInfo>>(
     () => {
       const info: Record<string, IconPackInfo> = {};
-      const packNames: IconPackName[] = ['aws', 'gcp', 'azure', 'kubernetes'];
+      const packNames: IconPackName[] = ['aws', 'gcp', 'azure', 'kubernetes', 'material'];
       packNames.forEach((name) => {
         info[name] = {
           name,
@@ -203,7 +209,7 @@ export const useIconPackManager = (coreIcons: any[]) => {
 
   // Load all packs (for when lazy loading is disabled)
   const loadAllPacks = useCallback(async () => {
-    const allPacks: IconPackName[] = ['aws', 'gcp', 'azure', 'kubernetes'];
+    const allPacks: IconPackName[] = ['aws', 'gcp', 'azure', 'kubernetes', 'material'];
     for (const pack of allPacks) {
       if (!packInfo[pack].loaded && !packInfo[pack].loading) {
         await loadPack(pack);
@@ -229,7 +235,7 @@ export const useIconPackManager = (coreIcons: any[]) => {
       collections.forEach((collection) => {
         if (collection !== 'isoflow' && collection !== 'imported') {
           const packName = collection as IconPackName;
-          if (['aws', 'gcp', 'azure', 'kubernetes'].includes(packName)) {
+          if (['aws', 'gcp', 'azure', 'kubernetes', 'material'].includes(packName)) {
             if (!packInfo[packName].loaded && !packInfo[packName].loading) {
               packsToLoad.push(packName);
             }

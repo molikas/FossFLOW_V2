@@ -24,3 +24,6 @@ overlay/
 diagrams/
 # Static analysis reports
 reports/
+
+# Generated icon packs (produced by prebuild scripts)
+packages/fossflow-app/src/assets/material-icons-pack.json

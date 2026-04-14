@@ -197,8 +197,13 @@ export const ElementsPanel = () => {
 
       {/* More icons — unloaded icon packs */}
       {iconPackManager && (() => {
+        // Build the set of collections already present in the loaded icons so we
+        // don't offer to load a pack whose icons are already visible on the canvas.
+        const loadedCollections = new Set(
+          currentIcons.map((icon) => icon.collection).filter(Boolean)
+        );
         const unloaded = iconPackManager.packInfo.filter(
-          (p) => !p.loaded && !p.loading
+          (p) => !p.loaded && !p.loading && !loadedCollections.has(p.name)
         );
         const loading = iconPackManager.packInfo.filter((p) => p.loading);
         if (unloaded.length === 0 && loading.length === 0) return null;

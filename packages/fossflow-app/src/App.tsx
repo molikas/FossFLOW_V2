@@ -9,6 +9,7 @@ import {
 } from './providers/DiagramLifecycleProvider';
 import { AppToolbar } from './components/AppToolbar';
 import { DiagnosticsOverlay } from './components/DiagnosticsOverlay';
+import { DiagnosticsToggleButton } from './components/DiagnosticsToggleButton';
 import { NotificationStack } from './components/NotificationStack';
 import { notificationStore } from './stores/notificationStore';
 import ChangeLanguage from './components/ChangeLanguage';
@@ -88,6 +89,7 @@ function EditorShell() {
           toolbarPortalTarget={toolbarPortalTarget}
           sidebarTogglePortalTarget={sidebarTogglePortalTarget}
           languageSelector={<ChangeLanguage />}
+          bottomDockEnd={<DiagnosticsToggleButton />}
         />
       </div>
 

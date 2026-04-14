@@ -1,4 +1,5 @@
 import React from 'react';
+import type { ReactNode } from 'react';
 import { Box, IconButton, Tooltip } from '@mui/material';
 import { ZoomControls } from 'src/components/ZoomControls/ZoomControls';
 import { useUiStateStore } from 'src/stores/uiStateStore';
@@ -29,7 +30,11 @@ const btnSx = {
   '&:hover': { bgcolor: 'action.hover', color: 'text.primary' }
 } as const;
 
-export const BottomDock = () => {
+interface BottomDockProps {
+  endSlot?: ReactNode;
+}
+
+export const BottomDock = ({ endSlot }: BottomDockProps = {}) => {
   const uiStateActions = useUiStateStore((s) => s.actions);
 
   return (
@@ -53,7 +58,7 @@ export const BottomDock = () => {
       {/* Left zone: empty / future use */}
       <Box />
 
-      {/* Right zone: zoom controls + help */}
+      {/* Right zone: zoom controls + help + optional end slot */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
         <ZoomControls />
         <Tooltip title="Help" placement="top">
@@ -65,6 +70,7 @@ export const BottomDock = () => {
             <HelpSvg />
           </IconButton>
         </Tooltip>
+        {endSlot}
       </Box>
     </Box>
   );

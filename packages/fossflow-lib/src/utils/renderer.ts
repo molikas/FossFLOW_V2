@@ -251,10 +251,21 @@ export const getFitToViewParams = (
     0,
     MAX_ZOOM
   );
-  const scrollTarget: Coords = {
-    x: (sortedCornerPositions.lowX + boundingBoxSize.width / 2) * zoom,
-    y: (sortedCornerPositions.lowY + boundingBoxSize.height / 2) * zoom
+
+  // Compute scroll using the mode-aware getTilePositionFn so that 2D mode
+  // centres correctly. The previous approach passed a zoom-scaled tile coord
+  // into the ISO-hardcoded getTileScrollPosition, which worked for ISO (where
+  // a single node at {0,0} cancels the x-term) but produced a wrong offset for
+  // 2D when the diagram centre is not at {0,0}.
+  const centerTile: Coords = {
+    x: sortedCornerPositions.lowX + boundingBoxSize.width / 2,
+    y: sortedCornerPositions.lowY + boundingBoxSize.height / 2
   };
-  const scroll = getTileScrollPosition(scrollTarget);
+  const centerScreenPos = getTilePositionFn({ tile: centerTile });
+  const scroll: Coords = {
+    x: -centerScreenPos.x * zoom,
+    y: -centerScreenPos.y * zoom
+  };
+
   return { zoom, scroll };
 };

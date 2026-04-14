@@ -252,7 +252,11 @@ export function DiagramLifecycleProvider({
     );
     const mergedIcons = [...iconPackManager.loadedIcons, ...importedIcons];
     isAfterLoadRef.current = true;
-    isoflowRef.current.load({ ...currentModelRef.current, icons: mergedIcons } as any);
+    // preserveViewport=true: icon pack updates must not reset the user's zoom/scroll
+    isoflowRef.current.load(
+      { ...currentModelRef.current, icons: mergedIcons } as any,
+      { preserveViewport: true }
+    );
   }, [iconPackManager.loadedIcons]);
 
   // ---------------------------------------------------------------------------

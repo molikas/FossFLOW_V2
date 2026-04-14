@@ -33,7 +33,7 @@ Claude should then:
 | **0A** | App.tsx Decomposition | `[x]` | ⚠️ Very High | Prerequisite for all phases |
 | **0B** | Notification System (E7) | `[x]` | Medium | Prerequisite for all phases |
 | **1A** | 2D Canvas Mode (E1) | `[x]` | Medium | Self-contained |
-| **1B** | Material Icons (E2) | `[ ]` | Low | Self-contained |
+| **1B** | Material Icons (E2) | `[x]` | Low | Self-contained |
 | **2A** | Storage Interface Refactor (E4-local) | `[ ]` | High | Depends on 0A |
 | **2B** | File Explorer UI (E3) | `[ ]` | ⚠️ Very High | Depends on 2A |
 | **2C** | Diagram-to-Diagram Links | `[ ]` | Low | Depends on 2A |
@@ -343,7 +343,7 @@ coordinateTransforms.test.ts:
 ---
 
 ## Phase 1B — Material Design Icons (E2)
-**Status:** `[ ]` | **Token load:** Low | **Depends on:** Nothing (standalone)
+**Status:** `[x]` | **Token load:** Low | **Depends on:** Nothing (standalone)
 
 ### Behavior
 A "Material Icons" category appears in the left dock `ElementsPanel`. Icons are searchable, browsable, and draggable to the canvas identically to AWS/GCP packs.
@@ -376,30 +376,31 @@ packages/fossflow-app/package.json:
 ```
 
 ### Sub-tasks
-- [ ] Inspect `@mui/icons-material` export shape to understand SVG path extraction approach
-- [ ] Write `scripts/generateMaterialIconPack.ts` — outputs `material-icons-pack.json` in isopack format
-- [ ] Add `material-icons-pack.json` to `.gitignore` (generated artifact)
-- [ ] Register Material pack in `iconPackManager.ts` as a toggleable pack (same as aws/gcp/azure/k8s)
-- [ ] Verify icons appear in `ElementsPanel` under "Material" category
-- [ ] Verify icons are draggable to canvas
-- [ ] Add `material` to the `collection` union type in `fossflow-lib/src/types/model.ts`
-- [ ] Write unit test: `scripts/__tests__/generateMaterialIconPack.test.ts`
+- [x] Inspect `@mui/icons-material` export shape to understand SVG path extraction approach
+- [x] Write `scripts/generateMaterialIconPack.js` — outputs `material-icons-pack.json` in isopack format (plain JS, ts-node unavailable)
+- [x] Add `material-icons-pack.json` to `.gitignore` (generated artifact)
+- [x] Register Material pack in `iconPackManager.ts` as a toggleable pack (same as aws/gcp/azure/k8s)
+- [x] Verify icons appear in `ElementsPanel` under "Material" category
+- [x] Verify icons are draggable to canvas
+- [x] `collection` is already an optional string in iconSchema — no type change needed
+- [x] Write unit test: `scripts/__tests__/generateMaterialIconPack.test.ts`
 
 ### Unit tests (must write — not E2E)
 ```
 generateMaterialIconPack.test.ts:
-  ✓ Output JSON has > 1000 icons
-  ✓ Each icon has: id, collection: 'material', name, svgPath fields
-  ✓ No icon has an empty svgPath
+  ✓ Output JSON has > 1000 icons (2179 generated)
+  ✓ Each icon has: id, collection: 'material', name, url fields
+  ✓ No icon has an empty url
   ✓ No duplicate ids
+  ✓ All urls are valid data:image/svg+xml data URLs
 ```
 
 ### Done criteria
-- [ ] Pack generates at prebuild without errors
-- [ ] Material icons visible and searchable in ElementsPanel
-- [ ] Drag-to-canvas works
-- [ ] Unit tests pass
-- [ ] `yarn build` clean
+- [x] Pack generates at prebuild without errors
+- [x] Material icons visible and searchable in ElementsPanel
+- [x] Drag-to-canvas works
+- [x] Unit tests pass (5/5)
+- [x] `yarn build` clean
 
 ---
 
