@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { DiagramInfo, StorageService } from '../services/storageService';
+import { DiagramMeta, StorageProvider } from '../services/storage';
 import { ConfirmDialog } from './ConfirmDialog';
 import './DiagramManager.css';
 
 interface Props {
-  storage: StorageService;
+  storage: StorageProvider;
   isServerStorage: boolean;
   onLoadDiagram: (id: string, data: any, listingName: string) => void;
   onClose: () => void;
@@ -18,7 +18,7 @@ export const DiagramManager: React.FC<Props> = ({
   onClose
 }) => {
   const { t } = useTranslation('app');
-  const [diagrams, setDiagrams] = useState<DiagramInfo[]>([]);
+  const [diagrams, setDiagrams] = useState<DiagramMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -135,9 +135,7 @@ export const DiagramManager: React.FC<Props> = ({
                     <h3>{diagram.name}</h3>
                     <span className="diagram-meta">
                       {t('dialog.diagramManager.lastModified')}:{' '}
-                      {diagram.lastModified.toLocaleString()}
-                      {diagram.size &&
-                        ` • ${(diagram.size / 1024).toFixed(1)} KB`}
+                      {new Date(diagram.lastModified).toLocaleString()}
                     </span>
                   </div>
                   <div className="diagram-actions">

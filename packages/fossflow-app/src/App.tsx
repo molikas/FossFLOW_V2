@@ -45,7 +45,7 @@ function EditorPage() {
 
 function EditorShell() {
   const { t, i18n } = useTranslation('app');
-  const { serverStorageAvailable } = useAppStorage();
+  const { serverStorageAvailable, isInitialized } = useAppStorage();
   const {
     isoflowRef,
     frozenInitialDataRef,
@@ -61,6 +61,7 @@ function EditorShell() {
 
   const sessionWarnPushedRef = useRef(false);
   useEffect(() => {
+    if (!isInitialized) return; // wait until storage check completes before deciding
     if (!serverStorageAvailable && !isReadonlyUrl && !sessionWarnPushedRef.current) {
       sessionWarnPushedRef.current = true;
       notificationStore.push({
@@ -72,7 +73,7 @@ function EditorShell() {
         )
       });
     }
-  }, [serverStorageAvailable, isReadonlyUrl, t]);
+  }, [serverStorageAvailable, isInitialized, isReadonlyUrl, t]);
 
   return (
     <div className="App">

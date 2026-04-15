@@ -211,7 +211,7 @@ export function DiagramLifecycleProvider({
           name: diagramInfo?.name || data.title || 'Readonly Diagram',
           data,
           createdAt: new Date().toISOString(),
-          updatedAt: diagramInfo?.lastModified.toISOString() || new Date().toISOString()
+          updatedAt: diagramInfo?.lastModified || new Date().toISOString()
         };
         const importedIcons = (data.icons || []).filter(
           (icon: any) => icon.collection === 'imported'

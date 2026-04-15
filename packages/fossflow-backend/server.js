@@ -89,8 +89,9 @@ if (STORAGE_ENABLED) {
             diagrams.push({
               id: file.replace('.json', ''),
               name: name,
-              lastModified: stats.mtime,
-              size: stats.size
+              lastModified: data.lastModified || stats.mtime.toISOString(),
+              folderId: data.folderId ?? null,
+              deletedAt: data.deletedAt ?? null
             });
           } catch (fileError) {
             console.error(`Error reading diagram file ${file}:`, fileError.message);
@@ -183,6 +184,174 @@ if (STORAGE_ENABLED) {
       }
     }
   });
+
+  // Soft-delete or patch diagram metadata (e.g. folderId, deletedAt)
+  app.patch('/api/diagrams/:id', async (req, res) => {
+    const diagramId = req.params.id;
+    try {
+      const filePath = path.join(STORAGE_PATH, `${diagramId}.json`);
+      const content = await fs.readFile(filePath, 'utf-8');
+      const data = JSON.parse(content);
+      const updated = { ...data, ...req.body, id: diagramId };
+      await fs.writeFile(filePath, JSON.stringify(updated, null, 2));
+      res.json({ success: true });
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        res.status(404).json({ error: 'Diagram not found' });
+      } else {
+        res.status(500).json({ error: 'Failed to patch diagram' });
+      }
+    }
+  });
+
+  // Move diagram to a folder
+  app.patch('/api/diagrams/:id/move', async (req, res) => {
+    const diagramId = req.params.id;
+    const { targetFolderId } = req.body;
+    try {
+      const filePath = path.join(STORAGE_PATH, `${diagramId}.json`);
+      const content = await fs.readFile(filePath, 'utf-8');
+      const data = JSON.parse(content);
+      data.folderId = targetFolderId ?? null;
+      await fs.writeFile(filePath, JSON.stringify(data, null, 2));
+      res.json({ success: true });
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        res.status(404).json({ error: 'Diagram not found' });
+      } else {
+        res.status(500).json({ error: 'Failed to move diagram' });
+      }
+    }
+  });
+
+  // ---- Folder endpoints -------------------------------------------------------
+
+  const FOLDERS_FILE = path.join(STORAGE_PATH, 'folders.json');
+
+  async function readFolders() {
+    try {
+      const content = await fs.readFile(FOLDERS_FILE, 'utf-8');
+      return JSON.parse(content);
+    } catch {
+      return [];
+    }
+  }
+
+  async function writeFolders(folders) {
+    await fs.writeFile(FOLDERS_FILE, JSON.stringify(folders, null, 2));
+  }
+
+  // List folders (optionally filtered by parentId)
+  app.get('/api/folders', async (req, res) => {
+    try {
+      const all = await readFolders();
+      const { parentId } = req.query;
+      const result =
+        parentId !== undefined
+          ? all.filter((f) => String(f.parentId) === String(parentId))
+          : all;
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to list folders' });
+    }
+  });
+
+  // Create folder
+  app.post('/api/folders', async (req, res) => {
+    try {
+      const { name, parentId } = req.body;
+      if (!name) return res.status(400).json({ error: 'name is required' });
+      const folders = await readFolders();
+      const id = `folder_${Date.now()}`;
+      folders.push({ id, name, parentId: parentId ?? null });
+      await writeFolders(folders);
+      res.status(201).json({ success: true, id });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to create folder' });
+    }
+  });
+
+  // Rename folder
+  app.put('/api/folders/:id', async (req, res) => {
+    try {
+      const { name } = req.body;
+      if (!name) return res.status(400).json({ error: 'name is required' });
+      const folders = await readFolders();
+      const idx = folders.findIndex((f) => f.id === req.params.id);
+      if (idx < 0) return res.status(404).json({ error: 'Folder not found' });
+      folders[idx] = { ...folders[idx], name };
+      await writeFolders(folders);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to rename folder' });
+    }
+  });
+
+  // Delete folder (recursive removes children too)
+  app.delete('/api/folders/:id', async (req, res) => {
+    try {
+      const recursive = req.query.recursive === 'true';
+      let folders = await readFolders();
+      if (recursive) {
+        const toDelete = new Set();
+        const collect = (fid) => {
+          toDelete.add(fid);
+          folders.filter((f) => f.parentId === fid).forEach((f) => collect(f.id));
+        };
+        collect(req.params.id);
+        folders = folders.filter((f) => !toDelete.has(f.id));
+      } else {
+        const idx = folders.findIndex((f) => f.id === req.params.id);
+        if (idx < 0) return res.status(404).json({ error: 'Folder not found' });
+        folders.splice(idx, 1);
+      }
+      await writeFolders(folders);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to delete folder' });
+    }
+  });
+
+  // Move folder to new parent
+  app.patch('/api/folders/:id/move', async (req, res) => {
+    try {
+      const { targetFolderId } = req.body;
+      const folders = await readFolders();
+      const idx = folders.findIndex((f) => f.id === req.params.id);
+      if (idx < 0) return res.status(404).json({ error: 'Folder not found' });
+      folders[idx] = { ...folders[idx], parentId: targetFolderId ?? null };
+      await writeFolders(folders);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to move folder' });
+    }
+  });
+
+  // ---- Tree manifest ----------------------------------------------------------
+
+  const MANIFEST_FILE = path.join(STORAGE_PATH, 'tree-manifest.json');
+
+  app.get('/api/tree-manifest', async (req, res) => {
+    try {
+      const content = await fs.readFile(MANIFEST_FILE, 'utf-8');
+      res.json(JSON.parse(content));
+    } catch {
+      res.json({ folders: [] });
+    }
+  });
+
+  app.put('/api/tree-manifest', async (req, res) => {
+    try {
+      await fs.writeFile(MANIFEST_FILE, JSON.stringify(req.body, null, 2));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to save tree manifest' });
+    }
+  });
+
+  // ---- Diagram list: include folderId + deletedAt in response -----------------
+  // (The existing GET /api/diagrams already reads these from the JSON file
+  //  since we store them there on create/patch. No further changes needed.)
 
   // Create a new diagram
   app.post('/api/diagrams', async (req, res) => {

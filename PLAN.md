@@ -34,7 +34,7 @@ Claude should then:
 | **0B** | Notification System (E7) | `[x]` | Medium | Prerequisite for all phases |
 | **1A** | 2D Canvas Mode (E1) | `[x]` | Medium | Self-contained |
 | **1B** | Material Icons (E2) | `[x]` | Low | Self-contained |
-| **2A** | Storage Interface Refactor (E4-local) | `[ ]` | High | Depends on 0A |
+| **2A** | Storage Interface Refactor (E4-local) | `[x]` | High | Depends on 0A |
 | **2B** | File Explorer UI (E3) | `[ ]` | ⚠️ Very High | Depends on 2A |
 | **2C** | Diagram-to-Diagram Links | `[ ]` | Low | Depends on 2A |
 | **3A** | Google Auth — authStore (E5) | `[ ]` | Medium | Depends on 0B |
@@ -405,7 +405,7 @@ generateMaterialIconPack.test.ts:
 ---
 
 ## Phase 2A — Pluggable Storage Interface (E4 — Local Only)
-**Status:** `[ ]` | **Token load:** High | **Depends on:** 0A, 0B
+**Status:** `[x]` | **Token load:** High | **Depends on:** 0A, 0B
 
 ### Token guardrail
 > ⚠️ **Do not implement all providers in one session.**
@@ -491,14 +491,14 @@ export interface StorageProvider {
 ```
 
 ### Sub-tasks
-- [ ] Create `services/storage/types.ts` with all interfaces above
-- [ ] Create `services/storage/providers/LocalStorageProvider.ts` — merge existing `ServerStorage` + `SessionStorage` logic into one provider implementing `StorageProvider`
-- [ ] Add folder support to `LocalStorageProvider`: folders stored as `fossflow_folders` JSON in localStorage (key: `fossflow-folders`), folder membership stored as `folderId` on diagram metadata
-- [ ] Create stub `services/storage/providers/GoogleDriveProvider.ts` — throws `NotImplementedError` on all methods
-- [ ] Create stub `services/storage/providers/S3Provider.ts` — throws `NotImplementedError` on all methods
-- [ ] Refactor `services/storage/StorageManager.ts` — provider registry pattern, `registerProvider()`, `setActiveProvider()`, delegates all calls to active provider
-- [ ] Update `providers/AppStorageContext.tsx` to initialize `StorageManager` with `LocalStorageProvider` as default
-- [ ] Update `fossflow-backend/server.js` — add folder endpoints:
+- [x] Create `services/storage/types.ts` with all interfaces above
+- [x] Create `services/storage/providers/LocalStorageProvider.ts` — merge existing `ServerStorage` + `SessionStorage` logic into one provider implementing `StorageProvider`
+- [x] Add folder support to `LocalStorageProvider`: folders stored as `fossflow_folders` JSON in localStorage (key: `fossflow-folders`), folder membership stored as `folderId` on diagram metadata
+- [x] Create stub `services/storage/providers/GoogleDriveProvider.ts` — throws `NotImplementedError` on all methods
+- [x] Create stub `services/storage/providers/S3Provider.ts` — throws `NotImplementedError` on all methods
+- [x] Refactor `services/storage/StorageManager.ts` — provider registry pattern, `registerProvider()`, `setActiveProvider()`, delegates all calls to active provider
+- [x] Update `providers/AppStorageContext.tsx` to initialize `StorageManager` with `LocalStorageProvider` as default
+- [x] Update `fossflow-backend/server.js` — add folder endpoints:
   - `GET /api/folders` → list folders
   - `POST /api/folders` → create folder
   - `PUT /api/folders/:id` → rename folder
@@ -506,7 +506,7 @@ export interface StorageProvider {
   - `PATCH /api/diagrams/:id/move` → move diagram to folder (`{ targetFolderId }`)
   - `GET /api/tree-manifest` → get manifest
   - `PUT /api/tree-manifest` → save manifest
-- [ ] Write unit tests: `services/storage/__tests__/LocalStorageProvider.test.ts`
+- [x] Write unit tests: `services/storage/__tests__/LocalStorageProvider.test.ts`
 
 ### Unit tests (must write — not E2E)
 ```
@@ -523,11 +523,11 @@ LocalStorageProvider.test.ts (use MSW to mock fetch):
 ```
 
 ### Done criteria
-- [ ] All existing save/load/delete flows work via `LocalStorageProvider`
-- [ ] Folder CRUD works against the dev server
-- [ ] Stub providers exist (return `NotImplementedError`) — no broken imports
-- [ ] Unit tests pass (with MSW mocking fetch)
-- [ ] `yarn build` clean
+- [x] All existing save/load/delete flows work via `LocalStorageProvider`
+- [x] Folder CRUD works against the dev server
+- [x] Stub providers exist (return `NotImplementedError`) — no broken imports
+- [x] Unit tests pass (9/9 — jest.fn fetch mock, MSW skipped: ESM conflict with Jest CJS config)
+- [x] `yarn build` clean
 
 ---
 
