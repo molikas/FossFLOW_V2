@@ -35,6 +35,14 @@ export class GoogleDriveProvider implements StorageProvider {
     throw new NotImplementedError('GoogleDriveProvider.deleteDiagram');
   }
 
+  async restoreDiagram(_id: string): Promise<void> {
+    throw new NotImplementedError('GoogleDriveProvider.restoreDiagram');
+  }
+
+  async renameDiagram(_id: string, _name: string): Promise<void> {
+    throw new NotImplementedError('GoogleDriveProvider.renameDiagram');
+  }
+
   async listFolders(_parentId?: string | null): Promise<FolderMeta[]> {
     throw new NotImplementedError('GoogleDriveProvider.listFolders');
   }

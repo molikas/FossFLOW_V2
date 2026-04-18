@@ -15,9 +15,9 @@
 .fossflow-container {
   flex: 1;
   width: 100%;
+  height: 100%;
   position: relative;
-  /* Remove background color to let Isoflow's grid show through */
-  /* background-color: #f9f9f9; */
+  overflow: hidden;
 }
 
 /* Ensure Isoflow takes full height */

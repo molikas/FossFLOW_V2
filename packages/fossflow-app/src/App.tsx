@@ -7,7 +7,9 @@ import {
   DiagramLifecycleProvider,
   useDiagramLifecycle
 } from './providers/DiagramLifecycleProvider';
+import { FileExplorerLayout } from './layout/FileExplorerLayout';
 import { AppToolbar } from './components/AppToolbar';
+import { EmptyStateScreen } from './components/EmptyStateScreen';
 import { DiagnosticsOverlay } from './components/DiagnosticsOverlay';
 import { DiagnosticsToggleButton } from './components/DiagnosticsToggleButton';
 import { NotificationStack } from './components/NotificationStack';
@@ -51,9 +53,11 @@ function EditorShell() {
     frozenInitialDataRef,
     iconPackManagerProp,
     handleModelUpdated,
+    handleCreateBlankDiagram,
     toolbarPortalTarget,
     sidebarTogglePortalTarget,
-    isReadonlyUrl
+    isReadonlyUrl,
+    currentDiagram
   } = useDiagramLifecycle();
 
   const currentLocale =
@@ -79,20 +83,36 @@ function EditorShell() {
     <div className="App">
       <AppToolbar />
 
-      <div className="fossflow-container">
-        <Isoflow
-          ref={isoflowRef}
-          initialData={frozenInitialDataRef.current}
-          onModelUpdated={handleModelUpdated}
-          editorMode={isReadonlyUrl ? 'EXPLORABLE_READONLY' : 'EDITABLE'}
-          locale={currentLocale}
-          iconPackManager={iconPackManagerProp}
-          toolbarPortalTarget={toolbarPortalTarget}
-          sidebarTogglePortalTarget={sidebarTogglePortalTarget}
-          languageSelector={<ChangeLanguage />}
-          bottomDockEnd={<DiagnosticsToggleButton />}
-        />
-      </div>
+      <FileExplorerLayout>
+        <div className="fossflow-container">
+          {serverStorageAvailable && !currentDiagram && !isReadonlyUrl ? (
+            <EmptyStateScreen onCreate={() => handleCreateBlankDiagram(null)} />
+          ) : (
+          <Isoflow
+            ref={isoflowRef}
+            initialData={frozenInitialDataRef.current}
+            onModelUpdated={handleModelUpdated}
+            editorMode={isReadonlyUrl ? 'EXPLORABLE_READONLY' : 'EDITABLE'}
+            locale={currentLocale}
+            iconPackManager={iconPackManagerProp}
+            toolbarPortalTarget={toolbarPortalTarget}
+            sidebarTogglePortalTarget={sidebarTogglePortalTarget}
+            languageSelector={<ChangeLanguage />}
+            bottomDockEnd={<DiagnosticsToggleButton />}
+            mainMenuOptions={[
+              // ACTION.NEW is intentionally excluded — FossFlow owns "New diagram"
+              // via its own toolbar button so it can flush auto-save first.
+              'ACTION.OPEN',
+              'EXPORT.JSON',
+              'EXPORT.PNG',
+              'ACTION.CLEAR_CANVAS',
+              'LINK.GITHUB',
+              'VERSION'
+            ]}
+          />
+          )}
+        </div>
+      </FileExplorerLayout>
 
       <DiagnosticsOverlay />
       <NotificationStack />

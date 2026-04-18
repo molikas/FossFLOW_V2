@@ -115,9 +115,23 @@ const App = forwardRef<IsoflowRef, IsoflowProps>(
     }, [enableDebugTools]);
 
     const { load } = initialDataManager;
-    useDirtyTracker(initialDataManager.isReady);
+    const { markClean } = useDirtyTracker(initialDataManager.isReady);
 
-    useImperativeHandle(ref, () => ({ load }), [load]);
+    // Wrap the exposed load so every programmatic load resets Isoflow's
+    // internal dirty flag.  Without this, isoflowRef.current.load() triggers
+    // useDirtyTracker's modelStore subscription and marks the diagram dirty
+    // even though no user edit occurred, causing the MainMenu "New diagram"
+    // guard to fire spuriously.
+    useImperativeHandle(
+      ref,
+      () => ({
+        load: (data, opts) => {
+          load(data, opts);
+          markClean();
+        }
+      }),
+      [load, markClean]
+    );
 
     const mergedInitialData = useMemo(() => {
       // Strip undefined values so they don't override INITIAL_DATA defaults

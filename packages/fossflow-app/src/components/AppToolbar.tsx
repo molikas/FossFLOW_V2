@@ -1,10 +1,12 @@
 import { useRef, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  Badge,
   Box,
   Chip,
   Divider,
   IconButton,
+  InputBase,
   Popover,
   Stack,
   TextField,
@@ -17,7 +19,10 @@ import {
   FolderOpenOutlined as FolderIcon,
   ShareOutlined as ShareIcon,
   Close as CloseIcon,
-  VisibilityOutlined as PreviewIcon
+  VisibilityOutlined as PreviewIcon,
+  AccountTreeOutlined as FileExplorerIcon,
+  SyncOutlined as SavingIcon,
+  ErrorOutlineOutlined as SaveErrorIcon
 } from '@mui/icons-material';
 import { useAppStorage } from '../providers/AppStorageContext';
 import { useDiagramLifecycle } from '../providers/DiagramLifecycleProvider';
@@ -29,13 +34,19 @@ export function AppToolbar() {
     diagramName,
     hasUnsavedChanges,
     lastSaved,
+    saveStatus,
     isReadonlyUrl,
     currentDiagram,
     setToolbarPortalTarget,
     setSidebarTogglePortalTarget,
     handleSaveClick,
     handleOpenClick,
-    handlePreviewClick
+    handlePreviewClick,
+    handleRenameCurrentDiagram,
+    saveAllDirty,
+    fileExplorerOpen,
+    setFileExplorerOpen,
+    dirtyDiagramIds
   } = useDiagramLifecycle();
 
   const shareButtonRef = useRef<HTMLButtonElement>(null);
@@ -44,10 +55,40 @@ export function AppToolbar() {
   const [showSharePopover, setShowSharePopover] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
 
+  // Inline title editing
+  const [editingName, setEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState('');
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
   const currentDiagramId = currentDiagram?.id;
   const shareUrl = currentDiagramId
     ? `${window.location.origin}/display/${currentDiagramId}`
     : '';
+
+  // Focus input when editing starts
+  useEffect(() => {
+    if (editingName && titleInputRef.current) {
+      titleInputRef.current.select();
+    }
+  }, [editingName]);
+
+  const handleTitleClick = () => {
+    if (isReadonlyUrl || !currentDiagram) return;
+    setEditNameValue(diagramName);
+    setEditingName(true);
+  };
+
+  const commitRename = () => {
+    setEditingName(false);
+    if (editNameValue.trim() && editNameValue.trim() !== diagramName) {
+      handleRenameCurrentDiagram(editNameValue.trim());
+    }
+  };
+
+  const handleTitleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') commitRename();
+    if (e.key === 'Escape') setEditingName(false);
+  };
 
   const handleShareClick = () => {
     if (!serverStorageAvailable || !currentDiagramId) return;
@@ -68,7 +109,6 @@ export function AppToolbar() {
     (e.target as HTMLInputElement).select();
   };
 
-  // Close share popover on outside click
   useEffect(() => {
     if (!showSharePopover) return;
     const handleOutside = (e: MouseEvent) => {
@@ -97,6 +137,67 @@ export function AppToolbar() {
     return t('status.savedOnDateYear', { month, day, year: d.getFullYear(), time });
   };
 
+  // ── Auto-save status (server mode) ──────────────────────────────────────────
+  const renderAutoSaveStatus = () => {
+    if (saveStatus === 'saving') {
+      return (
+        <Stack direction="row" alignItems="center" spacing={0.5}>
+          <SavingIcon sx={{ fontSize: 13, color: 'text.disabled', animation: 'spin 1s linear infinite', '@keyframes spin': { from: { transform: 'rotate(0deg)' }, to: { transform: 'rotate(360deg)' } } }} />
+          <Typography variant="caption" sx={{ color: 'text.disabled', userSelect: 'none' }}>
+            {t('status.saving', 'Saving…')}
+          </Typography>
+        </Stack>
+      );
+    }
+    if (saveStatus === 'error') {
+      return (
+        <Stack direction="row" alignItems="center" spacing={0.5}>
+          <SaveErrorIcon sx={{ fontSize: 13, color: 'error.main' }} />
+          <Typography variant="caption" sx={{ color: 'error.main', userSelect: 'none' }}>
+            {t('status.saveFailed', 'Save failed')}
+          </Typography>
+          <Button
+            size="small"
+            variant="text"
+            color="error"
+            sx={{ minWidth: 0, px: 0.5, py: 0, fontSize: 11, textTransform: 'none', lineHeight: 1.5 }}
+            onClick={handleSaveClick}
+          >
+            {t('status.retry', 'Retry')}
+          </Button>
+        </Stack>
+      );
+    }
+    if (lastSaved) {
+      return (
+        <Typography variant="caption" sx={{ color: 'text.disabled', userSelect: 'none', whiteSpace: 'nowrap' }}>
+          {formatSavedAt(lastSaved)}
+        </Typography>
+      );
+    }
+    return null;
+  };
+
+  // ── Session-mode status ──────────────────────────────────────────────────────
+  const renderSessionStatus = () => (
+    <Typography
+      variant="caption"
+      sx={{
+        color: hasUnsavedChanges ? 'text.primary' : 'text.disabled',
+        whiteSpace: 'nowrap',
+        userSelect: 'none',
+        minWidth: 60,
+        textAlign: 'right'
+      }}
+    >
+      {lastSaved
+        ? `${formatSavedAt(lastSaved)}${hasUnsavedChanges ? ' •' : ''}`
+        : hasUnsavedChanges
+          ? t('status.unsaved', 'Unsaved')
+          : ''}
+    </Typography>
+  );
+
   return (
     <Box
       className="toolbar"
@@ -111,7 +212,7 @@ export function AppToolbar() {
         gap: 0
       }}
     >
-      {/* LEFT: menu portal + save + open */}
+      {/* LEFT: menu portal + file-explorer toggle + new + save + open */}
       <Box
         className="toolbar-left"
         sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}
@@ -128,18 +229,62 @@ export function AppToolbar() {
         {!isReadonlyUrl && (
           <>
             <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-            <Tooltip title={t('nav.save', 'Save') + ' (Ctrl+S)'} placement="bottom">
-              <span>
-                <IconButton
-                  size="small"
-                  onClick={handleSaveClick}
-                  disabled={!!currentDiagramId && !hasUnsavedChanges}
-                  sx={{ borderRadius: 1, color: 'inherit' }}
-                >
-                  <SaveIcon sx={{ fontSize: 18 }} />
-                </IconButton>
-              </span>
+            <Tooltip
+              title={fileExplorerOpen ? 'Close file explorer' : 'Open file explorer'}
+              placement="bottom"
+            >
+              <IconButton
+                size="small"
+                onClick={() => setFileExplorerOpen(!fileExplorerOpen)}
+                sx={{
+                  borderRadius: 1,
+                  color: fileExplorerOpen ? 'primary.main' : 'inherit'
+                }}
+              >
+                <FileExplorerIcon sx={{ fontSize: 18 }} />
+              </IconButton>
             </Tooltip>
+
+            <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+
+            {/* Save — shown in session mode; hidden in server mode (auto-save handles it) */}
+            {!serverStorageAvailable && (
+              <>
+                <Tooltip title={t('nav.save', 'Save') + ' (Ctrl+S)'} placement="bottom">
+                  <span>
+                    <IconButton
+                      size="small"
+                      onClick={handleSaveClick}
+                      disabled={!!currentDiagramId && !hasUnsavedChanges}
+                      sx={{ borderRadius: 1, color: 'inherit' }}
+                    >
+                      <SaveIcon sx={{ fontSize: 18 }} />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+                {dirtyDiagramIds.size > (hasUnsavedChanges ? 1 : 0) && (
+                  <Tooltip
+                    title={`Save All — ${dirtyDiagramIds.size} unsaved diagrams`}
+                    placement="bottom"
+                  >
+                    <IconButton
+                      size="small"
+                      onClick={saveAllDirty}
+                      sx={{ borderRadius: 1, color: 'inherit' }}
+                    >
+                      <Badge
+                        badgeContent={dirtyDiagramIds.size}
+                        color="warning"
+                        sx={{ '& .MuiBadge-badge': { fontSize: 9, minWidth: 14, height: 14, padding: 0 } }}
+                      >
+                        <SaveIcon sx={{ fontSize: 18 }} />
+                      </Badge>
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </>
+            )}
+
             <Tooltip
               title={t('nav.diagrams', 'Diagrams') + ' (Ctrl+O)'}
               placement="bottom"
@@ -164,21 +309,58 @@ export function AppToolbar() {
         )}
       </Box>
 
-      {/* CENTER: diagram name */}
+      {/* CENTER: diagram name (editable in server mode) */}
       <Box
         className="toolbar-center"
         sx={{ flex: 1, display: 'flex', justifyContent: 'center', px: 1, overflow: 'hidden' }}
       >
-        {diagramName && (
-          <Typography
-            variant="body2"
-            fontWeight={500}
-            color="text.secondary"
-            noWrap
-            sx={{ userSelect: 'none' }}
-          >
-            {diagramName}
-          </Typography>
+        {editingName ? (
+          <InputBase
+            inputRef={titleInputRef}
+            value={editNameValue}
+            onChange={(e) => setEditNameValue(e.target.value)}
+            onBlur={commitRename}
+            onKeyDown={handleTitleKeyDown}
+            inputProps={{ style: { textAlign: 'center', padding: 0 } }}
+            sx={{
+              fontSize: '0.875rem',
+              fontWeight: 500,
+              color: 'text.secondary',
+              maxWidth: 320,
+              '& input': { textAlign: 'center' }
+            }}
+          />
+        ) : (
+          diagramName && (
+            <Tooltip
+              title={
+                !isReadonlyUrl && currentDiagram
+                  ? t('toolbar.clickToRename', 'Click to rename')
+                  : ''
+              }
+              placement="bottom"
+              disableHoverListener={isReadonlyUrl || !currentDiagram}
+            >
+              <Typography
+                variant="body2"
+                fontWeight={500}
+                color="text.secondary"
+                noWrap
+                onClick={handleTitleClick}
+                sx={{
+                  userSelect: 'none',
+                  cursor: !isReadonlyUrl && currentDiagram ? 'text' : 'default',
+                  px: 0.5,
+                  borderRadius: 0.5,
+                  '&:hover': !isReadonlyUrl && currentDiagram
+                    ? { bgcolor: 'action.hover' }
+                    : {}
+                }}
+              >
+                {diagramName}
+              </Typography>
+            </Tooltip>
+          )
         )}
       </Box>
 
@@ -189,22 +371,10 @@ export function AppToolbar() {
       >
         {!isReadonlyUrl && (
           <>
-            <Typography
-              variant="caption"
-              sx={{
-                color: hasUnsavedChanges ? 'text.primary' : 'text.disabled',
-                whiteSpace: 'nowrap',
-                userSelect: 'none',
-                minWidth: 60,
-                textAlign: 'right'
-              }}
-            >
-              {lastSaved
-                ? `${formatSavedAt(lastSaved)}${hasUnsavedChanges ? ' •' : ''}`
-                : hasUnsavedChanges
-                  ? t('status.unsaved', 'Unsaved')
-                  : ''}
-            </Typography>
+            {serverStorageAvailable
+              ? renderAutoSaveStatus()
+              : renderSessionStatus()}
+
             <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
             <Tooltip
               title={
@@ -230,9 +400,7 @@ export function AppToolbar() {
               title={
                 !serverStorageAvailable || !currentDiagramId
                   ? t('toolbar.previewSaveFirst', 'Save first to preview')
-                  : hasUnsavedChanges
-                    ? t('toolbar.saveAndPreview', 'Save & Preview')
-                    : t('toolbar.preview', 'Preview')
+                  : t('toolbar.preview', 'Preview')
               }
               placement="bottom"
             >
@@ -281,10 +449,7 @@ export function AppToolbar() {
               </IconButton>
             </Stack>
             <Typography variant="body2" color="text.secondary">
-              {t(
-                'share.hint',
-                'Anyone with this link can view the diagram in read-only mode.'
-              )}
+              {t('share.hint', 'Anyone with this link can view the diagram in read-only mode.')}
             </Typography>
             <Stack direction="row" spacing={1}>
               <TextField

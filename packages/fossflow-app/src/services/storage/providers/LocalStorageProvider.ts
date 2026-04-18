@@ -265,6 +265,44 @@ export class LocalStorageProvider implements StorageProvider {
     }
   }
 
+  async restoreDiagram(id: string): Promise<void> {
+    await this.ensureChecked();
+    if (this.usingServer) {
+      const response = await fetch(`${this.baseUrl}/api/diagrams/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deletedAt: null }),
+        signal: timeoutSignal(10000)
+      });
+      if (!response.ok) throw new Error(`Failed to restore diagram: ${response.status}`);
+    } else {
+      const list = this.sessionListDiagrams();
+      const updated = list.map((d) =>
+        d.id === id ? { ...d, deletedAt: undefined } : d
+      );
+      sessionStorage.setItem(SESSION_DIAGRAMS_KEY, JSON.stringify(updated));
+    }
+  }
+
+  async renameDiagram(id: string, name: string): Promise<void> {
+    await this.ensureChecked();
+    if (this.usingServer) {
+      const response = await fetch(`${this.baseUrl}/api/diagrams/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, title: name }),
+        signal: timeoutSignal(10000)
+      });
+      if (!response.ok) throw new Error(`Failed to rename diagram: ${response.status}`);
+    } else {
+      const list = this.sessionListDiagrams();
+      const updated = list.map((d) =>
+        d.id === id ? { ...d, name } : d
+      );
+      sessionStorage.setItem(SESSION_DIAGRAMS_KEY, JSON.stringify(updated));
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Folders — server path
   // ---------------------------------------------------------------------------

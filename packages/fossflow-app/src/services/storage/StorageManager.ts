@@ -81,6 +81,14 @@ export class StorageManager implements StorageProvider {
     return this.getActiveProvider().deleteDiagram(id, soft);
   }
 
+  async restoreDiagram(id: string): Promise<void> {
+    return this.getActiveProvider().restoreDiagram(id);
+  }
+
+  async renameDiagram(id: string, name: string): Promise<void> {
+    return this.getActiveProvider().renameDiagram(id, name);
+  }
+
   async listFolders(parentId?: string | null): Promise<FolderMeta[]> {
     return this.getActiveProvider().listFolders(parentId);
   }

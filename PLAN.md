@@ -1,6 +1,6 @@
 # FossFlow — Implementation Plan
 > **Living document.** Point Claude to this file at the start of any session: "read PLAN.md and implement the next incomplete phase."
-> Last updated: 2026-04-13
+> Last updated: 2026-04-18
 
 ---
 
@@ -35,8 +35,9 @@ Claude should then:
 | **1A** | 2D Canvas Mode (E1) | `[x]` | Medium | Self-contained |
 | **1B** | Material Icons (E2) | `[x]` | Low | Self-contained |
 | **2A** | Storage Interface Refactor (E4-local) | `[x]` | High | Depends on 0A |
-| **2B** | File Explorer UI (E3) | `[ ]` | ⚠️ Very High | Depends on 2A |
-| **2C** | Diagram-to-Diagram Links | `[ ]` | Low | Depends on 2A |
+| **2B** | File Explorer UI (E3) | `[x]` | ⚠️ Very High | Depends on 2A |
+| **2B-R** | File Explorer UX Revision | `[x]` | High | Revises 2B — do before 2C |
+| **2C** | Diagram-to-Diagram Links | `[ ]` | Low | Depends on 2A, 2B-R |
 | **3A** | Google Auth — authStore (E5) | `[ ]` | Medium | Depends on 0B |
 | **3B** | Google Drive Provider (E4) | `[ ]` | High | Depends on 3A |
 | **3C** | S3 Provider + Backend (E4) | `[ ]` | High | Depends on 2A |
@@ -532,7 +533,7 @@ LocalStorageProvider.test.ts (use MSW to mock fetch):
 ---
 
 ## Phase 2B — File Explorer UI (E3)
-**Status:** `[ ]` | **Token load:** ⚠️ Very High | **Depends on:** 0A, 2A
+**Status:** `[x]` | **Token load:** ⚠️ Very High | **Depends on:** 0A, 2A
 
 ### Token guardrail
 > ⚠️ **Break this into 3 sessions minimum.**
@@ -605,30 +606,30 @@ propagateDirty(tree: TreeManifest, diagrams: DiagramMeta[]): Map<string, boolean
 ```
 
 ### Sub-tasks (Session 1 — basic tree)
-- [ ] `yarn add react-arborist` in fossflow-app
-- [ ] Implement `useFileTree.ts` — loads tree manifest + diagram list, builds arborist-compatible node array
-- [ ] Implement `FileTreeNode.tsx` — renders folder (ChevronRight icon) and diagram (ArticleOutlined icon) nodes
-- [ ] Wire `FileExplorer.tsx` with `<Tree>` from react-arborist
-- [ ] Mount in `FileExplorerLayout.tsx` — collapsible left panel, 280px wide, pushes canvas right
-- [ ] Add toggle button in `AppToolbar.tsx` to open/close the panel
+- [x] `yarn add react-arborist` in fossflow-app
+- [x] Implement `useFileTree.ts` — loads tree manifest + diagram list, builds arborist-compatible node array
+- [x] Implement `FileTreeNode.tsx` — renders folder (ChevronRight icon) and diagram (ArticleOutlined icon) nodes
+- [x] Wire `FileExplorer.tsx` with `<Tree>` from react-arborist
+- [x] Mount in `FileExplorerLayout.tsx` — collapsible left panel, 280px wide, pushes canvas right
+- [x] Add toggle button in `AppToolbar.tsx` to open/close the panel
 
 ### Sub-tasks (Session 2 — CRUD)
-- [ ] Inline create folder: toolbar button → new node with `sequentialName()` → arborist rename mode
-- [ ] Inline rename: F2 / double-click → arborist rename mode → `renameFolder()` or update diagram name
-- [ ] Delete (single diagram): context menu → `notificationStore` undo toast (5s) → soft delete after 5s
-- [ ] Delete (folder with children): dialog with count → soft delete all descendants
-- [ ] Trash section: filtered list of `deletedAt !== null` items
-- [ ] Restore from trash: context menu "Restore" → clears `deletedAt`
-- [ ] Permanent delete from trash: "Delete permanently" → `deleteDiagram(id, soft=false)`
+- [x] Inline create folder: toolbar button → new node with `sequentialName()` → arborist rename mode
+- [x] Inline rename: F2 / double-click → arborist rename mode → `renameFolder()` or update diagram name
+- [x] Delete (single diagram): context menu → `notificationStore` undo toast (5s) → soft delete after 5s
+- [x] Delete (folder with children): dialog with count → soft delete all descendants
+- [x] Trash section: filtered list of `deletedAt !== null` items
+- [x] Restore from trash: context menu "Restore" → clears `deletedAt`
+- [x] Permanent delete from trash: "Delete permanently" → `deleteDiagram(id, soft=false)`
 
 ### Sub-tasks (Session 3 — interactions)
-- [ ] Drag-and-drop: arborist `onMove` → `moveItem()` → optimistic update → rollback on failure
-- [ ] Name collision on DnD: check before confirming move → show merge/replace/keep-both dialog
-- [ ] Context menu: right-click → MUI Menu with: Open, Rename, Duplicate, Move to Trash, Copy Path
-- [ ] Search/filter: text input in `FileTreeToolbar` → filter arborist nodes by name (real-time)
-- [ ] Dirty indicators: subscribe to `DiagramLifecycleProvider.hasUnsavedChanges`
-- [ ] Dirty propagation: compute `propagateDirty()` on each tree render
-- [ ] Thumbnail: `useThumbnail.ts` — reads `DiagramMeta.thumbnail` base64; generates on save via `dom-to-image-more`
+- [x] Drag-and-drop: arborist `onMove` → `moveItem()` → optimistic update → rollback on failure
+- [x] Name collision on DnD: check before confirming move → show merge/replace/keep-both dialog
+- [x] Context menu: right-click → MUI Menu with: Open, Rename, Duplicate, Move to Trash, Copy Path
+- [x] Search/filter: text input in `FileTreeToolbar` → filter arborist nodes by name (real-time)
+- [x] Dirty indicators: subscribe to `DiagramLifecycleProvider.hasUnsavedChanges`
+- [x] Dirty propagation: compute `propagateDirty()` on each tree render
+- [x] Thumbnail: `useThumbnail.ts` — reads `DiagramMeta.thumbnail` base64; generates on save via `dom-to-image-more`
 
 ### Unit tests (must write — not E2E)
 ```
@@ -645,21 +646,162 @@ fileOperations.test.ts:
 ```
 
 ### Done criteria
-- [ ] File tree visible as collapsible left panel
-- [ ] Full CRUD (create folder, rename, soft delete, restore, permanent delete)
-- [ ] Drag-and-drop with spring-loading
-- [ ] Context menu with all actions
-- [ ] Search/filter
-- [ ] Dirty indicators + propagation
-- [ ] Thumbnail on hover (after first save)
-- [ ] Trash section
-- [ ] Unit tests pass
-- [ ] `yarn build` clean
+- [x] File tree visible as collapsible left panel
+- [x] Full CRUD (create folder, rename, soft delete, restore, permanent delete)
+- [x] Drag-and-drop with spring-loading
+- [x] Context menu with all actions
+- [x] Search/filter
+- [x] Dirty indicators + propagation
+- [x] Thumbnail on hover (after first save)
+- [x] Trash section
+- [x] Unit tests pass (21/21)
+- [x] `yarn build` clean
+
+---
+
+## Phase 2B-R — File Explorer UX Revision
+**Status:** `[x]` | **Token load:** High | **Depends on:** 2B | **Must complete before:** 2C
+
+### Why this revision exists
+Phase 2B shipped a "draft auto-creation" model where editing an unsaved canvas automatically created a timestamped Draft entry in storage. After UX review this was replaced with a VS Code-style approach: explicit inline creation from the file tree, a "Blank diagram" canvas card for the empty-state, and no auto-draft behavior. Several supporting pieces (DraftsSection, search box, pre-creation-then-rename flow) were also revised.
+
+### Session startup checklist
+```
+Before coding, read these files:
+  packages/fossflow-app/src/providers/DiagramLifecycleProvider.tsx   (full)
+  packages/fossflow-app/src/components/fileExplorer/FileExplorer.tsx  (full)
+  packages/fossflow-app/src/components/fileExplorer/FileTreeToolbar.tsx
+  packages/fossflow-app/src/components/fileExplorer/FileTreeNode.tsx
+  packages/fossflow-app/src/hooks/useFileTree.ts
+  packages/fossflow-app/src/App.tsx
+  packages/fossflow-app/src/components/AppToolbar.tsx
+```
+
+### Decisions & constraints (do not revisit)
+| Decision | Rule |
+|---|---|
+| Search | Removed entirely — no search in file tree |
+| Auto-sort | Folders first (alpha), then diagrams (alpha) — implemented in `buildTree`; always wins |
+| DnD | Cross-folder move only — same-parent reorder silently rejected (`currentParentId === parentId` guard) |
+| Draft auto-creation | Removed entirely — no auto-draft, no DraftsSection |
+| Explorer header label | Dynamic from `storage.id`: `local` → "DIAGRAMS", `google-drive` → "GOOGLE DRIVE", `s3` → "S3" |
+| Explorer default open | First server-mode session only (localStorage `fossflow-explorer-initialized` flag); persisted after |
+| Session mode | Explorer defaults closed; no "Blank diagram" canvas card — old canvas behavior |
+| Canvas "Blank diagram" card | Shown when `serverStorageAvailable && currentDiagram === null && !isReadonlyUrl` |
+| AppToolbar "New diagram" button | Removed |
+| Inline creation | `__pending__` node injected into `treeDataWithPending`; empty name or Escape = cancel; non-empty + Enter/blur = create in storage |
+| New Diagram from tree | Flush auto-save (server) or show unsaved-changes dialog (session) → create → load blank canvas |
+| Canvas card creation location | Always root |
+| File tree button creation location | Selected folder, or root if nothing selected |
+| Unsaved changes guard (session mode) | ConfirmDialog with Save / Discard / Cancel (3 buttons) |
+
+### Target file structure changes
+```
+DELETED:
+  packages/fossflow-app/src/components/fileExplorer/DraftsSection.tsx
+
+REWRITTEN:
+  packages/fossflow-app/src/components/fileExplorer/FileTreeToolbar.tsx
+    — VS Code-style: [PROVIDER LABEL] + [New Diagram] [New Folder] [Refresh] [Collapse All]
+    — Props: { providerLabel, onNewDiagram, onNewFolder, onRefresh, onCollapseAll }
+
+NEW:
+  packages/fossflow-app/src/components/EmptyStateScreen.tsx
+    — Full canvas replacement (not overlay) when serverStorageAvailable && !currentDiagram
+    — ISO grid CSS background + centered Paper card with AddCircleOutline icon + "New diagram" button
+    — Props: { onCreate: () => void }
+    — A/B test: GRID_VARIANT constant at top ('iso' | '2d') — flip to compare, delete unused branch
+
+MODIFIED:
+  DiagramLifecycleProvider.tsx  — remove draft logic; add handleCreateBlankDiagram, checkUnsavedBeforeNavigate
+  FileExplorer.tsx              — pendingNew state, treeDataWithPending, inline creation handlers; TrashSection removed; context menu simplified to Open/Rename/Duplicate/Delete (hard delete with confirmation, no undo toast)
+  FileTreeNode.tsx              — Escape/blur cancellation for __pending__ node
+  useFileTree.ts                — remove draftsData; auto-sort in buildTree
+  AppToolbar.tsx                — remove "New diagram" button
+  App.tsx (EditorShell)         — render EmptyStateScreen when no diagram open (replaces canvas entirely)
+  ConfirmDialog.tsx             — add optional onDiscard prop for 3-button variant; standardized dialog style (soft shadow, X button, h6 600 title, body2 body)
+
+DELETED:
+  packages/fossflow-app/src/components/fileExplorer/TrashSection.tsx
+    — Removed: no trash UX; delete is immediate (hard delete) with confirmation dialog
+```
+
+### DiagramLifecycleProvider changes (precise)
+- **Remove:** `formatDraftName()`, `draftsFolderId` state+ref, `isCreatingDraftRef`, `ensureDraftsFolder()`,
+  its pre-fetch `useEffect`, auto-draft block in `handleModelUpdated` (the `else if (!isCreatingDraftRef.current)` branch),
+  `draftsFolderId` from context interface + value
+- **Change `handleModelUpdated` server-mode block:** when `currentDiagram === null`, do nothing (no draft, no save)
+- **Change `fileExplorerOpen` init:** first server session → `true`; subsequent → read `fossflow-explorer-open` from localStorage; session mode → always `false`
+- **Add `useEffect`** persisting `fileExplorerOpen` to `fossflow-explorer-open` in localStorage
+- **Add `handleCreateBlankDiagram(folderId: string | null)`:** sequential-named "Untitled", creates in storage, calls `handleDiagramManagerLoad`, opens explorer, fires refresh token
+- **Add `checkUnsavedBeforeNavigate(onProceed: () => void)`:** no-op in server mode; in session mode with `hasUnsavedChanges` → ConfirmDialog (Save / Discard / Cancel)
+- **Expose** `handleCreateBlankDiagram` and `checkUnsavedBeforeNavigate` in context interface + value
+
+### useFileTree changes (precise)
+- Remove `draftsFolderId` param; remove `draftsData` from result type and return
+- In `buildTree`: sort `childFolders` and `folderDiagrams` alphabetically before pushing to `nodes`
+
+### FileExplorer changes (precise)
+- Remove: `DraftsSection` import + render, `draftsFolderId` destructure, `searchTerm` state
+- Add: `selectedNode` state; `pendingNew` state; `selectedFolderId` memo; `treeDataWithPending` memo
+- Add: `injectPendingNode()` helper (inline or in fileOperations.ts)
+- Add: `useEffect` calling `treeRef.current?.edit('__pending__')` when `pendingNew` is set
+- Replace `handleNewFolder`: set `pendingNew = { type: 'folder', parentId: selectedFolderId }`
+- Add `handleNewDiagramInline`: set `pendingNew = { type: 'diagram', parentId: selectedFolderId }`
+- Rewrite `handleRenameSubmit`: intercepts `id === '__pending__'` — empty → cancel; non-empty folder → `createFolder`; non-empty diagram → `checkUnsavedBeforeNavigate` → `createDiagram` → `openDiagramById`
+- Remove `handleCreate` (arborist `onCreate` handler) entirely; remove `onCreate` prop from `<Tree>`
+- Update `handleMove`: add `if (currentParentId === parentId) return;` guard at top of loop
+- Add `handleCollapseAll`: `treeRef.current?.closeAll()`
+- Update `<Tree>`: remove `searchTerm`, `searchMatch`, `onCreate`; add `onSelect`; use `treeDataWithPending`
+- Update `<FileTreeToolbar>`: new prop signature
+
+### FileTreeNode changes (precise)
+- In edit input `onBlur`: if `node.data.id === '__pending__' && !value.trim()` → `node.submit('')` instead of `node.submit(value)` (routes to cancel path in handleRenameSubmit)
+- In edit input `onKeyDown` for Escape: if `node.data.id === '__pending__'` → `node.submit('')`; else → `node.reset()`
+- Skip tooltip when `node.data.id === '__pending__'` (name is empty)
+
+### BlankDiagramCard spec
+- Absolute overlay: `position: absolute; inset: 0; z-index: 10`
+- Background: semi-transparent `background.default` (blocks canvas interaction while showing it dimly)
+- Centered content: MUI `Paper elevation=0` with dashed border, ~200×160px, fully clickable (`ButtonBase`)
+- Contents: `AddCircleOutlineIcon` 64px + `Typography` "Blank diagram" (body1, text.secondary)
+- Hover: border → `primary.main`, icon → `primary.main`
+
+### Sub-tasks
+- [x] Delete `DraftsSection.tsx`
+- [x] Remove all draft logic from `DiagramLifecycleProvider.tsx`; add `handleCreateBlankDiagram` + `checkUnsavedBeforeNavigate`
+- [x] Update `fileExplorerOpen` initialization (first-session logic + localStorage persistence)
+- [x] Remove `draftsFolderId` from context interface and all consumers
+- [x] Update `useFileTree.ts`: remove `draftsData`, add auto-sort in `buildTree`
+- [x] Rewrite `FileTreeToolbar.tsx` to VS Code header layout
+- [x] Update `FileExplorer.tsx`: `pendingNew` inline creation, `treeDataWithPending`, updated handlers
+- [x] Update `FileTreeNode.tsx`: `__pending__` Escape/blur cancellation
+- [x] Add `EmptyStateScreen.tsx` (implemented as full canvas replacement, not overlay — see target structure note)
+- [x] Wire `EmptyStateScreen` into `App.tsx` EditorShell
+- [x] Remove "New diagram" button from `AppToolbar.tsx`
+- [x] Add `onDiscard` prop to `ConfirmDialog.tsx`
+- [x] Update `PLAN.md` Phase 2B sub-tasks 2B (Session 2 "Inline create folder") and (Session 3 "Search/filter") to note they are revised
+- [x] `yarn build` clean
+
+### Done criteria
+- [x] `DraftsSection.tsx` deleted; no draft folder auto-created on app start
+- [x] File explorer header: dynamic label + 4 icon buttons; no search box
+- [x] "New Diagram" inline: placeholder appears → empty/Escape cancels → name confirms → blank diagram opens in canvas
+- [x] "New Folder" inline: same placeholder flow; folder appears in tree sorted
+- [x] Auto-sort: folders before diagrams, alphabetical, at every level
+- [x] DnD: cross-folder move works; same-folder reorder is silently ignored
+- [x] EmptyStateScreen appears on server-mode empty state (ISO grid bg + card); clicking creates "Untitled" at root
+- [x] File explorer open by default on first server-mode session; closed by default on session mode
+- [x] AppToolbar "New diagram" button gone
+- [x] Unsaved-changes guard works before inline diagram creation in session mode
+- [x] TrashSection removed; context menu = Open / Rename / Duplicate / Delete (hard delete, confirmation dialog)
+- [x] Dialogs standardized: soft shadow, X close button, h6 600 title, body2 text.secondary body, proper DialogActions padding
+- [x] `yarn build` clean
 
 ---
 
 ## Phase 2C — Diagram-to-Diagram Links
-**Status:** `[ ]` | **Token load:** Low | **Depends on:** 2A, 2B
+**Status:** `[ ]` | **Token load:** Low | **Depends on:** 2A, 2B-R
 
 ### Behavior
 In the right sidebar, a node can be assigned a link to another diagram. In read-only preview mode (`/display/:id`), clicking a linked node opens the target diagram in a new tab.
@@ -1036,6 +1178,7 @@ Playwright mock approach:
 | 1B | Low | Single session |
 | 2A | High | Session 1: interface + LocalProvider only. Stubs for others. |
 | 2B | ⚠️ Very High | 3 sessions: basic tree → CRUD → interactions |
+| 2B-R | High | Single session. Read Phase 2B-R session checklist first. |
 | 2C | Low | Single session |
 | 3A | Medium | Single session |
 | 3B | High | Session 1: MSW mocks + unit tests. Session 2: real Drive API wiring |

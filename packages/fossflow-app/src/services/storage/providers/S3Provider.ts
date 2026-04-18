@@ -35,6 +35,14 @@ export class S3Provider implements StorageProvider {
     throw new NotImplementedError('S3Provider.deleteDiagram');
   }
 
+  async restoreDiagram(_id: string): Promise<void> {
+    throw new NotImplementedError('S3Provider.restoreDiagram');
+  }
+
+  async renameDiagram(_id: string, _name: string): Promise<void> {
+    throw new NotImplementedError('S3Provider.renameDiagram');
+  }
+
   async listFolders(_parentId?: string | null): Promise<FolderMeta[]> {
     throw new NotImplementedError('S3Provider.listFolders');
   }

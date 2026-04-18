@@ -16,14 +16,15 @@ import type { IsoflowRef } from 'fossflow';
 import { DiagramData } from '../diagramUtils';
 import { useIconPackManager } from '../services/iconPackManager';
 import { useAppStorage } from './AppStorageContext';
+import { useAutoSave, SaveStatus } from '../hooks/useAutoSave';
 import { DiagramManager } from '../components/DiagramManager';
 import { SaveDialog } from '../components/SaveDialog';
 import { LoadDialog } from '../components/LoadDialog';
 import { ExportDialog } from '../components/ExportDialog';
-import { SaveAsDialog } from '../components/SaveAsDialog';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { StorageManager } from '../StorageManager';
 import { notificationStore } from '../stores/notificationStore';
+import { sequentialName } from '../utils/fileOperations';
 
 // Core icons — loaded once at module level
 const coreIcons = flattenCollections([isoflowIsopack]);
@@ -38,6 +39,21 @@ const defaultColors = [
   { id: 'gray', value: '#666666' }
 ];
 
+// Module-level Set helpers
+function setWithAdd(prev: Set<string>, item: string): Set<string> {
+  if (prev.has(item)) return prev;
+  const next = new Set(prev);
+  next.add(item);
+  return next;
+}
+function setWithout(prev: Set<string>, ...items: string[]): Set<string> {
+  const hasAny = items.some((i) => prev.has(i));
+  if (!hasAny) return prev;
+  const next = new Set(prev);
+  for (const item of items) next.delete(item);
+  return next;
+}
+
 export interface SavedDiagram {
   id: string;
   name: string;
@@ -49,6 +65,7 @@ export interface SavedDiagram {
 interface PendingConfirm {
   message: string;
   onConfirm: () => void;
+  onDiscard?: () => void;
 }
 
 interface DiagramLifecycleContextValue {
@@ -61,6 +78,8 @@ interface DiagramLifecycleContextValue {
   diagrams: SavedDiagram[];
   currentModel: DiagramData | null;
   isReadonlyUrl: boolean;
+  // Auto-save status (server mode)
+  saveStatus: SaveStatus;
   // Dialog state
   showExportDialog: boolean;
   setShowExportDialog: (v: boolean) => void;
@@ -78,6 +97,17 @@ interface DiagramLifecycleContextValue {
   handleOpenClick: () => void;
   handlePreviewClick: () => Promise<void>;
   handleModelUpdated: (model: any) => void;
+  handleNewDiagram: () => Promise<void>;
+  handleRenameCurrentDiagram: (newName: string) => Promise<void>;
+  saveAllDirty: () => Promise<void>;
+  handleCreateBlankDiagram: (folderId: string | null) => Promise<void>;
+  checkUnsavedBeforeNavigate: (onProceed: () => void) => void;
+  // File explorer
+  fileExplorerOpen: boolean;
+  setFileExplorerOpen: (open: boolean) => void;
+  openDiagramById: (id: string, name: string) => Promise<void>;
+  fileTreeRefreshToken: number;
+  dirtyDiagramIds: Set<string>;
   // Icon pack
   iconPackManagerProp: {
     lazyLoadingEnabled: boolean;
@@ -99,7 +129,7 @@ export function DiagramLifecycleProvider({
 }) {
   const { readonlyDiagramId } = useParams<{ readonlyDiagramId: string }>();
   const { t } = useTranslation('app');
-  const { storage, serverStorageAvailable } = useAppStorage();
+  const { storage, serverStorageAvailable, isInitialized } = useAppStorage();
   const iconPackManager = useIconPackManager(coreIcons);
 
   const isReadonlyUrl =
@@ -123,16 +153,71 @@ export function DiagramLifecycleProvider({
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showStorageManager, setShowStorageManager] = useState(false);
   const [showDiagramManager, setShowDiagramManager] = useState(false);
-  const [showSaveAsDialog, setShowSaveAsDialog] = useState(false);
-  const [saveAsName, setSaveAsName] = useState('');
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
 
   // ---------------------------------------------------------------------------
   // Model / save state
   // ---------------------------------------------------------------------------
   const [currentModel, setCurrentModel] = useState<DiagramData | null>(null);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  // Session-mode dirty tracking (unchanged)
+  const [dirtyDiagramIds, setDirtyDiagramIds] = useState<Set<string>>(new Set());
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+
+  // In server mode the single-diagram hasUnsavedChanges is driven by saveStatus.
+  // In session mode it uses dirtyDiagramIds as before.
+  const hasUnsavedChanges = serverStorageAvailable
+    ? false  // toolbar uses saveStatus directly in server mode
+    : dirtyDiagramIds.has(currentDiagram?.id ?? '__unsaved__');
+
+  // ---------------------------------------------------------------------------
+  // Auto-save (server mode only)
+  // ---------------------------------------------------------------------------
+  const autoSave = useAutoSave({
+    storage,
+    enabled: serverStorageAvailable && !isReadonlyUrl,
+    onSaved: (_id, savedAt) => {
+      setLastSaved(savedAt);
+      setFileTreeRefreshToken((n) => n + 1);
+    },
+    onError: () => {
+      notificationStore.push({
+        severity: 'error',
+        message: t('alert.saveFailed', 'Auto-save failed — check your connection.')
+      });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // File explorer panel state
+  // ---------------------------------------------------------------------------
+  const [fileExplorerOpen, setFileExplorerOpen] = useState(false);
+  const [fileTreeRefreshToken, setFileTreeRefreshToken] = useState(0);
+  const explorerInitializedRef = useRef(false);
+
+  // Initialize fileExplorerOpen once storage check completes
+  useEffect(() => {
+    if (!isInitialized || explorerInitializedRef.current) return;
+    explorerInitializedRef.current = true;
+    if (!serverStorageAvailable) {
+      setFileExplorerOpen(false);
+      return;
+    }
+    const flag = localStorage.getItem('fossflow-explorer-initialized');
+    if (!flag) {
+      localStorage.setItem('fossflow-explorer-initialized', '1');
+      setFileExplorerOpen(true);
+    } else {
+      const saved = localStorage.getItem('fossflow-explorer-open');
+      setFileExplorerOpen(saved === 'true');
+    }
+  }, [isInitialized, serverStorageAvailable]);
+
+  // Persist fileExplorerOpen to localStorage (server mode only)
+  useEffect(() => {
+    if (!isInitialized || !serverStorageAvailable) return;
+    localStorage.setItem('fossflow-explorer-open', String(fileExplorerOpen));
+  }, [fileExplorerOpen, isInitialized, serverStorageAvailable]);
 
   // ---------------------------------------------------------------------------
   // Portal state
@@ -150,6 +235,11 @@ export function DiagramLifecycleProvider({
     if (lastOpenedData) {
       try {
         const data = JSON.parse(lastOpenedData);
+        if (!Array.isArray(data.items) || !Array.isArray(data.views)) {
+          console.warn('fossflow-last-opened-data had invalid structure, discarding.');
+          localStorage.removeItem('fossflow-last-opened-data');
+          throw new Error('invalid structure');
+        }
         const importedIcons = (data.icons || []).filter(
           (icon: any) => icon.collection === 'imported'
         );
@@ -157,6 +247,8 @@ export function DiagramLifecycleProvider({
           ...data,
           icons: [...coreIcons, ...importedIcons],
           colors: data.colors?.length ? data.colors : defaultColors,
+          items: data.items,
+          views: data.views,
           fitToScreen: data.fitToScreen !== false
         };
       } catch (e) {
@@ -174,16 +266,29 @@ export function DiagramLifecycleProvider({
   });
 
   // ---------------------------------------------------------------------------
-  // Refs for suppressing spurious model updates after programmatic loads
+  // Refs
   // ---------------------------------------------------------------------------
-  const isAfterLoadRef = useRef(false);
+  const isAfterLoadRef = useRef(true);
   const currentModelRef = useRef<DiagramData | null>(null);
-  useEffect(() => {
-    currentModelRef.current = currentModel;
-  }, [currentModel]);
+  useEffect(() => { currentModelRef.current = currentModel; }, [currentModel]);
+
+  const currentDiagramRef = useRef<SavedDiagram | null>(null);
+  useEffect(() => { currentDiagramRef.current = currentDiagram; }, [currentDiagram]);
+
+  const diagramNameRef = useRef(diagramName);
+  useEffect(() => { diagramNameRef.current = diagramName; }, [diagramName]);
+
+  // Session-mode scratch buffer
+  const scratchBufferRef = useRef<Map<string, DiagramData>>(new Map());
+  const dirtyDiagramIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => { dirtyDiagramIdsRef.current = dirtyDiagramIds; }, [dirtyDiagramIds]);
+
+  // Storage ref so callbacks don't stale
+  const storageRef = useRef(storage);
+  useEffect(() => { storageRef.current = storage; }, [storage]);
 
   // ---------------------------------------------------------------------------
-  // Frozen initial data for Isoflow (set once on first render)
+  // Frozen initial data for Isoflow
   // ---------------------------------------------------------------------------
   const frozenInitialDataRef = useRef<DiagramData | null>(null);
   if (frozenInitialDataRef.current === null) {
@@ -208,16 +313,16 @@ export function DiagramLifecycleProvider({
         const data = await storage.loadDiagram(readonlyDiagramId!);
         const readonlyDiagram: SavedDiagram = {
           id: readonlyDiagramId!,
-          name: diagramInfo?.name || data.title || 'Readonly Diagram',
+          name: diagramInfo?.name || (data as any).title || 'Readonly Diagram',
           data,
           createdAt: new Date().toISOString(),
           updatedAt: diagramInfo?.lastModified || new Date().toISOString()
         };
-        const importedIcons = (data.icons || []).filter(
+        const importedIcons = ((data as any).icons || []).filter(
           (icon: any) => icon.collection === 'imported'
         );
         const dataWithIcons = {
-          ...data,
+          ...(data as any),
           icons: [...iconPackManager.loadedIcons, ...importedIcons]
         };
         setCurrentDiagram(readonlyDiagram);
@@ -252,7 +357,6 @@ export function DiagramLifecycleProvider({
     );
     const mergedIcons = [...iconPackManager.loadedIcons, ...importedIcons];
     isAfterLoadRef.current = true;
-    // preserveViewport=true: icon pack updates must not reset the user's zoom/scroll
     isoflowRef.current.load(
       { ...currentModelRef.current, icons: mergedIcons } as any,
       { preserveViewport: true }
@@ -260,7 +364,7 @@ export function DiagramLifecycleProvider({
   }, [iconPackManager.loadedIcons]);
 
   // ---------------------------------------------------------------------------
-  // Load diagrams from localStorage on mount
+  // Load diagrams from localStorage (session mode)
   // ---------------------------------------------------------------------------
   useEffect(() => {
     const savedDiagrams = localStorage.getItem('fossflow-diagrams');
@@ -287,7 +391,7 @@ export function DiagramLifecycleProvider({
   }, []);
 
   // ---------------------------------------------------------------------------
-  // Persist diagrams to localStorage on change
+  // Persist diagrams to localStorage (session mode)
   // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!isDiagramsInitialized) return;
@@ -309,11 +413,14 @@ export function DiagramLifecycleProvider({
   }, [diagrams]);
 
   // ---------------------------------------------------------------------------
-  // Warn before unload on unsaved changes
+  // Warn before unload
   // ---------------------------------------------------------------------------
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (hasUnsavedChanges) {
+      const hasPending = serverStorageAvailable
+        ? autoSave.saveStatus === 'saving'
+        : dirtyDiagramIds.size > 0;
+      if (hasPending) {
         e.preventDefault();
         e.returnValue = t('alert.beforeUnload');
         return e.returnValue;
@@ -321,10 +428,10 @@ export function DiagramLifecycleProvider({
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [hasUnsavedChanges]);
+  }, [dirtyDiagramIds, autoSave.saveStatus, serverStorageAvailable]);
 
   // ---------------------------------------------------------------------------
-  // Build save payload
+  // Build save payload (session mode / Ctrl+S in server mode)
   // ---------------------------------------------------------------------------
   const buildSaveData = useCallback(() => {
     const importedIcons = (currentModel?.icons || diagramData.icons || []).filter(
@@ -341,7 +448,7 @@ export function DiagramLifecycleProvider({
   }, [currentModel, diagramData, diagramName]);
 
   // ---------------------------------------------------------------------------
-  // Session-mode save — core logic (after validation / confirm)
+  // Session-mode save
   // ---------------------------------------------------------------------------
   const executeSave = useCallback(
     (existingDiagram?: SavedDiagram) => {
@@ -380,8 +487,12 @@ export function DiagramLifecycleProvider({
       }
       setCurrentDiagram(newDiagram);
       setShowSaveDialog(false);
-      setHasUnsavedChanges(false);
+      const oldKey = currentDiagram?.id ?? '__unsaved__';
+      scratchBufferRef.current.delete(oldKey);
+      scratchBufferRef.current.delete(newDiagram.id);
+      setDirtyDiagramIds((prev) => setWithout(prev, oldKey, newDiagram.id));
       setLastSaved(new Date());
+      setFileTreeRefreshToken((n) => n + 1);
       notificationStore.push({ severity: 'success', message: `"${diagramName}" saved` });
       try {
         localStorage.setItem('fossflow-last-opened', newDiagram.id);
@@ -416,7 +527,7 @@ export function DiagramLifecycleProvider({
   }, [diagramName, diagrams, currentDiagram, t, executeSave]);
 
   // ---------------------------------------------------------------------------
-  // Session-mode load — core logic
+  // Session-mode load
   // ---------------------------------------------------------------------------
   const executeLoad = useCallback(
     async (diagram: SavedDiagram) => {
@@ -432,7 +543,6 @@ export function DiagramLifecycleProvider({
       setDiagramName(diagram.name);
       setCurrentModel(dataWithIcons);
       setShowLoadDialog(false);
-      setHasUnsavedChanges(false);
       setLastSaved(new Date(diagram.updatedAt));
       isAfterLoadRef.current = true;
       isoflowRef.current?.load(dataWithIcons as any);
@@ -503,11 +613,10 @@ export function DiagramLifecycleProvider({
     a.click();
     URL.revokeObjectURL(url);
     setShowExportDialog(false);
-    setHasUnsavedChanges(false);
   }, [currentModel, diagramData, diagramName]);
 
   // ---------------------------------------------------------------------------
-  // Server-mode diagram manager callbacks
+  // Server-mode: load diagram into canvas
   // ---------------------------------------------------------------------------
   const handleDiagramManagerLoad = useCallback(
     async (id: string, rawData: any, listingName: string) => {
@@ -539,6 +648,8 @@ export function DiagramLifecycleProvider({
         title: name,
         icons: finalIcons,
         colors: data.colors?.length ? data.colors : defaultColors,
+        items: Array.isArray(data.items) ? data.items : [],
+        views: Array.isArray(data.views) ? data.views : [],
         fitToScreen: data.fitToScreen !== false
       };
       const newDiagram = {
@@ -551,39 +662,144 @@ export function DiagramLifecycleProvider({
       setDiagramName(name);
       setCurrentDiagram(newDiagram);
       setCurrentModel(mergedData);
-      setHasUnsavedChanges(false);
       setLastSaved(new Date(newDiagram.updatedAt));
+      autoSave.resetStatus();
       isAfterLoadRef.current = true;
+      if (!isoflowRef.current) {
+        // Isoflow not mounted yet (EmptyStateScreen showing) — seed initialData so it
+        // mounts with the correct diagram instead of the stale frozen data.
+        frozenInitialDataRef.current = mergedData;
+      }
       isoflowRef.current?.load(mergedData as any);
-      if (!hasDefaultIcons && storage) {
-        storage.saveDiagram(id, mergedData as any).catch(() => {});
+      if (!hasDefaultIcons && storageRef.current) {
+        storageRef.current.saveDiagram(id, mergedData as any).catch(() => {});
       }
     },
-    [iconPackManager, storage]
+    [iconPackManager, autoSave.resetStatus]
   );
 
   // ---------------------------------------------------------------------------
-  // Toolbar action handlers
+  // Create blank diagram (for canvas card or file tree)
+  // ---------------------------------------------------------------------------
+  const handleCreateBlankDiagram = useCallback(
+    async (folderId: string | null) => {
+      if (!storageRef.current) return;
+      try {
+        const existing = await storageRef.current.listDiagrams();
+        const existingNames = existing.map((d) => d.name);
+        const name = sequentialName('Untitled', existingNames);
+        const blankData = {
+          title: name,
+          name,
+          icons: iconPackManager.loadedIcons,
+          colors: defaultColors,
+          items: [],
+          views: [],
+          fitToScreen: true
+        };
+        const id = await storageRef.current.createDiagram(blankData as any, folderId);
+        setFileExplorerOpen(true);
+        setFileTreeRefreshToken((n) => n + 1);
+        await handleDiagramManagerLoad(id, blankData, name);
+      } catch (e) {
+        console.error('handleCreateBlankDiagram failed:', e);
+        notificationStore.push({ severity: 'error', message: 'Failed to create diagram' });
+      }
+    },
+    [iconPackManager.loadedIcons, handleDiagramManagerLoad]
+  );
+
+  // ---------------------------------------------------------------------------
+  // Guard: check unsaved changes before navigating (session mode only)
+  // ---------------------------------------------------------------------------
+  const checkUnsavedBeforeNavigate = useCallback(
+    (onProceed: () => void) => {
+      if (serverStorageAvailable) {
+        onProceed();
+        return;
+      }
+      if (!hasUnsavedChanges) {
+        onProceed();
+        return;
+      }
+      setPendingConfirm({
+        message: 'You have unsaved changes. Save before leaving?',
+        onConfirm: () => { saveDiagram(); onProceed(); },
+        onDiscard: onProceed
+      });
+    },
+    [serverStorageAvailable, hasUnsavedChanges, saveDiagram]
+  );
+
+  // ---------------------------------------------------------------------------
+  // New Diagram (FossFlow-owned — replaces Isoflow's ACTION.NEW)
+  // ---------------------------------------------------------------------------
+  const handleNewDiagram = useCallback(async () => {
+    await autoSave.saveNow();
+
+    setCurrentDiagram(null);
+    setDiagramName('');
+    setCurrentModel(null);
+    setLastSaved(null);
+    autoSave.resetStatus();
+
+    setDirtyDiagramIds((prev) => setWithout(prev, '__unsaved__'));
+    scratchBufferRef.current.delete('__unsaved__');
+
+    const blankData: DiagramData = {
+      title: '',
+      icons: iconPackManager.loadedIcons,
+      colors: defaultColors,
+      items: [],
+      views: [],
+      fitToScreen: true
+    };
+    isAfterLoadRef.current = true;
+    isoflowRef.current?.load(blankData as any);
+  }, [autoSave.saveNow, autoSave.resetStatus, iconPackManager.loadedIcons]);
+
+  // ---------------------------------------------------------------------------
+  // Rename current diagram
+  // ---------------------------------------------------------------------------
+  const handleRenameCurrentDiagram = useCallback(
+    async (newName: string) => {
+      const trimmed = newName.trim();
+      if (!trimmed || !currentDiagramRef.current) return;
+      const diag = currentDiagramRef.current;
+      setDiagramName(trimmed);
+      setCurrentDiagram({ ...diag, name: trimmed });
+      if (serverStorageAvailable && storageRef.current) {
+        try {
+          await storageRef.current.renameDiagram(diag.id, trimmed);
+          setFileTreeRefreshToken((n) => n + 1);
+        } catch {
+          notificationStore.push({ severity: 'error', message: 'Rename failed' });
+          setDiagramName(diag.name);
+          setCurrentDiagram(diag);
+        }
+      }
+    },
+    [serverStorageAvailable]
+  );
+
+  // ---------------------------------------------------------------------------
+  // Toolbar save actions
   // ---------------------------------------------------------------------------
   const handleSaveClick = useCallback(async () => {
     if (serverStorageAvailable && storage) {
       if (currentDiagram) {
-        try {
-          const data = buildSaveData();
-          await storage.saveDiagram(currentDiagram.id, data as any);
-          setHasUnsavedChanges(false);
-          setLastSaved(new Date());
-          notificationStore.push({ severity: 'success', message: `"${currentDiagram.name}" saved` });
-        } catch (e) {
-          console.error('Save failed:', e);
-          notificationStore.push({
-            severity: 'error',
-            message: t('alert.saveFailed', 'Failed to save diagram. Please try again.')
-          });
+        await autoSave.saveNow();
+        if (autoSave.saveStatus === 'idle') {
+          try {
+            const data = buildSaveData();
+            await storage.saveDiagram(currentDiagram.id, data as any);
+            const savedAt = new Date();
+            setLastSaved(savedAt);
+            notificationStore.push({ severity: 'success', message: `"${currentDiagram.name}" saved` });
+          } catch {
+            notificationStore.push({ severity: 'error', message: t('alert.saveFailed', 'Save failed') });
+          }
         }
-      } else {
-        setSaveAsName(currentModel?.title || 'Untitled Diagram');
-        setShowSaveAsDialog(true);
       }
     } else {
       if (currentDiagram) {
@@ -592,40 +808,7 @@ export function DiagramLifecycleProvider({
         setShowSaveDialog(true);
       }
     }
-  }, [serverStorageAvailable, storage, currentDiagram, buildSaveData, currentModel, saveDiagram, t]);
-
-  const handleSaveAs = useCallback(async () => {
-    if (!saveAsName.trim() || !storage) return;
-    try {
-      const name = saveAsName.trim();
-      const data = { ...buildSaveData(), name, title: name };
-      const id = await storage.createDiagram(data as any);
-      const saved: SavedDiagram = {
-        id,
-        name,
-        data,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      setCurrentDiagram(saved);
-      setDiagramName(name);
-      setHasUnsavedChanges(false);
-      setLastSaved(new Date());
-      notificationStore.push({ severity: 'success', message: `"${name}" saved` });
-      setShowSaveAsDialog(false);
-      setSaveAsName('');
-      if (isoflowRef.current && currentModel) {
-        isAfterLoadRef.current = true;
-        isoflowRef.current.load({ ...currentModel, title: name } as any);
-      }
-    } catch (e) {
-      console.error('Save As failed:', e);
-      notificationStore.push({
-        severity: 'error',
-        message: t('alert.saveFailed', 'Failed to save diagram. Please try again.')
-      });
-    }
-  }, [saveAsName, storage, buildSaveData, currentModel, t]);
+  }, [serverStorageAvailable, storage, currentDiagram, autoSave, buildSaveData, saveDiagram, t]);
 
   const handleOpenClick = useCallback(() => {
     if (serverStorageAvailable) {
@@ -636,7 +819,7 @@ export function DiagramLifecycleProvider({
   }, [serverStorageAvailable]);
 
   // ---------------------------------------------------------------------------
-  // Keyboard shortcuts — must be after handleSaveClick + handleOpenClick
+  // Keyboard shortcuts
   // ---------------------------------------------------------------------------
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -653,34 +836,127 @@ export function DiagramLifecycleProvider({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleSaveClick, handleOpenClick]);
 
+  // ---------------------------------------------------------------------------
+  // Open diagram by ID (file explorer)
+  // ---------------------------------------------------------------------------
+  const openDiagramById = useCallback(
+    async (id: string, name: string) => {
+      if (!storage) return;
+      try {
+        await autoSave.saveNow();
+
+        if (!serverStorageAvailable) {
+          const currentId = currentDiagramRef.current?.id ?? '__unsaved__';
+          if (dirtyDiagramIdsRef.current.has(currentId) && currentModelRef.current) {
+            scratchBufferRef.current.set(currentId, currentModelRef.current);
+          }
+        }
+
+        const buffered = scratchBufferRef.current.get(id);
+        const rawData: any = buffered ?? await storage.loadDiagram(id);
+        await handleDiagramManagerLoad(id, rawData, name);
+      } catch (e) {
+        console.error('openDiagramById failed:', e);
+        notificationStore.push({ severity: 'error', message: `Failed to open "${name}"` });
+      }
+    },
+    [storage, serverStorageAvailable, autoSave.saveNow, handleDiagramManagerLoad]
+  );
+
   const handlePreviewClick = useCallback(async () => {
     if (!serverStorageAvailable || !currentDiagram || !storage) return;
-    if (hasUnsavedChanges) {
+    await autoSave.saveNow();
+    window.open(`/display/${currentDiagram.id}`, '_blank');
+  }, [serverStorageAvailable, currentDiagram, storage, autoSave.saveNow]);
+
+  // ---------------------------------------------------------------------------
+  // Session-mode Save All
+  // ---------------------------------------------------------------------------
+  const saveAllDirty = useCallback(async () => {
+    if (serverStorageAvailable) return;
+    const allDirtyIds = Array.from(dirtyDiagramIdsRef.current);
+    if (allDirtyIds.length === 0) return;
+
+    const resolveData = (diagId: string): DiagramData | null => {
+      const activeId = currentDiagramRef.current?.id ?? '__unsaved__';
+      if (diagId === activeId) return currentModelRef.current;
+      return scratchBufferRef.current.get(diagId) ?? null;
+    };
+
+    const clearDirty = (diagId: string) => {
+      scratchBufferRef.current.delete(diagId);
+      setDirtyDiagramIds((prev) => setWithout(prev, diagId));
+    };
+
+    const sessionExistingNames = diagrams.map((d) => d.name);
+    const sessionUpdates: SavedDiagram[] = [];
+    let savedCount = 0;
+    const failedIds: string[] = [];
+
+    for (const dirtyId of allDirtyIds) {
+      const dirtyData = resolveData(dirtyId);
+      if (!dirtyData) continue;
       try {
-        const data = buildSaveData();
-        await storage.saveDiagram(currentDiagram.id, data as any);
-        setHasUnsavedChanges(false);
-        setLastSaved(new Date());
-        notificationStore.push({ severity: 'success', message: `"${currentDiagram.name}" saved` });
-      } catch (e) {
-        console.error('Save before preview failed:', e);
-        notificationStore.push({
-          severity: 'error',
-          message: t('alert.saveBeforePreviewFailed', 'Failed to save before preview. Please try again.')
-        });
-        return;
+        if (dirtyId === '__unsaved__') {
+          const nameCandidate = dirtyData.title || diagramNameRef.current || 'Untitled Diagram';
+          const chosenName = sequentialName(nameCandidate, sessionExistingNames);
+          sessionExistingNames.push(chosenName);
+          const newSessionDiagram: SavedDiagram = {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            name: chosenName,
+            data: { ...dirtyData, title: chosenName },
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          sessionUpdates.push(newSessionDiagram);
+          if (!currentDiagramRef.current) {
+            setCurrentDiagram(newSessionDiagram);
+            setDiagramName(chosenName);
+            setLastSaved(new Date());
+          }
+        } else {
+          const existingEntry = diagrams.find((d) => d.id === dirtyId);
+          if (existingEntry) {
+            sessionUpdates.push({ ...existingEntry, data: dirtyData, updatedAt: new Date().toISOString() });
+            if (dirtyId === currentDiagramRef.current?.id) setLastSaved(new Date());
+          }
+        }
+        clearDirty(dirtyId);
+        savedCount++;
+      } catch {
+        failedIds.push(dirtyId);
       }
     }
-    window.open(`/display/${currentDiagram.id}`, '_blank');
-  }, [serverStorageAvailable, currentDiagram, storage, hasUnsavedChanges, buildSaveData, t]);
+
+    if (sessionUpdates.length > 0) {
+      setDiagrams((prev) => {
+        const byId = new Map(prev.map((d) => [d.id, d]));
+        for (const upd of sessionUpdates) byId.set(upd.id, upd);
+        return Array.from(byId.values());
+      });
+    }
+
+    setFileTreeRefreshToken((n) => n + 1);
+    if (failedIds.length === 0) {
+      notificationStore.push({
+        severity: 'success',
+        message: `${savedCount} diagram${savedCount !== 1 ? 's' : ''} saved`
+      });
+    } else {
+      notificationStore.push({
+        severity: 'warning',
+        message: `${savedCount} saved, ${failedIds.length} failed`
+      });
+    }
+  }, [diagrams, serverStorageAvailable]);
 
   // ---------------------------------------------------------------------------
   // Model update handler
   // ---------------------------------------------------------------------------
   const handleModelUpdated = useCallback(
     (model: any) => {
-      const updatedModel = {
-        title: model.title || diagramName || 'Untitled',
+      const updatedModel: DiagramData = {
+        title: model.title || diagramNameRef.current || 'Untitled',
         icons: model.icons || [],
         colors: model.colors || defaultColors,
         items: model.items || [],
@@ -688,18 +964,39 @@ export function DiagramLifecycleProvider({
         fitToScreen: true
       };
       setCurrentModel(updatedModel);
+
       if (isAfterLoadRef.current) {
         isAfterLoadRef.current = false;
         return;
       }
-      if (model.title && model.title !== diagramName) {
-        setDiagramName(model.title);
-        setCurrentDiagram(null);
-        setLastSaved(null);
+
+      if (model.title && model.title !== diagramNameRef.current) {
+        if (!currentDiagramRef.current) {
+          setDiagramName(model.title);
+          setCurrentDiagram(null);
+          setLastSaved(null);
+        }
       }
-      if (!isReadonlyUrl) setHasUnsavedChanges(true);
+
+      if (isReadonlyUrl) return;
+
+      if (serverStorageAvailable) {
+        // ── Server mode ──────────────────────────────────────────────────────
+        const currentId = currentDiagramRef.current?.id ?? null;
+        if (currentId) {
+          autoSave.scheduleSave(currentId, updatedModel);
+        }
+        // If no diagram open, do nothing — user must create explicitly
+      } else {
+        // ── Session mode ─────────────────────────────────────────────────────
+        const bufferKey = currentDiagramRef.current?.id ?? '__unsaved__';
+        scratchBufferRef.current.set(bufferKey, updatedModel);
+        if (!dirtyDiagramIdsRef.current.has(bufferKey)) {
+          setDirtyDiagramIds((prev) => setWithAdd(prev, bufferKey));
+        }
+      }
     },
-    [diagramName, isReadonlyUrl]
+    [isReadonlyUrl, serverStorageAvailable, autoSave.scheduleSave]
   );
 
   // ---------------------------------------------------------------------------
@@ -736,11 +1033,12 @@ export function DiagramLifecycleProvider({
     diagramName,
     setDiagramName,
     hasUnsavedChanges,
-    lastSaved,
+    lastSaved: serverStorageAvailable ? autoSave.lastSaved : lastSaved,
     currentDiagram,
     diagrams,
     currentModel,
     isReadonlyUrl,
+    saveStatus: autoSave.saveStatus,
     showExportDialog,
     setShowExportDialog,
     isoflowRef,
@@ -754,6 +1052,16 @@ export function DiagramLifecycleProvider({
     handleOpenClick,
     handlePreviewClick,
     handleModelUpdated,
+    handleNewDiagram,
+    handleRenameCurrentDiagram,
+    saveAllDirty,
+    handleCreateBlankDiagram,
+    checkUnsavedBeforeNavigate,
+    fileExplorerOpen,
+    setFileExplorerOpen,
+    openDiagramById,
+    fileTreeRefreshToken,
+    dirtyDiagramIds,
     iconPackManagerProp
   };
 
@@ -786,18 +1094,6 @@ export function DiagramLifecycleProvider({
         />
       )}
 
-      {showSaveAsDialog && (
-        <SaveAsDialog
-          name={saveAsName}
-          onNameChange={setSaveAsName}
-          onSave={handleSaveAs}
-          onClose={() => {
-            setShowSaveAsDialog(false);
-            setSaveAsName('');
-          }}
-        />
-      )}
-
       {showStorageManager && (
         <StorageManager onClose={() => setShowStorageManager(false)} />
       )}
@@ -815,11 +1111,18 @@ export function DiagramLifecycleProvider({
         <ConfirmDialog
           open
           message={pendingConfirm.message}
+          confirmLabel={pendingConfirm.onDiscard ? 'Save' : 'Confirm'}
+          discardLabel="Discard"
           onConfirm={() => {
             const fn = pendingConfirm.onConfirm;
             setPendingConfirm(null);
             fn();
           }}
+          onDiscard={pendingConfirm.onDiscard ? () => {
+            const fn = pendingConfirm.onDiscard!;
+            setPendingConfirm(null);
+            fn();
+          } : undefined}
           onCancel={() => setPendingConfirm(null)}
         />
       )}

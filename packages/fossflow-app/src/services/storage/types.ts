@@ -14,6 +14,7 @@ export interface FolderMeta {
   name: string;
   parentId: string | null;
   isExpanded?: boolean;    // tree UI state
+  deletedAt?: string;      // ISO 8601 — soft delete
 }
 
 export interface TreeManifest {
@@ -34,6 +35,8 @@ export interface StorageProvider {
   saveDiagram(id: string, data: unknown): Promise<void>;
   createDiagram(data: unknown, folderId?: string | null): Promise<string>;
   deleteDiagram(id: string, soft?: boolean): Promise<void>;
+  restoreDiagram(id: string): Promise<void>;   // clears deletedAt
+  renameDiagram(id: string, name: string): Promise<void>;
 
   // Folders
   listFolders(parentId?: string | null): Promise<FolderMeta[]>;
