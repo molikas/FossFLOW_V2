@@ -3,6 +3,7 @@ import {
   OpenInNewOutlined as OpenIcon,
   DriveFileRenameOutlineOutlined as RenameIcon,
   ContentCopyOutlined as DuplicateIcon,
+  LinkOutlined as ShareLinkIcon,
   DeleteOutlined as DeleteIcon
 } from '@mui/icons-material';
 import type { FileNode } from '../../hooks/useFileTree';
@@ -12,6 +13,7 @@ interface Props {
   onOpen: () => void;
   onRename: () => void;
   onDuplicate: () => void;
+  onCopyShareLink: () => void;
   onDelete: () => void;
   onClose: () => void;
 }
@@ -21,6 +23,7 @@ export function ContextMenuItems({
   onOpen,
   onRename,
   onDuplicate,
+  onCopyShareLink,
   onDelete,
   onClose
 }: Props) {
@@ -47,6 +50,12 @@ export function ContextMenuItems({
         <MenuItem dense onClick={handle(onDuplicate)}>
           <ListItemIcon><DuplicateIcon fontSize="small" /></ListItemIcon>
           Duplicate
+        </MenuItem>
+      )}
+      {isDiagram && (
+        <MenuItem dense onClick={handle(onCopyShareLink)}>
+          <ListItemIcon><ShareLinkIcon fontSize="small" /></ListItemIcon>
+          Copy share link
         </MenuItem>
       )}
       <Divider />

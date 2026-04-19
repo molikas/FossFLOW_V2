@@ -293,6 +293,22 @@ export function FileExplorer() {
   }, [deleteConfirm, tree]);
 
   // ---------------------------------------------------------------------------
+  // Copy share link
+  // ---------------------------------------------------------------------------
+
+  const handleCopyShareLink = useCallback((node: FileNode) => {
+    if (node.type !== 'diagram') return;
+    const publicUrl = process.env.PUBLIC_URL || '';
+    const base = publicUrl ? (publicUrl.endsWith('/') ? publicUrl.slice(0, -1) : publicUrl) : '';
+    const url = window.location.origin + base + '/display/' + node.id;
+    navigator.clipboard.writeText(url).then(() => {
+      notificationStore.push({ severity: 'success', message: 'Share link copied to clipboard' });
+    }).catch(() => {
+      notificationStore.push({ severity: 'error', message: 'Failed to copy link' });
+    });
+  }, []);
+
+  // ---------------------------------------------------------------------------
   // Duplicate diagram
   // ---------------------------------------------------------------------------
 
@@ -472,6 +488,7 @@ export function FileExplorer() {
             onOpen={() => { if (contextMenuNode) handleOpenDiagram(contextMenuNode); }}
             onRename={() => contextMenuNode && handleRenameNode(contextMenuNode)}
             onDuplicate={() => contextMenuNode && handleDuplicate(contextMenuNode)}
+            onCopyShareLink={() => contextMenuNode && handleCopyShareLink(contextMenuNode)}
             onDelete={() => {
               if (!contextMenuNode) return;
               if (contextMenuNode.type === 'folder') {
