@@ -257,7 +257,11 @@ const locale: LocaleProps = {
     linkPlaceholder: 'https://…',
     caption: 'Didascalia',
     captionHint: 'Mostrato sulla tela sotto il nome del nodo',
-    openLink: 'Apri link'
+    openLink: 'Apri link',
+    diagramLink: 'Link to diagram',
+    diagramLinkPlaceholder: 'Select a diagram…',
+    diagramLinkHint: 'Clicking this node in read-only mode opens the linked diagram',
+    openDiagramLink: 'Open linked diagram'
   },
   nodeStyleTab: {
     icon: 'Icona',

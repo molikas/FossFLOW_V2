@@ -9,12 +9,12 @@ interface Props {
 }
 
 export function FileExplorerLayout({ children }: Props) {
-  const { fileExplorerOpen } = useDiagramLifecycle();
+  const { fileExplorerOpen, isReadonlyUrl } = useDiagramLifecycle();
 
   return (
     <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-      {/* Left panel — collapses to 0 when closed */}
-      {fileExplorerOpen && (
+      {/* Left panel — hidden in read-only mode and when closed */}
+      {!isReadonlyUrl && fileExplorerOpen && (
         <>
           <Box
             sx={{

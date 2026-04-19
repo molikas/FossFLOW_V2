@@ -5,7 +5,8 @@ import {
   IconButton,
   Tooltip,
   Typography,
-  Box
+  Box,
+  Autocomplete
 } from '@mui/material';
 import {
   InsertLink as InsertLinkIcon,
@@ -14,6 +15,7 @@ import {
 import { ModelItem, ViewItem } from 'src/types';
 import { RichTextEditor } from 'src/components/RichTextEditor/RichTextEditor';
 import { useModelItem } from 'src/hooks/useModelItem';
+import { useUiStateStore } from 'src/stores/uiStateStore';
 import { Section } from '../../components/Section';
 import { useTranslation } from 'src/stores/localeStore';
 
@@ -39,6 +41,7 @@ export const NodeInfoTab = ({
   const { t } = useTranslation('nodeInfoTab');
   const { t: tPanel } = useTranslation('nodePanel');
   const modelItem = useModelItem(node.id);
+  const linkedDiagrams = useUiStateStore((s) => s.linkedDiagrams);
 
   const handleToggleLink = useCallback(() => {
     if (showLink && modelItem?.headerLink) {
@@ -147,6 +150,37 @@ export const NodeInfoTab = ({
           />
         )}
       </Section>
+
+      {/* Link to diagram — only shown when diagrams are available */}
+      {linkedDiagrams.length > 0 && (
+        <Section title={t('diagramLink')}>
+          <Typography
+            variant="caption"
+            color="text.disabled"
+            sx={{ display: 'block', mb: 0.5 }}
+          >
+            {t('diagramLinkHint')}
+          </Typography>
+          <Autocomplete
+            size="small"
+            options={linkedDiagrams}
+            getOptionLabel={(opt) => (typeof opt === 'string' ? opt : opt.name)}
+            isOptionEqualToValue={(opt, val) => opt.id === val.id}
+            value={linkedDiagrams.find((d) => d.id === modelItem.link) ?? null}
+            onChange={(_e, newVal) => {
+              onModelItemUpdated({ link: newVal?.id ?? undefined });
+            }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                placeholder={t('diagramLinkPlaceholder')}
+              />
+            )}
+            clearOnEscape
+            handleHomeEndKeys={false}
+          />
+        </Section>
+      )}
 
       {/* Caption — short text shown on the canvas under the node name */}
       <Section title={t('caption')}>

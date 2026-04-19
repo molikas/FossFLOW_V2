@@ -255,7 +255,11 @@ const locale: LocaleProps = {
     linkPlaceholder: 'https://…',
     caption: 'कैप्शन',
     captionHint: 'कैनवास पर नोड के नाम के नीचे दिखाया गया',
-    openLink: 'लिंक खोलें'
+    openLink: 'लिंक खोलें',
+    diagramLink: 'Link to diagram',
+    diagramLinkPlaceholder: 'Select a diagram…',
+    diagramLinkHint: 'Clicking this node in read-only mode opens the linked diagram',
+    openDiagramLink: 'Open linked diagram'
   },
   nodeStyleTab: {
     icon: 'आइकन',

@@ -245,6 +245,10 @@ export interface LocaleProps {
     caption: string;
     captionHint: string;
     openLink: string;
+    diagramLink: string;
+    diagramLinkPlaceholder: string;
+    diagramLinkHint: string;
+    openDiagramLink: string;
   };
   nodeStyleTab: {
     icon: string;
@@ -384,6 +388,8 @@ export interface IsoflowProps {
   renderer?: RendererProps;
   locale?: LocaleProps;
   iconPackManager?: IconPackManagerProps;
+  /** Diagrams available for node-to-diagram linking (Phase 2C). Each entry is {id, name}. */
+  linkedDiagrams?: Array<{ id: string; name: string }>;
   /** Slot rendered inside the Settings dialog as a "Language" tab — pass your own language-picker component. */
   languageSelector?: React.ReactNode;
   /** Portal target for the MainMenu hamburger button (left zone). */
@@ -394,6 +400,8 @@ export interface IsoflowProps {
   menuPortalTarget?: HTMLElement | null;
   /** Extra content rendered at the right end of the BottomDock (after the help icon). */
   bottomDockEnd?: React.ReactNode;
+  /** When true, the first-load welcome notification is hidden (pass true when a diagram is open). */
+  suppressOnboardingHints?: boolean;
 }
 
 export interface LoadOptions {

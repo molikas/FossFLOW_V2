@@ -165,7 +165,11 @@ export function FileExplorer() {
   // ---------------------------------------------------------------------------
 
   const handleRenameNode = useCallback((node: FileNode) => {
-    treeRef.current?.edit(node.id);
+    // Delay so the MUI Menu close animation completes and restores focus before
+    // we put the input in edit mode — prevents the menu from stealing focus back.
+    setTimeout(() => {
+      treeRef.current?.edit(node.id);
+    }, 150);
   }, []);
 
   const handleRenameSubmit = useCallback(
@@ -301,8 +305,10 @@ export function FileExplorer() {
           .map((d) => d.name);
         const newName = copySuffix(node.name, siblingsInFolder);
         const data = await storage.loadDiagram(node.id);
+        // Strip the original id so the server assigns a fresh one (prevents 409 Conflict).
+        const { id: _id, ...dataWithoutId } = data as Record<string, unknown>;
         await storage.createDiagram(
-          { ...(data as object), title: newName, name: newName },
+          { ...dataWithoutId, title: newName, name: newName },
           node.diagramMeta?.folderId ?? null
         );
         await tree.refresh();
@@ -393,7 +399,28 @@ export function FileExplorer() {
         </Box>
       )}
 
-      <Box ref={treeContainerRef} sx={{ flex: 1, overflow: 'hidden', py: 0.5 }}>
+      <Box
+        ref={treeContainerRef}
+        tabIndex={-1}
+        sx={{ flex: 1, overflow: 'hidden', py: 0.5, outline: 'none' }}
+        onKeyDown={(e) => {
+          if (!selectedNode) return;
+          if (e.key === 'F2') {
+            e.preventDefault();
+            treeRef.current?.edit(selectedNode.id);
+          }
+          if (e.key === 'Delete' || e.key === 'Backspace') {
+            // Only fire Delete when not renaming
+            if (document.activeElement?.tagName === 'INPUT') return;
+            e.preventDefault();
+            if (selectedNode.type === 'folder') {
+              handleDeleteFolder(selectedNode);
+            } else {
+              handleDeleteDiagram(selectedNode);
+            }
+          }
+        }}
+      >
         {treeDataWithPending.length === 0 && !tree.isLoading && (
           <Box sx={{ px: 1.5, py: 2, textAlign: 'center' }}>
             <Typography variant="caption" color="text.secondary">
@@ -431,6 +458,7 @@ export function FileExplorer() {
       <Menu
         open={!!contextMenuAnchor}
         onClose={closeContextMenu}
+        disableRestoreFocus
         anchorReference="anchorPosition"
         anchorPosition={
           contextMenuAnchor

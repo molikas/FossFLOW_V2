@@ -63,10 +63,12 @@ const App = forwardRef<IsoflowRef, IsoflowProps>(
       renderer,
       locale = enUS,
       iconPackManager,
+      linkedDiagrams,
       toolbarPortalTarget,
       sidebarTogglePortalTarget,
       languageSelector,
       bottomDockEnd,
+      suppressOnboardingHints,
       /** @deprecated use toolbarPortalTarget */
       menuPortalTarget
     },
@@ -202,6 +204,10 @@ const App = forwardRef<IsoflowRef, IsoflowProps>(
       uiStateActions.setIconPackManager(iconPackManager || null);
     }, [iconPackManager, uiStateActions]);
 
+    useEffect(() => {
+      uiStateActions.setLinkedDiagrams(linkedDiagrams || []);
+    }, [linkedDiagrams, uiStateActions]);
+
     if (!initialDataManager.isReady) return null;
 
     return (
@@ -225,9 +231,10 @@ const App = forwardRef<IsoflowRef, IsoflowProps>(
                 toolbarPortalTarget={portalTarget}
                 sidebarTogglePortalTarget={sidebarTogglePortalTarget}
                 languageSelector={languageSelector}
+                suppressOnboardingHints={suppressOnboardingHints}
               />
             </Box>
-            <LeftDockSlot />
+            {editorMode !== 'EXPLORABLE_READONLY' && <LeftDockSlot />}
             <RightSidebarSlot editorMode={editorMode} />
             <BottomDockSlot endSlot={bottomDockEnd} />
           </LayerContextProvider>

@@ -246,7 +246,11 @@ const locale: LocaleProps = {
     linkPlaceholder: 'https://…',
     caption: '说明文字',
     captionHint: '显示在画布中节点名称下方',
-    openLink: '打开链接'
+    openLink: '打开链接',
+    diagramLink: 'Link to diagram',
+    diagramLinkPlaceholder: 'Select a diagram…',
+    diagramLinkHint: 'Clicking this node in read-only mode opens the linked diagram',
+    openDiagramLink: 'Open linked diagram'
   },
   nodeStyleTab: {
     icon: '图标',

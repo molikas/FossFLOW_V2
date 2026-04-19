@@ -48,6 +48,7 @@ const initialState = () => {
       expandLabels: persisted?.expandLabels ?? false,
       canvasMode: persisted?.canvasMode ?? 'ISOMETRIC',
       iconPackManager: null, // Will be set by Isoflow if provided
+      linkedDiagrams: [],
       notification: null,
       activeLeftTab: null,
       rightSidebarOpen: false,
@@ -157,6 +158,9 @@ const initialState = () => {
         },
         setIconPackManager: (iconPackManager) => {
           set({ iconPackManager });
+        },
+        setLinkedDiagrams: (linkedDiagrams) => {
+          set({ linkedDiagrams });
         },
         setNotification: (notification) => {
           set({ notification });

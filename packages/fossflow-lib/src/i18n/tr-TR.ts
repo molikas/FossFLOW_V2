@@ -256,7 +256,11 @@ const locale: LocaleProps = {
     linkPlaceholder: 'https://…',
     caption: 'Altyazı',
     captionHint: 'Tuvalde düğüm adının altında gösterilir',
-    openLink: 'Bağlantıyı aç'
+    openLink: 'Bağlantıyı aç',
+    diagramLink: 'Link to diagram',
+    diagramLinkPlaceholder: 'Select a diagram…',
+    diagramLinkHint: 'Clicking this node in read-only mode opens the linked diagram',
+    openDiagramLink: 'Open linked diagram'
   },
   nodeStyleTab: {
     icon: 'Simge',

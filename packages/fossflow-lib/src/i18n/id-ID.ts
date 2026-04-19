@@ -254,7 +254,11 @@ const locale: LocaleProps = {
     linkPlaceholder: 'https://…',
     caption: 'Keterangan',
     captionHint: 'Ditampilkan di kanvas di bawah nama node',
-    openLink: 'Buka tautan'
+    openLink: 'Buka tautan',
+    diagramLink: 'Link to diagram',
+    diagramLinkPlaceholder: 'Select a diagram…',
+    diagramLinkHint: 'Clicking this node in read-only mode opens the linked diagram',
+    openDiagramLink: 'Open linked diagram'
   },
   nodeStyleTab: {
     icon: 'Ikon',

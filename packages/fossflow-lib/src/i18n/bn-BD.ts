@@ -253,7 +253,11 @@ const locale: LocaleProps = {
     linkPlaceholder: 'https://…',
     caption: 'ক্যাপশন',
     captionHint: 'ক্যানভাসে নোডের নামের নিচে দেখানো হয়',
-    openLink: 'লিঙ্ক খুলুন'
+    openLink: 'লিঙ্ক খুলুন',
+    diagramLink: 'Link to diagram',
+    diagramLinkPlaceholder: 'Select a diagram…',
+    diagramLinkHint: 'Clicking this node in read-only mode opens the linked diagram',
+    openDiagramLink: 'Open linked diagram'
   },
   nodeStyleTab: {
     icon: 'আইকন',

@@ -24,11 +24,6 @@ import { useModelStore } from 'src/stores/modelStore';
 import { ExportImageDialog } from '../ExportImageDialog/ExportImageDialog';
 import { HelpDialog } from '../HelpDialog/HelpDialog';
 import { SettingsDialog } from '../SettingsDialog/SettingsDialog';
-import { ConnectorHintTooltip } from '../ConnectorHintTooltip/ConnectorHintTooltip';
-import { ConnectorEmptySpaceTooltip } from '../ConnectorEmptySpaceTooltip/ConnectorEmptySpaceTooltip';
-import { ConnectorRerouteTooltip } from '../ConnectorRerouteTooltip/ConnectorRerouteTooltip';
-import { ImportHintTooltip } from '../ImportHintTooltip/ImportHintTooltip';
-import { LassoHintTooltip } from '../LassoHintTooltip/LassoHintTooltip';
 import { LazyLoadingWelcomeNotification } from '../LazyLoadingWelcomeNotification/LazyLoadingWelcomeNotification';
 import { NotificationSnackbar } from '../NotificationSnackbar/NotificationSnackbar';
 import { useCanvasMode } from 'src/contexts/CanvasModeContext';
@@ -85,6 +80,7 @@ interface UiOverlayProps {
   toolbarPortalTarget?: HTMLElement | null;
   sidebarTogglePortalTarget?: HTMLElement | null;
   languageSelector?: React.ReactNode;
+  suppressOnboardingHints?: boolean;
   /** @deprecated use toolbarPortalTarget */
   menuPortalTarget?: HTMLElement | null;
 }
@@ -93,6 +89,7 @@ export const UiOverlay = ({
   toolbarPortalTarget,
   sidebarTogglePortalTarget,
   languageSelector,
+  suppressOnboardingHints,
   menuPortalTarget
 }: UiOverlayProps = {}) => {
   const portalTarget = toolbarPortalTarget ?? menuPortalTarget ?? null;
@@ -297,21 +294,8 @@ export const UiOverlay = ({
         />
       )}
 
-      {/* Show hint tooltips only in editable mode */}
-      {editorMode === EditorModeEnum.EDITABLE && (
-        <ConnectorHintTooltip toolMenuRef={toolMenuRef} />
-      )}
-      {editorMode === EditorModeEnum.EDITABLE && <ConnectorEmptySpaceTooltip />}
-      {editorMode === EditorModeEnum.EDITABLE && <ConnectorRerouteTooltip />}
-      {editorMode === EditorModeEnum.EDITABLE && (
-        <ImportHintTooltip toolMenuRef={toolMenuRef} />
-      )}
-      {editorMode === EditorModeEnum.EDITABLE && (
-        <LassoHintTooltip toolMenuRef={toolMenuRef} />
-      )}
-
-      {/* Show lazy loading welcome notification if icon pack manager is provided */}
-      {iconPackManager && <LazyLoadingWelcomeNotification />}
+      {/* Welcome notification — suppressed when a diagram is open */}
+      {iconPackManager && !suppressOnboardingHints && <LazyLoadingWelcomeNotification />}
 
       <NotificationSnackbar />
 

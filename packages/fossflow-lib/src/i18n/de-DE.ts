@@ -257,7 +257,11 @@ const locale: LocaleProps = {
     linkPlaceholder: 'https://…',
     caption: 'Beschriftung',
     captionHint: 'Wird auf der Leinwand unterhalb des Knotennamens angezeigt',
-    openLink: 'Link öffnen'
+    openLink: 'Link öffnen',
+    diagramLink: 'Link to diagram',
+    diagramLinkPlaceholder: 'Select a diagram…',
+    diagramLinkHint: 'Clicking this node in read-only mode opens the linked diagram',
+    openDiagramLink: 'Open linked diagram'
   },
   nodeStyleTab: {
     icon: 'Symbol',

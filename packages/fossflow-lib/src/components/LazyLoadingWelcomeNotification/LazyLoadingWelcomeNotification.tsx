@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Box, IconButton, Paper, Typography, useTheme } from '@mui/material';
 import { Close as CloseIcon, Menu as MenuIcon } from '@mui/icons-material';
 import { useTranslation } from 'src/stores/localeStore';
@@ -8,15 +9,9 @@ const STORAGE_KEY = 'fossflow-lazy-loading-welcome-dismissed';
 export const LazyLoadingWelcomeNotification = () => {
   const { t } = useTranslation('lazyLoadingWelcome');
   const theme = useTheme();
-  const [isDismissed, setIsDismissed] = useState(true);
-
-  useEffect(() => {
-    // Check if the notification has been dismissed before
-    const dismissed = localStorage.getItem(STORAGE_KEY);
-    if (dismissed !== 'true') {
-      setIsDismissed(false);
-    }
-  }, []);
+  const [isDismissed, setIsDismissed] = useState(
+    () => localStorage.getItem(STORAGE_KEY) === 'true'
+  );
 
   const handleDismiss = () => {
     setIsDismissed(true);
@@ -27,14 +22,17 @@ export const LazyLoadingWelcomeNotification = () => {
     return null;
   }
 
-  return (
+  // Render into document.body via a portal so the fixed positioning works correctly
+  // even when this component is inside a CSS-transformed ancestor (which would otherwise
+  // create a new containing block, trapping position:fixed children).
+  return createPortal(
     <Box
       sx={{
         position: 'fixed',
         top: '50%',
         left: '50%',
         transform: 'translate(-50%, -50%)',
-        zIndex: 1400, // Above most UI elements
+        zIndex: 1400,
         maxWidth: 600,
         width: '90%'
       }}
@@ -103,6 +101,7 @@ export const LazyLoadingWelcomeNotification = () => {
           {t('signature')}
         </Typography>
       </Paper>
-    </Box>
+    </Box>,
+    document.body
   );
 };

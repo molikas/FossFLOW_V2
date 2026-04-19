@@ -1,3 +1,4 @@
+import { useRef, useCallback } from 'react';
 import { Box, Tooltip, Typography } from '@mui/material';
 import {
   FolderOutlined as FolderIcon,
@@ -21,17 +22,35 @@ export function FileTreeNode({ node, style, dragHandle, selectedId, onContextMen
   const isSelected = node.data.id === selectedId;
   const isDirty = node.data.isDirty;
 
-  const handleClick = () => {
+  // Distinguish single-click (open) from double-click (rename) with a short timer.
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleClick = useCallback(() => {
     if (isFolder) {
       node.toggle();
-    } else {
-      onOpen(node.data);
+      return;
     }
-  };
+    // For diagrams: delay open slightly so a double-click can cancel it.
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+      // Second click of a double-click — let dblclick handler take over.
+      return;
+    }
+    clickTimerRef.current = setTimeout(() => {
+      clickTimerRef.current = null;
+      onOpen(node.data);
+    }, 300);
+  }, [isFolder, node, onOpen]);
 
-  const handleDoubleClick = () => {
+  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+    }
     node.edit();
-  };
+  }, [node]);
 
   const FolderIconComponent = node.isOpen ? FolderOpenIcon : FolderIcon;
 
@@ -75,24 +94,36 @@ export function FileTreeNode({ node, style, dragHandle, selectedId, onContextMen
         <input
           autoFocus
           defaultValue={node.data.name}
+          onFocus={(e) => e.currentTarget.select()}
           onBlur={(e) => {
             const value = e.currentTarget.value;
             if (node.data.id === '__pending__' && !value.trim()) {
-              node.submit(''); // routes to cancel path in handleRenameSubmit
+              node.submit('');
             } else {
               node.submit(value);
             }
           }}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') node.submit(e.currentTarget.value);
+            // Stop ALL key events from reaching arborist's native tree-level handler.
+            // React synthetic stopPropagation alone is insufficient because arborist
+            // uses a native addEventListener on its container. stopImmediatePropagation
+            // on the native event prevents bubbling to any ancestor native listener.
+            e.stopPropagation();
+            e.nativeEvent.stopImmediatePropagation();
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              node.submit(e.currentTarget.value);
+            }
             if (e.key === 'Escape') {
+              e.preventDefault();
               if (node.data.id === '__pending__') {
-                node.submit(''); // cancel pending node
+                node.submit('');
               } else {
                 node.reset();
               }
             }
           }}
+          onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
           style={{
             flex: 1,
@@ -101,7 +132,9 @@ export function FileTreeNode({ node, style, dragHandle, selectedId, onContextMen
             padding: '0 4px',
             fontSize: '0.8125rem',
             outline: 'none',
-            minWidth: 0
+            minWidth: 0,
+            background: 'var(--mui-palette-background-paper, #fff)',
+            color: 'inherit'
           }}
         />
       ) : (

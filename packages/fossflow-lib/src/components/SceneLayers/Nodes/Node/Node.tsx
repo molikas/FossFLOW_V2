@@ -1,10 +1,12 @@
-import React, { useMemo, memo } from 'react';
-import { Box, Typography, Stack } from '@mui/material';
+import React, { useMemo, memo, useCallback } from 'react';
+import { Box, Typography, Stack, Tooltip } from '@mui/material';
+import { OpenInNew as OpenInNewIcon } from '@mui/icons-material';
 import { DEFAULT_LABEL_HEIGHT } from 'src/config';
 import { useCanvasMode } from 'src/contexts/CanvasModeContext';
 import { useIcon } from 'src/hooks/useIcon';
 import { ViewItem } from 'src/types';
 import { useModelItem } from 'src/hooks/useModelItem';
+import { useUiStateStore } from 'src/stores/uiStateStore';
 import { ExpandableLabel } from 'src/components/Label/ExpandableLabel';
 import { RichTextEditor } from 'src/components/RichTextEditor/RichTextEditor';
 
@@ -17,12 +19,38 @@ export const Node = memo(({ node, order }: Props) => {
   const modelItem = useModelItem(node.id);
   const { iconComponent } = useIcon(modelItem?.icon);
   const { getTilePosition } = useCanvasMode();
+  const editorMode = useUiStateStore((s) => s.editorMode);
+  const linkedDiagrams = useUiStateStore((s) => s.linkedDiagrams);
+
+  const isReadonly = editorMode === 'EXPLORABLE_READONLY';
+  const hasLink = isReadonly && !!modelItem?.link;
+
+  const linkedDiagramName = hasLink
+    ? (linkedDiagrams.find((d) => d.id === modelItem!.link)?.name ?? null)
+    : null;
+
+  const diagramTooltip = linkedDiagramName
+    ? `Opens "${linkedDiagramName}" in a new tab`
+    : 'Opens linked diagram in a new tab';
+
+  // Badge click: stop mousedown from reaching the window-level Pan handler so
+  // Pan.mouseup's tile-lookup doesn't also navigate (wrong tile for badge pixels).
+  const handleBadgeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.nativeEvent.stopPropagation();
+  }, []);
+
+  const handleBadgeClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (modelItem?.link) {
+        window.open(`/display/${modelItem.link}`, '_blank', 'noopener,noreferrer');
+      }
+    },
+    [modelItem]
+  );
 
   const position = useMemo(() => {
-    // CENTER places the container's top-left at the tile's projected center —
-    // works for both ISO and 2D (inverted-Y) because both use the same center
-    // convention. The old BOTTOM + PROJECTED_TILE_SIZE.height/2 subtraction was
-    // an obfuscated way of computing the same thing.
     return getTilePosition({
       tile: node.tile,
       origin: 'CENTER'
@@ -31,13 +59,10 @@ export const Node = memo(({ node, order }: Props) => {
 
   const description = useMemo(() => {
     if (!modelItem?.description) return null;
-    // Strip all HTML tags to check for visible text — handles all Quill empty
-    // variants (<p><br></p>, <p><br/></p>, whitespace-only, etc.)
     const visible = modelItem.description.replace(/<[^>]*>/g, '').trim();
     return visible ? modelItem.description : null;
   }, [modelItem?.description]);
 
-  // If modelItem doesn't exist, don't render the node
   if (!modelItem) {
     return null;
   }
@@ -49,6 +74,12 @@ export const Node = memo(({ node, order }: Props) => {
         zIndex: order
       }}
     >
+      <Tooltip
+        title={hasLink && !modelItem.headerLink ? diagramTooltip : ''}
+        placement="top"
+        disableInteractive
+        arrow
+      >
       <Box
         sx={{
           position: 'absolute',
@@ -56,7 +87,9 @@ export const Node = memo(({ node, order }: Props) => {
           justifyContent: 'center',
           alignItems: 'center',
           left: position.x,
-          top: position.y
+          top: position.y,
+          cursor: hasLink ? 'pointer' : 'inherit',
+          ...(hasLink && { pointerEvents: 'auto' })
         }}
       >
         {(modelItem?.name || description) && (
@@ -77,6 +110,7 @@ export const Node = memo(({ node, order }: Props) => {
                       <a
                         href="#"
                         data-testid="node-header-link"
+                        title={modelItem.headerLink}
                         style={{
                           color: 'inherit',
                           textDecoration: 'underline',
@@ -137,9 +171,36 @@ export const Node = memo(({ node, order }: Props) => {
                   }}
                 />
               )}
+            {hasLink && (
+              <Tooltip title={diagramTooltip} placement="right" disableInteractive arrow>
+                <Box
+                  onMouseDown={handleBadgeMouseDown}
+                  onClick={handleBadgeClick}
+                  sx={{
+                    pointerEvents: 'auto',
+                    cursor: 'pointer',
+                    position: 'absolute',
+                    bottom: -4,
+                    right: -4,
+                    width: 16,
+                    height: 16,
+                    borderRadius: '50%',
+                    bgcolor: 'primary.main',
+                    border: '2px solid #fff',
+                    boxShadow: '0 1px 4px rgba(0,0,0,0.35)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <OpenInNewIcon sx={{ fontSize: 9, color: '#fff' }} />
+                </Box>
+              </Tooltip>
+            )}
           </Box>
         )}
       </Box>
+      </Tooltip>
     </Box>
   );
 });

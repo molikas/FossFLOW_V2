@@ -207,6 +207,7 @@ export interface UiState {
   connectorInteractionMode: ConnectorInteractionMode;
   expandLabels: boolean;
   iconPackManager: IconPackManagerProps | null;
+  linkedDiagrams: Array<{ id: string; name: string }>;
   notification: Notification | null;
   activeLeftTab: 'ELEMENTS' | 'LAYERS' | null;
   rightSidebarOpen: boolean;
@@ -243,6 +244,7 @@ export interface UiStateActions {
   setConnectorInteractionMode: (mode: ConnectorInteractionMode) => void;
   setExpandLabels: (expand: boolean) => void;
   setIconPackManager: (iconPackManager: IconPackManagerProps | null) => void;
+  setLinkedDiagrams: (diagrams: Array<{ id: string; name: string }>) => void;
   setNotification: (notification: Notification | null) => void;
   setActiveLeftTab: (tab: 'ELEMENTS' | 'LAYERS' | null) => void;
   setRightSidebarOpen: (open: boolean) => void;

@@ -37,7 +37,7 @@ Claude should then:
 | **2A** | Storage Interface Refactor (E4-local) | `[x]` | High | Depends on 0A |
 | **2B** | File Explorer UI (E3) | `[x]` | ⚠️ Very High | Depends on 2A |
 | **2B-R** | File Explorer UX Revision | `[x]` | High | Revises 2B — do before 2C |
-| **2C** | Diagram-to-Diagram Links | `[ ]` | Low | Depends on 2A, 2B-R |
+| **2C** | Diagram-to-Diagram Links | `[x]` | Low | Depends on 2A, 2B-R |
 | **3A** | Google Auth — authStore (E5) | `[ ]` | Medium | Depends on 0B |
 | **3B** | Google Drive Provider (E4) | `[ ]` | High | Depends on 3A |
 | **3C** | S3 Provider + Backend (E4) | `[ ]` | High | Depends on 2A |
@@ -801,7 +801,7 @@ DELETED:
 ---
 
 ## Phase 2C — Diagram-to-Diagram Links
-**Status:** `[ ]` | **Token load:** Low | **Depends on:** 2A, 2B-R
+**Status:** `[x]` | **Token load:** Low | **Depends on:** 2A, 2B-R
 
 ### Behavior
 In the right sidebar, a node can be assigned a link to another diagram. In read-only preview mode (`/display/:id`), clicking a linked node opens the target diagram in a new tab.
@@ -815,17 +815,20 @@ Before coding, read these files:
 ```
 
 ### Sub-tasks
-- [ ] Add `link?: string` (diagramId) to the `Item` type in `fossflow-lib/src/types/model.ts`
-- [ ] Update Zod validation schema to allow optional `link` field
-- [ ] Add "Link to diagram" dropdown in `RightSidebar` node controls — populated from `StorageManager.listDiagrams()`
-- [ ] In `Renderer.tsx` (or the Node scene layer): in `EXPLORABLE_READONLY` mode, attach `onClick` to nodes that have `item.link` — opens `/display/{item.link}` in `_blank`
-- [ ] Visual indicator: linked nodes show a small external-link icon overlay in read-only mode
+- [x] Add `link?: string` (diagramId) to `modelItemSchema` Zod schema in `fossflow-lib/src/schemas/modelItems.ts`
+- [x] Update UI types: add `linkedDiagrams` to `UiState` + `UiStateActions` in `types/ui.ts`
+- [x] Add `linkedDiagrams` state + `setLinkedDiagrams` action to `uiStateStore.tsx`
+- [x] Add `linkedDiagrams` prop to `IsoflowProps` (isoflowProps.ts) and wire via useEffect in Isoflow.tsx
+- [x] Add "Link to diagram" dropdown in `NodeInfoTab.tsx` (edit mode, only shown when linkedDiagrams non-empty)
+- [x] Add locale strings: `diagramLink`, `diagramLinkPlaceholder`, `diagramLinkHint`, `openDiagramLink` to all locales
+- [x] In `Node.tsx`: in `EXPLORABLE_READONLY` mode, nodes with `modelItem.link` are clickable → opens `/display/{link}` in `_blank`; show small primary-colored badge with ExternalLink icon
+- [x] In `App.tsx` EditorShell: load `linkedDiagrams` from `storage.listDiagrams()`, refresh on `fileTreeRefreshToken`, pass as prop to `<Isoflow>`
 
 ### Done criteria
-- [ ] Node can be linked to another diagram via right sidebar
-- [ ] Clicking linked node in read-only mode opens correct diagram in new tab
-- [ ] Diagram IDs remain stable across renames
-- [ ] `yarn build` clean
+- [x] Node can be linked to another diagram via right sidebar (Details tab dropdown)
+- [x] Clicking linked node in read-only mode opens correct diagram in new tab
+- [x] Diagram IDs remain stable across renames
+- [x] `yarn build` clean
 
 ---
 

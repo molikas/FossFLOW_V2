@@ -255,7 +255,11 @@ const locale: LocaleProps = {
     linkPlaceholder: 'https://…',
     caption: 'Подпись',
     captionHint: 'Отображается на холсте под именем узла',
-    openLink: 'Открыть ссылку'
+    openLink: 'Открыть ссылку',
+    diagramLink: 'Link to diagram',
+    diagramLinkPlaceholder: 'Select a diagram…',
+    diagramLinkHint: 'Clicking this node in read-only mode opens the linked diagram',
+    openDiagramLink: 'Open linked diagram'
   },
   nodeStyleTab: {
     icon: 'Иконка',

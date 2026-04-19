@@ -41,6 +41,11 @@ export const Pan: ModeActions = {
         const item = getItemAtTile({ tile: currentTile, scene });
         if (item?.type === 'ITEM') {
           const modelItem = model.items.find((i) => i.id === item.id);
+          if (modelItem?.link) {
+            window.open(`/display/${modelItem.link}`, '_blank', 'noopener,noreferrer');
+            uiState.actions.setItemControls(null);
+            return;
+          }
           const hasContent =
             (!!modelItem?.description &&
               modelItem.description.replace(/<[^>]*>/g, '').trim() !== '') ||

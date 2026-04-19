@@ -259,7 +259,11 @@ const locale: LocaleProps = {
     linkPlaceholder: 'https://…',
     caption: 'Légende',
     captionHint: 'Affiché sur le canevas sous le nom du nœud',
-    openLink: 'Ouvrir le lien'
+    openLink: 'Ouvrir le lien',
+    diagramLink: 'Link to diagram',
+    diagramLinkPlaceholder: 'Select a diagram…',
+    diagramLinkHint: 'Clicking this node in read-only mode opens the linked diagram',
+    openDiagramLink: 'Open linked diagram'
   },
   nodeStyleTab: {
     icon: 'Icône',

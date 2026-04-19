@@ -260,7 +260,11 @@ const locale: LocaleProps = {
     linkPlaceholder: 'https://…',
     caption: 'Podpis',
     captionHint: 'Wyświetlany na płótnie poniżej nazwy węzła',
-    openLink: 'Otwórz link'
+    openLink: 'Otwórz link',
+    diagramLink: 'Link to diagram',
+    diagramLinkPlaceholder: 'Select a diagram…',
+    diagramLinkHint: 'Clicking this node in read-only mode opens the linked diagram',
+    openDiagramLink: 'Open linked diagram'
   },
   nodeStyleTab: {
     icon: 'Ikona',

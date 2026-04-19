@@ -2,17 +2,20 @@
  * REGRESSION — Save tracking: isAfterLoadRef suppresses post-load dirty flag
  *
  * Problem: every call to isoflowRef.current.load() fires onModelUpdated, which
- * was calling setHasUnsavedChanges(true). This caused a false-positive unsaved
- * state after every programmatic load.
+ * was triggering dirty-state mutations (setDirtyDiagramIds / autoSave.scheduleSave).
+ * This caused a false-positive unsaved state after every programmatic load.
  *
  * Fix:
- *   1. isAfterLoadRef is set to true before every programmatic load() call.
- *   2. handleModelUpdated returns early (without setting hasUnsavedChanges) when
- *      the ref is true, then resets the ref to false.
- *   3. Auto-save has been removed entirely — only explicit Save clears the flag
- *      and sets lastSaved. No background timer touches save state.
+ *   1. isAfterLoadRef is initialised to true (first onModelUpdated after mount is skipped).
+ *   2. isAfterLoadRef.current is set to true before every programmatic load() call.
+ *   3. handleModelUpdated returns early (without mutating dirty state) when the ref is
+ *      true, then resets the ref to false.
+ *   4. No background autoSaveTimer touches save state directly.
  *
- * This test reads DiagramLifecycleProvider.tsx source to pin all three parts of the contract.
+ * Dirty state is tracked via setDirtyDiagramIds (session mode) or
+ * autoSave.scheduleSave (server mode) — both gated behind the early-return above.
+ *
+ * This test reads DiagramLifecycleProvider.tsx source to pin all parts of the contract.
  * (Logic moved from App.tsx to DiagramLifecycleProvider.tsx in Phase 0A refactor.)
  */
 
@@ -35,9 +38,9 @@ describe('Save tracking — isAfterLoadRef pattern', () => {
     expect(fs.existsSync(APP_PATH)).toBe(true);
   });
 
-  it('declares isAfterLoadRef with useRef', () => {
+  it('declares isAfterLoadRef with useRef (initialised true to skip first post-mount fire)', () => {
     expect(src).toContain('isAfterLoadRef');
-    expect(src).toMatch(/isAfterLoadRef\s*=\s*useRef\(false\)/);
+    expect(src).toMatch(/isAfterLoadRef\s*=\s*useRef\(true\)/);
   });
 
   it('sets isAfterLoadRef.current = true before every isoflowRef.current.load() call', () => {
@@ -54,20 +57,25 @@ describe('Save tracking — isAfterLoadRef pattern', () => {
     expect(setTrueCount).toBeGreaterThan(0);
   });
 
-  it('handleModelUpdated checks isAfterLoadRef before setting hasUnsavedChanges(true)', () => {
-    const refCheckIdx = src.indexOf('isAfterLoadRef.current');
-    const unsavedSetIdx = src.indexOf('setHasUnsavedChanges(true)');
-    expect(refCheckIdx).toBeGreaterThan(-1);
-    expect(unsavedSetIdx).toBeGreaterThan(-1);
-    expect(refCheckIdx).toBeLessThan(unsavedSetIdx);
+  it('handleModelUpdated checks isAfterLoadRef before mutating dirty state', () => {
+    // 'isAfterLoadRef.current = false' is the reset inside the early-return guard —
+    // it is unique to handleModelUpdated. Dirty state mutations (setDirtyDiagramIds /
+    // scheduleSave) must appear after this reset in the source, proving they are
+    // guarded by the early return.
+    const earlyReturnResetIdx = src.indexOf('isAfterLoadRef.current = false');
+    expect(earlyReturnResetIdx).toBeGreaterThan(-1);
+
+    const dirtyMutationsAfterGuard = [
+      src.indexOf('setDirtyDiagramIds', earlyReturnResetIdx),
+      src.indexOf('scheduleSave', earlyReturnResetIdx)
+    ].filter((i) => i >= 0);
+
+    expect(dirtyMutationsAfterGuard.length).toBeGreaterThan(0);
   });
 
-  it('auto-save has been removed — no autoSaveTimer in source', () => {
+  it('no background autoSaveTimer directly mutates save state', () => {
     expect(src).not.toContain('autoSaveTimer');
-    // setHasUnsavedChanges(false) is correct in explicit save handlers and preview.
-    // What must NOT exist is a setTimeout whose arrow-function callback calls it —
-    // that would be a background timer silently clearing the dirty flag.
-    // Match: setTimeout(<whitespace>(<whitespace>)<whitespace>=><whitespace>{?<whitespace>setHasUnsavedChanges(false)
+    // No setTimeout callback that directly calls setHasUnsavedChanges.
     expect(src).not.toMatch(
       /setTimeout\s*\(\s*\(\s*\)\s*=>\s*\{?\s*setHasUnsavedChanges\s*\(\s*false\s*\)/
     );
