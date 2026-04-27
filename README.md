@@ -24,6 +24,7 @@ An "experimental" community fork of [FossFLOW](https://github.com/stan-smith/Fos
 - **Read-only node panel** — In `EXPLORABLE_READONLY` mode, clicking a node opens a single-scroll panel showing **Caption** and **Notes** sections (only when non-empty). Header shows the node icon, name, and optional link button. Nodes with no caption and no notes are not clickable at all — the panel stays closed.
 - **Double-click to place node or rectangle** — Double-clicking empty canvas opens a compact "Add" popover at the cursor. A **Rectangle** button at the top creates a background rectangle for visually grouping nodes. Below it, an icon picker lets you place a node — selecting an icon places it and immediately opens its Details tab for naming. Single left-click on empty canvas just deselects; no context menu.
 - **Clickable node links** — Attach a URL to any node; its label becomes a clickable link in the diagram.
+- **Cross-diagram links** — A node can link to another diagram in this workspace. In `EXPLORABLE_READONLY`, clicking the node opens the target diagram in a new tab; a blue badge on the icon indicates the link, and the tooltip reads *"Opens "X" in a new tab"* using the linked diagram's name. Header URL and diagram link coexist without showing two tooltips.
 - **Node label font size and color** — Adjust font size and text color from the Style tab.
 - **Text box rich text and color** — Text boxes support bold, italic, bullet lists, headers, and more. Text color is adjustable. The box auto-expands to fit its content.
 - **Connector label styling** — Per-label font size (8–24 px), text color, and position control. The color section is clearly labelled "Line Color" to distinguish it from label color.
@@ -32,11 +33,15 @@ An "experimental" community fork of [FossFLOW](https://github.com/stan-smith/Fos
 ### Canvas and navigation
 
 - **Right-click to pan** — Right-click drag pans the canvas; release to resume the active tool.
-- **Default zoom 85%** — Opens with a little breathing room.
+- **Default zoom 75%** — Opens with breathing room. (Reduced from 85%.)
+- **2D canvas mode** — Toggle between isometric and flat 2D from the ToolMenu. Each mode uses the same node/connector model; switching auto-fits the diagram to the viewport. Backed by a `CoordinateTransformStrategy` pattern (ISO and Cartesian2D strategies, each implementing `toScreen` / `fromScreen` / `gridTileUrl`) so the rest of the renderer is mode-agnostic.
 - **Layers** — Each view has an independent layer stack. Layers control visibility and lock state for all element types (nodes, connectors, rectangles, text boxes). Elements can be assigned to layers; unassigned elements are always visible and interactive. Layer order is draggable.
 
 ### File management
 
+- **File explorer** — VS Code-style collapsible left panel (280 px, `react-arborist`) listing all diagrams and folders. Inline create and rename via a `__pending__` node, drag-and-drop with collision detection, duplicate, hard delete with a confirmation dialog. Auto-sorted (folders alphabetically, then diagrams alphabetically) at every depth. Dirty indicators on individual nodes and on ancestor folders. Right-click for context actions including **Copy share link** (copies `/display/{id}` to the clipboard). Opens by default on first server-mode session and pushes the canvas rather than overlaying it.
+- **Empty state screen** — Full canvas replacement (ISO grid background + welcome card) shown when server storage is available and no diagram is open. Drives users to create or open from the file explorer instead of dropping them on a blank canvas.
+- **Pluggable storage** — All diagram and folder operations go through a `StorageManager` that delegates to the active `StorageProvider`. The shipped local provider uses the backend when reachable and falls back to `sessionStorage`. Google Drive and S3 providers are wired in as stubs (`NotImplementedError`) for future client-side implementations.
 - **Save / Save As** — Save directly to a named file. Save As always prompts for a new name and creates a new file.
 - **Diagrams panel** — Browse, load, and delete all saved diagrams from a single panel. Share any diagram as a read-only link.
 - **Save status indicator** — Shows when the diagram was last saved and whether there are unsaved changes. Displayed in the toolbar right section as `Saved at HH:MM`, `Saved yesterday at HH:MM`, or `Saved Mon DD at HH:MM` for older diagrams. A `•` dot appears when there are pending changes. No auto-save — only explicit Save updates the timestamp.
@@ -83,6 +88,8 @@ An "experimental" community fork of [FossFLOW](https://github.com/stan-smith/Fos
 
 ### Quality-of-life
 
+- **Notification system** — Native `alert()` calls replaced with a stack of dismissible MUI snackbars (max 3 visible, FIFO queue). Used for save toasts, errors, and other transient feedback. A new `ConfirmDialog` returns a promise from a destructive-action confirmation.
+- **Material Icons pack** — ~2,179 Material Design icons available as a loadable pack alongside AWS, GCP, Azure, and Kubernetes. Generated at prebuild time. Large packs (>100 icons) render a 60-icon preview to keep section expansion fast; the full set is searchable. Expanded sections survive pack reloads, and newly loaded packs auto-expand.
 - Editing a node no longer adds an empty description block to its canvas label.
 - Language selector stays on screen — dropdown anchors to the right edge of the button and shows the active language name.
 - Lasso hint auto-dismisses after first use.
@@ -128,6 +135,92 @@ Diagrams are saved to a `diagrams/` folder in the project directory.
 ---
 
 ## [Unreleased]
+
+### 2026-04-27
+
+#### Architecture — Phase refactor (0A → 2C)
+
+Seven-commit structural expansion covering provider decomposition, a notification system, 2D canvas mode, the Material icon pack, a pluggable storage interface, a VS Code-style file explorer, and cross-diagram links. All 353 regression tests pass.
+
+**Phase 0A — App.tsx decomposition into providers**
+
+- `AppStorageContext` extracted (storage init, `isServerStorage`, `isInitialized`).
+- `DiagramLifecycleProvider` extracted — owns all diagram state, save/load/delete, keyboard shortcuts, `beforeunload` guard, icon-pack manager, and dialog wiring.
+- `App.tsx` slimmed from 744 → 103 lines: pure provider composition, no logic.
+- `AppToolbar` drops every prop in favour of `useAppStorage` / `useDiagramLifecycle` hooks.
+- TDZ crash on init fixed by ordering the keyboard-shortcut effect after `handleSaveClick`/`handleOpenClick` declarations.
+
+**Phase 0B — Notification system**
+
+- `notificationStore` (Zustand, not persisted) with `push`/`dismiss`/`dismissAll`. Replaces every `alert()` call across the app.
+- `NotificationStack` component (MUI Snackbar+Alert, max 3 visible, FIFO queue).
+- `ConfirmDialog` — promise-returning dialog for destructive-action confirmation.
+- 10 unit tests on `notificationStore`.
+
+**Phase 1A — 2D canvas mode**
+
+- `CoordinateTransformStrategy` pattern in `coordinateTransforms.ts`: ISO and Cartesian2D strategies each encapsulate `toScreen`, `fromScreen`, and `gridTileUrl`.
+- `CanvasModeContext` provides the active strategy plus bound helper functions from the store.
+- `canvasMode` (`'ISOMETRIC' | '2D'`) added to persisted `uiStateStore` settings.
+- New `grid-tile-2d.svg` square grid tile asset.
+- `Grid.tsx`, `useIsoProjection`, `Node.tsx`, and `getMouse` are all mode-aware. `cartesian2DStrategy.fromScreen` adds a half-tile boundary correction so node centroids snap into cells correctly.
+- 2D / ISO toggle button in ToolMenu; auto fit-to-view on mode switch.
+- 22 unit tests on the strategies (1 skipped).
+
+**Phase 1B — Material Icons pack + 6 bug fixes**
+
+- `scripts/generateMaterialIconPack.js` (prebuild) generates a `material-icons-pack.json` artifact with ~2,179 icons from `@mui/icons-material`. Registered as `'material'` alongside aws/gcp/azure/k8s. The generated artifact is gitignored. 5 generator-script unit assertions.
+- Large packs (>100 icons) render a capped 60-icon preview in `IconCollection` to prevent expansion freeze when opening Material Icons.
+- `iconCategoriesState` preserved across icon-pack reloads (expanded sections no longer collapse on pack load); newly loaded packs auto-expand.
+- DiagnosticsOverlay moved into `BottomDock` `endSlot` via `bottomDockEnd` prop; new `diagnosticsStore` decouples the toggle button from the overlay.
+- Default zoom changed from 85% → 75%. `preserveViewport` flag on `IsoflowRef.load()` prevents zoom reset during pack-refresh loads.
+- `getFitToViewParams` uses a mode-aware `getTilePositionFn` so 2D mode centres correctly with 2+ nodes.
+
+**Phase 2A — Pluggable storage interface (local provider)**
+
+- `StorageManager` provider registry. The active provider receives all diagram and folder operations (`registerProvider`, `setActiveProvider`).
+- `LocalStorageProvider`: server-backed when the backend is reachable, falls back to `sessionStorage`. Full folder CRUD and tree-manifest support.
+- `GoogleDriveProvider` and `S3Provider`: `NotImplementedError` stubs (Phase 3B / 3C).
+- `AppStorageContext` registers and activates the local provider on init.
+- Backend (`server.js`): folder CRUD, move, soft-delete patch, and tree-manifest endpoints.
+- 9 unit tests on `LocalStorageProvider`. Session-storage warning now waits for `isInitialized` before firing.
+
+**Phase 2B + 2B-R — VS Code-style file explorer**
+
+- Collapsible 280 px left panel (`FileExplorerLayout`) using `react-arborist`. Pushes the canvas rather than overlaying it. Opens by default on the first server-mode session.
+- Full CRUD: inline create / rename via the arborist `__pending__` node pattern, drag-and-drop with collision detection, duplicate, hard delete (with confirmation).
+- Auto-sort: folders alphabetically, then diagrams alphabetically, at every depth.
+- Dirty indicators on nodes and on every ancestor folder.
+- `EmptyStateScreen` — full canvas replacement (ISO grid background + welcome card) shown when server storage is available and no diagram is open.
+- `checkUnsavedBeforeNavigate` guard for session-mode dirty state (Save / Discard / Cancel).
+- Dialog standardization: elevation-8 shadow, `borderRadius: 2`, X close button, `h6 / 600` titles, applied to `ConfirmDialog` and the file-explorer delete-confirm and name-collision dialogs.
+- Removed: auto-draft creation, `DraftsSection`, `TrashSection`, and the `AppToolbar` "New diagram" button.
+
+**Phase 2C — Diagram-to-diagram links + welcome popup on empty state**
+
+- A node can link to another diagram. In `EXPLORABLE_READONLY`, clicking the node opens the target in a new tab (`Pan.ts`); the tooltip reads *"Opens "X" in a new tab"* using the linked diagram's name. A blue badge on the icon indicates the link, with its own click handler so it doesn't suffer the underlying tile-mismatch issue.
+- Double tooltip prevented when a node has both a header URL and a diagram link.
+- `linkedDiagrams` prop wired through `IsoflowProps` → `uiStateStore`.
+- "Copy share link" item added to the file-tree right-click context menu — copies `/display/{id}` to the clipboard and notifies via `notificationStore`.
+- All contextual tip overlays removed from `UiOverlay` (`ConnectorHintTooltip`, `ConnectorEmptySpaceTooltip`, `ConnectorRerouteTooltip`, `LassoHintTooltip`, `ImportHintTooltip`).
+- `LazyLoadingWelcomeNotification` now uses `createPortal(document.body)` to escape the CSS transform stacking context. `suppressOnboardingHints` hides it once a diagram is open. `<Isoflow>` always mounts; `EmptyStateScreen` is an absolute overlay (zIndex 10), and the portal-rendered welcome popup (zIndex 1400) appears above it on first load.
+
+#### Bug fixes (alongside the phase work)
+
+- **Inline rename loses focus** — fixed via MUI Menu `disableRestoreFocus` + 150 ms delay.
+- **Duplicate diagram 409** — copied data now strips `id` before POST.
+- **First-load hint blink** — `isInitialized` guard before canvas render.
+- **Connector drawing regression** — `MAIN_MENU_OPTIONS` lifted to a module-level constant so `setEditorMode` no longer resets the tool mode on every context re-render.
+- **2D mode cursor off by 3.5 tiles** — root cause was the ISO formula running in 2D `getMouse`; fixed by threading `screenToTile` from `CanvasModeContext`.
+
+#### Tests
+
+- New: `coordinateTransforms.test.ts` (22 cases, 1 skipped); `notificationStore.test.ts` (10 cases); `LocalStorageProvider` (9 cases); generator-script tests (5 assertions).
+- Updated: `saveTracking.isAfterLoad` rebased onto `DiagramLifecycleProvider` (moved out of `App.tsx`); `SizeIndicator.test` wrapped in `CanvasModeProvider` and stale snapshot cleared.
+- Lib `jest` config: SVG file mock added (`fileMock.ts`).
+- All 353 regression tests pass.
+
+---
 
 ### 2026-04-10
 

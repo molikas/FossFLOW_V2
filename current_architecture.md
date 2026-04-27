@@ -1,6 +1,6 @@
 # FossFLOW Community Edition — Architecture Reference
 
-**Last updated:** 2026-04-11 (rev 9)
+**Last updated:** 2026-04-27 (rev 10)
 **Codebase root:** `packages/fossflow-lib/src` (library) · `packages/fossflow-app/src` (application shell)
 **Purpose:** Living architecture reference — feature inventory, store/reducer/mode architecture, test audit, gap analysis, lessons learned, and key APIs. Update this document whenever significant architectural changes are made.
 
@@ -160,6 +160,69 @@ This prevents the old diagram name bleeding into the toolbar after "New Diagram"
 **Compact format loading (2026-04-11):**
 
 `handleDiagramManagerLoad(id, rawData, listingName)` detects `rawData._?.f === 'compact'` and calls `transformFromCompactFormat(rawData)` (exported from `fossflow-lib`) before passing the model to Isoflow. The listing name (from the storage metadata) is used as the diagram name — always correct regardless of what field exists in the raw payload. `transformFromCompactFormat` is now exported from `fossflow-lib/src/index.ts`.
+
+### Canvas Modes (2026-04-27)
+
+The renderer is parameterised over a coordinate system. Two strategies ship today; adding a third is a `CoordinateTransformStrategy` implementation away.
+
+| Mode | Strategy | Grid asset | Notes |
+|---|---|---|---|
+| `ISOMETRIC` | `isoStrategy` (`utils/coordinateTransforms.ts`) | `grid-tile.svg` (rhombus) | Default. Uses the existing CSS isometric matrix in `useIsoProjection`. |
+| `2D` | `cartesian2DStrategy` (`utils/coordinateTransforms.ts`) | `grid-tile-2d.svg` (square) | No ISO matrix; `Node.tsx` uses CENTER origin (no BOTTOM+offset hack). `fromScreen` adds a half-tile correction so node centroids snap inside cells. |
+
+Both strategies implement `toScreen`, `fromScreen`, and `gridTileUrl`. `CanvasModeContext` exposes the active strategy plus bound helper functions. `canvasMode` is a persisted `uiStateStore` setting; toggling it via the ToolMenu fires an auto fit-to-view. `getMouse` reads `screenToTile` from the context — this is the fix for the 2D cursor offset, where the ISO formula was leaking into 2D mode and producing a 3.5-tile drift.
+
+### Notifications (2026-04-27)
+
+App-side, separate from the library's `uiState.notification` snackbar.
+
+| Component | Source | Purpose |
+|---|---|---|
+| `notificationStore` | `fossflow-app/src/stores/notificationStore.ts` | Zustand, not persisted. `push(msg, severity?)`, `dismiss(id)`, `dismissAll()`. Replaces every `alert()` call in the app. |
+| `NotificationStack` | `fossflow-app/src/components/NotificationStack.tsx` | MUI Snackbar + Alert; max 3 visible at once, FIFO queue. Mounts at the app root. |
+| `ConfirmDialog` | `fossflow-app/src/components/ConfirmDialog.tsx` | Promise-returning confirm dialog for destructive actions (delete, discard). |
+
+### Storage Providers (2026-04-27)
+
+All diagram and folder operations route through `StorageManager` (provider registry) → active `StorageProvider`. The picker / config decides which provider is active; the rest of the app is provider-agnostic.
+
+| Provider | Source | Status |
+|---|---|---|
+| `LocalStorageProvider` | `services/storage/providers/LocalStorageProvider.ts` | Server-backed when `/api/storage/*` is reachable; falls back to `sessionStorage`. Full folder CRUD + tree-manifest. **Shipped.** |
+| `GoogleDriveProvider` | `services/storage/providers/GoogleDriveProvider.ts` | `NotImplementedError` stub (Phase 3B). |
+| `S3Provider` | `services/storage/providers/S3Provider.ts` | `NotImplementedError` stub (Phase 3C). |
+
+**Backend support (`packages/fossflow-backend/server.js`):** folder CRUD, move (cross-folder), soft-delete patch, and tree-manifest endpoints. The `LocalStorageProvider` is the only client today; the manifest is the source of truth for tree shape so the UI never has to walk the filesystem.
+
+### File Explorer (2026-04-27)
+
+VS Code-style left panel. Lives in `fossflow-app`, not in the library.
+
+| Piece | Source | Notes |
+|---|---|---|
+| `FileExplorerLayout` | `components/fileExplorer/FileExplorerLayout.tsx` | Collapsible 280 px panel; pushes the canvas rather than overlaying. Opens by default on first server-mode session. |
+| `FileExplorer` | `components/fileExplorer/FileExplorer.tsx` | `react-arborist` tree; auto-sorts (folders alpha, then diagrams alpha) at every depth; dirty indicators on nodes and ancestor folders. |
+| `FileTreeNode` | `components/fileExplorer/FileTreeNode.tsx` | Renders a single tree row (icon, label, dirty dot, inline rename). |
+| `FileTreeToolbar` | `components/fileExplorer/FileTreeToolbar.tsx` | New file / new folder / refresh actions. |
+| `ContextMenuItems` | `components/fileExplorer/ContextMenuItems.tsx` | Right-click menu: rename, duplicate, delete, **Copy share link** (copies `/display/{id}`). |
+| `useFileTree` | `hooks/useFileTree.ts` | Hook that owns tree state and CRUD actions. |
+| `EmptyStateScreen` | `components/EmptyStateScreen.tsx` | Full canvas replacement (ISO grid bg + welcome card) when server storage is available and no diagram is open. Absolute overlay, zIndex 10. |
+
+**Inline create / rename:** the explorer inserts a `__pending__` node into the tree and lets `react-arborist` enter rename mode on it. On commit, the pending node is replaced by a real node from the storage round-trip. On cancel or escape, the pending node is removed.
+
+**Drag-and-drop:** collision detection prevents drops onto a name that already exists at the destination — surfaces a name-collision dialog instead of silently failing.
+
+**Removed in 2B-R:** auto-draft creation, `DraftsSection`, `TrashSection` (delete is now immediate hard delete with confirmation), and the `AppToolbar` "New diagram" button.
+
+### Cross-Diagram Links (2026-04-27)
+
+A node can store a reference to another diagram in this workspace.
+
+- `linkedDiagrams` is wired through `IsoflowProps` → `uiStateStore`.
+- In `EXPLORABLE_READONLY`, clicking a node with a diagram link opens the target in a new tab (`interaction/modes/Pan.ts`).
+- A blue badge on the node icon signals the link. The badge has its own click handler so it doesn't suffer the underlying tile-mismatch issue.
+- Tooltip text resolves to *"Opens "X" in a new tab"* using the linked diagram's name; falls back to a generic string if the name isn't yet hydrated.
+- Double-tooltip is prevented when a node has both a header URL and a diagram link.
 
 ### Editor Modes
 
@@ -826,6 +889,44 @@ For pastes with ≥ 500 connectors, `useCopyPaste` passes an `onPathProgress(don
 **Interpolation note:** The lib's `t()` returns a plain string with no parameter support. For strings needing runtime values (e.g. `searchResults: "SEARCH RESULTS ({count} icons)"`), callers use `.replace('{count}', value)` manually.
 
 **Locale completeness enforcement:** `__perf_refactor_regression__/i18n.localeCompleteness.test.ts` — reads all 13 locale files and asserts each contains every top-level namespace from `en-US.ts`.
+
+---
+
+### 2l. fossflow-app Provider Decomposition (2026-04-27)
+
+`App.tsx` was 744 lines of intermixed state, effects, and JSX. Phase 0A split it into a small composition root and two domain providers. `App.tsx` is now 103 lines — pure provider composition with no logic.
+
+**Provider tree (fossflow-app):**
+
+```
+App
+  AppStorageContext       (storage init: isServerStorage, isInitialized, StorageManager)
+    DiagramLifecycleProvider
+      ↳ owns:  diagram state, save / Save As / load / delete,
+               keyboard shortcuts, beforeunload guard,
+               icon-pack manager, Save / Discard / Load dialogs
+      ↳ exposes: useDiagramLifecycle()
+      AuthProvider*       (only if REACT_APP_GOOGLE_CLIENT_ID is set; otherwise transparent)
+        FileExplorerLayout
+          AppToolbar      (reads useAppStorage / useDiagramLifecycle — no props)
+          <Isoflow>       (library)
+          NotificationStack
+```
+
+\* `AuthProvider` exists in master at this point as the harness that wires `@react-oauth/google` into the lifecycle, but the Google Drive provider it would feed is still the `NotImplementedError` stub. The actual Drive implementation lives on `wip/drive-s3` and is not on master.
+
+**Why this split:**
+
+- `AppStorageContext` is the only place that touches storage init. The rest of the app reads `isServerStorage` / `isInitialized` from the hook and never sees a `StorageManager` directly.
+- `DiagramLifecycleProvider` owns the dirty-tracking lifecycle that used to span `App.tsx` and `AppToolbar.tsx`. The toolbar is now stateless — it simply consumes hooks.
+- The TDZ crash at first mount (keyboard-shortcut effect referencing `handleSaveClick` before it was declared) was an artefact of the old monolith; the new ordering inside `DiagramLifecycleProvider` declares handlers before the effect that registers them.
+
+**`AppStorageContext` initialisation:**
+
+1. Construct `StorageManager`.
+2. Register the `LocalStorageProvider` (server-backed if `/api/storage/status` is reachable; falls back to `sessionStorage`).
+3. Set it active. Drive and S3 are registered as `NotImplementedError` stubs and only become candidates when their own phases land.
+4. Set `isInitialized = true` — the session-only warning banner is gated on this so it doesn't flash before storage is known.
 
 ---
 
