@@ -1,15 +1,17 @@
 # Regression Test Suite Reference
 
-**Last updated:** 2026-07-15 (docs housekeeping — totals re-measured; suite links repaired; moved to `docs/guidelines/`)
-**Unit / integration totals** (measured 2026-07-15 via per-workspace `npm test`):
+**Last updated:** 2026-07-28 (totals re-measured across all four workspaces)
+**Unit / integration totals** (measured 2026-07-28 via per-workspace `npm test`):
 
 | Workspace | Passing | Suites |
 |---|---|---|
-| `axoview-lib` | 1544 (+1 skipped) | 150 |
-| `axoview-app` | 266 | 26 |
+| `axoview-lib` | 1737 (+1 skipped) | 155 |
+| `axoview-app` | 268 | 26 |
 | `axoview-backend` | 102 | 7 |
 | `axoview-worker` | 124 | 4 |
-| **Total** | **2036 (+1 skipped)** | **187** |
+| **Total** | **2231 (+1 skipped)** | **192** |
+
+> Most of the lib delta since the 2026-07-15 measurement (1544→1737, 150→155) predates this sync — it accumulated across the intervening waves and was simply never re-measured. The 2026-07-28 session itself added only the two `driveSharing` policy-rejection cases (app 266→268).
 
 *(lib `+22` / `+1` suite on 2026-07-19: the on-canvas icon-resize `NODE.TRANSFORM` suite + `iconScale` schema round-trips — see the ADR 0044 additions below.)*
 
