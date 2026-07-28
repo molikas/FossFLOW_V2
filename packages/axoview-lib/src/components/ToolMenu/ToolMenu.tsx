@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback } from 'react';
 import { Stack, Chip, Divider, Typography } from '@mui/material';
 import {
   PanToolOutlined as PanToolIcon,
@@ -11,18 +11,13 @@ import {
   ViewInArOutlined as IsometricIcon,
   GridOnOutlined as CartesianIcon
 } from '@mui/icons-material';
-import { useUiStateStore, useUiStateStoreApi } from 'src/stores/uiStateStore';
+import { useUiStateStore } from 'src/stores/uiStateStore';
 import { IconButton } from 'src/components/IconButton/IconButton';
 import { UiElement } from 'src/components/UiElement/UiElement';
 import { useHistory } from 'src/hooks/useHistory';
 import { TOOL_HOTKEYS } from 'src/config/hotkeys';
 import { useTranslation } from 'src/stores/localeStore';
-import {
-  isometricStrategy,
-  cartesian2DStrategy,
-  getCanvasModeSwitchScroll
-} from 'src/utils/coordinateTransforms';
-import { CoordsUtils } from 'src/utils';
+import { useCanvasModeToggle } from 'src/hooks/useCanvasModeToggle';
 import { tooltipWithShortcut } from 'src/utils/tooltipWithShortcut';
 
 export const ToolMenu = () => {
@@ -35,32 +30,11 @@ export const ToolMenu = () => {
   const connectorInteractionMode = useUiStateStore((state) => {
     return state.connectorInteractionMode;
   });
-  const canvasMode = useUiStateStore((state) => state.canvasMode);
-  const uiStateApi = useUiStateStoreApi();
+  // Toggle + viewport-preserving scroll correction (shared with the view-only
+  // present chrome, which mounts its own copy — the two are never live at once).
+  const { canvasMode, toggleCanvasMode } = useCanvasModeToggle();
 
   const hotkeys = TOOL_HOTKEYS;
-
-  // Iso↔2D switch preserves the user's zoom and viewport center (ADR locked
-  // decision #6): re-project the tile under the viewport center and recompute
-  // scroll so it stays centered. (The old `fitToView()` force-fit here is what
-  // made zoom "pop" — 65%→80%→97% — and recentred the whole diagram.)
-  const prevCanvasModeRef = useRef(canvasMode);
-  useEffect(() => {
-    const prevCanvasMode = prevCanvasModeRef.current;
-    if (prevCanvasMode === canvasMode) return;
-    prevCanvasModeRef.current = canvasMode;
-
-    const { zoom, scroll, actions } = uiStateApi.getState();
-    const fromStrategy =
-      prevCanvasMode === '2D' ? cartesian2DStrategy : isometricStrategy;
-    const toStrategy =
-      canvasMode === '2D' ? cartesian2DStrategy : isometricStrategy;
-
-    actions.setScroll({
-      position: getCanvasModeSwitchScroll(fromStrategy, toStrategy, zoom, scroll),
-      offset: CoordsUtils.zero()
-    });
-  }, [canvasMode, uiStateApi]);
 
   const handleUndo = useCallback(() => {
     undo();
@@ -68,10 +42,6 @@ export const ToolMenu = () => {
   const handleRedo = useCallback(() => {
     redo();
   }, [redo]);
-
-  const handleToggleCanvasMode = useCallback(() => {
-    uiStateStoreActions.setCanvasMode(canvasMode === 'ISOMETRIC' ? '2D' : 'ISOMETRIC');
-  }, [canvasMode, uiStateStoreActions]);
 
   return (
     <UiElement>
@@ -177,7 +147,7 @@ export const ToolMenu = () => {
           // D5 — canvas-mode toggle tooltip routed through i18n
           name={canvasMode === 'ISOMETRIC' ? t('switchTo2D') : t('switchToIsometric')}
           Icon={canvasMode === 'ISOMETRIC' ? <CartesianIcon /> : <IsometricIcon />}
-          onClick={handleToggleCanvasMode}
+          onClick={toggleCanvasMode}
           isActive={false}
           dataAxoviewId="canvas-mode-toggle"
         />

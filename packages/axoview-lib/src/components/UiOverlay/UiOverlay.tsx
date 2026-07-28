@@ -26,6 +26,7 @@ import { LazyLoadingWelcomeNotification } from '../LazyLoadingWelcomeNotificatio
 import { NotificationSnackbar } from '../NotificationSnackbar/NotificationSnackbar';
 import { CanvasContextMenu } from 'src/components/CanvasContextMenu/CanvasContextMenu';
 import { PreviewLayerSwitcher } from 'src/components/PreviewLayerSwitcher/PreviewLayerSwitcher';
+import { PreviewCanvasModeToggle } from 'src/components/PreviewCanvasModeToggle/PreviewCanvasModeToggle';
 // PreviewLabelsToggle moved into the bottom-dock zoom cluster (global hide-labels
 // toggle), so it's no longer rendered here.
 import { ViewModeInfoPopover } from 'src/components/ViewModeInfoPopover/ViewModeInfoPopover';
@@ -339,9 +340,11 @@ export const UiOverlay = ({
 
         {/* Present-mode chrome — top-left (feels more natural in a presentation
             than bottom-left). View mode only. The layer switcher self-gates on
-            ≥2 layers (ADR 0013). Hidden by the view-only "hide all controls"
-            toggle. High zIndex so it stays above any left chrome that lingers in
-            a forced-preview test environment. */}
+            ≥2 layers (ADR 0013). The canvas-mode toggle lets a viewer switch
+            iso↔2D for their OWN view (canvasMode is uiState/localStorage, never
+            document data). Hidden by the view-only "hide all controls" toggle.
+            High zIndex so it stays above any left chrome that lingers in a
+            forced-preview test environment. */}
         {editorMode === EditorModeEnum.EXPLORABLE_READONLY &&
           !hideViewControls && (
             <Stack
@@ -351,6 +354,7 @@ export const UiOverlay = ({
               style={{ left: appPadding.x, top: appPadding.y }}
             >
               <PreviewLayerSwitcher />
+              <PreviewCanvasModeToggle />
             </Stack>
           )}
       </Box>
