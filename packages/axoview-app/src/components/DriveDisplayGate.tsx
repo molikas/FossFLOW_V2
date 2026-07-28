@@ -29,7 +29,10 @@ export function DriveDisplayGate() {
   const { runtimeConfig } = useAppStorage();
   const authStatus = useAuthStore((s) => s.status);
   const signIn = useAuthStore((s) => s.signIn);
+  const signOut = useAuthStore((s) => s.signOut);
+  const signedInEmail = useAuthStore((s) => s.user?.email || null);
   const [pickerBusy, setPickerBusy] = useState(false);
+  const [switchBusy, setSwitchBusy] = useState(false);
   // ADR 0011 — a user-initiated Picker launch that fails surfaces inline in the
   // gate (an actionable, persistent message), not as a transient toast.
   const [pickerError, setPickerError] = useState<string | null>(null);
@@ -105,6 +108,29 @@ export function DriveDisplayGate() {
       );
     } finally {
       setPickerBusy(false);
+    }
+  };
+
+  // Wrong-account recovery (owner report 2026-07-28: "they still couldn't open
+  // it"). In `needs-grant` the viewer IS signed in — the account just can't see
+  // the file, typically a personal address when the link was shared to a work
+  // one. `signOut()` clears the profile hint, so the next `signIn()` shows
+  // Google's account chooser instead of silently re-picking the same account
+  // (`attemptSilentReconnect` passes the persisted email as `login_hint`).
+  //
+  // The one-shot auto-retry above fires only on `needs-signin`, so it does NOT
+  // cover this state — re-read explicitly once the new session lands, or the
+  // gate would keep showing the same wall to an account that now has access.
+  const handleSwitchAccount = async () => {
+    setSwitchBusy(true);
+    try {
+      signOut();
+      await signIn();
+      if (useAuthStore.getState().status === 'AUTHENTICATED') {
+        retryDriveDisplayRead(false);
+      }
+    } finally {
+      setSwitchBusy(false);
     }
   };
 
@@ -209,12 +235,30 @@ export function DriveDisplayGate() {
             )}
           </>
         ) : (
-          <Typography variant="body2" color="text.secondary">
-            {t(
-              'driveDisplay.grantUnavailable',
-              'Your Google account does not have access to this diagram through Axoview, and this deployment cannot request it. Ask the owner to share the file with you in Google Drive, then reload this page.'
-            )}
-          </Typography>
+          <>
+            <Typography variant="body2" color="text.secondary">
+              {signedInEmail
+                ? t('driveDisplay.grantUnavailableAs', {
+                    defaultValue:
+                      "You're signed in as {{email}}, which can't open this diagram. If it was shared with a different account, switch to it below. Otherwise ask the owner to share the file with you in Google Drive, then reload this page.",
+                    email: signedInEmail
+                  })
+                : t(
+                    'driveDisplay.grantUnavailable',
+                    'Your Google account does not have access to this diagram through Axoview. If the diagram was shared with a different account, switch to it below. Otherwise ask the owner to share the file with you in Google Drive, then reload this page.'
+                  )}
+            </Typography>
+            <Button
+              variant="outlined"
+              onClick={() => void handleSwitchAccount()}
+              disabled={switchBusy || authStatus === 'AUTHENTICATING'}
+              startIcon={<GoogleGIcon size={16} />}
+              data-axoview-id="drive-display-gate-switch-account"
+              sx={{ textTransform: 'none', bgcolor: 'background.paper' }}
+            >
+              {t('driveDisplay.switchAccountButton', 'Use a different Google account')}
+            </Button>
+          </>
         )}
       </Paper>
     </Box>

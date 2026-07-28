@@ -286,7 +286,9 @@
         "signInBody": "Sign in with Google so Axoview can check whether this diagram has been shared with you.",
         "grantBody": "You are signed in, but Axoview needs your permission to open this specific file from Google Drive.",
         "grantButton": "Open with Google Drive access",
-        "grantUnavailable": "Your Google account does not have access to this diagram through Axoview, and this deployment cannot request it. Ask the owner to share the file with you in Google Drive, then reload this page.",
+        "grantUnavailable": "Your Google account does not have access to this diagram through Axoview. If the diagram was shared with a different account, switch to it below. Otherwise ask the owner to share the file with you in Google Drive, then reload this page.",
+        "grantUnavailableAs": "You're signed in as {{email}}, which can't open this diagram. If it was shared with a different account, switch to it below. Otherwise ask the owner to share the file with you in Google Drive, then reload this page.",
+        "switchAccountButton": "Use a different Google account",
         "pickerError": "Could not open the Google Drive access dialog. This can happen when third-party cookies or pop-ups are blocked — allow them for this site, then try again.",
         "transientBody": "We couldn't reach Google Drive to load this diagram. Check your connection and try again.",
         "retryButton": "Try again"

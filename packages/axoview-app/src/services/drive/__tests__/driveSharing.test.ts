@@ -237,6 +237,46 @@ describe('addPersonPermission', () => {
   });
 });
 
+// Owner repro 2026-07-28 (corporate Workspace account): the verbatim 400 body
+// Drive returns when domain policy forbids link sharing. Google's message is an
+// EMPTY user message, so surfacing it showed the user `Bad Request. User
+// message: ""`. The cause lives only in errors[0].reason.
+describe('policy rejection with an empty user message', () => {
+  const POLICY_400 = {
+    error: {
+      code: 400,
+      message: 'Bad Request. User message: ""',
+      errors: [
+        {
+          message: 'Bad Request. User message: ""',
+          domain: 'global',
+          reason: 'publishOutNotPermitted'
+        }
+      ]
+    }
+  };
+
+  test('carries reason and does NOT surface the empty user message', async () => {
+    fetchMock.mockResolvedValueOnce(mockResponse(POLICY_400, 400));
+    await expect(setAnyoneWithLink('f1', true)).rejects.toMatchObject({
+      name: 'DriveShareError',
+      status: 400,
+      reason: 'publishOutNotPermitted'
+    });
+  });
+
+  test('falls back to our own message rather than Google\'s empty one', async () => {
+    fetchMock.mockResolvedValueOnce(mockResponse(POLICY_400, 400));
+    const err = await setAnyoneWithLink('f1', true).then(
+      () => null,
+      (e: Error) => e
+    );
+    expect(err).toBeInstanceOf(Error);
+    expect(err!.message).not.toContain('User message');
+    expect(err!.message).toContain('permissions.create(anyone) failed');
+  });
+});
+
 describe('removePermission', () => {
   test('DELETEs the permission id', async () => {
     fetchMock.mockResolvedValueOnce(mockResponse(null, 204));
