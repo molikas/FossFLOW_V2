@@ -56,6 +56,44 @@
 
 **Status:** Open, deferred as console noise. Revisit only if a feature visibly breaks with a matching CSP error in the Console (not Issues) tab.
 
+## Share dialog showed `Bad Request. User message: ""` on a corporate Google account — FIXED
+
+**Symptom:** Setting General access to "Anyone with the link" failed on a Google Workspace account with a `400` from `POST /drive/v3/files/<id>/permissions`, and the dialog surfaced the literal string `Bad Request. User message: ""`. Not reproducible on a personal `@gmail.com` account. Reported 2026-07-28.
+
+**Root cause:** Two layers. (1) Drive rejects the `{type:'anyone'}` grant by **domain policy** — `errors[0].reason` is `publishOutNotPermitted`, i.e. the org forbids sharing outside the company. The request is correct; the rejection is legitimate. (2) `toError` in `driveSharing.ts` read only `error.message`, and on policy rejections Google returns an **empty** user message (`Bad Request. User message: ""`), so the dialog displayed a string that conveys nothing. The actionable signal (`errors[0].reason`) was never read.
+
+**Workaround:** None at the policy level — the org's Workspace admin controls it. Share with specific people instead; that path is unaffected.
+
+**Status:** Fixed on branch `fix/shake-out-2026-07-28` (2026-07-28). `DriveShareError` now carries `reason`; an empty user message is treated as absent so our own fallback shows instead; `publishOutNotPermitted` maps to copy naming the policy and pointing at per-person sharing. Regression tests use the verbatim 400 body.
+
+## Shared Drive link dead-ends with no action when the Picker rung is unconfigured — FIXED (code) / config gap OPEN
+
+**Symptom:** A viewer opening a shared `/display/drive/<fileId>` link saw *"This diagram lives in its owner's Google Drive … this deployment cannot request it"* with **no button of any kind** — no sign-in, no retry, no way forward. Reported 2026-07-28 ("they still couldn't open it").
+
+**Root cause:** Three layers, only one of which is a code bug.
+
+1. **`GOOGLE_API_KEY` unset in the Production environment — the real gap, OPEN.** Deployed `/api/config` returns `drivePublicPreview: false`, and that field is literally `!!env.GOOGLE_API_KEY` ([app.ts](packages/axoview-worker/src/app.ts)). So [ADR 0042](docs/adr/0042-drive-native-sharing-and-readonly-preview.md) §2 **rung 1** — the anonymous Drive read-proxy that lets an "anyone with the link" viewer open a diagram with **no sign-in at all** — is off in production. ADR 0042 §8 records P1 as verified end-to-end with the key set as a **Preview** secret; it was evidently never added to **Production**. This is the rung that should carry ordinary share-link traffic, so with it off, every viewer is pushed down the ladder into the auth gate.
+2. **Picker rung dormant — BY DESIGN, not a gap.** `googleProjectNumber` is null, so `pickerAvailable` is false. Per ADR 0042 §8 this is an accepted deferral: once the API key moved server-side, the Picker needs *its own separate browser key* (`setDeveloperKey`), and **P2 is explicitly DEFERRED/dormant**. Setting `GOOGLE_PROJECT_NUMBER` alone therefore changes nothing — it is necessary but not sufficient. *(An earlier revision of this entry called it a plain config oversight; that was wrong.)*
+3. **Code — fixed.** The `pickerAvailable === false` fallback in `DriveDisplayGate` rendered only a `<Typography>`; every sibling branch offers an action, this one offered none. Note the state is `needs-grant`, meaning the viewer *is* signed in — the signed-out (`needs-signin`) branch always had a working sign-in button. The common real cause is being signed in with the **wrong account** (link shared to a work address, browser signed into a personal one).
+
+**Workaround:** Sign into Axoview with the account the diagram was shared with, or ask the owner to share it with the account you are using.
+
+**Status:** Code fixed on branch `fix/shake-out-2026-07-28` (2026-07-28) — the gate now names the signed-in address and offers "Use a different Google account" (`signOut()` clears the profile hint so Google shows the account chooser, then the Drive read is re-attempted; the existing one-shot auto-retry covers only `needs-signin`).
+
+**Ops action still Open (highest value):** add `GOOGLE_API_KEY` to the **Production** environment (`wrangler pages secret put GOOGLE_API_KEY`, or Cloudflare dashboard → Workers & Pages → `axoview` → Settings → Variables and secrets → **Production**). Confirm with `curl -s https://axoview.app/api/config` showing `"drivePublicPreview":true`. That restores rung 1 so public share links open with no sign-in. Restoring the Picker (rung 3) is a **separate, larger** task — it needs a new browser-restricted Picker key *plus* `GOOGLE_PROJECT_NUMBER` (project number `485371025824`), and is tracked as deferred in ADR 0042 §8, not here.
+
+## Strict CSP blocks Cloudflare's injected bot-detection script (benign)
+
+**Symptom:** On the deployed app the Console logs `app:88 Executing inline script violates the following Content Security Policy directive 'script-src 'self' https://accounts.google.com https://apis.google.com'`, suggesting a hash (`sha256-Zj25giKcc2e9gOw7hrLaG34A1qUEP6sdBk9FekCjt8Q=`) or a nonce. Reported 2026-07-28.
+
+**Root cause:** The inline script is **not ours** — Cloudflare injects it into the HTML response at the edge. `curl https://axoview.app/app` shows it appended after `<div id="root">`: `window.__CF$cv$params={r:'…',t:'…'}` loading `/cdn-cgi/challenge-platform/scripts/jsd/main.js`. That is Cloudflare **JavaScript Detections** (bot management). Our source [`app-shell.html`](packages/axoview-app/app-shell.html) line 88 is `</body>`, and the local `build/app.html` carries no inline script at all — confirming the injection is edge-side.
+
+**Distinct from** the `eval` CSP entry above (different directive, different cause), and **unrelated to** the GSI popup / COOP console noise seen in the same trace: the popup failure is the silent-reconnect running without a user gesture (it self-reports and arms a gesture retry), and the `Cross-Origin-Opener-Policy would block the window.closed call` lines come from Google's own GSI client — we send **no COOP header** on any route (verified against both the deployed response and `_headers` / `nginx.conf`).
+
+**Workaround:** None needed — Cloudflare's bot probe is blocked; the app is unaffected. Do **not** try to hash-allowlist it: the `r`/`t` params change per request, so the script's hash changes per request. Do not add `'unsafe-inline'`.
+
+**Status:** Open, deferred as console noise (owner decision 2026-07-28). The clean fix is a Cloudflare dashboard change — Security → Bots → JavaScript Detections → off for the `axoview.app` zone — at the cost of that bot signal.
+
 ## SVG export "could not export image" under the strict CSP — FIXED
 
 **Symptom:** On the deployed site, "Download as SVG" did nothing and logged "could not export image" + a `connect-src` CSP violation. `downloadSvgFile` did `fetch(svgData)` on a `data:image/svg+xml;base64,…` URL to turn it into a Blob, but a `data:` URL is a *connect* source and is not in the deployed `connect-src` allowlist (`'self'` + Google/Cloudflare, the 2026-07-05 hardening). Worked locally only because the dev server has no strict CSP.

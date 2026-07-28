@@ -289,6 +289,28 @@ const keepEditorSelection = (e: React.MouseEvent) => e.preventDefault();
 // commit it through that component.
 const TRANSPARENT = 'transparent';
 
+// Connector width stops (owner 2026-07-28: "minimal width for line is 10" —
+// too heavy for dense diagrams). `width` is a percentage of UNPROJECTED_TILE_SIZE
+// (100), so the number is also the unprojected stroke px. Everything downstream
+// scales off it proportionally — white under-halo ×1.4, selection halo ×3.5,
+// dash period ×2, DOUBLE offset ×3 — so a thinner value shrinks the whole
+// connector coherently, and hit detection is tile-based (±1 Chebyshev, see
+// hitDetection.ts) so a 2px line keeps a full-tile click target.
+//
+// Uneven on purpose: +3 at width 2 is a large visual change, +5 at width 25 is
+// barely perceptible. The old uniform 10/15/20/25/30 stops are all preserved,
+// so saved connectors never sit off-step and the default (config.ts `width: 10`)
+// is untouched.
+const CONNECTOR_WIDTH_STOPS = [
+  { value: 2 },
+  { value: 5 },
+  { value: 10 },
+  { value: 15 },
+  { value: 20 },
+  { value: 25 },
+  { value: 30 }
+];
+
 // Clean slider with a persistent value readout in the header (always visible —
 // no hover/click needed) + plain tick marks + the drag bubble. Shared by the
 // icon-size and connector-width controls so they read identically.
@@ -299,6 +321,7 @@ const LabeledSlider = ({
   min,
   max,
   step,
+  marks = true,
   onChange
 }: {
   label: string;
@@ -306,7 +329,10 @@ const LabeledSlider = ({
   displayValue: string;
   min: number;
   max: number;
-  step: number;
+  // `null` restricts the slider to the explicit `marks` list (MUI contract) —
+  // used by the connector width control, whose stops are deliberately uneven.
+  step: number | null;
+  marks?: boolean | { value: number }[];
   onChange: (value: number) => void;
 }) => (
   <Box>
@@ -331,7 +357,7 @@ const LabeledSlider = ({
     </Box>
     <Box sx={{ px: 1 }}>
       <Slider
-        marks
+        marks={marks}
         step={step}
         min={min}
         max={max}
@@ -2127,9 +2153,10 @@ export const TopBarStyleControls = () => {
                 label={t('width')}
                 value={connStyle.width ?? 10}
                 displayValue={String(connStyle.width ?? 10)}
-                min={10}
-                max={30}
-                step={5}
+                min={CONNECTOR_WIDTH_STOPS[0].value}
+                max={CONNECTOR_WIDTH_STOPS[CONNECTOR_WIDTH_STOPS.length - 1].value}
+                step={null}
+                marks={CONNECTOR_WIDTH_STOPS}
                 onChange={(width) => connStyle.apply({ width })}
               />
             </Box>

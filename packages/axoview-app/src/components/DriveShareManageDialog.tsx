@@ -40,6 +40,7 @@ import {
 } from '@mui/icons-material';
 import {
   DrivePermission,
+  DriveShareError,
   ShareRole,
   drivePreviewUrl,
   listPermissions,
@@ -52,6 +53,27 @@ import {
   getRecentShareEmails,
   addRecentShareEmail
 } from '../services/drive/recentShareEmails';
+
+// Drive policy rejections carry their cause ONLY in `reason` — Google's message
+// is an empty user message (see toError in driveSharing.ts), which as raw text
+// tells the user nothing. Map the causes a user can act on to copy that says
+// what happened AND what still works. Owner repro 2026-07-28: a corporate
+// Workspace account toggling "Anyone with the link" got a bare
+// `Bad Request. User message: ""`.
+const shareErrorCopy = (
+  err: unknown,
+  t: (key: string, fallback: string) => string
+): string => {
+  if (err instanceof DriveShareError && err.reason === 'publishOutNotPermitted') {
+    return t(
+      'share.drive.manage.publishOutNotPermitted',
+      'Your organization’s Google Workspace policy doesn’t allow “Anyone with the link” sharing. You can still share with specific people below.'
+    );
+  }
+  return err instanceof Error && err.message
+    ? err.message
+    : t('share.drive.manage.actionError', 'That change could not be saved.');
+};
 
 // The app renders on MUI's DEFAULT theme (16px body, 20px h6, UPPERCASE overline),
 // which makes this dialog feel oversized next to the lib's compact Export dialog.
@@ -243,11 +265,7 @@ export function DriveShareManageDialog({
         await refresh();
         onAccessChanged?.();
       } catch (err) {
-        setActionError(
-          err instanceof Error
-            ? err.message
-            : tRef.current('share.drive.manage.actionError', 'That change could not be saved.')
-        );
+        setActionError(shareErrorCopy(err, tRef.current));
       } finally {
         setBusy(false);
       }

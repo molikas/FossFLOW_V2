@@ -42,11 +42,20 @@ export interface DrivePermission {
   displayName?: string;
 }
 
-/** Drive's structured error body — Google returns `error.message` we can surface. */
+/**
+ * Drive's structured error body. `error.message` is usually surfaceable, but
+ * POLICY rejections arrive with an EMPTY user message —
+ * `Bad Request. User message: ""` — so the only actionable signal is
+ * `errors[0].reason` (owner repro 2026-07-28: a Workspace account hitting
+ * `publishOutNotPermitted` saw the raw empty-message string in the dialog).
+ * Carry the reason so the UI can map it to copy a human can act on.
+ */
 export class DriveShareError extends Error {
   constructor(
     readonly status: number,
-    message: string
+    message: string,
+    /** Google's machine-readable cause, e.g. `publishOutNotPermitted`. */
+    readonly reason?: string
   ) {
     super(message);
     this.name = 'DriveShareError';
@@ -60,17 +69,30 @@ async function requireToken(): Promise<string> {
   return token;
 }
 
+/**
+ * Google wraps its user-facing text as `... User message: "<text>"`, and on
+ * policy rejections that text is EMPTY. Surfacing it verbatim shows the user
+ * a message that literally says nothing, so treat an empty user message as
+ * absent and keep our own fallback (the `reason` carries the real cause).
+ */
+const EMPTY_USER_MESSAGE = /User message:\s*""/;
+
 /** Surface Google's own error message (e.g. "The user ... could not be found")
  *  instead of a bare status — the custom dialog shows it inline. */
 async function toError(res: Response, fallback: string): Promise<DriveShareError> {
   let message = fallback;
+  let reason: string | undefined;
   try {
-    const body = (await res.json()) as { error?: { message?: string } };
-    if (body?.error?.message) message = body.error.message;
+    const body = (await res.json()) as {
+      error?: { message?: string; errors?: { reason?: string }[] };
+    };
+    reason = body?.error?.errors?.[0]?.reason;
+    const apiMessage = body?.error?.message;
+    if (apiMessage && !EMPTY_USER_MESSAGE.test(apiMessage)) message = apiMessage;
   } catch {
     /* non-JSON body — keep the fallback */
   }
-  return new DriveShareError(res.status, message);
+  return new DriveShareError(res.status, message, reason);
 }
 
 /**
