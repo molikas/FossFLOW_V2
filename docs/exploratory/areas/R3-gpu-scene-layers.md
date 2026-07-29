@@ -51,6 +51,14 @@
 - (Lib UI components) ItemControls panels (NodeSettings/ConnectorSettings/RectangleSettings/TextBoxSettings etc.) have only the two-section parity test — no per-control behavior tests
 - (Lib UI components) ExportImageDialog behavior beyond waitForIconsDrawn is covered only by static source-grep tests (initialLoad/memo)
 
+
+**Next:** R3 is the first OPEN area. Two rigs built by R1/R2 apply directly and should be reused rather than rebuilt:
+
+1. **The read-back pixel oracle** (`tests-exploratory/R2-webgl/gl-08-13-14.explore.spec.ts`, helper `paintedPixels`). Every bulk canvas is created with `preserveDrawingBuffer: true`, so `drawImage` into a 2D canvas plus an alpha count answers "did this GPU layer paint?" — an empty diagram reads exactly 0 and one placed node reads > 0. **The "CI is pixel-blind" note in the R2/R3 mapper text is wrong**; build R3 invalidation and LOD probes on this.
+2. **The recording WebGL2 stub** (`src/__explore__/R2/glStub.ts`). `glSpriteBatch` feature-checks three WebGL2 methods so a canvas-mock falls back to null; supplying them drives the real packer under jest and records every upload and draw. It also carries `installDrawing2DStub()` — the shared `canvasStub` only provides `font`/`measureText`, and `createSpriteBatch` throws `dctx.clearRect is not a function` without the drawing calls (a setup throw that under `it.failing` reads as a confirmed bug).
+
+Carry forward from R2: the atlas has no eviction and no overflow signal (GL-02/05/12), so any R3 hypothesis about rebuild/invalidation should ask what happens to chips that were skipped during an overflowed build.
+
 ## Hypotheses
 
 | ID | Hypothesis | Source | Nearest existing tests | Probe | Verdict | Evidence |
