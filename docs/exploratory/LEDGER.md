@@ -15,7 +15,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 | I3 | [Selection, drag engine & lasso/freehand marquee](areas/I3-selection-drag-lasso.md) | DONE | 15 / 10 | 4 | 1 | 10/20/14 |
 | I4 | [Connector draw, reconnect & waypoint interactions](areas/I4-connector-interactions.md) | DONE | 15 / 10 | 8 | 0 | 9/19/11 |
 | I5 | [Pan/right-click, context menu, placement tools & transform handles](areas/I5-pan-menu-placement-transform.md) | DONE | 14 / 10 | 5 | 0 | 11/15/17 |
-| R1 | [Projection & coordinate transforms (iso/2D/screen, off-grid)](areas/R1-projection-transforms.md) | IN PROGRESS | 12 / 10 | 7 | 1 | 8/12/13 |
+| R1 | [Projection & coordinate transforms (iso/2D/screen, off-grid)](areas/R1-projection-transforms.md) | DONE | 15 / 10 | 6 | 2 | 8/12/13 |
 | R2 | [WebGL sprite-batch substrate (atlas, shaders, context loss)](areas/R2-webgl-substrate.md) | OPEN | 0 / 10 | 0 | 0 | 9/3/8 |
 | R3 | [Bulk GPU scene layers (build/invalidation, style parity, LOD)](areas/R3-gpu-scene-layers.md) | OPEN | 0 / 10 | 0 | 0 | 10/6/11 |
 | R4 | [Renderer orchestration (culling, hybrid promotion, fit-to-view)](areas/R4-renderer-orchestration.md) | OPEN | 0 / 10 | 0 | 0 | 10/0/11 |
@@ -63,6 +63,8 @@ After all areas are DONE: completeness-critic pass per APPROACH §8 — list the
 |----|----------|-------|
 | SEL-15 | Should a marquee honour the additive modifier (Shift/Ctrl/Cmd) the click path already honours? | **OPEN** — industry standard is yes (Figma, Miro, Lucidchart, draw.io, Illustrator, Sketch, Inkscape, Blender, Finder, File Explorer); recommendation recorded in the area file |
 | TCH-06 | Should a cancelled press break the double-tap streak? | **OPEN** — industry standard is yes (Android `GestureDetector.cancel()`, iOS `touchesCancelled`); same handler omission as the filed TCH-14, so cheap to fix together |
+| PROJ-06 | Should the ISO area quads use the exact projection ratio (0.7075 / 0.4095) instead of the 3-decimal constants? | **OPEN** — drift is hypot(0.05, 0.05) px per tile of width; a 20-tile rectangle's far corner is 1.41 px from the tile it claims. Never flips a hit-test; the constants were kept deliberately so an extraction changed no pixel |
+| PROJ-07 | Should the off-grid `offset` be re-projected on an iso↔2D switch? | **OPEN** — it is not: a residual inside the ISO tile diamond can sit outside the 2D tile square, so the item is drawn over a neighbouring cell in 2D. Recommendation (with reasoning) in the area file |
 | SEL-12 | Should the marquee auto-scroll at the viewport edge? | **CLOSED 2026-07-29 — by design.** Lassoing off-screen items is not a requirement; the probe now pins the no-auto-scroll behaviour as intended |
 
 ## Bugs filed
@@ -133,3 +135,7 @@ After all areas are DONE: completeness-critic pass per APPROACH §8 — list the
 | PTR-12 | Ctrl+C over any non-input text selection is preventDefaulted, so copying text out of the app silently does nothing | *Ctrl+C is hijacked everywhere — copying text out of the app silently does nothing* |
 | PTR-14 | Ctrl+Shift+] / Ctrl+Shift+[ (bring to front / send to back) are dead on a real keyboard — the guard tests `e.key`, which is `}`/`{` when shifted; `z-order.spec.ts` is a false green | *Ctrl+Shift+] / Ctrl+Shift+[ … do nothing on a real keyboard* |
 | PTR-01/02/03 | Read-only (`EXPLORABLE_READONLY`, the `/display` viewer route) is fully keyboard-editable — tool hotkeys arm drawing tools, Delete destroys items, Ctrl+C/V duplicates them | *Read-only mode is keyboard-editable — the keydown dispatcher has no `editorMode` gate* |
+| PROJ-01/02/04 | The project bounding box mis-frames the diagram: text boxes extend the wrong way in tile-Y, floating labels are not enumerated, and a pixel extent gets the inclusive tile-count +1 (fit-to-view and Export Image both) | *The project bounding box mis-frames the diagram: text boxes extend the wrong way, labels are not counted* |
+| PROJ-05 | A 2D Y-orientation text box draws one tile thick but claims its full row count, so multi-row boxes paint outside themselves and empty canvas beside them is clickable | *A 2D Y-orientation text box draws one tile thick but claims its full row count* |
+| PROJ-10 | Clicking two stacked nodes selects the one drawn underneath — item hit-testing scans `scene.items` array order and ignores zIndex/layer/isoDepth (the rectangle branch of the same function does sort) | *Clicking two stacked nodes selects the one drawn underneath (item hit-testing ignores z-order)* |
+| PROJ-12 | Selecting a connector attached to an off-grid node makes the wire jump at that node — only the DOM renderer applies `connectorEndpointVertexDelta`, the WebGL bulk path never reads `offset` | *Selecting a connector attached to an off-grid node makes the wire jump at that node* |

@@ -263,6 +263,15 @@ describe('PROJ-14 — negative-zero tile coordinates', () => {
 // PROJ-15 — the residual interpolated into a CSS calc()
 // ---------------------------------------------------------------------------
 
+// VERDICT: FALSIFIED — by the browser, not by the arithmetic. Everything below
+// about the arithmetic holds: the placement residual really can land in the
+// exponent range, and `getRenderedDragTransform` really does interpolate it
+// unguarded. But CSS Values 4 permits scientific notation and Chromium
+// implements it, so the declaration is ACCEPTED and nothing is dropped (proved
+// against a real browser in
+// `tests-exploratory/R1-projection/proj-07-08-09-15.explore.spec.ts`). The one
+// input that IS rejected is `Infinity`, which only an unvalidated imported
+// model can supply — the already-filed CLIP-14/15 class.
 describe('PROJ-15 — getRenderedDragTransform stringifies the residual', () => {
   // CSS <number> grammar: [+-]? (digits ("." digits)? | "." digits). No exponent.
   const CSS_LENGTH = /^[+-]?(\d+(\.\d+)?|\.\d+)px$/;
@@ -282,7 +291,7 @@ describe('PROJ-15 — getRenderedDragTransform stringifies the residual', () => 
     parts.forEach((p) => expect(CSS_LENGTH.test(p)).toBe(true));
   });
 
-  it.failing('BUG-SHAPE: a sub-1e-6 residual emits exponent notation (invalid CSS)', () => {
+  it.failing('a sub-1e-6 residual emits exponent notation (not the CSS 2.1 grammar)', () => {
     const css = getRenderedDragTransform({ x: 1e-7, y: 0 });
     lengths(css).forEach((p) => expect(CSS_LENGTH.test(p)).toBe(true));
   });
@@ -333,10 +342,12 @@ describe('PROJ-15 — getRenderedDragTransform stringifies the residual', () => 
     );
   });
 
-  it('BLAST RADIUS: the invalid length voids the live drag var too', () => {
-    // The residual and the compositor drag delta share ONE translate3d, so an
-    // invalid residual takes the whole `transform` declaration with it — the
-    // element stops following the pointer mid-drag, not just the sub-px shift.
+  it('BLAST RADIUS (if a value IS ever rejected): one calc voids the whole rule', () => {
+    // The residual and the compositor drag delta share ONE translate3d, so any
+    // value the parser does reject — `Infinity` today — takes the whole
+    // `transform` declaration with it, live drag delta included. That is why
+    // the missing formatting guard is still worth closing even though the
+    // exponent case turned out to be accepted.
     const css = getRenderedDragTransform({ x: 4.547473508864641e-13, y: 0 });
     expect(css).toContain('--ff-drag-dx');
     expect(css).toContain('4.547473508864641e-13px');
