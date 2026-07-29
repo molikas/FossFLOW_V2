@@ -21,6 +21,8 @@
     "test:regression": "npm run test:unit && npm run test:e2e",
     "test:e2e:ui": "node_modules/.bin/playwright test --ui --config packages/axoview-e2e/playwright.config.ts",
     "test:e2e:ci": "node_modules/.bin/playwright test --config packages/axoview-e2e/playwright.config.ts --trace on-first-retry",
+    "explore:unit": "jest --config packages/axoview-lib/jest.explore.config.js --rootDir packages/axoview-lib",
+    "explore:e2e": "playwright test --config packages/axoview-e2e/playwright.explore.config.ts",
     "perf": "playwright test --config packages/axoview-e2e/perf/perf.config.ts",
     "lint": "npm run lint --workspaces --if-present",
     "clean": "npm run clean --workspaces --if-present && rm -rf node_modules",

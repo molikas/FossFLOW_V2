@@ -40,10 +40,14 @@ Engine (E1–E4) and interaction (I1–I5) first — highest seam density and ev
 
 ## Infrastructure status
 
-- [ ] `packages/axoview-e2e/playwright.explore.config.ts` + `fixtures/explore.fixture.ts` (console/pageerror oracle, `expectStoreInvariants`, schema oracle)
-- [ ] `packages/axoview-lib/jest.explore.config.js` + `'/__explore__/'` added to the default config's `testPathIgnorePatterns`
-- [ ] Root scripts: `explore:e2e`, `explore:unit`
-- [ ] First shared-oracle helper landed and used by ≥1 probe
+- [x] `packages/axoview-e2e/playwright.explore.config.ts` + `fixtures/explore.fixture.ts` (console/pageerror oracle, `expectStoreInvariants`, schema oracle) — built 2026-07-29
+- [x] `packages/axoview-lib/jest.explore.config.js` + `'/__explore__/'` added to the default config's `testPathIgnorePatterns`
+- [x] Root scripts: `explore:e2e`, `explore:unit`
+- [x] First shared-oracle helper landed and used by ≥1 probe (`tests-exploratory/_rig/rig.explore.spec.ts`)
+
+**Quarantine verified 2026-07-29:** default lib Jest lists the same 155 files before/after the `testPathIgnorePatterns` touch; the default Playwright config lists 178 tests in 75 files, none under `tests-exploratory/`. Probe artifacts nest under the already-gitignored `test-results/explore` and `playwright-report/explore`.
+
+**Oracles available to probes** (`fixtures/explore.fixture.ts`): `exploreTest` (blank-diagram boot) / `exploreAppTest` (raw `/app` boot), both auto-asserting the console/pageerror oracle in teardown; `expectStoreInvariants(page)` (INV-1…INV-10), `expectSchemaClean(page)`, `expectModelHealthy(page)` = both. **Grow INV-* as areas confirm cross-store bugs.**
 
 ## Cross-area mop-up (final wave)
 
