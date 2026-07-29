@@ -1248,3 +1248,145 @@ live preview" feature would take.
 same `setState` the rest of `useSceneActions` uses (it is already
 transaction-aware), keeping `flushSync` for the non-transaction case. Repro:
 [`scn-05-08.explore.test.tsx`](packages/axoview-lib/src/__explore__/E3/scn-05-08.explore.test.tsx).
+
+## A dangling active view makes reads and writes disagree — the canvas shows page 1 while every edit throws
+
+**Found by:** exploratory campaign SCN-09
+
+**Symptom:** `useSceneData.currentView` silently falls back to `views[0]` when
+`ui.view` names a view the model does not have, while `useSceneActions` keys off
+the raw `currentViewId`. With a dangling active view (reachable today — see the
+page-create entry, HIST-04, whose undo deletes the page and strands `ui.view`)
+the editor therefore *renders* page 1 and *refuses* every edit: `createLabel`,
+`createConnector` and friends all throw `Item with id "…" not found` out of
+`getItemByIdOrThrow`. The user sees a normal-looking canvas that rejects
+everything they do.
+
+**Root cause:** the fallback in
+[`useSceneData`](packages/axoview-lib/src/hooks/useSceneData.ts#L49-L62) was
+written to keep rendering resilient, but it hides the broken state instead of
+surfacing it, and the write facade never got the matching fallback.
+
+**Workaround:** switch pages (which calls `setView` with a real id).
+
+**Status:** Open. Fix direction: make the fallback authoritative — if
+`useSceneData` decides `views[0]` is current, write that id back to `ui.view` so
+reads and writes agree — or drop the fallback and repair `ui.view` at its source.
+Fixing HIST-04 removes the main way to reach the state. Repro:
+[`scn-09-13.explore.test.tsx`](packages/axoview-lib/src/__explore__/E3/scn-09-13.explore.test.tsx).
+
+## One stale item reference discards an entire multi-delete
+
+**Found by:** exploratory campaign SCN-11
+
+**Symptom:** `deleteSelectedItems` guards `CONNECTOR`, `TEXTBOX`, `RECTANGLE`
+and `LABEL` refs against ids that are no longer in the view, but `ITEM` refs go
+straight to `deleteViewItem`, which throws on a missing id. Because the whole
+delete runs inside `transaction()`, that throw skips the commit — so a selection
+containing one dead item ref deletes **nothing**, and the exception escapes into
+the key handler. It also leaves `pendingPre` armed (see the phantom-history
+entry, HIST-05).
+
+**Reachability:** the stale-selection bugs make this easy to hit — the selection
+keeps deleted ids (HIST-13) and keeps entities whose layer was hidden (RED-15).
+
+**Root cause:**
+[`useSceneActions.deleteSelectedItems`](packages/axoview-lib/src/hooks/useSceneActions.ts#L834-L838)
+— the `existing*` liveness sets built a few lines below cover every ref type
+except `ITEM`.
+
+**Workaround:** re-select before deleting.
+
+**Status:** Open. Fix direction: build the item-id liveness set alongside the
+others and filter `ITEM` refs through it; more generally, a dead ref in a
+selection should be skipped, never fatal. Repro:
+[`scn-09-13.explore.test.tsx`](packages/axoview-lib/src/__explore__/E3/scn-09-13.explore.test.tsx).
+
+## An invalid paste is abandoned silently — Ctrl+V appears to do nothing
+
+**Found by:** exploratory campaign SCN-12
+
+**Symptom:** when the assembled view fails validation, `pasteItems` logs
+`console.warn('[axoview] paste produced an invalid view; skipping')` and returns.
+Nothing is pasted, no history entry is written, and **no notification is shown** —
+from the user's seat Ctrl+V simply did nothing. The neighbouring failure path
+(empty clipboard) does raise a notification, so the two behave inconsistently for
+the same gesture, and UX §6.3 requires failures to be surfaced rather than left in
+devtools.
+
+**Root cause:** the guard was added as a "should never happen" backstop
+([`useSceneActions.pasteItems`](packages/axoview-lib/src/hooks/useSceneActions.ts#L1069-L1074))
+and warns instead of notifying because it runs inside a `startTransition`
+callback. SCN-06 shows the guard can be reached with ordinary content.
+
+**Status:** Open. Fix direction: surface the same "could not paste" notification
+the empty-clipboard path uses. Repro:
+[`scn-09-13.explore.test.tsx`](packages/axoview-lib/src/__explore__/E3/scn-09-13.explore.test.tsx).
+
+## New pages can duplicate an existing page name
+
+**Found by:** exploratory campaign SCN-13
+
+**Symptom:** `createView` names a page `Page {views.length + 1}`. Delete a page
+from the middle of the list and the next page created reuses a name that is
+already taken — Page 1 / Page 2 / Page 3, delete Page 2, add a page, and there
+are now two tabs called "Page 3". The same shape as the layer `order` collision
+(RED-04/05): a positional counter that a delete invalidates.
+
+**Root cause:**
+[`useSceneActions.createView`](packages/axoview-lib/src/hooks/useSceneActions.ts#L764-L784).
+
+**Workaround:** rename the page.
+
+**Status:** Open. Fix direction: derive the number from the highest existing
+"Page N" suffix (or keep a monotonic counter) rather than from the array length.
+Repro:
+[`scn-09-13.explore.test.tsx`](packages/axoview-lib/src/__explore__/E3/scn-09-13.explore.test.tsx).
+
+## Pasting onto another page carries the source page's layer assignment
+
+**Found by:** exploratory campaign SCN-14
+
+**Symptom:** paste copies `layerId` along with everything else, so pasting a node
+from a page that has layers onto a page that does not produces an item pointing at
+a layer that does not exist in its view. The item renders as unassigned, layer
+visibility and locking silently do not apply to it, and the Layers panel cannot
+show or repair the association. `validateView` reports nothing — it has no layer
+checks at all (see the layer-reference entry, RED-03).
+
+**Root cause:** `useCopyPaste.handlePaste` spreads `...ci.viewItem` and the
+target view's layer set is never consulted.
+
+**Workaround:** re-assign the pasted items to a layer on the target page.
+
+**Status:** Open. Fix direction: drop (or remap) `layerId` when the paste target
+view has no matching layer — and add the `INVALID_LAYER_REF` validation check
+from RED-03 so the class cannot return through another duplication path. Repro:
+[`scn-14-15.explore.test.tsx`](packages/axoview-lib/src/__explore__/E3/scn-14-15.explore.test.tsx).
+
+## Switching pages during async connector routing writes the old page's paths into the new page's scene
+
+**Found by:** exploratory campaign SCN-15
+
+**Symptom:** paste enough connectors to need more than one routing frame (>25),
+then switch pages before routing finishes. `computePathsAsync` keeps running with
+the `currentViewId` it captured at call time, and each batch writes its whole
+scene map into the live scene store — which by then belongs to the *new* page. The
+new page ends up caching the previous page's connector paths: phantom
+`scene.connectors[id]` entries with no owner in the active view.
+
+This is the async sibling of the cross-page undo issue (D-9): the scene store is
+per-active-view but the writers are not.
+
+**Root cause:**
+[`useSceneActions.computePathsAsync`](packages/axoview-lib/src/hooks/useSceneActions.ts#L936-L989)
+closes over `currentViewId` but writes through `sceneStoreApi` unconditionally;
+nothing cancels the queued batches on a view change.
+
+**Workaround:** switch pages twice — `changeView`'s SYNC_SCENE rebuilds the scene
+from the model.
+
+**Status:** Open. Fix direction: capture the view id at schedule time and abort
+the remaining batches when `uiState.view` no longer matches (a generation counter
+is enough), or route into a per-view scene keyed by that id. Repro:
+[`scn-14-15.explore.test.tsx`](packages/axoview-lib/src/__explore__/E3/scn-14-15.explore.test.tsx).

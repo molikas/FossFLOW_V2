@@ -8,7 +8,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 |------|------|--------|---------|------|----------|-------------------------------|
 | E1 | [History & undo/redo engine (dual-store patches)](areas/E1-history-undo-redo.md) | DONE | 15 / 10 | 9 | 3 | 8/5/12 |
 | E2 | [Reducers & cross-store cascades](areas/E2-reducers-cascades.md) | DONE | 15 / 10 | 10 | 1 | 8/7/8 |
-| E3 | [Scene actions, transactions & paste assembly](areas/E3-scene-actions-paste.md) | IN PROGRESS | 8 / 10 | 5 | 0 | 9/8/7 |
+| E3 | [Scene actions, transactions & paste assembly](areas/E3-scene-actions-paste.md) | DONE | 15 / 10 | 12 | 0 | 9/8/7 |
 | E4 | [Clipboard, schemas, initial load & session/UI state](areas/E4-clipboard-schemas-load.md) | OPEN | 0 / 10 | 0 | 0 | 8/22/6 |
 | I1 | [Pointer pipeline, mode dispatcher & keyboard routing](areas/I1-pointer-modes-keyboard.md) | OPEN | 0 / 10 | 0 | 0 | 10/20/10 |
 | I2 | [Touch & pen gesture state machine](areas/I2-touch-pen-gestures.md) | OPEN | 0 / 10 | 0 | 0 | 10/22/8 |
@@ -83,3 +83,10 @@ After all areas are DONE: completeness-critic pass per APPROACH §8 — list the
 | SCN-06 | Paste validates the view before rectangles/text boxes/labels are layered on, so a pasted rectangle with a dangling colour ref lands and poisons the view | *Paste validates the view before rectangles, text boxes and labels are added — so those land unchecked* |
 | SCN-07 | The batch drag updaters enforce their "drag-only" contract by comment alone — an out-of-drag call moves the node for real with no undo entry and no validation | *The batch drag updaters are "drag-only" by convention only — an out-of-drag call is un-undoable* |
 | SCN-08 | `previewConnectorPaths` bypasses the open transaction's pending state, so a preview issued inside a transaction is erased by the commit | *Connector previews written during a transaction are erased by the commit* |
+| SCN-09 | A dangling `ui.view` makes the canvas render page 1 while every edit throws — the read facade falls back, the write facade does not | *A dangling active view makes reads and writes disagree* |
+| SCN-10 | The RED-01 hole makes `useModelItem` throw for EVERY subscriber (consumer half of RED-01 — no separate entry) | *`deleteModelItem` corrupts the model…* |
+| SCN-11 | One stale `ITEM` ref throws inside the delete transaction and discards the entire multi-delete | *One stale item reference discards an entire multi-delete* |
+| SCN-12 | An invalid paste is abandoned with a console.warn and no notification — Ctrl+V appears to do nothing | *An invalid paste is abandoned silently — Ctrl+V appears to do nothing* |
+| SCN-13 | New pages are named from `views.length`, so a delete in the middle makes the next page duplicate an existing name | *New pages can duplicate an existing page name* |
+| SCN-14 | Pasting onto another page carries the source page's `layerId`, leaving a dangling layer ref no check catches | *Pasting onto another page carries the source page's layer assignment* |
+| SCN-15 | Switching pages during async connector routing writes the old page's paths into the new page's scene (async sibling of D-9) | *Switching pages during async connector routing…* |
