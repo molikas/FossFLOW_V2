@@ -7,7 +7,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 | Area | Name | Status | Counted | Bugs | Suspects | Seeds (seams/invariants/gaps) |
 |------|------|--------|---------|------|----------|-------------------------------|
 | E1 | [History & undo/redo engine (dual-store patches)](areas/E1-history-undo-redo.md) | DONE | 15 / 10 | 9 | 3 | 8/5/12 |
-| E2 | [Reducers & cross-store cascades](areas/E2-reducers-cascades.md) | IN PROGRESS | 7 / 10 | 7 | 0 | 8/7/8 |
+| E2 | [Reducers & cross-store cascades](areas/E2-reducers-cascades.md) | IN PROGRESS | 9 / 10 | 8 | 0 | 8/7/8 |
 | E3 | [Scene actions, transactions & paste assembly](areas/E3-scene-actions-paste.md) | OPEN | 0 / 10 | 0 | 0 | 9/8/7 |
 | E4 | [Clipboard, schemas, initial load & session/UI state](areas/E4-clipboard-schemas-load.md) | OPEN | 0 / 10 | 0 | 0 | 8/22/6 |
 | I1 | [Pointer pipeline, mode dispatcher & keyboard routing](areas/I1-pointer-modes-keyboard.md) | OPEN | 0 / 10 | 0 | 0 | 10/20/10 |
@@ -72,3 +72,4 @@ After all areas are DONE: completeness-critic pass per APPROACH §8 — list the
 | RED-04/05 | Layer `order` values collide — `createLayer` after a `deleteLayer`, and any partial `reorderLayers` list — leaving the stacking order of the pair undefined | *Layer `order` values collide — after a delete, or after a partial reorder* |
 | RED-06 | Every timestamped action stamps `lastUpdated` even when the reducer changed nothing, so a same-name rename or a redundant style write dirties the diagram and burns an undo step | *No-op edits dirty the diagram and burn an undo step (every action stamps `lastUpdated`)* |
 | RED-07 | The delete cascade misses anchor-to-anchor connector chains, leaving a dangling ref that poisons the view (RED-02) and a permanently unroutable connector | *Deleting a node leaves anchor-to-anchor connectors dangling and permanently unroutable* |
+| RED-08 | Deleting a node leaks its `model.items` entry forever — orphans grow without bound and ship in every save and export | *Deleted nodes leak their model items — `model.items` grows forever and ships in every save* |

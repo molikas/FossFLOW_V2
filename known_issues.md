@@ -1047,3 +1047,28 @@ remaining connectors for `ref.anchor` values that no longer resolve and either
 re-point them at the anchor's last tile or cascade-delete them — the same
 "leave no dangling ref" rule the direct-reference cascade already follows. Repro:
 [`red-06-07.explore.test.ts`](packages/axoview-lib/src/__explore__/E2/red-06-07.explore.test.ts).
+
+## Deleted nodes leak their model items — `model.items` grows forever and ships in every save
+
+**Found by:** exploratory campaign RED-08
+
+**Symptom:** deleting a node removes only the **view** item; its entry in
+`model.items` (name, icon, notes, link) is never collected. A place-then-delete
+cycle therefore grows `model.items` without bound while the canvas stays empty,
+and every orphan is written to localStorage / Drive, included in JSON and ZIP
+exports, and re-loaded next session. Nothing surfaces them: `validateView` only
+checks the other direction (view item → model item), and lean-save strips bundled
+icons but never orphaned items.
+
+**Root cause:** the split is deliberate — `deleteViewItem` is the delete path and
+the model-item twin is not called by anything (its only implementation,
+`deleteModelItem`, corrupts the array; see that entry, RED-01). So there is no
+garbage-collection step anywhere between the delete and the save.
+
+**Workaround:** none in-app.
+
+**Status:** Open. Fix direction: sweep unreferenced `model.items` at save time
+(lean-save is the natural home — an item referenced by no view item in any view is
+dead) rather than at delete time, so undo of a delete keeps working. Fixing
+`deleteModelItem` (RED-01) is a prerequisite for any delete-time variant. Repro:
+[`red-08-09.explore.test.tsx`](packages/axoview-lib/src/__explore__/E2/red-08-09.explore.test.tsx).
