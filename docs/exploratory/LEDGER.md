@@ -11,7 +11,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 | E3 | [Scene actions, transactions & paste assembly](areas/E3-scene-actions-paste.md) | DONE | 15 / 10 | 12 | 0 | 9/8/7 |
 | E4 | [Clipboard, schemas, initial load & session/UI state](areas/E4-clipboard-schemas-load.md) | DONE | 15 / 10 | 12 | 0 | 8/22/6 |
 | I1 | [Pointer pipeline, mode dispatcher & keyboard routing](areas/I1-pointer-modes-keyboard.md) | DONE | 15 / 10 | 10 | 0 | 10/20/10 |
-| I2 | [Touch & pen gesture state machine](areas/I2-touch-pen-gestures.md) | IN PROGRESS | 0 / 10 | 0 | 0 | 10/22/8 |
+| I2 | [Touch & pen gesture state machine](areas/I2-touch-pen-gestures.md) | DONE | 15 / 10 | 7 | 1 | 10/22/8 |
 | I3 | [Selection, drag engine & lasso/freehand marquee](areas/I3-selection-drag-lasso.md) | OPEN | 0 / 10 | 0 | 0 | 10/20/14 |
 | I4 | [Connector draw, reconnect & waypoint interactions](areas/I4-connector-interactions.md) | OPEN | 0 / 10 | 0 | 0 | 9/19/11 |
 | I5 | [Pan/right-click, context menu, placement tools & transform handles](areas/I5-pan-menu-placement-transform.md) | OPEN | 0 / 10 | 0 | 0 | 11/15/17 |
@@ -98,6 +98,12 @@ After all areas are DONE: completeness-critic pass per APPROACH §8 — list the
 | CLIP-10 | The single notification slot lets a success toast bury an unread error (ADR 0011 contract) | *The notification slot has no queue — a later toast silently buries an unread error* |
 | CLIP-13 | `updateViewItem` accepts an `iconScale` outside the schema's `[0.1,3]`, so a group resize saves a diagram that then refuses to load | *A group icon-resize can commit a scale outside the schema cap, bricking the next load* |
 | CLIP-14/15 | Unknown icon references and unbounded tile coordinates both pass schema + validateView | *Icon references and tile coordinates are unvalidated* |
+| TCH-02/03 | The long-press menu leaves `mouse.mousedown`/`mousedownItem` populated after the lift, and a tap-away inside 700 ms cannot dismiss it | *The long-press context menu leaves the press half-open, and cannot be dismissed for 700 ms* |
+| TCH-04 | Pen hover produces no hover cursor, hover outline or `hoveredItem` — pen is routed into the touch machine, which drops moves without a press | *Pen hover does nothing — no hover cursor, no hover outline, no `hoveredItem`* |
+| TCH-05 | A touch palette drag released back onto the Elements panel places a node at the tile behind the panel (rect containment, not hit-testing) | *A touch palette drag released back onto the Elements panel places a node behind the panel* |
+| TCH-09 | A floating Label has no long-press menu on touch, and no fallback either — every Label command is unreachable by touch | *A floating Label has no long-press menu on touch — the press never reaches the gesture machine* |
+| TCH-12 | Double-tapping a text box opens the Details deck instead of the on-canvas editor — touch cannot edit text at all | *Double-tapping a text box opens the Details deck instead of editing it* |
+| TCH-14 | Cancelling one finger mid-pinch strands the other: no pan, no zoom until it lifts (`onTouchPointerUp` demotes to pan, `onTouchPointerCancel` does not) | *Cancelling one finger during a pinch strands the other* |
 | PTR-07/08 | A tool hotkey or Ctrl+A during a connector draw strands the half-drawn connector (self-anchored, unabortable, and Ctrl+A selects it) | *A tool hotkey or Ctrl+A during a connector draw strands the half-drawn connector* |
 | PTR-11 | The arrow keys nudge items on a locked layer (the mouse path is gated, the keyboard path is not) | *The arrow keys nudge items on a locked layer* |
 | PTR-10 | An undo taken mid-drag is unrecoverable — the gesture’s commit clears the redo stack | *An undo taken during a drag is unrecoverable — the gesture’s commit destroys the redo entry* |

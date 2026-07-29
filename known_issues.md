@@ -1833,3 +1833,179 @@ take the lock/visibility sets the way `handleSelectAll` already does via
 invariant **INV-11** in the exploratory oracle (`fixtures/explore.fixture.ts`).
 Repro:
 [`ptr-04-07-08-11-13.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I1-pointer/ptr-04-07-08-11-13.explore.spec.ts).
+
+## The long-press context menu leaves the press half-open, and cannot be dismissed for 700 ms
+
+**Found by:** exploratory campaign TCH-02 / TCH-03
+
+**Symptom:** two defects in the same gesture. (1) After a long-press opens a
+node's context menu and the finger lifts, `uiState.mouse.mousedown` is still
+populated and `mode.mousedownItem` still names the pressed node — the app
+believes a press is in progress with nothing touching the screen. (2) A
+deliberate tap-away to dismiss the menu does nothing if it happens within ~700 ms
+of the menu opening; the menu only closes if the user waits and taps again.
+
+**Root cause:** (1) the `menu` phase is entered from inside the long-press timer
+and `onTouchPointerUp` returns early for `wasPhase === 'menu'`
+([useInteractionManager.ts:1265-1269](packages/axoview-lib/src/interaction/useInteractionManager.ts#L1265-L1269)),
+so the `mousedown` that was forwarded at press time never gets its matching
+`mouseup`. `Cursor.entry` re-runs `mousedown` whenever `mousedownItem` is set
+([Cursor.ts:580-587](packages/axoview-lib/src/interaction/modes/Cursor.ts#L580-L587)),
+so the stale bookkeeping is live input for the next mode transition.
+(2) `suppressLongPressGestureEnd`
+([useInteractionManager.ts:90-114](packages/axoview-lib/src/interaction/useInteractionManager.ts#L90-L114))
+installs capture-phase window listeners that `preventDefault` **any** cancelable
+`touchend` and swallow `mousedown`/`click` on `.MuiBackdrop-root`, self-removing
+only on the first `click` or after a 700 ms timer. Its purpose is to survive the
+compat-mouse sequence the lift synthesises — but it cannot tell that sequence
+apart from a genuine new tap, so the user's next tap inside the window is eaten
+too.
+
+**Workaround:** wait ~1 s before tapping away, or pick a menu item.
+
+**Status:** Open. Fix direction: forward a `mouseup` when entering the `menu`
+phase (or clear `mousedownItem`/`mouse.mousedown` explicitly); and scope the
+suppression to the compat sequence rather than a time window — e.g. record the
+`touchend` timestamp and only swallow synthesised events within one frame of it,
+or drop the belt-and-braces backdrop listeners now that the `touchend`
+`preventDefault` does the real work. Repro:
+[`touch-tch-01-06-14.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I2-touch/touch-tch-01-06-14.explore.spec.ts).
+
+## Pen hover does nothing — no hover cursor, no hover outline, no `hoveredItem`
+
+**Found by:** exploratory campaign TCH-04
+
+**Symptom:** hovering a node with a pen/stylus (without pressing) produces none
+of the feedback a mouse produces at the same point: `uiState.hoveredItem` stays
+null, so there is no hover outline, no pointer cursor, and `uiState.mouse` keeps
+its last stale position. Moving a mouse to the same point immediately sets all
+of it.
+
+**Root cause:** `onPointerMove` routes every non-mouse `pointerType` — pen
+included — into the touch gesture machine
+([useInteractionManager.ts:1470-1478](packages/axoview-lib/src/interaction/useInteractionManager.ts#L1470-L1478)),
+and `onTouchPointerMove` early-returns for a pointer that is not in `ts.pointers`
+([useInteractionManager.ts:1209-1211](packages/axoview-lib/src/interaction/useInteractionManager.ts#L1209-L1211)) —
+i.e. one that never pressed. That guard is right for touch (a finger cannot
+hover) and wrong for pen, which is a hovering device. ADR 0018 treats pen as
+"touch that happens to be precise"; hover is the one place where that
+equivalence breaks.
+
+**Workaround:** none; press instead of hovering.
+
+**Status:** Open. Fix direction: route hovering pen moves (`pointerType === 'pen'`
+with no active press) down the mouse path — `onMouseEvent(toSlim(e, 'mousemove'))` —
+and keep the touch machine for pen moves that belong to an active press. Repro:
+[`touch-tch-04-05-07-08.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I2-touch/touch-tch-04-05-07-08.explore.spec.ts).
+
+## A touch palette drag released back onto the Elements panel places a node behind the panel
+
+**Found by:** exploratory campaign TCH-05
+
+**Symptom:** on touch, press an icon in the Elements panel, drag it, then change
+your mind and release it back over the panel. A node is placed anyway — at the
+canvas tile the panel is covering (measured: tile `{-7, 4}`, off to the left,
+invisible until the panel is closed).
+
+**Root cause:** the `palette` phase decides "was this dropped on the canvas?"
+with a raw `getBoundingClientRect` containment test against `rendererEl`
+([useInteractionManager.ts:1344-1351](packages/axoview-lib/src/interaction/useInteractionManager.ts#L1344-L1351),
+and the same test again on the `pointercancel` path at
+[:1393-1399](packages/axoview-lib/src/interaction/useInteractionManager.ts#L1393-L1399)).
+The renderer's rect spans the whole window (measured `{x:0, y:46, w:1280,
+h:674}`) and the left dock renders *inside* it (the icon measured at `x:61`), so
+every panel is "on the canvas" as far as that test is concerned. Rect
+containment cannot answer the question hit-testing answers.
+
+**Workaround:** drag the icon off the panel and release over empty canvas, or
+delete the stray node afterwards.
+
+**Status:** Open. Fix direction: replace the rect test with
+`document.elementFromPoint(clientX, clientY)` and require the hit element to be
+the interactions box (or inside it) — the same `isRendererInteraction` question
+the mouse path already asks. Repro:
+[`touch-tch-04-05-07-08.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I2-touch/touch-tch-04-05-07-08.explore.spec.ts).
+
+## A floating Label has no long-press menu on touch — the press never reaches the gesture machine
+
+**Found by:** exploratory campaign TCH-09
+
+**Symptom:** holding a floating Label (ADR 0031) on a touch device opens no
+context menu. Holding a node in the same place does. The Label also gets no
+fallback behaviour — the hold-on-empty auto-lasso does not arm either, and the
+mode stays `CURSOR`, so the press produces nothing at all. Since the context menu
+is the sole per-item command surface on touch (ADR 0027 §4), every Label command
+— delete, z-order, add note — is unreachable by touch.
+
+**Root cause:** two layers miss it. `onTouchPointerDown` resolves the pressed
+entity with `getItemAtTile`
+([useInteractionManager.ts:1166-1169](packages/axoview-lib/src/interaction/useInteractionManager.ts#L1166-L1169)),
+and Labels are deliberately not tile-hit-tested (ADR 0031 §4 — they are addressed
+through the `LabelHitLayer` DOM proxy), so `downItem` is null. And the proxy's own
+pointer handling consumes the press before the window-bound gesture machine sees
+it, which is why not even the `pan-pending` fallback runs. The mouse path is
+unaffected because the right-click menu is raised from the proxy element itself
+(`label-entity.spec.ts` "right-clicking a Label opens its item menu").
+
+**Workaround:** none on touch.
+
+**Status:** Open. Fix direction: give `LabelHitLayer` a long-press handler that
+opens the item menu (mirroring its existing right-click branch), or let the
+proxy's pointerdown fall through to the window machine with the label id carried
+the way `data-anchor-id` is for connector anchors. Repro:
+[`touch-tch-09-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I2-touch/touch-tch-09-15.explore.spec.ts).
+
+## Double-tapping a text box opens the Details deck instead of editing it — touch cannot edit text on canvas
+
+**Found by:** exploratory campaign TCH-12
+
+**Symptom:** double-clicking a text box with a mouse drops into the on-canvas
+rich-text editor (ADR 0034 §1 — verified as a control in the probe).
+Double-TAPPING the same text box does not: `editingTextBoxId` stays null and the
+Details deck opens instead. There is no other touch route into the editor, so a
+touch-only user cannot edit text box content at all.
+
+**Root cause:** the two double-activation paths were written separately and only
+one learned about ADR 0034. `onDoubleClick`
+([useInteractionManager.ts:864-873](packages/axoview-lib/src/interaction/useInteractionManager.ts#L864-L873))
+has an explicit `item.type === 'TEXTBOX'` branch that selects without opening the
+panel and calls `setEditingTextBoxId`. The touch double-tap branch in
+`onTouchPointerUp`
+([useInteractionManager.ts:1300-1307](packages/axoview-lib/src/interaction/useInteractionManager.ts#L1300-L1307))
+has only the generic `setItemControls(controls)` — no TEXTBOX case. A sibling-drift
+bug: two implementations of "double-activate an item", diverging on the type that
+was special-cased later.
+
+**Workaround:** none on touch.
+
+**Status:** Open. Fix direction: factor the double-activation body out of
+`onDoubleClick` and call it from the touch branch too, so the TEXTBOX case (and
+any future type-specific case) cannot diverge again. Repro:
+[`touch-tch-09-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I2-touch/touch-tch-09-15.explore.spec.ts).
+
+## Cancelling one finger during a pinch strands the other — the canvas freezes until it lifts
+
+**Found by:** exploratory campaign TCH-14
+
+**Symptom:** during a two-finger pinch, if one finger's pointer is cancelled by
+the OS (notification, edge swipe, palm rejection), the remaining finger stops
+doing anything: it neither pans nor zooms, however far it moves, until it is
+lifted and re-placed. Lifting the same finger normally instead of cancelling it
+resumes a one-finger pan correctly (verified as a control in the probe).
+
+**Root cause:** `onTouchPointerUp` has an explicit `wasPhase === 'pinch'` branch
+that drops back to `phase: 'pan'` when one pointer remains
+([useInteractionManager.ts:1270-1280](packages/axoview-lib/src/interaction/useInteractionManager.ts#L1270-L1280)).
+`onTouchPointerCancel` has no such branch — it only resets the phase when
+`ts.pointers.size === 0`
+([useInteractionManager.ts:1406-1410](packages/axoview-lib/src/interaction/useInteractionManager.ts#L1406-L1410)) —
+so the machine stays in `pinch` with one pointer, and `runTouchFrame`'s
+`pts.length >= 2` guard makes every frame a no-op.
+
+**Workaround:** lift the remaining finger and start again.
+
+**Status:** Open. Fix direction: give `onTouchPointerCancel` the same
+pinch → pan demotion `onTouchPointerUp` has (ideally by sharing one
+`endPointer(e, { cancelled })` helper, since the two handlers have drifted in
+exactly this way). Repro:
+[`touch-tch-01-06-14.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I2-touch/touch-tch-01-06-14.explore.spec.ts).
