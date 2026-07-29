@@ -1,0 +1,58 @@
+{
+  "_comment": [
+    "Accepted-risk allowlist for scripts/check-audit.js.",
+    "",
+    "CI fails on any advisory NOT listed here, so adding an entry is a deliberate,",
+    "reviewable act — not a silent suppression. Each entry must say why the",
+    "advisory cannot bite THIS codebase, verified against actual usage rather than",
+    "the advisory text, and what would make it bite (the tripwire).",
+    "",
+    "`reviewBy` does not fail the build; it prints a loud warning once passed, so",
+    "an acceptance cannot quietly become permanent. Established by the 2026-07-29",
+    "review — see docs/reviews/technical-review-2026-07-29.md §3 finding 4."
+  ],
+  "allow": [
+    {
+      "id": "GHSA-v3m3-f69x-jf25",
+      "package": "quill",
+      "title": "Quill XSS via HTML export feature",
+      "shipped": true,
+      "why": "Axoview DOES call the affected getSemanticHTML(), but every call site pipes the result through sanitizeHtml() before it is stored (TextBoxInlineEditor.tsx:115,134), the model is re-sanitized on load (useInitialDataManager.ts:85), and the sole dangerouslySetInnerHTML sink re-sanitizes at render (TextBox.tsx:254,336). ADR 0029's defence-in-depth absorbs the payload.",
+      "noForwardFix": "npm's only remedy is a BREAKING downgrade to react-quill-new@3.7.0.",
+      "tripwire": "If the ADR 0029 sanitize is removed from ANY of those three points, this becomes live stored-XSS. renderedGeometry-style contract coverage on sanitizeHtml call sites would make that unmissable.",
+      "acceptedOn": "2026-07-29",
+      "reviewBy": "2026-10-29"
+    },
+    {
+      "id": "GHSA-qwww-vcr4-c8h2",
+      "package": "react-router",
+      "title": "React Router RSC-mode CSRF bypass",
+      "shipped": true,
+      "why": "The vulnerable code path is RSC mode. Axoview is a client-only SPA (rsbuild, no server components, no React Router server actions), so the path does not exist in the build.",
+      "noForwardFix": "Advisory range is 7.12.0 - 8.2.0 with no patched release in range; npm offers only a downgrade to 7.11.0.",
+      "tripwire": "Adopting React Router RSC mode or server actions.",
+      "acceptedOn": "2026-07-29",
+      "reviewBy": "2026-10-29"
+    },
+    {
+      "id": "GHSA-3jxr-9vmj-r5cp",
+      "package": "brace-expansion",
+      "title": "brace-expansion DoS via exponential-time expansion",
+      "shipped": false,
+      "why": "devDependency only, reached via nodemon. Never bundled, never served, never processes user input.",
+      "tripwire": "brace-expansion appearing under a runtime dependency.",
+      "acceptedOn": "2026-07-29",
+      "reviewBy": "2026-10-29"
+    },
+    {
+      "id": "GHSA-mh99-v99m-4gvg",
+      "package": "brace-expansion",
+      "title": "brace-expansion DoS via unbounded expansion length (OOM)",
+      "shipped": false,
+      "why": "devDependency only, reached via nodemon. Never bundled, never served, never processes user input.",
+      "tripwire": "brace-expansion appearing under a runtime dependency.",
+      "acceptedOn": "2026-07-29",
+      "reviewBy": "2026-10-29"
+    }
+  ]
+}

@@ -79,7 +79,16 @@ app.get('/api/public/drive/:fileId', async (c) => {
   const keyQ = `key=${encodeURIComponent(key)}`;
   // Our preview URLs may carry a ?resourceKey= (ADR 0042 §1); forward it as the
   // header Drive expects, on BOTH the metadata and content reads.
-  const resourceKey = c.req.query('resourceKey');
+  // Validated on the same allowlist as fileId before it is interpolated into a
+  // header value. Not currently exploitable — the Workers runtime rejects CRLF
+  // in header values — but the invariant should be enforced here, not inherited
+  // from the runtime (2026-07-29 review, F3). A malformed key is dropped rather
+  // than rejected: it is an optional hint, and Drive answers without it.
+  const rawResourceKey = c.req.query('resourceKey');
+  const resourceKey =
+    rawResourceKey && /^[A-Za-z0-9_-]{1,120}$/.test(rawResourceKey)
+      ? rawResourceKey
+      : undefined;
   const init: RequestInit = resourceKey
     ? { headers: { 'X-Goog-Drive-Resource-Keys': `${fileId}/${resourceKey}` } }
     : {};

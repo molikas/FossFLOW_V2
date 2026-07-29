@@ -241,7 +241,6 @@ export const AnnotationLayer = () => {
       if (e.button === 0) e.stopPropagation();
     };
     const stopLeftDrag = (e: MouseEvent) => {
-      // eslint-disable-next-line no-bitwise
       if (e.buttons & 1) e.stopPropagation();
     };
     // Touch carries no button info; swallow it wholesale so the canvas can't

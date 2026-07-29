@@ -16,21 +16,30 @@ cd packages/axoview-lib && npx eslint src --ext .ts,.tsx --format stylish 2>&1
 
 # TypeScript strict type check (catches what ESLint misses)
 npm run lint 2>&1
-
-# Prettier compliance
-cd packages/axoview-lib && npx prettier --check "src/**/*.{ts,tsx}" 2>&1 | tail -5
 ```
+
+> **Prettier was removed from this phase on 2026-07-29.** It reported 156
+> non-compliant files against the repo's own `.prettierrc`, had never been in CI,
+> and nothing consumed the result — knip already listed `prettier` under
+> `ignoreDependencies`, i.e. the repo had conceded it. A gate nobody acts on
+> trains people to skim past red. ESLint covers what actually matters. If
+> formatting is ever wanted back, sweep with `--write` and add it to CI in the
+> same change — do not re-add a measurement with no consumer.
 
 **Metrics to extract:**
 - ESLint: total errors, total warnings, breakdown by rule (`no-explicit-any`, `no-unused-vars`, `exhaustive-deps`)
 - TypeScript: total error count, which files, which categories (type mismatch vs missing props)
-- Prettier: number of non-compliant files
 - Count `any` usages in production source: `grep -rn ": any" src --include="*.ts" --include="*.tsx" | grep -v ".test." | wc -l`
 - Count suppressions: `grep -rn "@ts-ignore\|@ts-nocheck" src | wc -l`
 
 ## Phase 2 — Security & Dependency Audit
 
 ```bash
+# The GATE (also runs in CI): fails only on advisories that are neither fixed
+# nor explicitly accepted in scripts/audit-allowlist.json.
+npm run check:audit 2>&1
+
+# The full picture, for the report's numbers.
 npm audit --workspaces 2>&1
 ```
 
@@ -38,6 +47,14 @@ npm audit --workspaces 2>&1
 - Vulnerability count by severity: critical / high / moderate / low
 - Which packages, CVE IDs, and whether a fix is available
 - Whether fix requires breaking changes
+
+> **Verify exploitability against real usage — never report advisory text as a
+> finding.** The 2026-07-29 review found 12 advisories and **zero** exploitable:
+> each was killed by checking how the package is actually called (e.g. Quill's
+> HTML-export XSS is real and Axoview *does* call the affected API, but every
+> call site is wrapped in the ADR 0029 sanitize). Report the verification, and
+> record accepted risks in `scripts/audit-allowlist.json` — not just in prose,
+> which enforces nothing.
 
 ## Phase 3 — Test Coverage
 
@@ -59,13 +76,23 @@ cd packages/axoview-lib && npm run build 2>&1 | tail -20
 
 # App build
 cd packages/axoview-app && npm run build 2>&1 | tail -30
+
+# The GATE (also runs in CI): asserts the editor's boot-critical JS against
+# scripts/bundle-budget.json instead of merely printing sizes.
+npm run check:bundle 2>&1
 ```
 
 **Metrics to extract:**
 - Build success/failure and any warnings
 - Library bundle: size in KB, output formats (CJS only = no tree-shaking for consumers)
-- App chunks: flag any chunk >1MB uncompressed; flag main entry >500KB gzip
+- App chunks: the budget gate above enforces this — report its output, and say what changed
 - Check for `"type": "module"` warnings (rslib perf overhead)
+
+> **Why this is a script and not a prose threshold.** Until 2026-07-29 this phase
+> said "flag any chunk >1MB uncompressed; flag main entry >500KB gzip" and then
+> only *printed* sizes. A 9.24 MB / 1.43 MB-gzip chunk passed it for months
+> because nothing asserted. If you add a threshold to this skill, add it to
+> `scripts/` too — a threshold that lives only in prose is decoration.
 
 ## Phase 5 — Architecture Review
 
@@ -75,8 +102,16 @@ Explore and read the following, then assess each dimension:
 # File size inventory — God file detection
 find src -name "*.ts" -o -name "*.tsx" | xargs wc -l | sort -rn | head -25
 
-# Circular dependency check
-npx madge --circular src/index.ts 2>&1
+# Circular dependency check — the GATE (also runs in CI). Asserts the DENOMINATOR
+# (>=280 files reached) before the cycle count, then ratchets the count against
+# scripts/cycles-baseline.json.
+#
+# Do NOT hand-roll `npx madge --circular src/index.ts` here. Without --ts-config
+# madge cannot resolve the `src/…` path alias: it silently walks 16 of 293 files
+# and prints a truthful-but-worthless "✔ No circular dependency found!". That
+# false green stood for months (2026-07-29 review, finding 1). The script exists
+# so the denominator can never be silently wrong again.
+npm run check:cycles 2>&1
 
 # Memoization coverage
 grep -rn "React.memo\|useMemo\|useCallback" src --include="*.tsx" --include="*.ts" | grep -v ".test." | wc -l
@@ -143,8 +178,14 @@ grep -rn "console\.error" packages/axoview-lib/src packages/axoview-app/src \
 grep -rn "createPortal" packages/axoview-lib/src packages/axoview-app/src \
   --include="*.tsx" | grep -v "__tests__\|test\.tsx"
 
-# §6.4 — cold-start splash must exist in the app shell. 0 hits = regression.
-grep -c 'id="ax-splash"' packages/axoview-app/public/index.html
+# §6.4 — cold-start splash must exist in the EDITOR shell. 0 hits = regression.
+#
+# Path corrected 2026-07-29: this grepped `public/index.html`, which ADR 0040
+# turned into the static MARKETING LANDING — a page that correctly has no app
+# splash (and no scripts at all). The editor shell moved to `app-shell.html`, so
+# the check reported a false High-severity regression on healthy code. Verify
+# against the emitted build too, since the shell is a template.
+grep -c 'id="ax-splash"' packages/axoview-app/app-shell.html
 ```
 
 **How to interpret findings:**
@@ -194,9 +235,21 @@ grep -rn "scene\.connectors\[\|previewConnectorPaths\|batchUpdateViewItemTiles" 
 grep -rn "flushSync" packages/axoview-lib/src \
   --include="*.ts" --include="*.tsx" | grep -v "__tests__"
 
-# A-6 — stray console.log / console.warn in production source
-# (excludes our intentional render probe + DiagnosticsOverlay)
-grep -rn "console\.\(log\|warn\|debug\)" packages/axoview-lib/src packages/axoview-app/src \
+# A-6 — stray console.log in production source. THIS is the High-severity one:
+# console.log is debugging left behind.
+grep -rn "console\.log" packages/axoview-lib/src packages/axoview-app/src \
+  --include="*.ts" --include="*.tsx" | grep -v "__tests__\|\.test\.\|test\.tsx\|renderProbe\.ts\|DiagnosticsOverlay\.tsx"
+
+# console.warn / console.debug — REVIEW ONLY, not a defect count. Split out
+# 2026-07-29: the combined grep returned 20 hits and called them all High, but
+# every one was a deliberate diagnostic — the four WebGL canvases' null-batch
+# warnings (added by the 2026-07-08 review precisely to kill a SILENT-blank
+# failure), error boundaries, svgOptimizer fallbacks, invalid-data discards. Zero
+# were console.log. Reporting those as "strip before commit" would have argued
+# for deleting the fix a previous review had just landed.
+# Read each hit; flag only ones that are debugging residue or that fire on a
+# user-facing failure without a matching setNotification (UX §6.3).
+grep -rn "console\.\(warn\|debug\)" packages/axoview-lib/src packages/axoview-app/src \
   --include="*.ts" --include="*.tsx" | grep -v "__tests__\|\.test\.\|test\.tsx\|renderProbe\.ts\|DiagnosticsOverlay\.tsx"
 ```
 

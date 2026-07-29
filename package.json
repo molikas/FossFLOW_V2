@@ -30,7 +30,10 @@
     "update-version": "node scripts/update-version.js",
     "semantic-release": "semantic-release",
     "prepare": "simple-git-hooks",
-    "lint:docs": "node scripts/lint-docs.js"
+    "lint:docs": "node scripts/lint-docs.js",
+    "check:cycles": "node scripts/check-cycles.js",
+    "check:bundle": "node scripts/check-bundle-budget.js",
+    "check:audit": "node scripts/check-audit.js"
   },
   "simple-git-hooks": {
     "commit-msg": "npx commitlint --edit \"$1\""
@@ -50,6 +53,7 @@
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^7.0.1",
     "knip": "^6.2.0",
+    "madge": "8.0.0",
     "semantic-release": "^25.0.3",
     "simple-git-hooks": "^2.13.1",
     "typescript": "^5.9.3"
