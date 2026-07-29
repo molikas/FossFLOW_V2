@@ -7,7 +7,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 | Area | Name | Status | Counted | Bugs | Suspects | Seeds (seams/invariants/gaps) |
 |------|------|--------|---------|------|----------|-------------------------------|
 | E1 | [History & undo/redo engine (dual-store patches)](areas/E1-history-undo-redo.md) | DONE | 15 / 10 | 9 | 3 | 8/5/12 |
-| E2 | [Reducers & cross-store cascades](areas/E2-reducers-cascades.md) | IN PROGRESS | 2 / 10 | 2 | 0 | 8/7/8 |
+| E2 | [Reducers & cross-store cascades](areas/E2-reducers-cascades.md) | IN PROGRESS | 5 / 10 | 5 | 0 | 8/7/8 |
 | E3 | [Scene actions, transactions & paste assembly](areas/E3-scene-actions-paste.md) | OPEN | 0 / 10 | 0 | 0 | 9/8/7 |
 | E4 | [Clipboard, schemas, initial load & session/UI state](areas/E4-clipboard-schemas-load.md) | OPEN | 0 / 10 | 0 | 0 | 8/22/6 |
 | I1 | [Pointer pipeline, mode dispatcher & keyboard routing](areas/I1-pointer-modes-keyboard.md) | OPEN | 0 / 10 | 0 | 0 | 10/20/10 |
@@ -68,3 +68,5 @@ After all areas are DONE: completeness-critic pass per APPROACH §8 — list the
 | HIST-13 | Deleting a selected item leaves `uiState.selectedIds` pointing at the dead id (INV-2), through undo and redo, until the next click | *Deleting a selected item leaves it selected — `uiState.selectedIds` keeps the dead id* |
 | RED-01 | `deleteModelItem` leaves an `undefined` slot in `model.items`; `validateView` then throws on it, making the view un-editable and the model unloadable (exported API, no in-app caller yet) | *`deleteModelItem` corrupts the model: the deleted slot stays as `undefined`…* |
 | RED-02 | One pre-existing invalid entity anywhere in a view makes every node move AND every node placement throw (`updateViewItem` validates the whole view and throws on the first issue) | *One invalid entity anywhere in a view makes every node move and every node placement throw* |
+| RED-03 | A `layerId` naming no layer is accepted by the reducer and passes both `validateView` and `modelSchema`, so dangling layer refs save and reload intact | *Nothing validates layer references — a `layerId` naming no layer is accepted, saved and reloaded* |
+| RED-04/05 | Layer `order` values collide — `createLayer` after a `deleteLayer`, and any partial `reorderLayers` list — leaving the stacking order of the pair undefined | *Layer `order` values collide — after a delete, or after a partial reorder* |

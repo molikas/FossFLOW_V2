@@ -926,3 +926,62 @@ minimum, only fail on issues the action *introduced* — diff the issue set agai
 the pre-state), and surface a rejected write as a notification rather than an
 uncaught throw. Repro:
 [`red-01-02.explore.test.ts`](packages/axoview-lib/src/__explore__/E2/red-01-02.explore.test.ts).
+
+## Nothing validates layer references — a `layerId` naming no layer is accepted, saved and reloaded
+
+**Found by:** exploratory campaign RED-03
+
+**Symptom:** `ASSIGN_LAYER_TO_ITEMS` writes whatever `layerId` it is handed, with
+no check that the layer exists in the target view. The result passes
+`validateView` *and* `modelSchema` — `validation.ts` has no layer checks at all —
+so a dangling layer reference is saved, exported and reloaded intact. The entity
+renders as "unassigned" while still carrying a ref, which means layer visibility
+and locking silently do not apply to it and the Layers panel cannot show or
+repair the association.
+
+The same hole covers refs that arrive from outside the reducer: an item pasted or
+imported carrying a `layerId` belonging to a *different* view keeps it, and
+nothing ever flags it.
+
+**Root cause:** `validateView` validates connector, anchor, colour and view-item
+refs but never `layerId`, and `assignLayerToItems`
+([view.ts](packages/axoview-lib/src/stores/reducers/view.ts#L160-L184)) does not
+look the layer up. `deleteLayer` cleans refs to the layer it deletes, which is why
+the in-view case usually looks fine — it is the cross-view and unknown-id cases
+that persist.
+
+**Workaround:** re-assign the entity to a real layer, or to "no layer".
+
+**Status:** Open. Fix direction: add a `INVALID_LAYER_REF` check to `validateView`
+(cheap — one `Set` of layer ids per view, the same shape the existing checks use)
+and reject unknown ids in `assignLayerToItems`. Repro:
+[`red-03-05.explore.test.ts`](packages/axoview-lib/src/__explore__/E2/red-03-05.explore.test.ts).
+
+## Layer `order` values collide — after a delete, or after a partial reorder
+
+**Found by:** exploratory campaign RED-04 / RED-05
+
+**Symptom:** two layers can end up with the same `order`, leaving their stacking
+order undefined (it becomes whatever `Array#sort` happens to do with equal keys).
+Two independent routes:
+- **After a delete.** `createLayer` derives `order` from `layers.length` and
+  `deleteLayer` never renumbers the survivors. Create A/B/C (orders 0,1,2), delete
+  B (leaves 0,2), create D → D gets `order = length = 2`, colliding with C.
+- **After a partial reorder.** `reorderLayers` assigns `order = index` for the ids
+  it is given and silently ignores the rest, so any list that does not contain
+  *every* layer leaves the omitted ones on their old numbers, colliding with the
+  renumbered ones. (A list with a *duplicated* id turns out to be harmless — the
+  last write wins and the values stay unique.)
+
+**Root cause:** `order` is treated as a free-standing integer rather than as a
+derived property of position;
+[view.ts `createLayer`/`deleteLayer`/`reorderLayers`](packages/axoview-lib/src/stores/reducers/view.ts#L90-L158)
+each maintain it independently and none of them re-normalises the set.
+
+**Workaround:** drag any layer in the panel to force a full renumber.
+
+**Status:** Open. Fix direction: normalise after every mutation — sort by the
+current `order` and rewrite `0..n-1` at the end of `createLayer`, `deleteLayer`
+and `reorderLayers`, so the invariant "orders are a permutation of `0..n-1`"
+cannot be broken by any single call. Repro:
+[`red-03-05.explore.test.ts`](packages/axoview-lib/src/__explore__/E2/red-03-05.explore.test.ts).
