@@ -730,3 +730,96 @@ restores the missing size.
 per-stack length — when a store evicts seq N, drop every entry with seq ≤ N from
 both stacks. Repro:
 [`hist-02-03.explore.test.tsx`](packages/axoview-lib/src/__explore__/E1/hist-02-03.explore.test.tsx).
+
+## A failed edit arms the undo snapshot; the next page switch records a phantom history entry
+
+**Found by:** exploratory campaign HIST-05
+
+**Symptom:** When a `useSceneActions` write throws inside its reducer, the edit is
+correctly abandoned — but `saveToHistoryBeforeChange()` has already run, so both
+stores are left holding an armed `pendingPre` snapshot. The next write that was
+meant to bypass history entirely — `changeView`'s `SYNC_SCENE` on a page switch,
+`resyncScene` after an undo, or a `computePathsAsync` batch — consumes that
+snapshot and pushes a real history entry stamped with a stale sequence. A later
+Ctrl+Z then reverts a scene diff the user never made (measured: switching pages
+after a failed edit adds one entry to the scene stack).
+
+**Root cause:** `pendingPre` is armed by `saveToHistory()` and disarmed only by a
+subsequent `set()`. There is no `abortPendingHistory()`, and no `try/catch` around
+the reducer call in `useSceneActions`' write helpers
+([useSceneActions.ts](packages/axoview-lib/src/hooks/useSceneActions.ts#L517-L544)),
+so a throw leaves the pair unbalanced. Every `skipHistory=true` write is written
+as if it can never record — but `set(updates, true)` still records whenever
+`pendingPre` happens to be armed.
+
+**Reachability:** any reducer throw between the save and the set. The reachable
+ones today are `getItemByIdOrThrow` (acting on an id that is no longer in the
+view — e.g. a stale selection, see the INV-2 note in the campaign ledger) and
+`validateView` on create/update. The probe forces the throw directly.
+
+**Workaround:** none.
+
+**Status:** Open. Fix direction: wrap the reducer call in the write helpers so a
+throw disarms `pendingPre` on both stores, and/or make `skipHistory=true` mean
+"never record" rather than "do not arm". Repro:
+[`hist-05-08.explore.test.tsx`](packages/axoview-lib/src/__explore__/E1/hist-05-08.explore.test.tsx).
+
+## A leaked drag bracket makes later edits un-undoable, and the next Ctrl+Z destroys them
+
+**Found by:** exploratory campaign HIST-06
+
+**Symptom:** If `beginDragTransaction()` runs without a matching
+`commitDragTransaction()` (the documented lost-mouseup hazard —
+canvas-interaction §6.2), `dragInProgress` and `pendingPreFrozen` stay set for the
+lifetime of that hook instance. Every subsequent edit then applies to the document
+with **no** history entry, while `canUndo()` keeps reporting `true` for the
+pre-drag entry. Pressing Ctrl+Z at that point does not merely fail to undo the
+recent edits — it *destroys* them: each entry's inverse patch replaces the whole
+`views` array (the store diffs `Object.assign(draft, next)` against a fresh array),
+so the rollback wipes every un-recorded edit made since the leak, with no redo
+entry for any of it.
+
+**Root cause:** two-part. (a) No rollback/expiry for the freeze: nothing outside
+`commitDragTransaction` ever calls `unfreezePendingPre()`, and
+`saveToHistoryBeforeChange()` early-returns while `dragInProgress` is set. (b) The
+patch granularity is coarser than the "diff pair rather than a full Model
+snapshot" comment in [modelStore.tsx](packages/axoview-lib/src/stores/modelStore.tsx#L20-L21)
+implies — assigning a fresh `views` array yields one whole-array `replace` patch,
+so an undo is effectively a snapshot restore of that subtree and cannot preserve
+concurrent un-recorded writes.
+
+**Reachability:** the leak itself is an interaction-layer question (mode exits
+commit lazily on the next pointer event, so a keyboard-only follow-up can leave
+the bracket open); this entry records the store-level blast radius once it happens.
+
+**Workaround:** perform any pointer interaction (which runs the lazy mode exit)
+before using the keyboard.
+
+**Status:** Open. Fix direction: a `rollbackDragTransaction` / freeze timeout, plus
+an assertion that `set()` never applies while frozen. Related: HIST-07 below.
+
+## A mid-drag edit from another component corrupts the drag's undo entry
+
+**Found by:** exploratory campaign HIST-07
+
+**Symptom:** `dragInProgress` is a `useRef` *inside* `useSceneActions`, so every
+component that calls the hook gets its own copy. While one component holds an open
+drag transaction, a write issued through any *other* component's instance does not
+see the flag: it runs `saveToHistoryBeforeChange()`, which overwrites the frozen
+pre-drag snapshot with the current mid-drag state. The drag's commit entry then
+only covers the tail of the gesture, so Ctrl+Z leaves the dragged item at a
+mid-drag position instead of returning it to where the drag started (measured:
+node returned to the intermediate tile, not its origin).
+
+**Root cause:** the transaction flags (`dragInProgress`, `transactionInProgress`,
+`pendingStateRef`) are per-hook-instance refs guarding *store-global* state —
+[useSceneActions.ts](packages/axoview-lib/src/hooks/useSceneActions.ts#L40-L44).
+The store itself owns `pendingPre`/`pendingPreFrozen`, so the guard belongs there.
+
+**Workaround:** none.
+
+**Status:** Open. Fix direction: move the drag/transaction flags into the stores
+(next to `pendingPreFrozen`, which is already store-owned) so every hook instance
+observes the same state, and make `saveToHistory()` a no-op while frozen. Related:
+HIST-06 above. Repro:
+[`hist-05-08.explore.test.tsx`](packages/axoview-lib/src/__explore__/E1/hist-05-08.explore.test.tsx).
