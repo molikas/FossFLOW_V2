@@ -1756,3 +1756,80 @@ guard the tool-hotkey and Ctrl+A paths need. Alternatively make
 `commitDragTransaction` a no-op when the transaction produced no patches, so it
 cannot clear the redo stack. Repro:
 [`ptr-06-09-10-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I1-pointer/ptr-06-09-10-15.explore.spec.ts).
+
+## A tool hotkey or Ctrl+A during a connector draw strands the half-drawn connector
+
+**Found by:** exploratory campaign PTR-07 / PTR-08
+
+**Symptom:** in the default click-to-connect mode, click the first node to start
+a connection, then change your mind and press a tool hotkey (`r`, `t`, `l`, `s`,
+…) or `Ctrl+A`. The half-drawn connector is **not** removed — it stays in
+`view.connectors` as a real, saved entity with both anchors bound to the SAME
+node (a degenerate self-loop, which is what `createConnectorAt` seeds before the
+second click resolves the far end). Escape can no longer clear it either: the
+mode is no longer `CONNECTOR`, so `handleConnectorEscape` returns false and the
+orphan is permanent. `Ctrl+A` additionally folds it into the selection, so the
+user's "select all" reports N+1 elements.
+
+**Root cause:** `handleClickFirst`
+([Connector.ts:57-89](packages/axoview-lib/src/interaction/modes/Connector.ts#L57-L89))
+really creates the connector and opens a drag transaction; only the second click,
+Escape or the right-click restore closes either. `handleToolHotkeys`
+([useInteractionManager.ts:337-414](packages/axoview-lib/src/interaction/useInteractionManager.ts#L337-L414))
+and `handleSelectAll`
+([useInteractionManager.ts:222-239](packages/axoview-lib/src/interaction/useInteractionManager.ts#L222-L239))
+just call `setMode(...)` with no in-flight-gesture check, so the abort path is
+skipped entirely. The mode registry's `exit`/`entry` lifecycle cannot save it
+either: `Connector.exit` only resets the cursor, and it does not even run until
+the NEXT pointer event (`processMouseUpdate` compares `reducerTypeRef`).
+
+**Scope note (measured, not assumed):** the abandoned `beginDragTransaction`
+bracket does NOT go on to suppress history for later edits — the next gesture's
+own begin/commit closes it, and a subsequent rectangle draw records its entry
+normally. The damage is the stranded entity, not the D-4 / HIST-06 amplifier.
+
+**Workaround:** press Escape *before* switching tools; or delete the orphan
+connector afterwards (it is selectable).
+
+**Status:** Open. Fix direction: give the programmatic mode switches the same
+abort the Escape path has — factor `handleConnectorEscape`'s
+delete-plus-commit into a shared `abortInFlightGesture(uiState, deps)` and call
+it from `handleToolHotkeys` and `handleSelectAll` before `setMode`. Repro:
+[`ptr-04-07-08-11-13.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I1-pointer/ptr-04-07-08-11-13.explore.spec.ts).
+
+## The arrow keys nudge items on a locked layer
+
+**Found by:** exploratory campaign PTR-11
+
+**Symptom:** select some items, then lock their layer in the Layers panel. The
+arrow keys still move them — one tile per press, indefinitely, so a "locked"
+layer can be walked across the canvas. Every selected item on the locked layer
+moves together, and each press is its own undo entry.
+
+**Root cause:** `handleArrowKey`'s nudge path applies no lock/visibility gate,
+on the strength of a comment that is not true:
+
+```ts
+// selectedIds already only holds interactable refs (it can't contain
+// locked/hidden items — ADR 0006 §3), so no extra lock/hide gate is needed here.
+```
+
+([handleArrowKey.ts:126-131](packages/axoview-lib/src/interaction/handleArrowKey.ts#L126-L131)).
+`selectedIds` is never re-validated when a layer's state changes — that is the
+already-filed RED-15 ("Hiding or locking a layer does not drop the entities it
+covers from the live selection"). RED-15 documented the Delete consequence; the
+nudge is a second consumer of the same stale selection, and it is the one that
+contradicts an explicit in-code assertion. Note the pointer path *is* gated
+(`isItemInteractable` in `processMouseUpdate`), so a locked item cannot be
+dragged with the mouse — only with the keyboard.
+
+**Workaround:** click empty canvas to clear the selection before locking, or
+after.
+
+**Status:** Open. Fix direction: fixing RED-15 (re-validate `selectedIds` on
+every layer state change) fixes this too; independently, `handleArrowKey` should
+take the lock/visibility sets the way `handleSelectAll` already does via
+`layerContextRef`, and the false comment should go. Tracked as a new cross-store
+invariant **INV-11** in the exploratory oracle (`fixtures/explore.fixture.ts`).
+Repro:
+[`ptr-04-07-08-11-13.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I1-pointer/ptr-04-07-08-11-13.explore.spec.ts).

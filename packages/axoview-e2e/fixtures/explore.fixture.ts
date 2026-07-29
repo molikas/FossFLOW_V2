@@ -117,8 +117,12 @@ type StoreSnapshot = {
     rectangleIds: string[];
     labelIds: string[];
     layerIds: string[];
+    /** layer id -> its visibility / lock flags */
+    layerFlags: Array<{ id: string; visible: boolean; locked: boolean }>;
     /** view item id -> layerId, only for items that declare one */
     itemLayerRefs: Array<{ itemId: string; layerId: string }>;
+    /** entity id -> layerId across every selectable collection */
+    entityLayerRefs: Array<{ id: string; layerId: string }>;
     /** connector id -> anchor item refs */
     anchorItemRefs: Array<{ connectorId: string; itemId: string }>;
   };
@@ -157,6 +161,20 @@ const readStoreSnapshot = (page: Page): Promise<StoreSnapshot> =>
       if (vi?.layerId) itemLayerRefs.push({ itemId: vi.id, layerId: vi.layerId });
     }
 
+    // Layer assignment across every selectable collection (INV-11).
+    const entityLayerRefs: Array<{ id: string; layerId: string }> = [];
+    for (const coll of [
+      view?.items,
+      view?.connectors,
+      view?.textBoxes,
+      view?.rectangles,
+      view?.labels
+    ]) {
+      for (const e of arr(coll)) {
+        if (e?.layerId) entityLayerRefs.push({ id: e.id, layerId: e.layerId });
+      }
+    }
+
     return {
       activeViewId,
       viewIds: views.map((v: any) => v.id),
@@ -169,7 +187,14 @@ const readStoreSnapshot = (page: Page): Promise<StoreSnapshot> =>
         rectangleIds: ids(view?.rectangles),
         labelIds: ids(view?.labels),
         layerIds: ids(view?.layers),
+        layerFlags: arr(view?.layers).map((l: any) => ({
+          id: l?.id,
+          // A layer with no explicit flag is visible + unlocked.
+          visible: l?.visible !== false,
+          locked: l?.locked === true
+        })),
         itemLayerRefs,
+        entityLayerRefs,
         anchorItemRefs
       },
       sceneConnectorIds: Object.keys(scene.connectors ?? {}),
@@ -219,6 +244,11 @@ const dupes = (list: string[]) => {
  *  INV-8  no duplicate ids inside any one collection
  *  INV-9  every view item layerId resolves to a layer on the view
  *  INV-10 itemControls' target, when it names an item, resolves
+ *  INV-11 no selectedIds entry sits on a hidden or locked layer — a selection
+ *         must never outlive the interactability of what it points at (ADR 0006
+ *         §3). Proved live by E2/RED-15 (lock/hide leaves the entity selected)
+ *         and by I1/PTR-11, where the stale selection lets the arrow keys walk
+ *         a locked layer across the canvas.
  */
 export async function expectStoreInvariants(page: Page, label = '') {
   const s = await readStoreSnapshot(page);
@@ -308,6 +338,18 @@ export async function expectStoreInvariants(page: Page, label = '') {
       `INV-10 itemControls targets a missing ${s.itemControls.type}${at}`
     ).toBe(true);
   }
+
+  // INV-11
+  const layerById = new Map(s.view.layerFlags.map((l) => [l.id, l]));
+  const layerOf = new Map(s.view.entityLayerRefs.map((r) => [r.id, r.layerId]));
+  const untouchableSelection = s.selectedIds.filter((sel) => {
+    const layer = layerById.get(layerOf.get(sel.id) ?? '');
+    return !!layer && (!layer.visible || layer.locked);
+  });
+  expect(
+    untouchableSelection,
+    `INV-11 selectedIds hold entities on a hidden or locked layer${at}`
+  ).toEqual([]);
 }
 
 // ---------------------------------------------------------------------------
