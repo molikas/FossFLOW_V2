@@ -48,32 +48,57 @@ Take the area marked `IN PROGRESS` if one exists, else the first `OPEN` area in 
 
 ## Rig traps — read before writing a probe
 
-**The one that matters most: `it.failing` / `test.fail()` only distinguish pass from fail, so a probe whose body throws during *setup* reports as a confirmed bug.** This has produced false evidence twice. The rule that catches it:
+**The one that matters most: `it.failing` / `test.fail()` only distinguish pass from fail, so a probe whose body throws — or whose *setup never happened* — reports as a confirmed bug.** Two rules catch it:
 
-> **Pair every `it.failing` with a passing characterization test that positively asserts the observed end state.** If the characterization can't be written, you don't understand the failure yet.
+> **1. Pair every `it.failing` with a passing characterization test that positively asserts the observed end state.** If the characterization can't be written, you don't understand the failure yet.
+>
+> **2. Assert the PRECONDITION, not just the outcome.** A `test.fail` that "confirms" a bug is worthless if the state it needed was never reached. Log and assert the setup: did the pan actually move `scroll`? did the selector actually match an element? is the entity you think you're acting on the one you resolved? The I-block spent five wrong verdicts on this before the rule was written down.
 
 Known setup-throw traps:
 
 - **jsdom has no canvas 2D context.** `getTextBoxDimensions` throws `Could not get canvas context`, so *any* T1 probe that touches text boxes dies in the reducer. Call `installCanvasStub()` from `packages/axoview-lib/src/__explore__/canvasStub.ts` first. `canvasStub.explore.test.ts` guards the stub itself.
 - **`useCopyPaste` needs `<ClipboardProvider>`.** Use `ClipboardProviders` from `packages/axoview-lib/src/__explore__/E3/harness.tsx` instead of the bare store providers.
 
+Known silent-precondition traps (each cost a wrong verdict in I2–I5):
+
+- **The active view's `items` array order is NOT the placement order**, and it shifts as items are added. Resolve entities by id, never by index — `tiles[2]` is not "the third node I placed". (Cost two wrong I4 verdicts.)
+- **Focus stays inside the Elements icon grid after placing a node**, and the grid consumes arrow keys for its own roving-tabindex navigation. A keyboard pan then silently does nothing. Click empty canvas first to move focus. (Cost two wrong CTX-02 verdicts.)
+- **`uiState.mouse.mousedown` survives a completed gesture**, and `Cursor.mousemove` skips the hover path entirely while a press is live. Any probe measuring hover must clear it with a plain click first. (This is also a real finding — TCH-02.)
+- **A freshly created connector label is EMPTY and is discarded on Escape** (the empty-content lifecycle). Type text and commit before probing anything about it.
+- **A wrong selector reads as "0 elements", which looks exactly like "the feature is absent".** Verify the hook exists before concluding anything from a zero count.
+- **`getModelItemCount` reads `model.items`, which leaks deleted nodes forever (RED-08).** For "was it deleted?" use `getViewItemCount`.
+- **Playwright's `keyboard.press` sends the UNSHIFTED character for a shifted punctuation chord** — `press('Control+Shift+]')` yields `e.key === ']'` where a real keyboard sends `'}'`. This made `z-order.spec.ts` a false green over a shortcut that cannot fire in the product (I1/PTR-14). Drive such chords through CDP: `page.context().newCDPSession(page)` → `Input.dispatchKeyEvent` with `modifiers` (ctrl=2, shift=8, alt=1, meta=4) and the real `key`. Re-check any suite that presses chorded punctuation.
+
 ## What already exists — reuse it
 
 - **T1 harnesses.** `src/__explore__/E1/harness.tsx` (provider tree, seeded two-node view, `setup()`, `modelView`, `historyDepths`, `seqs`, `orphanSceneConnectors`, `drawConnector`, `placeIcon`), `E2/harness.ts` (bare reducer `State` builder — the reducers are pure, no React needed), `E3/harness.tsx` (adds `ClipboardProviders`, `makePastePayload`, `flushAnimationFrames` for rAF-scheduled work under fake timers).
-- **T2 fixture.** `packages/axoview-e2e/fixtures/explore.fixture.ts` — `exploreTest` (blank-diagram boot) / `exploreAppTest` (raw `/app`), both auto-asserting the console/pageerror oracle in teardown, plus `expectStoreInvariants` (INV-1…INV-10), `expectSchemaClean`, `expectModelHealthy`. **Grow the INV list** when an area confirms a new cross-store invariant.
+- **T2 fixture.** `packages/axoview-e2e/fixtures/explore.fixture.ts` — `exploreTest` (blank-diagram boot) / `exploreAppTest` (raw `/app`), both auto-asserting the console/pageerror oracle in teardown, plus `expectStoreInvariants` (INV-1…INV-11), `expectSchemaClean`, `expectModelHealthy`. **Grow the INV list** when an area confirms a new cross-store invariant. (INV-11, added by I1/PTR-11: no `selectedIds` entry may sit on a hidden or locked layer.)
+- **T3 real-input patterns** (all proven in `tests-exploratory/I1-pointer/` … `I5-pan-menu/`):
+  - *Real-mouse node drag* — `page.mouse.move/down/move(steps)/up`, then **assert `mode.type === 'DRAG_ITEMS'` before continuing** so a rig failure can't masquerade as evidence (`ptr-06-09-10-15.explore.spec.ts` `beginRealDrag`).
+  - *Absolute page coords for a tile* — `CanvasPOM.tileToScreen(tile)` (interactions-box-relative) + `interactionsLayer().boundingBox()` origin. Existing helper `drawnClientPoint` in `helpers/offGrid.ts` does the same **including the off-grid `offset`**; pass `{...item, offset: undefined}` for the bare grid cell.
+  - *Real key chords* — CDP `Input.dispatchKeyEvent` (see the trap above).
+  - *Pen / device-class pointer* — CDP `Input.dispatchMouseEvent` with `pointerType: 'pen' | 'mouse'` (`touch-tch-04-05-07-08.explore.spec.ts` `hoverAs`).
+  - *Finger-by-finger multi-touch* — `TouchPOM` covers whole gestures; the `Fingers` driver in `touch-tch-01-06-14.explore.spec.ts` adds/cancels individual pointers mid-gesture (`down`/`moveTo`/`up`/`cancel`). Touch probes must be named `touch-*.explore.spec.ts` so the `chromium-touch` project picks them up.
 - The e2e process **can import lib source directly** (`import { modelSchema } from '../../axoview-lib/src/schemas/model'`) — that is what makes the real-zod schema oracle possible. The lib `dist/` is NOT requireable from node.
 
 ## DOM selector notes (surfaces with no test hooks)
 
 - **ViewTabs** (page tabs, add/delete page) has no `data-axoview-id` and no accessible names — MUI `Tooltip` puts the title on a wrapper, not the button. Target the MUI icon id: `button:has(svg[data-testid="AddIcon"])` to add a page, `…"CloseIcon"` (nth-indexed) to delete one, `…"DeleteOutlineOutlinedIcon"` for the Layers-panel delete.
+- **Context-menu items** have no ids either — target the MUI icon the same way: `li:has(svg[data-testid="NewLabelOutlinedIcon"])` is "Add label". `.MuiMenu-paper li` + `allTextContents()` dumps the whole menu when you need to compare per-type contents.
+- **Transform handles** are `[data-axoview-id="canvas-transform-anchor"]` (four per selection); also `canvas-rotate-handle`, `canvas-resize-readout`.
+- **The left dock shows ONE panel at a time** — opening Layers closes Elements. Any probe that needs two panels simultaneously has to find another route.
+- **The renderer's bounding rect spans the whole window** and the docks render *inside* it, which is why rect-containment "is this on the canvas?" checks are wrong (TCH-05, CTX-01). For a real answer use `document.elementFromPoint`.
 - `tests-exploratory/_rig/dom-probe.explore.spec.ts` is a **skipped** DOM-dump helper — unskip it locally to list every button's icon id / aria-label when you need to find a new one.
 
 ## Environment notes
 
 - E2E runs against the rsbuild dev server on `:3000` (Playwright `webServer` auto-starts it; kill stray port-3000 listeners if startup hangs). `workers` must stay 1 — the dev server cannot take parallel HMR clients.
 - The `window.__axoview__` debug bridge exists only in dev builds — never test against a production build. It exposes `ui` / `model` / `scene` store APIs plus `changeView(viewId, model)` (the same call a page-tab click makes).
-- Run probes with `npm run explore:unit` / `npm run explore:e2e`. Single file: `npm run explore:unit -- --testPathPattern "<slug>"`, or `npx playwright test --config packages/axoview-e2e/playwright.explore.config.ts tests-exploratory/<area>/<file>` from the repo root.
-- Long heredocs through the Bash tool are fragile here — write long `known_issues.md` entries to a scratchpad file and append with `node -e "fs.appendFileSync(...)"`.
+- Run probes with `npm run explore:unit` / `npm run explore:e2e`. Single file: `npm run explore:unit -- --testPathPattern "<slug>"`, or `npx playwright test --config packages/axoview-e2e/playwright.explore.config.ts tests-exploratory/<area>/<file>` from the repo root. `-g "<ID>"` re-runs one hypothesis.
+- **A full-area e2e run takes 2–6 minutes; run it in the background** rather than blocking a foreground call, and re-check the whole area file once at the end.
+- **`net::ERR_NETWORK_IO_SUSPENDED` in the fixture means the host slept mid-run — that is environment, not evidence.** Re-run before recording anything from it.
+- Long heredocs through the Bash tool are fragile here — write long `known_issues.md` entries to a scratchpad file and append with `node -e "fs.appendFileSync(...)"`. Beware backticks and `${…}` inside double-quoted `node -e` strings: bash performs command substitution on them and silently mangles the output. Prefer writing a `.js` file and running `node file.js`.
+- **Typecheck new probes** with `npx tsc --noEmit -p packages/axoview-e2e/tsconfig.json` and grep for your own file — the package has pre-existing errors elsewhere, so a bare exit code means nothing.
 
 ## Definition of done & handoff
 
@@ -83,7 +108,21 @@ Known setup-throw traps:
 
 ## Standing cross-area threads (carry these into every area)
 
-Recorded by the E1–E4 waves; a new area should ask whether its surface reproduces them rather than re-deriving them.
+Recorded by the E1–E4 and I1–I5 waves; a new area should ask whether its surface reproduces them rather than re-deriving them.
+
+**From the interaction block (I1–I5):**
+
+A. **Layer state is honoured by the gesture paths and by almost nothing else.** `processMouseUpdate` builds `isItemInteractable` from `lockedIds`+`visibleIds` and hands it to the modes; every *other* consumer re-derives interactability and gets it wrong — arrow nudge (PTR-11), connector anchors (CONN-15), transform chrome (CTX-06). Whenever an area acts on an entity, ask what it checked before doing so.
+
+B. **"Was this event on the canvas?" is asked three different ways.** `isRendererInteraction` (correct), `getBoundingClientRect` containment (TCH-05 — wrong, the renderer rect covers the docks), and not at all (CTX-01). Any new surface that decides on-canvas-ness is a candidate.
+
+C. **`EXPLORABLE_READONLY` is inverted in both directions.** It exposes the mutating keyboard paths it should block (PTR-01/02/03) and withholds the one read-only interaction it should offer (CTX-15). Any area with a viewer/present surface should probe both directions.
+
+D. **Touch is a second implementation of every interaction, and it drifts from its mouse twin.** Four I2 bugs are sibling-drift (double-tap vs dblclick, `onTouchPointerCancel` vs `onTouchPointerUp`, palette drop, pen hover). Wherever an area has a touch path, diff it against the mouse path rather than testing it alone.
+
+E. **Degenerate entities are creatable and rejected nowhere.** Self-loop connectors, zero-length connectors, half-attached connectors, zero-size rectangles. Consistent with the engine block's finding below — nothing validates identity or sanity, only references.
+
+**From the engine block (E1–E4):**
 
 1. **Identity and range integrity are unvalidated.** `validateModel` checks *reference* integrity only. Duplicate ids, duplicate connector-anchor ids, dangling `layerId`, unknown icon refs, unbounded tile coordinates, colliding layer `order` and duplicate page names all load clean. Whenever an area creates, copies or imports entities, ask what identity it is trusting.
 2. **The scene store is per-active-view; several writers ignore that.** Undo (D-9), `computePathsAsync` and `previewConnectorPaths` each write the live scene without checking which view is on screen. Any new async or cross-page path is a candidate.
