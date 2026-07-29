@@ -1,0 +1,58 @@
+# E2 — Reducers & cross-store cascades
+
+**Status:** OPEN · **Counted hypotheses:** 0 / 10 · **Bugs:** 0 · **Hypothesis ID prefix:** `RED-`
+
+**Scope:** Pure-ish functions over State={model,scene} dispatched via reducers.view({action,payload,ctx:{viewId}}). Own all entity CRUD: view items (tile moves cascade UPDATE_CONNECTOR→syncConnector re-route for every touching connector; deletes cascade connector deletion), connectors (create/update sync scene path; unroutable fallback on getConnectorPath throw), textBoxes (geometry-affecting updates re-measure scene size), labels/rectangles (model-only), layers (delete unassigns layerId from 5 entity arrays), SYNC_SCENE (rebuilds scene from INITIAL_SCENE_STATE for one view). TIMESTAMPED_ACTIONS set stamps view.lastUpdated. updateViewItem is the only reducer that runs validateView and THROWS on the first issue.
+
+**Code:**
+- `packages/axoview-lib/src/stores/reducers/view.ts`
+- `packages/axoview-lib/src/stores/reducers/viewItem.ts`
+- `packages/axoview-lib/src/stores/reducers/connector.ts`
+- `packages/axoview-lib/src/stores/reducers/textBox.ts`
+- `packages/axoview-lib/src/stores/reducers/label.ts`
+- `packages/axoview-lib/src/stores/reducers/rectangle.ts`
+- `packages/axoview-lib/src/stores/reducers/modelItem.ts`
+- `packages/axoview-lib/src/schemas/validation.ts`
+
+**Dedupe baseline:** [coverage-baseline.md](../coverage-baseline.md) sections — E2E: *Drag / collision / off-grid / snap*; Unit: *Lib store reducers + zustand stores*, *Lib zod schemas + model validation*. Then grep the suites directly.
+
+## Seed seams (2026-07-29 mapping — starting points, not a ceiling)
+
+- deleteModelItem (modelItem.ts line 33) uses `delete draft.model.items[modelItem.index]` on an ARRAY — leaves a sparse hole (undefined element, length unchanged) instead of splicing. Any downstream `items.map(i => i.id)` (validateView line 222, useModelItem's index build, getState() consumers) hits undefined.id → TypeError, and serialization emits null. deleteViewItem correctly splices; the model-item twin does not.
+- updateViewItem throws raw Error(issues[0].message) AFTER pendingPre was captured by the caller — unhandled in event handlers and leaves the orphaned-pendingPre hazard (area 1). createViewItem funnels through it, so any create that lands an invalid cascade also throws mid-gesture.
+- updateConnector/updateTextBox nest produce() inside produce(): syncConnector/syncTextBox are called with `state: draft` and their result assigned back onto draft.model/draft.scene — an immer draft-of-draft pattern; a change in immer version or a frozen sub-tree here corrupts patch generation that history depends on (patches are what undo replays).
+- SYNC_SCENE starts from INITIAL_SCENE_STATE — a module-level shared constant. If any reducer ever mutates scene.connectors on the state built from it without immer (batch paths in useSceneActions spread it, so currently safe), the seed object is poisoned for every later view switch. Also SYNC_SCENE drops scene entries for anything not in the target view: correct per-view, but callers must never sync against the wrong viewId.
+- reorderLayers trusts orderedIds: unknown ids silently skipped, duplicated ids assign duplicate order values then sort — layer order can silently diverge from the panel's drag result.
+- deleteLayer/assignLayerToItems iterate 5 hard-coded entity arrays — any new entity type with layerId (the pattern that produced the ADR 0023 offset-omission bug class) will silently keep dangling layerId refs; nothing validates layerId liveness (validateView has no layer checks at all — a dangling layerId passes schema+validation and renders as 'unassigned').
+- updateViewTimestamp runs after every timestamped action even when the payload was a no-op — dirties the model (dirty tracker fires on any store write) and generates a patch entry containing only lastUpdated, so undo can appear to 'do nothing' for one keystroke.
+- syncConnector catch-all: any throw from getConnectorPath writes {tiles:[], unroutable:true}. resyncScene (useHistory) treats unroutable as 'deliberate' and skips re-route — a transiently-failing route (e.g. mid-drag inconsistent view) becomes sticky-invisible until the next full SYNC_SCENE.
+
+## Related harvested invariants (keyword-matched hint list — scan the [full table](../coverage-baseline.md#invariants) too)
+
+- **(ADR 0006 §3 / canvas-interaction.md §7 I-1)** selectedIds can only ever contain interactable refs — locked/hidden-layer items are excluded from every selection path (Ctrl+A, lasso, click, context menu). → *Select 5 items, then toggle their layer to hidden (or locked) in the LayersPanel while the selection is live: nothing re-validates selectedIds on a layer-state change, so Delete or a group drag then mutates now-hidden/locked items. All guards test the acquisition paths, not selection invalidation on layer toggle.*
+- **(ADR 0006 §2 + canvas-interaction.md I-2 (getConnectorWaypointRefs))** Ctrl/⌘+click toggles a connector plus its tile-bound waypoints in/out of the selection as one atomic group; a connector always carries its waypoints into any selection. → *Ctrl+click a selected connector to toggle it OFF: if the toggle removes only the connector ref and leaves its waypoint CONNECTOR_ANCHOR refs in selectedIds, a subsequent group drag translates orphan waypoints and pinches the path. Cursor.waypointGestures.test.ts covers the toggle-ON atomic group, not the removal symmetric.*
+- **(canvas-interaction.md §6.6 (RAF throttle))** Move reducers run at most once per animation frame regardless of device event rate; down/up flush immediately. → *A new pointer path (pen with pointerrawupdate, or a touch handler added outside useRAFThrottle) drives Connector.mousemove at device rate → the per-frame model clone (§6.5 GC cliff) arrives in seconds instead of ~50s. The doc explicitly lists 'pointermove actually throttled under load' as an untested guard gap.*
+- **(ADR 0023 Consequences + addendum D)** A connector anchored to an offset/unsnapped node must resolve to the RENDERED (offset) endpoint on both the WebGL bulk path and the DOM selected path. → *Select a connector attached to an off-grid node: the sparse DOM <Connector> (selection halo) and the WebGL ConnectorsCanvas body must agree on the endpoint. If one resolves via bare tile and the other via rendered position, selecting/deselecting makes the wire visibly jump at the node. The invariant suite asserts DOM/WebGL equality for rectangle vertices, not connector endpoints at offset nodes.*
+- **(ADR 0036 §2 + known_issues (root-folder detection))** ADR 0036 promises the provider detects a deleted/trashed Drive root folder; as-built, isAvailable() only checks auth and the cached root id is never revalidated. → *Trash the app folder in Drive's own UI mid-session: autosaves keep 200-OK patching files in the trash for the rest of the session; loss surfaces only at next full listing. The cheap fix (invalidate on zero-listing or 404) is catalogued but unimplemented — any test asserting 'save succeeded ⇒ durable' is false here.*
+- **(ADR 0027 §4 + as-built note)** The context menu is the SOLE per-item command surface; no command is reachable only via a removed gesture; the catalogue keeps item-type parity (unsnap/collision/Add note for every eligible type). → *The ADR's as-built note admits there is NO unit test for CanvasContextMenu and only 'Unsnap from grid' is e2e-exercised. A new element type or a menu refactor that drops 'Disable collision' or 'Add note' for one type orphans that command entirely (its old surfaces are deleted) and every suite stays green.*
+- **(ADR 0042 §2 + worker app.ts (resourceKey fix))** The public Drive read-proxy validates fileId and (since 2026-07-29) resourceKey on the allowlist /^[A-Za-z0-9_-]{10,120}$/, with a malformed resourceKey DROPPED so 'no valid request regresses'. → *Google resource keys can be shorter than 10 chars or contain other legal characters — a legitimate short resourceKey now gets silently dropped, so an 'anyone with the link' file that REQUIRES the key returns 404 from Drive and the viewer hits the auth-gate ladder with no hint. The worker test verifies the drop behavior, not that real-world resourceKey formats pass the same regex as fileIds.*
+
+## Known coverage gaps (from the baseline inventory)
+
+- (Drag / collision / off-grid / snap) Escape mid-node-drag cancels and restores the origin position
+- (Drag / collision / off-grid / snap) Multi-select drop where only SOME target tiles are occupied (partial collision)
+- (Drag / collision / off-grid / snap) Collision semantics between a node and an off-grid/unsnapped neighbour during drag
+- (Drag / collision / off-grid / snap) Drag at extreme zoom-out / near canvas edge
+- (Drag / collision / off-grid / snap) An explicit 're-snap this item' action
+- (Lib store reducers + zustand stores) packages/axoview-lib/src/stores/historySequence.ts — zero direct tests
+- (Lib store reducers + zustand stores) packages/axoview-lib/src/stores/localeStore.tsx — zero tests (translation lookup/namespace fallback)
+- (Lib store reducers + zustand stores) packages/axoview-lib/src/stores/uiStateStore.tsx — only indirectly tested via multiSelect.contract; most UI-state actions untested directly
+
+## Hypotheses
+
+| ID | Hypothesis | Source | Nearest existing tests | Probe | Verdict | Evidence |
+|----|-----------|--------|------------------------|-------|---------|----------|
+
+## Product questions (SUSPECT verdicts)
+
+*none yet*
