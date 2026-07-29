@@ -1,6 +1,6 @@
 # I2 — Touch & pen gesture state machine
 
-**Status:** OPEN · **Counted hypotheses:** 0 / 10 · **Bugs:** 0 · **Hypothesis ID prefix:** `TCH-`
+**Status:** IN PROGRESS · **Counted hypotheses:** 0 / 10 · **Bugs:** 0 · **Hypothesis ID prefix:** `TCH-`
 
 **Scope:** TouchGestureState phase machine (idle/item/pan-pending/pan/pinch/palette/menu) inside useInteractionManager (lines ~926-1500): forwards item gestures as synthesized mouse events (forwardMouse), one-finger pan, two-finger pinch-zoom-to-centroid, 450ms long-press (node → context menu via suppressLongPressGestureEnd; empty → one-shot auto-lasso), 300ms double-tap → details panel, and off-canvas 'palette' drag-to-place for the Elements panel.
 
@@ -64,6 +64,21 @@
 
 | ID | Hypothesis | Source | Nearest existing tests | Probe | Verdict | Evidence |
 |----|-----------|--------|------------------------|-------|---------|----------|
+| TCH-01 | A second finger landing during a one-finger node drag ends it by forwarding `mouseup` with the SECOND pointer's coordinates, so the node commits at the new finger's tile rather than where the dragging finger was | seed seam #1 | `touch-drag-move.spec.ts` (single finger, uninterrupted); `touch-pinch-zoom.spec.ts` (pinch from idle) | — | PROPOSED | |
+| TCH-02 | The long-press `menu` phase never forwards a matching `mouseup`, so `uiState.mouse.mousedown` and `mode.mousedownItem` stay populated and bleed into the next gesture | seed seam #2 | `touch-longpress.spec.ts` (asserts the menu opens; nothing after it) | — | PROPOSED | |
+| TCH-03 | `suppressLongPressGestureEnd`'s capture-phase listeners swallow a deliberate tap-away for up to 700 ms, so the just-opened context menu cannot be dismissed | seed seam #3 | `touch-longpress.spec.ts` (opens the menu, never dismisses it by tap) | — | PROPOSED | |
+| TCH-04 | Pen hover produces no hover cursor and no `hoveredItem` — `onTouchPointerMove` early-returns for a pointer that never pressed — while a mouse at the same point sets both | seed seam #4 (device parity) | none — no pen test exists in the suite | — | PROPOSED | |
+| TCH-05 | The `palette` drop test is raw `getBoundingClientRect` containment on `rendererEl`, so a panel-drag released over an OVERLAYING panel still places the icon at the occluded tile | seed seam #5 | `touch-palette-drag.spec.ts` (drop over bare canvas only) | — | PROPOSED | |
+| TCH-06 | Double-tap bookkeeping (`lastTapTime`/`lastTapItem`) is not reset by `pointercancel`, so tap → cancel → tap on the same item within 300 ms spuriously opens the details panel | seed seam #7 | `touch-tap-select.spec.ts` (single taps only) | — | PROPOSED | |
+| TCH-07 | The touch pointerdown hit-test calls `getItemAtTile` WITHOUT the ADR-0023 `point` argument, so an off-grid node's drawn body pans under a finger where it drags under a mouse | seed seam #8 | `off-grid-pointer.spec.ts` (mouse only); `touch-drag-move.spec.ts` (on-grid) | — | PROPOSED | |
+| TCH-08 | Two fingers moving in parallel (no distance change) are handled as a pinch, so a two-finger pan drifts the zoom instead of purely panning | baseline gap "Two-finger pan (vs pinch) discrimination" | `touch-pinch-zoom.spec.ts` (distance really changes) | — | PROPOSED | |
+| TCH-09 | A long-press on a floating Label opens no context menu — labels are not tile-hit-tested (ADR 0031 §4), so `downItem` is null and the hold starts an auto-lasso instead | baseline gap "Long-press on a connector or floating label" | `touch-longpress.spec.ts` (node only); `label-entity.spec.ts` (right-click, mouse) | — | PROPOSED | |
+| TCH-10 | A touch drag onto an occupied tile bypasses the collision rejection the mouse drag honours | baseline gap "Touch drag onto an occupied tile" | `drag-collision.spec.ts` (mouse); `touch-drag-move.spec.ts` (free tile) | — | PROPOSED | |
+| TCH-11 | In `EXPLORABLE_READONLY` a one-finger drag starting on a node still moves it | baseline gap "Touch interactions in view/presenter mode" | `presenter-hover-notes.spec.ts`, `drive-display.spec.ts` (no touch) | — | PROPOSED | |
+| TCH-12 | Double-tapping a text box opens the Details deck instead of the on-canvas editor — the touch double-tap branch has no TEXTBOX case, unlike `onDoubleClick` (ADR 0034 §1) | baseline gap "Double-tap to inline-edit/rename" + parity oracle | `textbox-text-edit-move.spec.ts` (mouse dblclick edits); `touch-tap-select.spec.ts` (no double-tap) | — | PROPOSED | |
+| TCH-13 | Drawing a connector by touch is broken: the lift after the first tap forwards a `mouseup` that click-mode `Connector.mouseup` was never meant to receive | baseline gap "Drawing a connector by touch" | `connector-creation.spec.ts`, `connector-realmouse.spec.ts` (mouse) | — | PROPOSED | |
+| TCH-14 | One finger's `pointercancel` during a pinch leaves `phase: 'pinch'` with a single pointer — `runTouchFrame` needs two, so the surviving finger is dead until it lifts. `onTouchPointerUp` handles this case; `onTouchPointerCancel` does not | interleaving matrix + reading the cancel path | `touch-pinch-zoom.spec.ts` (clean two-finger lift) | — | PROPOSED | |
+| TCH-15 | A long-press on a connector opens a menu targeting the wrong entity (or none) — the hit-test halo differs from the mouse right-tap path | baseline gap "Long-press on a connector" | `usePanHandlers.test.ts` (mouse right-tap unit); `touch-longpress.spec.ts` (node only) | — | PROPOSED | |
 
 ## Product questions (SUSPECT verdicts)
 
