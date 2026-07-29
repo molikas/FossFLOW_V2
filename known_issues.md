@@ -2468,3 +2468,141 @@ currently harmless because `PROJECT_BOUNDING_BOX_PADDING` is 3 tiles per side �
 worth folding into the same fix so a padding change cannot re-open it
 (campaign PROJ-03, verdict FALSIFIED-but-latent). Repro:
 [`bounds-proj-01-02-03-04.explore.test.ts`](packages/axoview-lib/src/__explore__/R1/bounds-proj-01-02-03-04.explore.test.ts).
+
+## A 2D Y-orientation text box draws one tile thick but claims its full row count
+
+**Found by:** exploratory campaign PROJ-05
+
+**Symptom:** Rotate a text box to the Y (vertical) orientation, switch the
+canvas to 2D, and give it more than one line. The text is drawn inside a wrapper
+that is **always exactly one tile thick**, while its selection box and its hit
+area claim `size.height` tiles of thickness. Two consequences: rows 2..N are
+painted outside their own wrapper, and a click up to `size.height - 1` tiles to
+the side of the visible text still selects the box (empty canvas beside it is not
+clickable).
+
+**Root cause:** [`TextBox.tsx`](packages/axoview-lib/src/components/SceneLayers/TextBoxes/TextBox.tsx#L196-L212)
+takes a dedicated `isTwoDY` branch that passes `from = textBox.tile` — dropping
+`size.height` — because `useIsoProjection`'s 2D-Y case renders a wide-and-short
+rectangle and then rotates it 90 degrees. The rotation swaps the extents, so the
+drawn thickness is fixed at `UNPROJECTED_TILE_SIZE`. Hit-testing and the
+transform controls take the other route,
+[`getTextBoxEndTile`](packages/axoview-lib/src/utils/isoMath.ts), whose Y branch
+returns `tile + { x: rows, y: -size.width }` — `rows = size.height - 1` tiles of
+thickness. The two derivations agree only for a single-row box, which is the case
+every existing test uses. The X orientation is unaffected: the branch is Y-only.
+
+**Workaround:** keep Y-orientation text boxes to one line in 2D, or use the X
+orientation (the iso Y path has its own `originOverride` correction and is
+consistent).
+
+**Status:** Open. Fix direction: give the 2D-Y branch the row count too —
+`from = tile`, `to = tile + { x: size.width, y: 0 }` is only correct when
+`size.height === 1`; the rotated wrapper needs `pxSize.height = size.height` tiles
+so the post-rotation thickness matches `getTextBoxEndTile`. Repro:
+[`geometry-proj-05-10-11-12.explore.test.tsx`](packages/axoview-lib/src/__explore__/R1/geometry-proj-05-10-11-12.explore.test.tsx).
+
+## Clicking two stacked nodes selects the one drawn underneath (item hit-testing ignores z-order)
+
+**Found by:** exploratory campaign PROJ-10
+
+**Symptom:** With two items whose drawn footprints overlap — reachable by turning
+off collision (`collides: false`, ADR 0023) so both sit on one tile, or by
+nudging one off-grid onto its neighbour — a click selects whichever item happens
+to be **last in the view's `items` array**, not the one painted on top. Raising
+one item's z-index changes what you see and changes nothing about what you can
+click; the lower item stays the only reachable one.
+
+**Root cause:** `itemAtPoint` in
+[`hitDetection.ts`](packages/axoview-lib/src/utils/hitDetection.ts) scans
+`scene.items` backwards and returns the first footprint that contains the cursor
+— pure array order, with no reference to `zIndex`, layer order or iso depth.
+`NodesCanvas` paints through
+`resolveRenderOrder(layerOrder, zIndex, -tile.x - tile.y)`, so the visually
+topmost item is the one with the **highest** resolved order, which has no
+relation to its array index. This is sibling drift inside a single function: the
+RECTANGLE branch of the same `getItemAtTile` explicitly rebuilds the paint order
+("Rectangles paint in the SAME order Rectangles.tsx uses ... A click on
+overlapping rectangles must select that visually-topmost one") before scanning;
+the ITEM branch never got the same treatment.
+
+**Workaround:** move one of the overlapping items apart, select the intended one
+from the Layers panel, or re-order the items so the one you want is last.
+
+**Status:** Open. Fix direction: sort the candidate items by
+`resolveRenderOrder` before the backwards scan, exactly as the rectangle branch
+does — the layer order is already available to the hit-test callers. Repro:
+[`geometry-proj-05-10-11-12.explore.test.tsx`](packages/axoview-lib/src/__explore__/R1/geometry-proj-05-10-11-12.explore.test.tsx).
+
+## Selecting a connector attached to an off-grid node makes the wire jump at that node
+
+**Found by:** exploratory campaign PROJ-12
+
+**Symptom:** Drag a node off-grid (global snap off, or per-item Unsnap) so it
+carries an ADR-0023 `offset`. A connector anchored to it is drawn by the WebGL
+bulk path ending at the node's **bare tile**. Click the connector: it is promoted
+to the DOM/SVG renderer, which ends it at the node's **rendered** position. The
+endpoint moves by the full node offset — up to half a tile, 41.6 px for a
+(37, -19) residual — every time the connector is selected or deselected. A lasso
+selection promotes it too, so the jump also fires on marquee select.
+
+**Root cause:** ADR 0023 addendum D requires both connector renderers to resolve
+an endpoint at an offset node to the RENDERED endpoint. The helper that does it,
+[`connectorEndpointVertexDelta`](packages/axoview-lib/src/utils/resolvePlacement.ts),
+is correct and mode-aware — but it has exactly one caller,
+[`Connector.tsx`](packages/axoview-lib/src/components/SceneLayers/Connectors/Connector.tsx#L37-L51)
+(the sparse DOM path).
+[`ConnectorsCanvas.tsx`](packages/axoview-lib/src/components/SceneLayers/Connectors/ConnectorsCanvas.tsx)
+maps every path tile straight through `getTilePosition(connectorPathTileToGlobal(...))`
+and never reads a view item's `offset` at all. `Renderer.connectorHybridIds`
+switches a connector between the two renderers on selection, which is what makes
+the divergence visible as a jump. The renderedGeometry invariant suite asserts
+WebGL/DOM parity for *rectangle* vertices; connector endpoints at offset nodes
+were never covered.
+
+**Workaround:** keep nodes with connectors snapped to the grid.
+
+**Status:** Open. Fix direction: apply the same endpoint delta in
+`ConnectorsCanvas`'s vertex build (it already has the projection and the view
+items in scope), and extend `renderedGeometry.invariant.test.tsx` with a
+connector-endpoint parity case so the two paths cannot drift again. Repro:
+[`geometry-proj-05-10-11-12.explore.test.tsx`](packages/axoview-lib/src/__explore__/R1/geometry-proj-05-10-11-12.explore.test.tsx).
+
+## An off-grid residual is interpolated into CSS unguarded, and a tiny one voids the whole transform
+
+**Found by:** exploratory campaign PROJ-15
+
+**Symptom:** A rectangle or text box placed off-grid can end up with a residual
+whose JavaScript string form uses exponent notation — for example
+`4.547473508864641e-13`, which the placement math really does produce (zoom 0.7,
+cursor at screen x = -1987 in a 1280-wide renderer). CSS has no exponent grammar,
+so `translate3d(calc(var(--ff-drag-dx, 0px) + 4.547473508864641e-13px), ...)` is
+invalid and the browser drops the **entire** `transform` declaration. Because the
+residual and the live compositor drag delta share that one `translate3d`, the
+element then stops following the pointer during a drag — it sits still and jumps
+to its new position on release. The lost residual itself is sub-pixel and
+invisible; the lost drag preview is not.
+
+**Root cause:**
+[`getRenderedDragTransform`](packages/axoview-lib/src/utils/renderedGeometry.ts#L105-L108)
+interpolates `offset.x` / `offset.y` straight into the `calc()` with no
+formatting guard. `resolvePlacement` only collapses an **exactly** zero residual
+to `undefined`, so any magnitude below 1e-6 survives into the style string.
+`cursorTileResidual` (the fresh-placement path used by `TextBox`, `Label`,
+`PlaceIcon` and keyboard placement) computes `cursorPoint - tileCentre` in
+floating point, and a sweep of the real zoom ladder against a wide screen range
+finds these near-cancellations at roughly one in fifty thousand
+(zoom, screen-x) combinations. A second route is a hand-edited or generated
+model file: the `offset` schema is a bare `z.number()`, so `Infinity` passes
+validation and produces `Infinitypx` (same class as the already-registered
+"Icon references and tile coordinates are unvalidated").
+
+**Workaround:** nudge the item once with the arrow keys or re-drag it; any
+committed drag delta is at least 1 px, which re-writes a well-formed residual.
+
+**Status:** Open. Fix direction: format the residual at the boundary —
+`offset.x.toFixed(3)` (or a `Number.isFinite` guard plus a small epsilon that
+collapses to `undefined`) inside `getRenderedDragTransform`, and tighten
+`resolvePlacement`'s zero test to an epsilon rather than exact equality so a
+sub-milli-pixel residual is never persisted at all. Repro:
+[`transforms-proj-06-13-14-15.explore.test.ts`](packages/axoview-lib/src/__explore__/R1/transforms-proj-06-13-14-15.explore.test.ts).
