@@ -14,7 +14,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 | I2 | [Touch & pen gesture state machine](areas/I2-touch-pen-gestures.md) | DONE | 15 / 10 | 7 | 1 | 10/22/8 |
 | I3 | [Selection, drag engine & lasso/freehand marquee](areas/I3-selection-drag-lasso.md) | DONE | 15 / 10 | 4 | 2 | 10/20/14 |
 | I4 | [Connector draw, reconnect & waypoint interactions](areas/I4-connector-interactions.md) | DONE | 15 / 10 | 8 | 0 | 9/19/11 |
-| I5 | [Pan/right-click, context menu, placement tools & transform handles](areas/I5-pan-menu-placement-transform.md) | IN PROGRESS | 0 / 10 | 0 | 0 | 11/15/17 |
+| I5 | [Pan/right-click, context menu, placement tools & transform handles](areas/I5-pan-menu-placement-transform.md) | DONE | 14 / 10 | 5 | 0 | 11/15/17 |
 | R1 | [Projection & coordinate transforms (iso/2D/screen, off-grid)](areas/R1-projection-transforms.md) | OPEN | 0 / 10 | 0 | 0 | 8/12/13 |
 | R2 | [WebGL sprite-batch substrate (atlas, shaders, context loss)](areas/R2-webgl-substrate.md) | OPEN | 0 / 10 | 0 | 0 | 9/3/8 |
 | R3 | [Bulk GPU scene layers (build/invalidation, style parity, LOD)](areas/R3-gpu-scene-layers.md) | OPEN | 0 / 10 | 0 | 0 | 10/6/11 |
@@ -98,6 +98,10 @@ After all areas are DONE: completeness-critic pass per APPROACH §8 — list the
 | CLIP-10 | The single notification slot lets a success toast bury an unread error (ADR 0011 contract) | *The notification slot has no queue — a later toast silently buries an unread error* |
 | CLIP-13 | `updateViewItem` accepts an `iconScale` outside the schema's `[0.1,3]`, so a group resize saves a diagram that then refuses to load | *A group icon-resize can commit a scale outside the schema cap, bricking the next load* |
 | CLIP-14/15 | Unknown icon references and unbounded tile coordinates both pass schema + validateView | *Icon references and tile coordinates are unvalidated* |
+| CTX-01 | A mouse palette drag released over a panel places the element at the tile the panel is covering (no over-canvas check on the mouse path at all) | *A mouse palette drag released over a panel places the element behind the panel* |
+| CTX-03/04 | Panning drops the armed tool — always for a middle-drag, and for TEXTBOX/LABEL on a right-drag | *Panning drops the armed tool — always for a middle-drag, and for half the tools on a right-drag* |
+| CTX-06 | The group resize box is drawn around items on a hidden layer (`TransformControlsManager` consults `lockedIds` but not `visibleIds`) | *The group resize box is drawn around items on a hidden layer* |
+| CTX-15 | In view-only mode a left-click on a content-bearing item opens nothing — PAN owns the click, so the ADR-0012 popover is unreachable for a viewer | *In view-only mode a left-click on a content-bearing item opens nothing* |
 | CONN-01/02 | The endpoint-reconnect mode has no way out — Escape restores nothing and leaves you in it; an off-canvas release neither commits nor exits | *The endpoint-reconnect mode has no way out* |
 | CONN-04 | The connector’s end anchor is regenerated with a fresh id on every tile move while drawing | *The connector’s end anchor is given a brand-new id on every tile move while drawing* |
 | CONN-07/13 | A stray click while the connector tool is armed commits a zero-length (drag mode) or half-attached (click mode) connector — the documented empty-click revert does not exist | *A stray click while the connector tool is armed leaves a permanent half-attached or zero-length connector* |

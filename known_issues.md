@@ -2297,3 +2297,117 @@ node reads as empty tile to the connector tool. Note this is the same
 "acquisition paths are gated, this one is not" shape as PTR-11, from the other
 direction. Repro:
 [`conn-01-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I4-connectors/conn-01-15.explore.spec.ts).
+
+## A mouse palette drag released over a panel places the element behind the panel
+
+**Found by:** exploratory campaign CTX-01
+
+**Symptom:** press an icon in the Elements panel with the mouse, drag it, then
+change your mind and release it still over the panel. A node is placed anyway —
+at the canvas tile the panel is covering (measured tile `{-8, 4}`, off to the
+left and invisible until the panel is closed).
+
+**Root cause:** the placement modes commit on `moved` alone. `PlaceIcon.mouseup`
+([PlaceIcon.ts:47-53](packages/axoview-lib/src/interaction/modes/PlaceIcon.ts#L47-L53)),
+`TextBox.mouseup` ([TextBox.ts:27-33](packages/axoview-lib/src/interaction/modes/TextBox.ts#L27-L33))
+and `Label.mouseup` ([Label.ts:26-32](packages/axoview-lib/src/interaction/modes/Label.ts#L26-L32))
+all place when the gesture exceeded tap-slop, with no check that the release was
+over the canvas. Only the TOUCH `palette` path checks anything at all — and its
+check is a `getBoundingClientRect` containment that has its own hole (TCH-05).
+Both are the same question — "was this dropped on the canvas?" — answered two
+different wrong ways, and not at all on the mouse path.
+
+**Workaround:** delete the stray node, or drop deliberately over the canvas.
+
+**Status:** Open. Fix direction: one shared "was the release over the canvas"
+helper, implemented as `document.elementFromPoint(clientX, clientY)` resolving
+inside the interactions box — the same question `isRendererInteraction` answers
+for every other gesture — used by both the mouse placement modes and the touch
+palette path. Repro:
+[`ctx-01-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I5-pan-menu/ctx-01-15.explore.spec.ts).
+
+## Panning drops the armed tool — always for a middle-drag, and for half the tools on a right-drag
+
+**Found by:** exploratory campaign CTX-03 / CTX-04
+
+**Symptom:** arm a tool, pan the canvas, and find yourself back in Select with no
+indication why.
+
+- **Right-drag pan** restores `CONNECTOR`, `LASSO`, `FREEHAND_LASSO`,
+  `RECTANGLE.DRAW` and `PLACE_ICON` (verified as a control), but silently drops
+  `TEXTBOX` and `LABEL` — measured `TEXTBOX → CURSOR`.
+- **Middle-drag pan** drops *every* tool, including the five right-drag restores
+  correctly — measured `LASSO → CURSOR`.
+
+**Root cause:** `restorePreviousMode` reconstructs clean modes from a hardcoded
+five-case switch and falls through to `CURSOR` for everything else
+([usePanHandlers.ts:52-90](packages/axoview-lib/src/interaction/usePanHandlers.ts#L52-L90)) —
+`TEXTBOX`, `LABEL`, `NODE.TRANSFORM`, `RECONNECT_ANCHOR` and `DRAG_ITEMS` all
+land in the default. And `endPan` only calls it when the pan was a right-drag;
+the middle-drag branch hardcodes `setMode({type:'CURSOR'})`
+([usePanHandlers.ts:115-125](packages/axoview-lib/src/interaction/usePanHandlers.ts#L115-L125)),
+so the restore machinery is skipped entirely. Panning is navigation, not a tool
+change — neither path should alter the armed tool.
+
+**Workaround:** re-press the tool hotkey after panning.
+
+**Status:** Open. Fix direction: call `restorePreviousMode()` from both pan
+methods, and replace the switch with "save the whole previous mode object and
+put it back", falling back to a clean reconstruction only for modes carrying
+in-flight state (CONNECTOR's abort is the one case that genuinely needs
+special handling). Repro:
+[`ctx-01-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I5-pan-menu/ctx-01-15.explore.spec.ts).
+
+## The group resize box is drawn around items on a hidden layer
+
+**Found by:** exploratory campaign CTX-06
+
+**Symptom:** with a selection that includes an item on a hidden layer, the
+transform chrome renders anyway — four resize handles around a bounding box that
+includes an entity the user cannot see. Dragging them resizes the invisible item
+along with the visible ones.
+
+**Root cause:** `TransformControlsManager` gates its handles on `lockedIds` only
+and never consults `visibleIds`, unlike every gesture path (`processMouseUpdate`
+builds `isItemInteractable` from both). Reaching the state is easy: RED-15 shows
+a live selection is not re-validated when a layer is hidden.
+
+**Workaround:** clear the selection after hiding a layer.
+
+**Status:** Open. Fix direction: use the same `isItemInteractable` predicate the
+gesture paths use — hidden-layer members should be excluded from the chrome's
+bounds and from the resize, or the chrome suppressed entirely. Fixing RED-15
+(re-validate the selection on a layer-state change) removes the common route in.
+Repro:
+[`ctx-01-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I5-pan-menu/ctx-01-15.explore.spec.ts).
+
+## In view-only mode a left-click on a content-bearing item opens nothing
+
+**Found by:** exploratory campaign CTX-15
+
+**Symptom:** in `EXPLORABLE_READONLY` — the mode the `/display/<diagramId>`
+viewer route runs in — clicking a node that carries a description opens no ADR
+0012 info popover and selects nothing: `itemControls` stays null and the mode
+stays `PAN`. The popover state itself works (`view-mode-info-popover.spec.ts`
+drives `setItemControls` directly and the popover renders), so the content is
+reachable in principle — it is the click that never gets there. For a viewer,
+that is the only way in: there is no properties dock in read-only mode.
+
+**Root cause:** `EXPLORABLE_READONLY` boots into `PAN`
+([utils/common.ts getStartingMode](packages/axoview-lib/src/utils/common.ts#L72-L84)),
+and the pan path owns the left button, so the click never reaches the selection
+logic in `Cursor`. The area's own scope statement lists "Pan mode incl.
+EXPLORABLE_READONLY left-click-opens-popover" as intended behaviour, and
+`view-mode-info-popover.spec.ts` says in its header that "the click→select
+wiring is existing, separately-covered behavior" — but no test drives the click,
+and it does not work.
+
+**Workaround:** none for a viewer.
+
+**Status:** Open. Fix direction: in `Pan.mousedown`/`mouseup`, when
+`editorMode === 'EXPLORABLE_READONLY'` and the release was a stationary click on
+a content-bearing item, set `itemControls` for it (the popover reads exactly
+that state) before falling through to the pan logic. Note this is the mirror of
+PTR-01/02/03: read-only exposes the mutating keyboard paths it should not, and
+withholds the one read-only interaction it should offer. Repro:
+[`ctx-01-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I5-pan-menu/ctx-01-15.explore.spec.ts).
