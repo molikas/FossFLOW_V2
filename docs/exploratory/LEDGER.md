@@ -8,7 +8,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 |------|------|--------|---------|------|----------|-------------------------------|
 | E1 | [History & undo/redo engine (dual-store patches)](areas/E1-history-undo-redo.md) | DONE | 15 / 10 | 9 | 3 | 8/5/12 |
 | E2 | [Reducers & cross-store cascades](areas/E2-reducers-cascades.md) | DONE | 15 / 10 | 10 | 1 | 8/7/8 |
-| E3 | [Scene actions, transactions & paste assembly](areas/E3-scene-actions-paste.md) | IN PROGRESS | 0 / 10 | 0 | 0 | 9/8/7 |
+| E3 | [Scene actions, transactions & paste assembly](areas/E3-scene-actions-paste.md) | IN PROGRESS | 2 / 10 | 0 | 0 | 9/8/7 |
 | E4 | [Clipboard, schemas, initial load & session/UI state](areas/E4-clipboard-schemas-load.md) | OPEN | 0 / 10 | 0 | 0 | 8/22/6 |
 | I1 | [Pointer pipeline, mode dispatcher & keyboard routing](areas/I1-pointer-modes-keyboard.md) | OPEN | 0 / 10 | 0 | 0 | 10/20/10 |
 | I2 | [Touch & pen gesture state machine](areas/I2-touch-pen-gestures.md) | OPEN | 0 / 10 | 0 | 0 | 10/22/8 |
