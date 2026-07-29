@@ -33,16 +33,25 @@ module.exports = {
     '!src/types/**',
     '!src/index.ts'
   ],
-  // Floors ratcheted 2026-07-05 (technical-review-2026-07 §8b): global floors sit
-  // ~5-7pp under measured reality (37.4% stmts / 25.1% branches) so the tested core
-  // can't silently erode; the two well-covered areas carry their own higher floors
-  // (directory paths aggregate; measured: reducers 89.0/70.7, schemas 99.2/94.1).
+  // Floors sit ~5-6pp under measured reality so the tested core can't silently
+  // erode; the two well-covered areas carry their own higher floors (directory
+  // paths aggregate).
+  //
+  // Re-ratcheted 2026-07-29 (technical-review-2026-07-29 §"what to improve" #5).
+  // Coverage had risen since the 2026-07-05 ratchet (37.4→40.2 stmts,
+  // 25.1→28.5 branches) without the floors following, so the intended 5-7pp of
+  // slack had widened to ~10pp and the gate had gone soft. Measured 2026-07-29:
+  //   global   stmts 40.2  branches 28.5  functions 34.6  lines 40.2
+  //   reducers stmts 89.0  branches 70.7   (unchanged — floors still right)
+  //   schemas  stmts 99.2  branches 94.1   (unchanged — floors still right)
+  // Re-measure and re-tighten whenever coverage moves up materially; that is the
+  // maintenance this gate needs to keep working.
   coverageThreshold: {
     global: {
-      branches: 20,
-      functions: 25,
-      lines: 30,
-      statements: 30
+      branches: 23,
+      functions: 29,
+      lines: 34,
+      statements: 34
     },
     './src/stores/reducers/': {
       statements: 85,

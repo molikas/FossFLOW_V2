@@ -97,6 +97,31 @@ jobs:
       - name: Knip — dead-code report
         run: npx knip --reporter compact
 
+      # The three gates below were promoted out of the /audit skill by the
+      # 2026-07-29 review. All three previously existed only as advisory prose in
+      # .claude/commands/audit.md — measured by hand, occasionally, and acted on
+      # never. Two of them were structurally incapable of failing at all. Each is
+      # now a ratchet with a baseline file and a negative test.
+
+      # Asserts the DENOMINATOR (>=280 files in the graph) before the cycle
+      # count, because the bug this replaced was a green produced over 16 of 293
+      # files — missing --ts-config silently dropped the `src/…` path alias.
+      - name: Circular dependencies — denominator + ratchet
+        run: npm run check:cycles
+
+      # /audit Phase 4 stated "flag any chunk >1MB uncompressed" and then only
+      # PRINTED sizes; a 9.24 MB chunk passed it for months. Runs after the build
+      # because it measures real emitted bytes.
+      - name: Bundle budget — editor boot-critical JS
+        run: npm run check:bundle
+
+      # Fails only on advisories that are neither fixed nor explicitly accepted
+      # in scripts/audit-allowlist.json (each with a written why + tripwire), so
+      # the signal is "something NEW" rather than the permanent red that makes
+      # teams stop running npm audit.
+      - name: Dependency advisories — allowlist tripwire
+        run: npm run check:audit
+
       - name: Build Worker bundle and check size (ADR 0009 D8)
         run: |
           npx wrangler pages functions build --outdir .worker-build

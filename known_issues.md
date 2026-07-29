@@ -1,6 +1,6 @@
 # Known Issues
 
-**Last reviewed:** 2026-07-15 (docs housekeeping). Open items cross-checked against [technical-review-2026-07.md](docs/reviews/technical-review-2026-07.md) — note **no frozen review yet covers** Drive storage, the `/app` landing split, or Drive-native sharing (see [docs/README.md](docs/README.md#frozen-baselines--reviews)), so for those surfaces the ADRs + [docs/guidelines/](docs/guidelines/) are the cross-check.
+**Last reviewed:** 2026-07-29 (whole-system technical review — see [technical-review-2026-07-29.md](docs/reviews/technical-review-2026-07-29.md); two entries added at the foot of this file for the deferred editor boot payload and the remaining runtime import cycle, both with options tables and risk levels). Previously 2026-07-15 (docs housekeeping). Open items cross-checked against [technical-review-2026-07.md](docs/reviews/technical-review-2026-07.md) — note **no frozen review yet covers** Drive storage, the `/app` landing split, or Drive-native sharing (see [docs/README.md](docs/README.md#frozen-baselines--reviews)), so for those surfaces the ADRs + [docs/guidelines/](docs/guidelines/) are the cross-check.
 
 > **Convention — resolved entries stay.** This register keeps fixed/closed items in place, annotated `**Status:** Fixed in <sha> (date)`, because they are useful to search when a symptom recurs. That is the rule `/notes` enforces ("do not delete it"). *(The header previously read "Last pruned … resolved entries removed", which contradicted `/notes` and never matched the file's actual contents — 13 resolved entries were retained. Reconciled 2026-07-15 in favour of the `/notes` rule; nothing was deleted.)* Scan for **Status: Open** to read this as an open-issues list.
 
@@ -525,3 +525,86 @@ that were still open with no other home. Small / decision-scoped; not blockers.
   panning) is worth adding.
 
 **Status:** Open, deferred with owner sign-off. Recorded in ADR 0038.
+
+## Editor boot payload — 1787 kB gzip of JS before `/app` is usable (2026-07-29)
+
+**Symptom:** Opening the editor at `/app` downloads, parses and executes five
+`defer` scripts totalling **1787 kB gzip / 10,302 kB raw** before anything is
+interactive. One chunk (`215.js`) is **1425 kB gzip / 9042 kB raw** across
+**10,636 webpack modules** — MUI Material, Quill and the axoview lib fused
+together, including one unattributed 1173 kB module. The read-only share path
+(ADR 0042) pays the same cost: a viewer following a link downloads the whole
+editor.
+
+**Not affected:** the marketing landing at `/`. `build/index.html` ships **zero**
+script tags, so ADR 0040's landing/SPA split is intact and SEO/LCP there is fine.
+The AWS/GCP/Azure/K8s icon packs are also **already lazy** (`await import()` in
+[`iconPackManager.ts`](packages/axoview-app/src/services/iconPackManager.ts)) —
+they are the `async/` chunks and are **not** part of this number.
+
+**Root cause:** nothing is code-split below the entry. There is **no
+`React.lazy` or `Suspense` anywhere in either package**, so every route,
+dialog and editor-only dependency is in the boot graph regardless of whether the
+session ever uses it.
+
+**Discussed options** (2026-07-29 review; owner deferred all of them — initial
+load time judged not dramatic in practice):
+
+| Option | Effort | Risk | Notes |
+|---|---|---|---|
+| **0. Attribute the chunk first** (bundle analyzer run) | XS | **None** | Prerequisite for scoping anything below. Nobody can size the win until the 1173 kB module and the MUI surface are named. Do this before committing to any option |
+| **1. Lazy-load Quill** | M | **Med** | Clear trigger (only needed once a user edits text) but **4 static import sites** — `RichTextEditor`, `TextBoxInlineEditor`, `TextBoxLinkCard` — plus `quill.snow.css` imported in two more places |
+| **2. Lazy-load `ExportImageDialog`** | S–M | **Med** | Also resolves the remaining runtime import cycle (see next entry). Interacts with the GL-context budget: the dialog mounts a second `<Axoview>`, and ADR 0038 already flags the ~16-context browser cap — likely favourable, must be verified not assumed |
+| **3. Route-split the editor shell / read-only viewer** | L | **High** | Biggest potential win (a viewer wouldn't load editor chrome at all) but the largest blast radius |
+| **4. Revisit `splitChunks`** | S | **Low** | Re-slices the same bytes across more requests; improves caching, does **not** reduce boot cost. Cosmetic against this symptom |
+
+**Cross-cutting risk for options 1–3:** `axoview-lib` is a **published npm
+package**. Dynamic `import()` inside it pushes chunk-loading semantics onto
+downstream consumers' bundlers — a compatibility surface, not just an internal
+change. Any of these also needs an e2e + perf-harness pass, since those suites
+may encode current load timing.
+
+**Risk of NOT doing it:** low and static. This is a steady-state cost, not a
+regression, and it cannot silently worsen — `npm run check:bundle` fails CI if
+the boot payload grows past
+[`scripts/bundle-budget.json`](scripts/bundle-budget.json).
+
+**Status:** Open, deferred with owner sign-off (2026-07-29). Budget gate in place
+so it cannot drift. Revisit if boot time becomes a user complaint, or
+opportunistically when `ExportImageDialog` is next touched (option 2 pays down
+two items at once). See
+[technical-review-2026-07-29.md §3](docs/reviews/technical-review-2026-07-29.md).
+
+## Runtime import cycle: `Axoview` → `UiOverlay` → `ExportImageDialog` → `Axoview` (2026-07-29)
+
+**Symptom:** No user-visible symptom today. `ExportImageDialog` mounts a second
+`<Axoview>` instance to render the export, so the module graph closes a loop back
+to its own root. It is one of the two cycles confirmed to survive compilation —
+the other (`schemas/validation.ts` ⇄ `utils/index.ts` ⇄ `utils/model.ts`) was
+**fixed 2026-07-29** by importing `getAllAnchors` from `src/utils/isoMath`
+instead of the `src/utils` barrel, which dropped the whole graph from 63 cycles
+to 47.
+
+**Why it matters:** an ES-module value cycle is only safe while every binding in
+the loop is referenced *lazily*, inside function bodies. The day someone reads
+one of them at module-evaluation time — a module-level `const`, a decorator, a
+default parameter — it becomes a TDZ crash at import, and the stack points at the
+consumer rather than the cycle. The failure is silent until it is sudden.
+
+**Discussed options:**
+
+| Option | Effort | Risk | Notes |
+|---|---|---|---|
+| **1. Lazy-load `ExportImageDialog`** (`React.lazy` + `Suspense` in `UiOverlay`) | S–M | **Med** | Breaks the cycle *and* trims the boot payload — same work as option 2 in the entry above. Needs the GL-context check noted there. **Preferred if/when touched** |
+| **2. Invert the dependency** — have `ExportImageDialog` receive a render callback instead of importing `Axoview` | M | **Med** | Removes the cycle without any loading-pattern change, but reshapes the export API surface |
+| **3. Leave it, guarded** | XS | **Low** | Status quo. `npm run check:cycles` holds the count at 47, so no *new* cycle can be added silently, but this one stays |
+
+**Risk of NOT doing it:** **Low.** Latent, not active — the current code works and
+is regression-gated at 47 cycles. The exposure is a future edit inside the loop
+turning a working import into a boot crash. Bounded, and cheap to fix if it ever
+fires.
+
+**Status:** Open, deferred with owner sign-off (2026-07-29). Currently option 3.
+Coupled to the bundle-split entry above: whoever does option 1 there closes this
+for free. See
+[technical-review-2026-07-29.md §5](docs/reviews/technical-review-2026-07-29.md).

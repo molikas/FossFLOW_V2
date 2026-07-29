@@ -6,7 +6,15 @@ import type {
   View,
   Rectangle
 } from 'src/types';
-import { getAllAnchors } from 'src/utils';
+// Deep import, NOT the `src/utils` barrel — deliberate. The barrel re-exports
+// `./model`, which imports `validateModel` back from this file, so going through
+// it forms a genuine runtime value cycle (validation → utils/index → utils/model
+// → validation). It survives today only because both bindings are referenced
+// lazily inside function bodies; a module-level use on either side would be a
+// TDZ crash at import. `isoMath` pulls only deep paths and never reaches
+// `schemas`, so this edge is acyclic. Removing this one barrel hop dropped the
+// graph from 63 cycles to 47 (2026-07-29 review §5).
+import { getAllAnchors } from 'src/utils/isoMath';
 
 type IssueType =
   | {

@@ -1,0 +1,26 @@
+{
+  "_comment": [
+    "Budget for scripts/check-bundle-budget.js — the editor SPA's boot-critical",
+    "JS (every non-async <script src> in build/app.html).",
+    "",
+    "THESE NUMBERS ARE NOT A TARGET. They are a ratchet pinned ~1% above measured",
+    "reality on 2026-07-29 so the bundle cannot grow silently. 1787 kB gzip to boot",
+    "an editor is bad, and the review says so — see technical-review-2026-07-29.md",
+    "§3 finding 3. The budget exists to stop it getting worse while the split work",
+    "is scheduled.",
+    "",
+    "Measured 2026-07-29 (gzip -9):",
+    "  215.js          1425 kB gzip / 9042 kB raw   (10,636 modules: MUI + Quill + lib)",
+    "  app.js           264 kB gzip /  966 kB raw",
+    "  lib-react         44 kB gzip",
+    "  lib-polyfill      41 kB gzip",
+    "  lib-router        13 kB gzip",
+    "  TOTAL           1787 kB gzip",
+    "",
+    "When the split lands, LOWER these. Never raise them to make a build pass —",
+    "that converts the gate back into the decoration it replaced."
+  ],
+  "maxTotalBlockingGzipBytes": 1850000,
+  "maxChunkGzipBytes": 1480000,
+  "ratchetSlackBytes": 102400
+}
