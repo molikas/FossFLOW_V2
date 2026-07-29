@@ -7,7 +7,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 | Area | Name | Status | Counted | Bugs | Suspects | Seeds (seams/invariants/gaps) |
 |------|------|--------|---------|------|----------|-------------------------------|
 | E1 | [History & undo/redo engine (dual-store patches)](areas/E1-history-undo-redo.md) | DONE | 15 / 10 | 9 | 3 | 8/5/12 |
-| E2 | [Reducers & cross-store cascades](areas/E2-reducers-cascades.md) | IN PROGRESS | 9 / 10 | 8 | 0 | 8/7/8 |
+| E2 | [Reducers & cross-store cascades](areas/E2-reducers-cascades.md) | IN PROGRESS | 12 / 10 | 8 | 0 | 8/7/8 |
 | E3 | [Scene actions, transactions & paste assembly](areas/E3-scene-actions-paste.md) | OPEN | 0 / 10 | 0 | 0 | 9/8/7 |
 | E4 | [Clipboard, schemas, initial load & session/UI state](areas/E4-clipboard-schemas-load.md) | OPEN | 0 / 10 | 0 | 0 | 8/22/6 |
 | I1 | [Pointer pipeline, mode dispatcher & keyboard routing](areas/I1-pointer-modes-keyboard.md) | OPEN | 0 / 10 | 0 | 0 | 10/20/10 |
@@ -46,6 +46,8 @@ Engine (E1–E4) and interaction (I1–I5) first — highest seam density and ev
 - [x] First shared-oracle helper landed and used by ≥1 probe (`tests-exploratory/_rig/rig.explore.spec.ts`)
 
 **Quarantine verified 2026-07-29:** default lib Jest lists the same 155 files before/after the `testPathIgnorePatterns` touch; the default Playwright config lists 178 tests in 75 files, none under `tests-exploratory/`. Probe artifacts nest under the already-gitignored `test-results/explore` and `playwright-report/explore`.
+
+**Rig note — jsdom has no canvas 2D context.** `getTextBoxDimensions` throws `Could not get canvas context`, so ANY T1 probe touching text boxes must call `installCanvasStub()` (`src/__explore__/canvasStub.ts`) first. This is a campaign-specific trap: an `it.failing` probe whose body throws during *setup* reports as a confirmed bug. Two E1 probes were briefly recorded on that false evidence on 2026-07-29 and re-verified with the stub (verdicts unchanged, now backed by explicit characterization tests). `canvasStub.explore.test.ts` guards the stub itself.
 
 **Oracles available to probes** (`fixtures/explore.fixture.ts`): `exploreTest` (blank-diagram boot) / `exploreAppTest` (raw `/app` boot), both auto-asserting the console/pageerror oracle in teardown; `expectStoreInvariants(page)` (INV-1…INV-10), `expectSchemaClean(page)`, `expectModelHealthy(page)` = both. **Grow INV-* as areas confirm cross-store bugs.**
 

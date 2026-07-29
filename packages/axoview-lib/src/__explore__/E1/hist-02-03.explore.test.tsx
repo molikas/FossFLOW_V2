@@ -5,6 +5,7 @@
  *
  * See docs/exploratory/areas/E1-history-undo-redo.md.
  */
+import { installCanvasStub } from '../canvasStub';
 import {
   setup,
   act,
@@ -15,6 +16,11 @@ import {
   seqs,
   orphanSceneConnectors
 } from './harness';
+
+// jsdom has no canvas 2D context; text-box probes need a measurer or the
+// reducer throws during setup and an it.failing body "passes" for the wrong
+// reason. See __explore__/canvasStub.ts.
+installCanvasStub();
 
 // ---------------------------------------------------------------------------
 // HIST-02 — redo-stack invalidation is per-store, not per-logical-action
@@ -152,4 +158,31 @@ describe('HIST-03 — 50-entry trimming splits one logical action across the sta
       ).toBeDefined();
     }
   );
+
+  it('characterization: pins the exact end state — text box present, scene size gone', () => {
+    const result = setup();
+
+    act(() => {
+      result.current.scene.createTextBox({
+        id: 'tb-1',
+        tile: { x: 1, y: 1 },
+        content: 'hello'
+      });
+    });
+    expect(result.current.sceneApi.getState().textBoxes['tb-1']).toBeDefined();
+
+    for (let i = 0; i < 50; i += 1) {
+      placeIcon(result, `node-${i}`, { x: 10 + i, y: 10 });
+    }
+    for (let i = 0; i < 60; i += 1) {
+      act(() => {
+        result.current.history.undo();
+      });
+    }
+
+    expect(modelView(result).textBoxes ?? []).toHaveLength(1);
+    expect(
+      result.current.sceneApi.getState().textBoxes['tb-1']
+    ).toBeUndefined();
+  });
 });

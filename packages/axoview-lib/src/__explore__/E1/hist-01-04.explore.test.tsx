@@ -8,6 +8,7 @@
  * CORRECT behaviour, so the probe is green while the bug lives and flips to an
  * unexpected pass the moment someone fixes it.
  */
+import { installCanvasStub } from '../canvasStub';
 import {
   setup,
   act,
@@ -18,6 +19,11 @@ import {
   expectCoherent,
   VIEW_ID
 } from './harness';
+
+// jsdom has no canvas 2D context; text-box probes need a measurer or the
+// reducer throws during setup and an it.failing body "passes" for the wrong
+// reason. See __explore__/canvasStub.ts.
+installCanvasStub();
 
 // ---------------------------------------------------------------------------
 // HIST-01 — useLayerActions.commit() never allocates a logical-action sequence
@@ -105,6 +111,35 @@ describe("HIST-01 — layer ops inherit the previous action's history sequence",
       ).toBeDefined();
     }
   );
+
+  it('characterization: the text box survives the undo but its scene size does not', () => {
+    const result = setup();
+
+    act(() => {
+      result.current.scene.createTextBox({
+        id: 'tb-1',
+        tile: { x: 1, y: 1 },
+        content: 'hello'
+      });
+    });
+    const sizeBefore = result.current.sceneApi.getState().textBoxes['tb-1'].size;
+    expect(sizeBefore).toBeDefined();
+
+    act(() => {
+      result.current.layers.createLayer({ name: 'Layer 1' });
+    });
+    act(() => {
+      result.current.history.undo();
+    });
+
+    // Pins the exact failure the it.failing above asserts against: the model
+    // keeps the text box, the scene loses its measured size, and nothing
+    // restores it (resyncScene re-routes connectors only).
+    expect(modelView(result).textBoxes).toHaveLength(1);
+    expect(
+      result.current.sceneApi.getState().textBoxes['tb-1']
+    ).toBeUndefined();
+  });
 
   it.failing(
     'BUG: the extra scene pop leaves an orphan scene connector after the second undo',
