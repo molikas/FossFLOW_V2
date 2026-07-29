@@ -12,7 +12,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 | E4 | [Clipboard, schemas, initial load & session/UI state](areas/E4-clipboard-schemas-load.md) | DONE | 15 / 10 | 12 | 0 | 8/22/6 |
 | I1 | [Pointer pipeline, mode dispatcher & keyboard routing](areas/I1-pointer-modes-keyboard.md) | DONE | 15 / 10 | 10 | 0 | 10/20/10 |
 | I2 | [Touch & pen gesture state machine](areas/I2-touch-pen-gestures.md) | DONE | 15 / 10 | 7 | 1 | 10/22/8 |
-| I3 | [Selection, drag engine & lasso/freehand marquee](areas/I3-selection-drag-lasso.md) | IN PROGRESS | 0 / 10 | 0 | 0 | 10/20/14 |
+| I3 | [Selection, drag engine & lasso/freehand marquee](areas/I3-selection-drag-lasso.md) | DONE | 15 / 10 | 4 | 2 | 10/20/14 |
 | I4 | [Connector draw, reconnect & waypoint interactions](areas/I4-connector-interactions.md) | OPEN | 0 / 10 | 0 | 0 | 9/19/11 |
 | I5 | [Pan/right-click, context menu, placement tools & transform handles](areas/I5-pan-menu-placement-transform.md) | OPEN | 0 / 10 | 0 | 0 | 11/15/17 |
 | R1 | [Projection & coordinate transforms (iso/2D/screen, off-grid)](areas/R1-projection-transforms.md) | OPEN | 0 / 10 | 0 | 0 | 8/12/13 |
@@ -98,6 +98,10 @@ After all areas are DONE: completeness-critic pass per APPROACH §8 — list the
 | CLIP-10 | The single notification slot lets a success toast bury an unread error (ADR 0011 contract) | *The notification slot has no queue — a later toast silently buries an unread error* |
 | CLIP-13 | `updateViewItem` accepts an `iconScale` outside the schema's `[0.1,3]`, so a group resize saves a diagram that then refuses to load | *A group icon-resize can commit a scale outside the schema cap, bricking the next load* |
 | CLIP-14/15 | Unknown icon references and unbounded tile coordinates both pass schema + validateView | *Icon references and tile coordinates are unvalidated* |
+| SEL-01 | Arrow-nudging an off-grid item erases its sub-tile `offset` and snaps it to the grid (ADR 0023 offset-omission class, keyboard consumer) | *Arrow-nudging an off-grid item erases its sub-tile offset and snaps it to the grid* |
+| SEL-02 | A connector-body drag splices its waypoint OUTSIDE the drag transaction — two history entries per gesture, and one undo leaves the stray waypoint | *Starting a drag on a connector body splices a waypoint outside the drag transaction* |
+| SEL-04 | A mixed node + rectangle group dragged into a collision tears: the node is blocked, the rectangle keeps going, both commit | *A mixed node + rectangle group dragged into a collision tears apart* |
+| SEL-07 | With a freehand-lasso selection live, Backspace in ANY text field deletes the canvas selection (the lasso delete branch skips the editable-target guard) | *A live freehand-lasso selection makes Backspace destructive in every text field* |
 | TCH-02/03 | The long-press menu leaves `mouse.mousedown`/`mousedownItem` populated after the lift, and a tap-away inside 700 ms cannot dismiss it | *The long-press context menu leaves the press half-open, and cannot be dismissed for 700 ms* |
 | TCH-04 | Pen hover produces no hover cursor, hover outline or `hoveredItem` — pen is routed into the touch machine, which drops moves without a press | *Pen hover does nothing — no hover cursor, no hover outline, no `hoveredItem`* |
 | TCH-05 | A touch palette drag released back onto the Elements panel places a node at the tile behind the panel (rect containment, not hit-testing) | *A touch palette drag released back onto the Elements panel places a node behind the panel* |

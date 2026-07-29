@@ -2009,3 +2009,118 @@ pinch → pan demotion `onTouchPointerUp` has (ideally by sharing one
 `endPointer(e, { cancelled })` helper, since the two handlers have drifted in
 exactly this way). Repro:
 [`touch-tch-01-06-14.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I2-touch/touch-tch-01-06-14.explore.spec.ts).
+
+## Arrow-nudging an off-grid item erases its sub-tile offset and snaps it to the grid
+
+**Found by:** exploratory campaign SEL-01
+
+**Symptom:** an item deliberately placed off-grid (ADR 0023 — snapping off, then
+nudged with the mouse so it sits between cells) loses its position the moment it
+is moved with the arrow keys. One `ArrowRight` translates it by the correct tile
+AND discards the px residual: measured `offset {-8.70, -12.74}` → absent, so the
+item visibly jumps onto the grid. The mouse drag path preserves the offset; only
+the keyboard destroys it.
+
+**Root cause:** `handleArrowKey`'s nudge builds its updates from the tile alone —
+`{ id, tile: CoordsUtils.add(it.tile, delta) }` with no `offset` field
+([handleArrowKey.ts:140-152](packages/axoview-lib/src/interaction/handleArrowKey.ts#L140-L152)) —
+and the batch updaters write `offset: u.offset` unconditionally
+([useSceneActions.ts:163, 240, 271](packages/axoview-lib/src/hooks/useSceneActions.ts#L163)),
+so `undefined` overwrites the stored residual. `DragItems.mouseup` passes the
+offset explicitly, which is why the drag path is unaffected. This is the ADR 0023
+"offset-omission" bug class (its seven-bug cluster) recurring in the one consumer
+the original sweep did not cover.
+
+**Workaround:** re-place the item by dragging instead of nudging.
+
+**Status:** Open. Fix direction: read each item's current `offset` in the nudge
+and pass it through, exactly as `DragItems.mouseup` does. Consider making the
+batch updaters treat `offset: undefined` as "leave unchanged" rather than "clear"
+so the whole class cannot recur — that is a wider decision, since some callers
+may rely on clearing. Repro:
+[`sel-01-04-07-11.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I3-selection/sel-01-04-07-11.explore.spec.ts).
+
+## A mixed node + rectangle group dragged into a collision tears apart
+
+**Found by:** exploratory campaign SEL-04
+
+**Symptom:** select a node and a rectangle together and drag the group so the
+node's target tile is occupied by another node. The node stops at the last free
+tile while the rectangle keeps following the cursor, and both commit — measured
+node delta `{-2, +2}` against rectangle delta `{-3, +3}`. The group's relative
+layout is silently changed, in one history entry, with no visual warning.
+
+**Root cause:** collision is a node-only rule. `computeNodeUpdates` is
+all-or-nothing for ITEMs (it returns null for the whole frame when any target
+tile collides), but the rectangle / text-box / label preview branches in the same
+`dragItems` pass are not collision-gated at all and keep accumulating the cursor
+delta
+([DragItems.ts:343-403](packages/axoview-lib/src/interaction/modes/DragItems.ts#L343-L403)).
+`DragItems.mouseup` then commits whatever each preview map holds. Node-only
+groups are safe — verified: a two-node group over an occupied tile moves rigidly
+or not at all (SEL-11) — so the bug is specific to MIXED groups.
+
+**Workaround:** undo, and move the group without crossing an occupied tile.
+
+**Status:** Open. Fix direction: make the collision verdict apply to the whole
+group — if `computeNodeUpdates` returns null for a frame, skip the rectangle /
+text-box / label preview accumulation for that frame too, so every member holds
+the last valid position. Repro:
+[`sel-01-04-07-11.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I3-selection/sel-01-04-07-11.explore.spec.ts).
+
+## A live freehand-lasso selection makes Backspace destructive in every text field
+
+**Found by:** exploratory campaign SEL-07
+
+**Symptom:** draw a freehand lasso around some items, then click into any text
+field and press Backspace to correct a typo. Every lassoed item is deleted from
+the canvas, and the keystroke never reaches the field (measured: view items 2 →
+0, field value unchanged). The same Backspace with no freehand selection live is
+harmless.
+
+**Root cause:** a parity divergence plus a deliberate guard omission, which are
+only dangerous together. `Lasso.mouseup` drops back to `CURSOR`, but
+`FreehandLasso.mouseup` STAYS in `FREEHAND_LASSO` with `mode.selection`
+populated — so the freehand selection is a long-lived state a marquee selection
+never is. And `handleDeleteOrBackspace`'s lasso branch deliberately runs BEFORE
+the editable-target guard
+([handleDeleteKey.ts:66-79](packages/axoview-lib/src/interaction/handleDeleteKey.ts#L66-L79)) —
+the other two branches (`selectedIds.length > 1`, single `itemControls`) both
+call `isEditableTarget`, but the lasso branch does not. Combined: any focused
+input, anywhere in the app, is one Backspace away from destroying the selection.
+
+**Workaround:** press Escape (or click empty canvas) to leave freehand mode
+before typing anywhere.
+
+**Status:** Open. Fix direction: add the `isEditableTarget` guard to the lasso
+branch as well — there is no stated reason for it to be exempt while the other
+two are guarded. Separately, consider making `FreehandLasso.mouseup` return to
+`CURSOR` like `Lasso.mouseup` does, which would close the whole class and remove
+a real behavioural inconsistency between the two marquee tools. Repro:
+[`sel-01-04-07-11.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I3-selection/sel-01-04-07-11.explore.spec.ts).
+
+## Starting a drag on a connector body splices a waypoint outside the drag transaction
+
+**Found by:** exploratory campaign SEL-02
+
+**Symptom:** grabbing a connector's body to bend it splices the new waypoint as
+its OWN history entry, before the drag transaction opens. One gesture therefore
+records two entries (measured: history 3 → 5), and if the drag is abandoned —
+e.g. a tool hotkey mid-press — the stray waypoint is left on the connector.
+Pressing Ctrl+Z once removes the move but leaves the waypoint (anchors 3, not 2);
+a second Ctrl+Z is needed to undo something the user never deliberately did.
+
+**Root cause:** `Cursor.mousemove`'s drag-start branch resolves the grabbed
+connector to an anchor via `getAnchor`, which splices a new waypoint through
+`scene.updateConnector`, and only then hands off to `DRAG_ITEMS`
+([Cursor.ts:612-618](packages/axoview-lib/src/interaction/modes/Cursor.ts#L612-L618)) —
+whose `entry` is what calls `beginDragTransaction`. The write therefore lands
+outside the bracket that was supposed to make the gesture one undo step.
+
+**Workaround:** press Ctrl+Z twice.
+
+**Status:** Open. Fix direction: open the drag transaction before the splice —
+either move `beginDragTransaction` ahead of the `getAnchor` call in the drag-start
+branch, or perform the splice inside `DragItems.entry` from the pressed
+connector/tile. Repro:
+[`sel-02-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I3-selection/sel-02-15.explore.spec.ts).
