@@ -9,7 +9,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 | E1 | [History & undo/redo engine (dual-store patches)](areas/E1-history-undo-redo.md) | DONE | 15 / 10 | 9 | 3 | 8/5/12 |
 | E2 | [Reducers & cross-store cascades](areas/E2-reducers-cascades.md) | DONE | 15 / 10 | 10 | 1 | 8/7/8 |
 | E3 | [Scene actions, transactions & paste assembly](areas/E3-scene-actions-paste.md) | DONE | 15 / 10 | 12 | 0 | 9/8/7 |
-| E4 | [Clipboard, schemas, initial load & session/UI state](areas/E4-clipboard-schemas-load.md) | IN PROGRESS | 0 / 10 | 0 | 0 | 8/22/6 |
+| E4 | [Clipboard, schemas, initial load & session/UI state](areas/E4-clipboard-schemas-load.md) | DONE | 15 / 10 | 12 | 0 | 8/22/6 |
 | I1 | [Pointer pipeline, mode dispatcher & keyboard routing](areas/I1-pointer-modes-keyboard.md) | OPEN | 0 / 10 | 0 | 0 | 10/20/10 |
 | I2 | [Touch & pen gesture state machine](areas/I2-touch-pen-gestures.md) | OPEN | 0 / 10 | 0 | 0 | 10/22/8 |
 | I3 | [Selection, drag engine & lasso/freehand marquee](areas/I3-selection-drag-lasso.md) | OPEN | 0 / 10 | 0 | 0 | 10/20/14 |
@@ -90,3 +90,11 @@ After all areas are DONE: completeness-critic pass per APPROACH §8 — list the
 | SCN-13 | New pages are named from `views.length`, so a delete in the middle makes the next page duplicate an existing name | *New pages can duplicate an existing page name* |
 | SCN-14 | Pasting onto another page carries the source page's `layerId`, leaving a dangling layer ref no check catches | *Pasting onto another page carries the source page's layer assignment* |
 | SCN-15 | Switching pages during async connector routing writes the old page's paths into the new page's scene (async sibling of D-9) | *Switching pages during async connector routing…* |
+| CLIP-01 | Duplicate item / view ids pass every validation layer; one copy becomes permanently unreachable but is saved and re-exported | *Nothing enforces id uniqueness — duplicate item or view ids load clean…* |
+| CLIP-02 | The load filter checks item refs only, so a connector anchored to a dropped connector's anchor survives and makes the WHOLE diagram refuse to open | *One connector with an unresolvable anchor-to-anchor ref makes the whole diagram refuse to open* |
+| CLIP-04/05/06 | `useDirtyTracker` leaks a subscription per diagram open, never resets `isDirtyRef`, and ignores edits made in its 100 ms startup window | *`useDirtyTracker` leaks a subscription per diagram open, and the dirty flag is never reset* |
+| CLIP-08 | A `preserveViewport` reload keeps the previous model's selection (INV-2), feeding SCN-11's throwing delete | *A `preserveViewport` reload keeps the previous model's selection* |
+| CLIP-09 | Deleting a solo'd layer leaves its id in `previewLayerOverrides`, blanking the preview until a page switch | *Deleting a layer leaves it solo'd in the preview overrides — the canvas can go blank* |
+| CLIP-10 | The single notification slot lets a success toast bury an unread error (ADR 0011 contract) | *The notification slot has no queue — a later toast silently buries an unread error* |
+| CLIP-13 | `updateViewItem` accepts an `iconScale` outside the schema's `[0.1,3]`, so a group resize saves a diagram that then refuses to load | *A group icon-resize can commit a scale outside the schema cap, bricking the next load* |
+| CLIP-14/15 | Unknown icon references and unbounded tile coordinates both pass schema + validateView | *Icon references and tile coordinates are unvalidated* |

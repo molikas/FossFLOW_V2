@@ -1390,3 +1390,188 @@ from the model.
 the remaining batches when `uiState.view` no longer matches (a generation counter
 is enough), or route into a per-view scene keyed by that id. Repro:
 [`scn-14-15.explore.test.tsx`](packages/axoview-lib/src/__explore__/E3/scn-14-15.explore.test.tsx).
+
+## Nothing enforces id uniqueness — duplicate item or view ids load clean and one copy becomes unreachable
+
+**Found by:** exploratory campaign CLIP-01
+
+**Symptom:** a model carrying two `items` entries (or two `views`) with the same
+id passes `modelSchema.safeParse` and `validateModel`. Every lookup in the
+codebase goes through `getItemByIdOrThrow`, which returns the **first** match, so
+the second entity exists in the file, is saved and re-exported, and can never be
+selected, edited, rendered by name, or deleted. Nothing tells the user it is
+there.
+
+This is the same missing-check family as the anchor-id collision on paste
+(SCN-03), the dangling layer ref (RED-03) and the duplicate page name (SCN-13):
+ids and positional values are trusted everywhere and validated nowhere.
+
+**Root cause:** `validation.ts` checks *reference* integrity (view item to model
+item, anchors, colours) but never *identity* integrity, and `validateModelItem`
+is an intentional no-op.
+
+**Reachability:** any merge/import path that concatenates two id spaces — ZIP
+import, "duplicate page", a paste bug like SCN-03, or a hand-edited file.
+
+**Status:** Open. Fix direction: one `assertUniqueIds` pass in `validateModel`
+covering `items`, `views`, and per-view `items`/`connectors`/`rectangles`/
+`textBoxes`/`labels`/`layers` plus anchor ids — it is O(n) with a Set and would
+have caught SCN-03 as well. Repro:
+[`clip-01-03.explore.test.ts`](packages/axoview-lib/src/__explore__/E4/clip-01-03.explore.test.ts).
+
+## One connector with an unresolvable anchor-to-anchor ref makes the whole diagram refuse to open
+
+**Found by:** exploratory campaign CLIP-02
+
+**Symptom:** the load-time normalisation in `useInitialDataManager` drops
+connectors whose anchors reference a missing **item**, but leaves connectors whose
+anchors reference another connector's **anchor**. If the referenced connector was
+one of the dropped ones (or was never there), the survivor is now dangling —
+`validateModel` reports `INVALID_ANCHOR_TO_ANCHOR_REF`, `modelSchema.safeParse`
+fails, and the load path aborts with `setIsReady(false)` and an error toast. The
+user cannot open the diagram at all because of one connector.
+
+The delete-path bugs (RED-07, RED-14) produce exactly this shape in a saved file,
+so a diagram can be bricked by an ordinary editing session.
+
+**Root cause:**
+[`useInitialDataManager`](packages/axoview-lib/src/hooks/useInitialDataManager.ts#L92-L120)
+— the filter's `every` only inspects `ref.item`; `ref.anchor` is accepted
+unconditionally. The validation that follows is fatal rather than corrective.
+
+**Workaround:** none in-app; the file must be repaired externally.
+
+**Status:** Open. Fix direction: extend the load filter to resolve `ref.anchor`
+against the surviving connectors' anchor ids (iterating to a fixed point, since
+dropping one connector can orphan another) — the same "drop the bad connector,
+keep the diagram" policy the item-ref case already follows. Repro:
+[`clip-01-03.explore.test.ts`](packages/axoview-lib/src/__explore__/E4/clip-01-03.explore.test.ts).
+
+## `useDirtyTracker` leaks a subscription per diagram open, and the dirty flag is never reset
+
+**Found by:** exploratory campaign CLIP-04 / CLIP-05 / CLIP-06
+
+**Symptom:** three defects in one hook
+([useDirtyTracker.ts](packages/axoview-lib/src/hooks/useDirtyTracker.ts)):
+
+- **Leaked subscriptions.** The effect's cleanup is `return () => clearTimeout(timer)`
+  — it never calls the unsubscribe it stored in `cleanupRef`. Every `isReady`
+  toggle (i.e. every diagram open) registers another model-store listener that
+  survives until unmount. Measured: two opens, two subscriptions, zero released.
+- **Stale dirty flag.** `isDirtyRef` is only cleared by `markClean()`. Because the
+  ref short-circuits (`if (!isDirtyRef.current)`), a newly-opened diagram whose
+  predecessor was dirty never calls `setIsDirty(true)` again — so the *next* real
+  edit does not raise the flag and the save indicator lies.
+- **Swallowed first edit.** Subscription is deferred 100 ms after `isReady`, so an
+  edit inside that window is not tracked at all: the model changed, `isDirty`
+  stays false, and the beforeunload guard lets the tab close on unsaved work.
+
+**Root cause:** the effect owns a timer, a subscription and a ref, and its cleanup
+addresses only the timer. The 100 ms delay is a workaround for post-load store
+writes rather than an explicit "load finished" signal.
+
+**Status:** Open. Fix direction: unsubscribe in the effect cleanup (and reset
+`isDirtyRef` there), and replace the timer with an explicit post-load `markClean()`
+from the load path — which also removes the swallowed-edit window. Repro:
+[`clip-04-09.explore.test.tsx`](packages/axoview-lib/src/__explore__/E4/clip-04-09.explore.test.tsx).
+
+## Deleting a layer leaves it solo'd in the preview overrides — the canvas can go blank
+
+**Found by:** exploratory campaign CLIP-09
+
+**Symptom:** `previewLayerOverrides` (the ADR 0013 preview-only solo/hide state)
+is keyed by layer id and cleared only by `setView`, `setEditorMode` and the
+explicit clear action. Deleting the layer that is currently solo'd leaves
+`soloLayerId` pointing at an id that no longer exists — and because
+`isEntityVisibleInPreview` shows *only* entities on the solo'd layer, everything
+disappears until the user switches pages or leaves preview.
+
+**Root cause:** the override lives in ui-state and the delete happens in the
+model, with no subscription between them — the same shape as the stale-selection
+bugs (HIST-13, RED-15).
+
+**Workaround:** switch pages, or toggle preview off and on.
+
+**Status:** Open. Fix direction: clear (or re-resolve) `previewLayerOverrides`
+entries whose layer no longer exists whenever the view's layer set changes. Repro:
+[`clip-04-09.explore.test.tsx`](packages/axoview-lib/src/__explore__/E4/clip-04-09.explore.test.tsx).
+
+## A `preserveViewport` reload keeps the previous model's selection
+
+**Found by:** exploratory campaign CLIP-08
+
+**Symptom:** the load path resets `selectedIds`/`itemControls` only when
+`preserveViewport` is falsy. The icon-pack-swap reload sets it, so after that
+reload the selection still names entities from the *previous* model — a dangling
+selection (INV-2) that the delete path will then throw on (SCN-11) and that the
+properties panel renders as "open but blank".
+
+**Root cause:**
+[`useInitialDataManager`](packages/axoview-lib/src/hooks/useInitialDataManager.ts#L211-L217)
+groups the selection reset with the viewport reset, but they answer different
+questions: the viewport should be preserved across a pack swap, the selection
+cannot be (the ids are gone).
+
+**Status:** Open. Fix direction: always clear the selection on load; keep only the
+scroll/zoom restore behind `preserveViewport`. Repro:
+[`clip-08-15.explore.test.tsx`](packages/axoview-lib/src/__explore__/E4/clip-08-15.explore.test.tsx).
+
+## The notification slot has no queue — a later toast silently buries an unread error
+
+**Found by:** exploratory campaign CLIP-10
+
+**Symptom:** `uiState.notification` is a single slot. Any later
+`setNotification` overwrites whatever was there, so a success or progress toast
+(paste succeeded, routing N%, cut N items) replaces an error the user has not read
+— e.g. a failed save or a failed load. Contention is routine: a large paste emits
+progress toasts while autosave may be reporting a failure.
+
+**Root cause:** by design, but it collides with the ADR 0011 error-UX contract
+that failures of intent must be surfaced.
+
+**Status:** Open. Fix direction: either a small queue with severity-aware
+precedence (errors are never displaced by non-errors), or route errors to the
+dialog surface ADR 0011 already requires and leave the toast slot for
+informational messages. Repro:
+[`clip-08-15.explore.test.tsx`](packages/axoview-lib/src/__explore__/E4/clip-08-15.explore.test.tsx).
+
+## A group icon-resize can commit a scale outside the schema cap, bricking the next load
+
+**Found by:** exploratory campaign CLIP-13
+
+**Symptom:** `iconScale` is schema-capped to `[0.1, 3]`, but
+`scene.updateViewItem` accepts any number — the reducer path performs no clamp.
+A group resize multiplies each member's starting scale by a shared factor
+(ADR 0044, to preserve relative sizes), so a member already at 2.5x times a factor
+of 1.3 commits 3.25. The write succeeds, the diagram saves, and the **next load
+fails `safeParse`** — the whole file refuses to open because of one node. This is
+the "no dead writes" / S1-brick class the connector-label 24-to-40 cap already
+taught.
+
+**Root cause:** the range lives only in the schema; no write site enforces it.
+
+**Status:** Open. Fix direction: clamp at the write site (`updateViewItem`, and
+the group-resize factor computation), accepting that a clamped member breaks
+strict ratio preservation — or cap the *factor* so no member can exceed the range,
+which preserves ratios and stays legal. Repro:
+[`clip-08-15.explore.test.tsx`](packages/axoview-lib/src/__explore__/E4/clip-08-15.explore.test.tsx).
+
+## Icon references and tile coordinates are unvalidated
+
+**Found by:** exploratory campaign CLIP-14 / CLIP-15
+
+**Symptom:** two more unchecked reference/range classes:
+
+- **Unknown icon id.** A model item whose `icon` names an icon that is not in
+  `model.icons` passes both `modelSchema` and `validateView`. Pasting a node from
+  a diagram that loaded an icon pack into one that did not therefore commits
+  cleanly and renders as a tombstone after save+reload — the `requiredPacks`
+  mechanism never learns about the pack because nothing flagged the reference.
+- **Unbounded tiles.** `coords` is `z.number()`, which correctly rejects `NaN`,
+  but nothing bounds magnitude: a tile at `1e12` loads clean, overflows the
+  projection math and puts content where no viewport can reach it.
+
+**Status:** Open. Fix direction: add an `INVALID_ITEM_ICON_REF` check to
+`validateModel` (and derive `requiredPacks` from it), and give `coords` a sane
+`.int().min()/.max()` bound consistent with the grid's addressable range. Repro:
+[`clip-08-15.explore.test.tsx`](packages/axoview-lib/src/__explore__/E4/clip-08-15.explore.test.tsx).
