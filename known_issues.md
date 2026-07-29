@@ -1723,3 +1723,36 @@ or press `Ctrl+]` repeatedly.
 existing `z-order.spec.ts` assertion should move to `e.code` too, or it will keep
 passing over a broken shortcut. Repro:
 [`ptr-05-12-14.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I1-pointer/ptr-05-12-14.explore.spec.ts).
+
+## An undo taken during a drag is unrecoverable — the gesture's commit destroys the redo entry
+
+**Found by:** exploratory campaign PTR-10
+
+**Symptom:** press `Ctrl+Z` while a node drag is in flight (button still down),
+then release. The undo lands — the node disappears — and `Ctrl+Y` will not bring
+it back. `model.history.future` is empty after the release, so the entry is gone
+rather than merely unreachable; pressing redo again does nothing. Outside a drag
+the same two keystrokes round-trip fine (`hotkeys.spec.ts` "Ctrl+Y redoes after
+Ctrl+Z", and the probe's own positive control).
+
+**Root cause:** nothing gates the keyboard shortcuts on an in-flight gesture. The
+drag opened a transaction at `DragItems.entry` (`scene.beginDragTransaction()`),
+`Ctrl+Z` runs `useHistory.undo()` straight through the window keydown handler
+underneath it, and the `mouseup` then runs `DragItems.mouseup` →
+`scene.commitDragTransaction()`. That commit is a NEW action as far as the
+history store is concerned, and a new action clears the redo stack — the standard
+undo/redo rule, applied to a commit the user never intended as an edit. (The
+committed patch itself is empty, because the item the drag was previewing no
+longer exists, so the history depth does not even change: `past.length` stays 1
+while `future.length` drops to 0.)
+
+**Workaround:** finish or abandon the gesture before pressing Ctrl+Z. Note that
+Escape does NOT abandon a drag (canvas-interaction.md §8 — `DRAG_ITEMS` has no
+abort), so "release, then undo" is the only safe order.
+
+**Status:** Open. Fix direction: ignore undo/redo (and the other mutating
+shortcuts) while `scene.dragInProgress` is true — the same in-flight-gesture
+guard the tool-hotkey and Ctrl+A paths need. Alternatively make
+`commitDragTransaction` a no-op when the transaction produced no patches, so it
+cannot clear the redo stack. Repro:
+[`ptr-06-09-10-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I1-pointer/ptr-06-09-10-15.explore.spec.ts).
