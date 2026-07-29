@@ -8,7 +8,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 |------|------|--------|---------|------|----------|-------------------------------|
 | E1 | [History & undo/redo engine (dual-store patches)](areas/E1-history-undo-redo.md) | DONE | 15 / 10 | 9 | 3 | 8/5/12 |
 | E2 | [Reducers & cross-store cascades](areas/E2-reducers-cascades.md) | DONE | 15 / 10 | 10 | 1 | 8/7/8 |
-| E3 | [Scene actions, transactions & paste assembly](areas/E3-scene-actions-paste.md) | IN PROGRESS | 2 / 10 | 0 | 0 | 9/8/7 |
+| E3 | [Scene actions, transactions & paste assembly](areas/E3-scene-actions-paste.md) | IN PROGRESS | 4 / 10 | 2 | 0 | 9/8/7 |
 | E4 | [Clipboard, schemas, initial load & session/UI state](areas/E4-clipboard-schemas-load.md) | OPEN | 0 / 10 | 0 | 0 | 8/22/6 |
 | I1 | [Pointer pipeline, mode dispatcher & keyboard routing](areas/I1-pointer-modes-keyboard.md) | OPEN | 0 / 10 | 0 | 0 | 10/20/10 |
 | I2 | [Touch & pen gesture state machine](areas/I2-touch-pen-gestures.md) | OPEN | 0 / 10 | 0 | 0 | 10/22/8 |
@@ -47,7 +47,9 @@ Engine (E1–E4) and interaction (I1–I5) first — highest seam density and ev
 
 **Quarantine verified 2026-07-29:** default lib Jest lists the same 155 files before/after the `testPathIgnorePatterns` touch; the default Playwright config lists 178 tests in 75 files, none under `tests-exploratory/`. Probe artifacts nest under the already-gitignored `test-results/explore` and `playwright-report/explore`.
 
-**Rig note — jsdom has no canvas 2D context.** `getTextBoxDimensions` throws `Could not get canvas context`, so ANY T1 probe touching text boxes must call `installCanvasStub()` (`src/__explore__/canvasStub.ts`) first. This is a campaign-specific trap: an `it.failing` probe whose body throws during *setup* reports as a confirmed bug. Two E1 probes were briefly recorded on that false evidence on 2026-07-29 and re-verified with the stub (verdicts unchanged, now backed by explicit characterization tests). `canvasStub.explore.test.ts` guards the stub itself.
+**Rig note — a probe that throws during SETUP reports as a confirmed bug.** `it.failing` / `test.fail()` only distinguish pass from fail, so any environment or provider error inside the body looks like evidence. Two traps found so far: (a) jsdom has no canvas 2D context; (b) `useCopyPaste` needs `<ClipboardProvider>` (`ClipboardProviders` in `__explore__/E3/harness.tsx`). **Always pair an `it.failing` with a passing characterization test that positively asserts the observed end state** — that is what caught both. Specifically:
+
+**jsdom has no canvas 2D context.** `getTextBoxDimensions` throws `Could not get canvas context`, so ANY T1 probe touching text boxes must call `installCanvasStub()` (`src/__explore__/canvasStub.ts`) first. This is a campaign-specific trap: an `it.failing` probe whose body throws during *setup* reports as a confirmed bug. Two E1 probes were briefly recorded on that false evidence on 2026-07-29 and re-verified with the stub (verdicts unchanged, now backed by explicit characterization tests). `canvasStub.explore.test.ts` guards the stub itself.
 
 **Oracles available to probes** (`fixtures/explore.fixture.ts`): `exploreTest` (blank-diagram boot) / `exploreAppTest` (raw `/app` boot), both auto-asserting the console/pageerror oracle in teardown; `expectStoreInvariants(page)` (INV-1…INV-10), `expectSchemaClean(page)`, `expectModelHealthy(page)` = both. **Grow INV-* as areas confirm cross-store bugs.**
 
@@ -77,3 +79,4 @@ After all areas are DONE: completeness-critic pass per APPROACH §8 — list the
 | RED-08 | Deleting a node leaks its `model.items` entry forever — orphans grow without bound and ship in every save and export | *Deleted nodes leak their model items — `model.items` grows forever and ships in every save* |
 | RED-14 | Deleting a connector orphans any sibling anchored to its anchors — dangling ref, unroutable connector, and the view stops accepting edits (RED-02) | *Deleting a connector orphans any connector anchored to it (anchor-to-anchor)* |
 | RED-15 | Hiding or locking a layer leaves the entities it covers in `selectedIds`, so Delete still removes items the user can no longer see or edit | *Hiding or locking a layer does not drop the entities it covers from the live selection* |
+| SCN-03/04 | Paste keeps the original connector anchor ids, so one waypoint delete pinches both copies and the original's waypoint becomes unaddressable | *Paste does not regenerate connector anchor ids — the clone shares them with the original* |

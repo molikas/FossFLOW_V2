@@ -8,8 +8,27 @@
  *
  * Not a spec file — `jest.explore.config.js` only matches `*.explore.test.tsx`.
  */
+import React from 'react';
 import { act } from '@testing-library/react';
 import type { PastePayload } from 'src/clipboard/clipboard';
+import { ClipboardProvider } from 'src/clipboard/ClipboardContext';
+import { Providers as StoreProviders } from '../E1/harness';
+
+/**
+ * The E1 provider tree plus the instance-scoped clipboard, so probes can drive
+ * the REAL `useCopyPaste` rather than a mock. Without this `useClipboard`
+ * throws at render — and a throwing render makes an `it.failing` probe report
+ * as a confirmed bug (the same trap `canvasStub` guards against).
+ */
+export const ClipboardProviders = ({
+  children
+}: {
+  children: React.ReactNode;
+}) => (
+  <StoreProviders>
+    <ClipboardProvider>{children}</ClipboardProvider>
+  </StoreProviders>
+);
 
 export {
   Providers,

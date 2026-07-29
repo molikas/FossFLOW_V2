@@ -1130,3 +1130,36 @@ state.
 re-assignment), dropping refs that no longer pass — the same filter the
 acquisition paths already share, applied as an invalidation step. Repro:
 [`red-13-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/E2-reducers/red-13-15.explore.spec.ts).
+
+## Paste does not regenerate connector anchor ids — the clone shares them with the original
+
+**Found by:** exploratory campaign SCN-03 / SCN-04
+
+**Symptom:** copy/paste remaps every entity id through `idMap` (items,
+connectors, rectangles, text boxes, labels) but rebuilds connector anchors with
+`{ ...anchor, ref }`, so `anchor.id` is carried over verbatim. Copying a
+connector that has a middle waypoint therefore leaves **two** anchors called
+`anc-mid` in the same view. Measured consequences:
+- **One delete pinches two connectors.** `deleteSelectedItems` splices waypoint
+  anchors by id across every connector in the view, so deleting the pasted
+  clone's waypoint removes the original's as well — both paths go from 3 anchors
+  to 2 in a single Delete.
+- **The original's waypoint becomes unaddressable.** Anchor-to-anchor refs and
+  `CONNECTOR_ANCHOR` selection refs resolve through
+  `getItemByIdOrThrow(getAllAnchors(...), id)`, which returns the first match.
+  Paste unshifts, so the clone always wins — which of the two is reachable is an
+  artefact of array order, not of intent.
+
+**Root cause:** [`useCopyPaste.handlePaste`](packages/axoview-lib/src/clipboard/useCopyPaste.ts#L355-L382)
+builds `newConnectors` with fresh connector ids but no anchor-id remapping. The
+schema does not require anchor-id uniqueness and `validateView` does not check
+it, so nothing downstream catches the collision.
+
+**Workaround:** delete and re-draw the waypoint on the pasted copy.
+
+**Status:** Open. Fix direction: extend `idMap` to anchor ids and remap
+`anchor.id` alongside `anchor.ref` (anchor-to-anchor refs inside the pasted set
+must follow the same map); add an anchor-id-uniqueness check to `validateView`
+so the class cannot come back through another duplication path (ZIP import,
+"duplicate page"). Repro:
+[`scn-03-04.explore.test.tsx`](packages/axoview-lib/src/__explore__/E3/scn-03-04.explore.test.tsx).
