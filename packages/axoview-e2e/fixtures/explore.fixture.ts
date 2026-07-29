@@ -202,12 +202,18 @@ const dupes = (list: string[]) => {
  * Invariant numbering is stable — probes and known_issues entries cite it.
  *
  *  INV-1  the active view id resolves to a view in the model
+ *         — proved live by E1/HIST-04 (an undone page create strands ui.view)
  *  INV-2  every selectedIds entry resolves to a live object of its type
+ *         — proved live by E1/HIST-13 (Delete leaves the dead id selected)
  *  INV-3  no orphan scene connector paths (scene ⊆ active view connectors)
+ *         — proved live by E1/HIST-02 (stale scene redo) and E1/HIST-09 (D-9)
  *  INV-4  no unrendered connectors (active view connectors ⊆ scene) — a
  *         connector with no scene path is invisible on canvas (sceneStore.tsx
  *         documents this exact regression on the scene-redo path)
  *  INV-5  scene textBoxes ↔ active view textBoxes, both directions
+ *         — proved live by E1/HIST-01 and E1/HIST-03 (text box loses its scene
+ *           size when the two history stacks fall out of step; unlike
+ *           connectors, resyncScene never repairs it)
  *  INV-6  every view item references an existing model item
  *  INV-7  every connector anchor item-ref resolves to a view item
  *  INV-8  no duplicate ids inside any one collection

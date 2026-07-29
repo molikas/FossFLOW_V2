@@ -836,3 +836,30 @@ The store itself owns `pendingPre`/`pendingPreFrozen`, so the guard belongs ther
 observes the same state, and make `saveToHistory()` a no-op while frozen. Related:
 HIST-06 above. Repro:
 [`hist-05-08.explore.test.tsx`](packages/axoview-lib/src/__explore__/E1/hist-05-08.explore.test.tsx).
+
+## Deleting a selected item leaves it selected — `uiState.selectedIds` keeps the dead id
+
+**Found by:** exploratory campaign HIST-13
+
+**Symptom:** Select a node and press Delete. The view item is removed from
+`model.views[].items`, but `uiState.selectedIds` still holds
+`{ type: 'ITEM', id: <deleted id> }` until the next click somewhere else. The same
+dangling reference survives an undo/redo round trip of the delete. Anything routed
+through the current selection in that window — a style-strip write, an arrow-key
+nudge, a second Delete, a layer assignment — targets an id the reducers resolve
+with `getItemByIdOrThrow`, i.e. it throws. That throw is itself harmful: it leaves
+the undo snapshot armed (see the phantom-history-entry entry above, HIST-05).
+
+**Root cause:** the delete path (`useSceneActions.deleteSelectedItems`) removes the
+entities but never clears the ui-state slice that named them; `uiState` has the
+`clearSelection` convenience action and nothing calls it here. Detected by the
+campaign's cross-store oracle INV-2 ("every `selectedIds` entry resolves to a live
+object of its type").
+
+**Workaround:** click empty canvas after deleting.
+
+**Status:** Open. Fix direction: clear (or filter) `selectedIds` and `itemControls`
+in the delete transaction — and, more durably, make selection resolution
+defensive so a dangling id degrades to "not selected" rather than to a reducer
+throw. Repro:
+[`hist-11-13.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/E1-history/hist-11-13.explore.spec.ts).
