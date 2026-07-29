@@ -985,3 +985,65 @@ current `order` and rewrite `0..n-1` at the end of `createLayer`, `deleteLayer`
 and `reorderLayers`, so the invariant "orders are a permutation of `0..n-1`"
 cannot be broken by any single call. Repro:
 [`red-03-05.explore.test.ts`](packages/axoview-lib/src/__explore__/E2/red-03-05.explore.test.ts).
+
+## No-op edits dirty the diagram and burn an undo step (every action stamps `lastUpdated`)
+
+**Found by:** exploratory campaign RED-06
+
+**Symptom:** every action in `TIMESTAMPED_ACTIONS` runs `updateViewTimestamp`
+unconditionally — including the ones whose reducer body changed nothing. The
+result is a brand-new model / views array / view object with only `lastUpdated`
+different, so `useDirtyTracker` fires ("unsaved changes"), autosave runs, and the
+history stores an entry whose undo produces no visible change — a Ctrl+Z that
+appears to do nothing.
+
+Reachable cases confirmed by the probe:
+- committing a page rename **with the same name** (ViewTabs' inline rename commits
+  on blur/Enter unconditionally, so opening it and pressing Enter is enough);
+- re-writing a view-item property with the value it already has (a style-strip
+  click on the already-active colour, a `showLabel` toggle back and forth);
+- `UPDATE_LAYER` with an id that matches no layer, and `REORDER_LAYERS` with an
+  empty list — both of which the reducer bodies explicitly early-return on.
+
+**Root cause:** [`view.ts`](packages/axoview-lib/src/stores/reducers/view.ts#L325-L327)
+applies the timestamp based on the *action name*, not on whether the action
+actually produced a change. The reducers signal "nothing happened" by returning
+the state untouched, and that signal is discarded one line later.
+
+**Workaround:** none; the phantom dirty flag is harmless to the data, just noisy.
+
+**Status:** Open. Fix direction: stamp only when the reducer returned a different
+model (`newState.model !== ctx.state.model` is already the natural test, since
+every reducer either produces via immer or returns the input) — and, for the
+inline-rename path, skip the dispatch entirely when the text is unchanged. Repro:
+[`red-06-07.explore.test.ts`](packages/axoview-lib/src/__explore__/E2/red-06-07.explore.test.ts).
+
+## Deleting a node leaves anchor-to-anchor connectors dangling and permanently unroutable
+
+**Found by:** exploratory campaign RED-07
+
+**Symptom:** `deleteViewItem`'s cascade removes only the connectors that reference
+the deleted item **directly** (`getConnectorsByViewItem` matches `ref.item`). A
+connector anchored to *another connector's anchor* — the ADR 0006 anchor-to-anchor
+ref a connector dropped onto another connector produces — is not part of that set,
+so when the cascade removes its target connector the surviving one is left with a
+`ref.anchor` pointing at an anchor that no longer exists. Consequences:
+- `validateView` reports `INVALID_ANCHOR_TO_ANCHOR_REF`, which by RED-02 makes
+  **every subsequent node move and node placement in that view throw**;
+- `getConnectorPath` throws on it, so `SYNC_SCENE` writes
+  `{ tiles: [], unroutable: true }` — and `useHistory.resyncScene` treats
+  `unroutable` as deliberate and never retries, so the connector is invisible for
+  the rest of the session (see the sticky-unroutable entry, RED-09).
+
+**Root cause:** the cascade computes its victim set from direct item references
+only and never walks the anchor graph transitively —
+[viewItem.ts](packages/axoview-lib/src/stores/reducers/viewItem.ts#L68-L103).
+`deleteConnector` has the same gap (RED-14).
+
+**Workaround:** delete the chained connector manually before deleting the node.
+
+**Status:** Open. Fix direction: after removing connectors, sweep the view's
+remaining connectors for `ref.anchor` values that no longer resolve and either
+re-point them at the anchor's last tile or cascade-delete them — the same
+"leave no dangling ref" rule the direct-reference cascade already follows. Repro:
+[`red-06-07.explore.test.ts`](packages/axoview-lib/src/__explore__/E2/red-06-07.explore.test.ts).
