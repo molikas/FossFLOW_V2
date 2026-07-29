@@ -1,6 +1,6 @@
 # I5 — Pan/right-click, context menu, placement tools & transform handles
 
-**Status:** OPEN · **Counted hypotheses:** 0 / 10 · **Bugs:** 0 · **Hypothesis ID prefix:** `CTX-`
+**Status:** IN PROGRESS · **Counted hypotheses:** 0 / 10 · **Bugs:** 0 · **Hypothesis ID prefix:** `CTX-`
 
 **Scope:** usePanHandlers: middle-drag and deferred right-drag pan (4px threshold), right-TAP → item/bulk/canvas context menu (ADR 0027), previous-mode save/restore with connector abort; Pan mode incl. EXPLORABLE_READONLY left-click-opens-popover; arm-then-drop placement tools (PlaceIcon/TextBox/Label) with off-grid residual placement; CanvasContextMenu (sole per-item command surface); TransformControlsManager selection chrome + resize handle geometry feeding the RECTANGLE/TEXTBOX/NODE transform modes; keyboard placement at viewport centre.
 
@@ -77,8 +77,25 @@
 
 ## Hypotheses
 
+*(Ledger-wide ID scan: "menu dismissal on scroll/zoom" was probed as **PTR-13** in I1 (FALSIFIED — the MUI backdrop eats the wheel and MenuList eats the arrows), so only the viewport-edge and per-type-contents halves of that baseline gap are proposed here.)*
+
 | ID | Hypothesis | Source | Nearest existing tests | Probe | Verdict | Evidence |
 |----|-----------|--------|------------------------|-------|---------|----------|
+| CTX-01 | A MOUSE palette drag released off-canvas still places the element — the placement modes gate on `moved` alone, and only the touch `palette` path does an over-canvas check | seed seam #1 (mouse twin of TCH-05) | `PlaceIcon.test.ts` ("off-canvas no-move tap only arms" — the MOVED case is untested); `touch-palette-drag.spec.ts` (touch) | — | PROPOSED | |
+| CTX-02 | A right-tap opens the context menu for a STALE tile when the pointer hasn't moved over the target since the last pan | seed seam #2 | `usePanHandlers.test.ts` (right-tap unit, mouse position seeded directly) | — | PROPOSED | |
+| CTX-03 | A right-drag pan started while TEXTBOX or LABEL is armed silently drops the tool — `restorePreviousMode` only reconstructs five hardcoded mode types | seed seam #3 | `usePanHandlers.test.ts` "mode restore after pan (CURSOR and CONNECTOR)" | — | PROPOSED | |
+| CTX-04 | A MIDDLE-drag pan always exits to CURSOR even when a tool was armed, unlike the right-drag path which restores it | seed seam #8 | `usePanHandlers.test.ts` "middle-click pan cycle" (no armed tool) | — | PROPOSED | |
+| CTX-05 | Wheel-zoom during a node icon-resize jumps the committed scale — the factor math divides by the zoom in force at commit time | seed seam #6 | `TransformNode.test.ts` (fixed zoom) | — | PROPOSED | |
+| CTX-06 | The transform chrome gates on `lockedIds` only, so a group containing an item on a HIDDEN layer still gets a group resize box | seed seam #10 | `layers.spec.ts` (visibility of entities, not of chrome) | — | PROPOSED | |
+| CTX-07 | `handleRightButtonUp` consumes ANY stray right mouseup, including one whose press began off-canvas, so a right-click in a panel loses its native menu | seed seam #7 | `contextmenu-scope.spec.ts` (off-canvas right-click keeps its native menu — with our menu CLOSED) | — | PROPOSED | |
+| CTX-08 | Dragging a rectangle handle past the opposite edge inverts the rectangle instead of clamping | baseline gap "Inverted drag (resize past zero)" | `TransformRectangle.test.ts` (corner + edge drags that keep the opposite edge fixed) | — | PROPOSED | |
+| CTX-09 | A zero-travel rectangle draw commits a degenerate zero-size rectangle instead of being discarded | baseline gap "Zero-size / single-tile rectangle draw commit-vs-discard" | `DrawRectangle.test.ts` (create on mousedown, resize on move) | — | PROPOSED | |
+| CTX-10 | Undo of a rectangle resize does not restore the original bounds | baseline gap "Undo of a rectangle resize" | `TransformRectangle.test.ts` (one undo entry asserted, never replayed); `undo-redo-*.spec.ts` (placements) | — | PROPOSED | |
+| CTX-11 | A context menu opened near the viewport edge overflows off-screen instead of flipping/clamping | baseline gap | `contextmenu-scope.spec.ts` (centre of canvas only) | — | PROPOSED | |
+| CTX-12 | The context menu's command set is not at parity across element types — a type is missing a command its peers have (ADR 0027 §4: the menu is the SOLE per-item command surface) | baseline gap + ADR 0027 as-built note ("no unit test for CanvasContextMenu") | `rectangle-zorder-menu.spec.ts` (rectangle zIndex only); `label-entity.spec.ts` (menu opens) | — | PROPOSED | |
+| CTX-13 | Keyboard-driven placement drops the element at a stale mouse tile rather than the viewport centre | scope statement ("keyboard placement at viewport centre") | `useKeyboardIconPlacement.ts` — zero tests (baseline "zero-test hooks") | — | PROPOSED | |
+| CTX-14 | `TransformTextBox`'s near-edge branches are off by one in orientation Y, where "width" maps to −y | seed seam #5 | `TransformTextBox.test.ts` (both orientations, near/far edge) | — | PROPOSED | |
+| CTX-15 | In `EXPLORABLE_READONLY` a left-click on a content-bearing item does not open the ADR-0012 info popover (Pan mode owns the click) | scope statement ("Pan mode incl. EXPLORABLE_READONLY left-click-opens-popover") | `view-mode-info-popover.spec.ts` (drives `setItemControls` directly, "the click→select wiring is existing, separately-covered behavior") | — | PROPOSED | |
 
 ## Product questions (SUSPECT verdicts)
 
