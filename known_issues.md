@@ -316,7 +316,12 @@ The icon catalog conflates two concerns (see [ADR-0002](docs/adr/0002-icon-catal
 These are distinct mechanisms, not stack-skew, so the sequence-stamping work does not address them. Filed explicitly so they are not lost:
 
 - **D-8 — paste→undo→redo restored empty connector paths — FIXED 2026-06-16 (PR #49, [ADR 0021](docs/adr/0021-paste-algorithmic-perf-and-spatial-index.md) item 7).** Paste records a provisional empty path in the scene history entry (`createConnector(..., skipPathfinding=true)`), and `computePathsAsync` fills the real paths *outside* history (`skipHistory=true`). So paste → `Ctrl+Z` → `Ctrl+Y` re-applied the recorded patch with empty paths → pasted connectors rendered pathless until a later edit touched them. **Fix:** `useHistory.undo/redo` calls a scoped `resyncScene()` that re-routes the active view (`SYNC_SCENE`, written `skipHistory` so it never perturbs either undo/redo stack) — but **only when** an active-view connector actually has a missing/empty (non-`unroutable`) path, so the common model-only undo (e.g. a rename) pays just an O(C) `tiles.length` scan, never a synchronous full re-route at 700+ connectors. Guarded by the `useHistory` unit suites ([useHistory.test.tsx](packages/axoview-lib/src/hooks/__tests__/useHistory.test.tsx) + [useHistory.realStore.test.tsx](packages/axoview-lib/src/hooks/__tests__/useHistory.realStore.test.tsx)).
-- **D-9 — cross-view (page-switch) undo applies scene patches to the wrong view.** The scene store holds only the current view but its history stack is global and unscoped; `changeView` rebuilds the scene with `skipHistory=true` and does not clear/scope history. Undoing after a page switch applies the previous view's scene patches to the current view (phantom/stale `scene.connectors[id]`) while the model undo reverts an off-screen view. **Fix sketch:** scope scene history per-view, or clear/snapshot on `changeView`. Larger change; deferred. Code-traced, e2e repro to be added.
+- **D-9 — cross-view (page-switch) undo applies scene patches to the wrong view.** The scene store holds only the current view but its history stack is global and unscoped; `changeView` rebuilds the scene with `skipHistory=true` and does not clear/scope history. Undoing after a page switch applies the previous view's scene patches to the current view (phantom/stale `scene.connectors[id]`) while the model undo reverts an off-screen view. **Fix sketch:** scope scene history per-view, or clear/snapshot on `changeView`. Larger change; deferred. **Repro committed 2026-07-29** by the exploratory
+  campaign (HIST-09):
+  [`hist-09-10.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/E1-history/hist-09-10.explore.spec.ts)
+  — draw two connectors on page 1, switch to an empty page 2, Ctrl+Z, and page 2's
+  scene cache ends up holding page 1's connector path (`test.fail()`, with a
+  passing characterization test alongside it).
 
 ## Touch per-item actions (delete / z-order) — RESOLVED via direct manipulation (Option A)
 
@@ -662,6 +667,14 @@ never calls `saveToHistoryBeforeChange()`, and its `setState()` writes both stor
 with `skipHistory=true`. With no pending pre-snapshot the store takes the
 "no pending pre — just apply the update" branch, so nothing enters either stack.
 `deleteView` (same file) does call `saveToHistoryBeforeChange()`.
+
+**Worse, end-to-end:** because every history entry's inverse patch replaces the
+whole `views` array (see the leaked-drag entry below for the same mechanism), the
+un-recorded page creation lives in a subtree the undo rolls back wholesale. Draw a
+connector, click "Add page", press Ctrl+Z: **the new page silently disappears**
+and `uiState.view` is left pointing at its id — a dangling active-view reference
+that every reader papers over by falling back to `views[0]`. Measured e2e in
+[`hist-09-10.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/E1-history/hist-09-10.explore.spec.ts).
 
 **Workaround:** delete the page manually (that *is* undoable).
 

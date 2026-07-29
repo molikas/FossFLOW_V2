@@ -6,7 +6,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 
 | Area | Name | Status | Counted | Bugs | Suspects | Seeds (seams/invariants/gaps) |
 |------|------|--------|---------|------|----------|-------------------------------|
-| E1 | [History & undo/redo engine (dual-store patches)](areas/E1-history-undo-redo.md) | IN PROGRESS | 10 / 10 | 7 | 2 | 8/5/12 |
+| E1 | [History & undo/redo engine (dual-store patches)](areas/E1-history-undo-redo.md) | IN PROGRESS | 12 / 10 | 8 | 3 | 8/5/12 |
 | E2 | [Reducers & cross-store cascades](areas/E2-reducers-cascades.md) | OPEN | 0 / 10 | 0 | 0 | 8/7/8 |
 | E3 | [Scene actions, transactions & paste assembly](areas/E3-scene-actions-paste.md) | OPEN | 0 / 10 | 0 | 0 | 9/8/7 |
 | E4 | [Clipboard, schemas, initial load & session/UI state](areas/E4-clipboard-schemas-load.md) | OPEN | 0 / 10 | 0 | 0 | 8/22/6 |
@@ -64,3 +64,4 @@ After all areas are DONE: completeness-critic pass per APPROACH §8 — list the
 | HIST-05 | A failed edit leaves the undo snapshot armed, so the next page switch records a phantom scene history entry | *A failed edit arms the undo snapshot; the next page switch records a phantom history entry* |
 | HIST-06 | After a leaked drag bracket later edits record no history AND the next Ctrl+Z destroys them (patches are whole-subtree replaces) | *A leaked drag bracket makes later edits un-undoable, and the next Ctrl+Z destroys them* |
 | HIST-07 | `dragInProgress` is per-hook-instance, so a mid-drag write from another component corrupts the drag's undo entry (undo lands mid-drag) | *A mid-drag edit from another component corrupts the drag's undo entry* |
+| HIST-09 | Cross-page undo writes the previous page's cached connector path into the page now on screen (**known** — D-9; this is its first committed repro, no new entry) | *Undo desync … (D-7)* → residual **D-9** |
