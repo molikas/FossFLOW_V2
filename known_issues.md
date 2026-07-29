@@ -1072,3 +1072,61 @@ garbage-collection step anywhere between the delete and the save.
 dead) rather than at delete time, so undo of a delete keeps working. Fixing
 `deleteModelItem` (RED-01) is a prerequisite for any delete-time variant. Repro:
 [`red-08-09.explore.test.tsx`](packages/axoview-lib/src/__explore__/E2/red-08-09.explore.test.tsx).
+
+## Deleting a connector orphans any connector anchored to it (anchor-to-anchor)
+
+**Found by:** exploratory campaign RED-14
+
+**Symptom:** `DELETE_CONNECTOR` splices the connector out of the view and drops
+its scene path, but never touches sibling connectors whose anchors reference
+*its* anchors (the ADR 0006 anchor-to-anchor ref that dropping a connector onto
+another connector creates). The survivor is left with a `ref.anchor` pointing at
+an anchor that no longer exists, so `validateView` reports
+`INVALID_ANCHOR_TO_ANCHOR_REF`, `getConnectorPath` throws on it, and — by RED-02 —
+**every subsequent node move in that view throws**. Deleting one connector can
+therefore make the whole page un-editable.
+
+This is the direct-delete twin of the node-delete gap (RED-07); both stem from
+the same missing rule.
+
+**Root cause:** the delete paths compute their victim set from *item* references
+only and never walk the anchor graph —
+[connector.ts `deleteConnector`](packages/axoview-lib/src/stores/reducers/connector.ts#L6-L19),
+[viewItem.ts `deleteViewItem`](packages/axoview-lib/src/stores/reducers/viewItem.ts#L68-L103).
+
+**Workaround:** delete the dependent connector first.
+
+**Status:** Open. Fix direction: one shared "sweep dangling anchor refs" step that
+both delete paths run — for each surviving connector, replace any `ref.anchor`
+that no longer resolves with the anchor's last known tile, or cascade-delete the
+connector if that leaves it with fewer than two anchors. Repro:
+[`red-14.explore.test.ts`](packages/axoview-lib/src/__explore__/E2/red-14.explore.test.ts).
+
+## Hiding or locking a layer does not drop the entities it covers from the live selection
+
+**Found by:** exploratory campaign RED-15
+
+**Symptom:** select items (Ctrl+A or a lasso) while their layer is visible and
+unlocked, then hide — or lock — that layer in the Layers panel. `selectedIds`
+still holds them. Pressing Delete removes items the user can no longer see, and a
+group drag or a style write moves/restyles entities the panel presents as locked.
+Confirmed end-to-end for both the hide and the lock toggle.
+
+This breaks the ADR 0006 §3 / canvas-interaction I-1 invariant that `selectedIds`
+may only ever contain interactable refs. Every existing guard covers the
+*acquisition* paths (Ctrl+A, lasso, click, context menu all filter through
+`makeInteractableCheck`); nothing re-validates a selection that was legal when it
+was made and stopped being legal afterwards.
+
+**Root cause:** layer state lives in the model and selection lives in ui-state,
+with no subscription between them — `updateLayer` writes `visible`/`locked` and
+nothing revisits `uiState.selectedIds`.
+
+**Workaround:** click empty canvas to clear the selection after changing layer
+state.
+
+**Status:** Open. Fix direction: re-run `makeInteractableCheck` over
+`selectedIds` whenever a layer's `visible`/`locked` changes (and on layer delete /
+re-assignment), dropping refs that no longer pass — the same filter the
+acquisition paths already share, applied as an invalidation step. Repro:
+[`red-13-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/E2-reducers/red-13-15.explore.spec.ts).
