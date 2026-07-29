@@ -608,3 +608,65 @@ fires.
 Coupled to the bundle-split entry above: whoever does option 1 there closes this
 for free. See
 [technical-review-2026-07-29.md §5](docs/reviews/technical-review-2026-07-29.md).
+
+## Layer / z-order ops inherit the previous action's history sequence — one Ctrl+Z reverts two actions
+
+**Found by:** exploratory campaign HIST-01
+
+**Symptom:** After any action that writes BOTH stores (draw a connector, create/edit
+a text box, drag a node that has connectors), the next layer-panel operation
+(create/rename/show/hide/lock a layer, reorder layers, assign items to a layer, or
+a `Ctrl+]` / `Ctrl+[` z-order change) is recorded with the *same* logical-action
+sequence as that earlier action. A single Ctrl+Z then steps **both** history
+stacks: it undoes the layer op (correct) *and* reverts the earlier action's scene
+half (wrong). Visible consequences:
+- a text box created just before a layer op loses its `scene.textBoxes[id].size`
+  on that undo and renders with no measured size — `useHistory.resyncScene()`
+  re-routes connectors only, never text boxes;
+- for connectors the path is silently repaired by `resyncScene`, but the scene
+  stack is now one entry short, so the *next* Ctrl+Z removes the connector from
+  the model and leaves its scene path behind (orphan `scene.connectors[id]`).
+
+**Root cause:** [`useLayerActions.commit()`](packages/axoview-lib/src/hooks/useLayerActions.ts#L34-L41)
+calls `modelStore.saveToHistory()` directly instead of the
+`allocateHistorySequence() + saveToHistory()` pair every other write path uses
+(`useSceneActions.saveToHistoryBeforeChange`, `useHistory.transaction`,
+`beginDragTransaction`). With no allocation, `modelStore.set()` stamps the entry
+with `currentHistorySequence()` — the *previous* action's number — and the D-7
+coordination in `useHistory.undo` (step every stack whose top carries the max seq)
+can no longer tell the two actions apart. `commit()` also never calls
+`sceneStore.saveToHistory()`, so a layer op can never record its own scene half.
+
+**Workaround:** none at the user level. Undo once more and redo to re-route, or
+avoid interleaving layer/z-order edits with connector and text-box edits.
+
+**Status:** Open. Fix direction: call `allocateHistorySequence()` in
+`useLayerActions.commit()` before `saveToHistory()`, and save/commit the scene
+store alongside the model store — i.e. reuse `useSceneActions`'
+`saveToHistoryBeforeChange` rather than hand-rolling a second commit path
+(the sibling-drift bug class). Repro:
+[`hist-01-04.explore.test.tsx`](packages/axoview-lib/src/__explore__/E1/hist-01-04.explore.test.tsx).
+
+## Creating a page is not undoable, and Ctrl+Z after it silently reverts the previous action
+
+**Found by:** exploratory campaign HIST-04
+
+**Symptom:** "New page" adds a view to the model but records no history entry.
+Pressing Ctrl+Z straight after creating a page therefore leaves the page in place
+and instead reverts whatever the user did *before* creating it — a silent,
+off-screen undo (the reverted edit lives on the previous page). Deleting a page
+*is* undoable, so the create/delete pair is asymmetric.
+
+**Root cause:** [`useSceneActions.createView`](packages/axoview-lib/src/hooks/useSceneActions.ts#L764-L784)
+never calls `saveToHistoryBeforeChange()`, and its `setState()` writes both stores
+with `skipHistory=true`. With no pending pre-snapshot the store takes the
+"no pending pre — just apply the update" branch, so nothing enters either stack.
+`deleteView` (same file) does call `saveToHistoryBeforeChange()`.
+
+**Workaround:** delete the page manually (that *is* undoable).
+
+**Status:** Open. Fix direction: add `saveToHistoryBeforeChange()` to `createView`,
+matching `deleteView`. Note the related open question of whether undoing a page
+create/delete should also restore `uiState.view` — it is not part of either
+history stack (see HIST-10). Repro:
+[`hist-01-04.explore.test.tsx`](packages/axoview-lib/src/__explore__/E1/hist-01-04.explore.test.tsx).
