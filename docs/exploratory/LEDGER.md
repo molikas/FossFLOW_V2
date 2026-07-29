@@ -6,7 +6,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 
 | Area | Name | Status | Counted | Bugs | Suspects | Seeds (seams/invariants/gaps) |
 |------|------|--------|---------|------|----------|-------------------------------|
-| E1 | [History & undo/redo engine (dual-store patches)](areas/E1-history-undo-redo.md) | IN PROGRESS | 2 / 10 | 2 | 0 | 8/5/12 |
+| E1 | [History & undo/redo engine (dual-store patches)](areas/E1-history-undo-redo.md) | IN PROGRESS | 4 / 10 | 4 | 0 | 8/5/12 |
 | E2 | [Reducers & cross-store cascades](areas/E2-reducers-cascades.md) | OPEN | 0 / 10 | 0 | 0 | 8/7/8 |
 | E3 | [Scene actions, transactions & paste assembly](areas/E3-scene-actions-paste.md) | OPEN | 0 / 10 | 0 | 0 | 9/8/7 |
 | E4 | [Clipboard, schemas, initial load & session/UI state](areas/E4-clipboard-schemas-load.md) | OPEN | 0 / 10 | 0 | 0 | 8/22/6 |
@@ -58,4 +58,6 @@ After all areas are DONE: completeness-critic pass per APPROACH §8 — list the
 | ID | Symptom | known_issues.md anchor |
 |----|---------|------------------------|
 | HIST-01 | Layer/z-order ops inherit the previous action's history sequence, so one Ctrl+Z reverts two actions (strands a text box's scene size; orphans a scene connector on the next undo) | *Layer / z-order ops inherit the previous action's history sequence — one Ctrl+Z reverts two actions* |
+| HIST-02 | A new model-only action clears only the model redo stack, so Redo stays armed and resurrects an undone connector's scene path (orphan `scene.connectors[id]`) | *Redo stays armed on the scene stack after a new action, resurrecting an undone connector's path* |
+| HIST-03 | The two 50-entry stacks trim independently, so one logical action's halves are evicted at different times; draining history strands a text box with no scene size (falsifies the D-7 entry's "trim sub-case resolved" claim) | *Independent 50-entry history trimming splits one logical action across the two stacks* |
 | HIST-04 | Creating a page records no history entry, so Ctrl+Z after "New page" silently reverts the previous action and leaves the page | *Creating a page is not undoable, and Ctrl+Z after it silently reverts the previous action* |

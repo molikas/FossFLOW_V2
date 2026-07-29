@@ -670,3 +670,63 @@ matching `deleteView`. Note the related open question of whether undoing a page
 create/delete should also restore `uiState.view` — it is not part of either
 history stack (see HIST-10). Repro:
 [`hist-01-04.explore.test.tsx`](packages/axoview-lib/src/__explore__/E1/hist-01-04.explore.test.tsx).
+
+## Redo stays armed on the scene stack after a new action, resurrecting an undone connector's path
+
+**Found by:** exploratory campaign HIST-02
+
+**Symptom:** Draw a connector → Ctrl+Z → place an icon (or any model-only action:
+rename, nudge a lone node, edit a title) → the Redo control is still enabled, and
+Ctrl+Y writes the undone connector's path back into the scene store even though
+the connector is no longer in the model. The result is an orphan
+`scene.connectors[id]` — a cached path with no owner — that survives until the
+next `changeView`/`SYNC_SCENE` rebuild. `useHistory.canRedo` is
+`modelCanRedo || sceneCanRedo`, so the button lies about what a redo will do.
+
+**Root cause:** "A new action clears the redo stack" is implemented per store, in
+each store's `set()`. A model-only action produces zero patches in the scene
+store, which takes the MQA #5 no-op early return —
+[sceneStore.tsx](packages/axoview-lib/src/stores/sceneStore.tsx#L184-L186) — and
+that branch returns *before* the `future: []` reset. So the scene store keeps a
+future entry belonging to a logical action the user has since abandoned. The same
+hole exists symmetrically in [modelStore.tsx](packages/axoview-lib/src/stores/modelStore.tsx#L193-L195).
+
+**Workaround:** switch pages and back (rebuilds the scene from the model).
+
+**Status:** Open. Fix direction: redo invalidation is a property of the logical
+action, not of one store — clear BOTH futures when either store records a new
+entry (e.g. in the `saveToHistoryBeforeChange` / `allocateHistorySequence`
+boundary), or make the no-op branch still reset `future`. Repro:
+[`hist-02-03.explore.test.tsx`](packages/axoview-lib/src/__explore__/E1/hist-02-03.explore.test.tsx).
+
+## Independent 50-entry history trimming splits one logical action across the two stacks
+
+**Found by:** exploratory campaign HIST-03
+
+**Symptom:** After a both-stores action (create a text box or a connector)
+followed by more than 50 model-only actions, the model half of that action is
+evicted by `MAX_HISTORY_SIZE` while its scene half stays at the bottom of the
+scene stack. Undoing all the way back then applies the surviving scene half on its
+own: for a text box the model entry survives but `scene.textBoxes[id].size` is
+reverted away, leaving a text box with no measured size that no later undo/redo
+restores. (For connectors the same split happens but is masked —
+`useHistory.resyncScene()` re-routes the path afterwards.)
+
+This contradicts the D-7 entry above, which records "the `MAX_HISTORY_SIZE=50`
+trim-skew sub-case (behavior-map §4.5(a)) is resolved by the same fix". Sequence
+stamping makes one keystroke revert one logical action; it does not stop the two
+stacks from trimming that action's halves at different times.
+
+**Root cause:** each store trims its own `past` at 50 entries
+([modelStore.tsx](packages/axoview-lib/src/stores/modelStore.tsx#L201-L202),
+[sceneStore.tsx](packages/axoview-lib/src/stores/sceneStore.tsx#L192-L193)) with
+no knowledge of the shared logical-action sequence, and the two stacks fill at
+different rates because model-only actions push nothing to the scene stack.
+
+**Workaround:** none. Switching pages rebuilds the scene from the model and
+restores the missing size.
+
+**Status:** Open. Fix direction: trim by logical-action sequence rather than by
+per-stack length — when a store evicts seq N, drop every entry with seq ≤ N from
+both stacks. Repro:
+[`hist-02-03.explore.test.tsx`](packages/axoview-lib/src/__explore__/E1/hist-02-03.explore.test.tsx).
