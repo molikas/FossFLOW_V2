@@ -1,6 +1,6 @@
 # E4 — Clipboard, schemas, initial load & session/UI state
 
-**Status:** OPEN · **Counted hypotheses:** 0 / 10 · **Bugs:** 0 · **Hypothesis ID prefix:** `CLIP-`
+**Status:** IN PROGRESS · **Counted hypotheses:** 0 / 10 · **Bugs:** 0 · **Hypothesis ID prefix:** `CLIP-`
 
 **Scope:** uiStateStore owns all ephemeral/session state: zoom/scroll, editorMode/mode, selection (selectedIds + itemControls with mirroring contracts ADR-0006/0022), transient drag previews (labelDrag/labelMove(s)/iconScaleDrag/editingTextBoxSize), annotation strokes with their own linear undo, persisted prefs, dirty flag, notification slot, contextMenu, per-view preview layer overrides. Clipboard is an instance-scoped ref holding live (frozen) model object references; useCopyPaste resolves selection→payload, cut deletes, paste remaps ids/offsets/anchors and routes async. useInitialDataManager normalises legacy shapes (title→name, label seeding, XSS sanitize), drops invalid connectors, zod-validates via modelSchema.superRefine(validateModel), then seeds stores and clears history. useDirtyTracker subscribes to modelStore post-load.
 
@@ -64,8 +64,25 @@
 
 ## Hypotheses
 
+Proposed 2026-07-29 (all 15 recorded before probing began, per APPROACH §1).
+
 | ID | Hypothesis | Source | Nearest existing tests | Probe | Verdict | Evidence |
 |----|-----------|--------|------------------------|-------|---------|----------|
+| CLIP-01 | Nothing checks id uniqueness: a model with two items sharing an id loads clean through zod + `validateModel`, and every by-id lookup silently resolves to the first — the second item is unreachable and unrenderable | seed seam #3 | `validation.test.ts`, `modelItems.test.ts` (shape only, no duplicate-id case) | `__explore__/E4/clip-01-03.explore.test.ts` | PROPOSED | |
+| CLIP-02 | The load-time connector filter only checks anchor→ITEM refs, so a connector anchored to a DROPPED connector's anchor survives normalisation; `validateModel` then flags it and the ENTIRE diagram refuses to open — one bad connector bricks the file | seed seam #2 | `useInitialDataManager.test.tsx` (orphan-connector filtering, all direct item refs) | `__explore__/E4/clip-01-03.explore.test.ts` | PROPOSED | |
+| CLIP-03 | `connectorSchema.anchors` has a `.max()` but no `.min(2)`, so a 1-anchor connector loads clean and then throws in `getConnectorPath` — the connector is invisible and (per the `deleteSelectedItems` comment) blocks `placeIcon` | boundary / schema gap | `connector.test.ts` schema (valid shapes only) | `__explore__/E4/clip-01-03.explore.test.ts` | PROPOSED | |
+| CLIP-04 | `useDirtyTracker`'s effect cleanup only clears the timer — it never unsubscribes — so every `isReady` toggle (open a second diagram) stacks another model subscription that outlives the diagram it was created for | seed seam #6 | none — `useDirtyTracker` has zero tests | `__explore__/E4/clip-04-06.explore.test.tsx` | PROPOSED | |
+| CLIP-05 | `isDirtyRef` is never reset when a new diagram loads, so opening a second diagram after editing the first starts already-dirty (and `markClean` is the only reset, called on programmatic load only) | seed seam #6 | none | `__explore__/E4/clip-04-06.explore.test.tsx` | PROPOSED | |
+| CLIP-06 | The 100 ms post-ready delay before subscribing swallows a genuinely fast first edit: the model changes, the dirty flag stays false, and the beforeunload guard lets the tab close on unsaved work | seed seam #6 | none | `__explore__/E4/clip-04-06.explore.test.tsx` | PROPOSED | |
+| CLIP-07 | The clipboard stores live references into store state, which is safe only while that state is immer-frozen — but the `batchUpdate*` drag paths write PLAIN unfrozen objects, so a copy taken after a drag is aliased to live state and a later drag mutates what paste will insert | seed seam #4 | `clipboard.test.ts` (payload storage, never aliasing) | `__explore__/E4/clip-07-09.explore.test.tsx` | PROPOSED | |
+| CLIP-08 | Loading a diagram with `preserveViewport` (the icon-pack-swap reload) skips the selection reset, so `selectedIds`/`itemControls` keep pointing at the previous model's ids (INV-2) | seed seam #5 | `useInitialDataManager.test.tsx` (no selection assertions) | `__explore__/E4/clip-07-09.explore.test.tsx` | PROPOSED | |
+| CLIP-09 | `deleteLayer` never clears the layer's id out of `previewLayerOverrides`, so a solo/hidden override for a deleted layer survives and keeps suppressing content until the next view switch | seed seam #7 | `previewLayerVisibility.test.ts` (merge math only) | `__explore__/E4/clip-07-09.explore.test.tsx` | PROPOSED | |
+| CLIP-10 | `notification` is a single slot with no queue, so a paste-progress or success toast overwrites a pending error notification — the user never sees the failure | seed seam #8 | none — notification is asserted per-path, never under contention | `__explore__/E4/clip-10-12.explore.test.tsx` | PROPOSED | |
+| CLIP-11 | ADR 0023's off-grid trio (`offset`/`snap`/`collides`) does NOT survive a clipboard round trip — the paste silently re-snaps the node and re-enables collision | harvested invariant (ADR 0023 §7) | `offGridRoundTrip.test.ts` (export→import only); `useCopyPaste.test.ts` #9 (tile offset only) | `__explore__/E4/clip-10-12.explore.test.tsx` | PROPOSED | |
+| CLIP-12 | ADR 0044's per-node `iconScale` does not survive a clipboard round trip (the ADR names clipboard as "the real risk site") | harvested invariant (ADR 0044) | `TransformNode.test` (single-node clamp); no clipboard round-trip | `__explore__/E4/clip-10-12.explore.test.tsx` | PROPOSED | |
+| CLIP-13 | A group icon-resize multiplies each member's scale, so a member already near the cap commits a value outside the schema's hard `[0.1, 3]` — the whole diagram then fails `safeParse` on the next load (the S1-brick class) | harvested invariant (ADR 0034 §4 / ADR 0044) | `TransformNode.test` single-node clamp | `__explore__/E4/clip-13-15.explore.test.tsx` | PROPOSED | |
+| CLIP-14 | Nothing validates that a view item's model item references a known icon, so pasting a node whose icon pack the target diagram never loaded commits a model that validates clean and renders as a tombstone after save+reload | harvested invariant (features.md requiredPacks) | `leanSave.test.ts` (fixed catalog); no cross-diagram paste test | `__explore__/E4/clip-13-15.explore.test.tsx` | PROPOSED | |
+| CLIP-15 | `validateView` has no tile-coordinate sanity check, so a model carrying non-finite or absurd tile values (a corrupted file, a bad import) loads clean and only fails later inside the projection math | seed seam #3 / boundary | `views.test.ts` (coords shape via zod `z.number()`) | `__explore__/E4/clip-13-15.explore.test.tsx` | PROPOSED | |
 
 ## Product questions (SUSPECT verdicts)
 
