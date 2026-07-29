@@ -8,7 +8,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 |------|------|--------|---------|------|----------|-------------------------------|
 | E1 | [History & undo/redo engine (dual-store patches)](areas/E1-history-undo-redo.md) | DONE | 15 / 10 | 9 | 3 | 8/5/12 |
 | E2 | [Reducers & cross-store cascades](areas/E2-reducers-cascades.md) | DONE | 15 / 10 | 10 | 1 | 8/7/8 |
-| E3 | [Scene actions, transactions & paste assembly](areas/E3-scene-actions-paste.md) | IN PROGRESS | 4 / 10 | 2 | 0 | 9/8/7 |
+| E3 | [Scene actions, transactions & paste assembly](areas/E3-scene-actions-paste.md) | IN PROGRESS | 8 / 10 | 5 | 0 | 9/8/7 |
 | E4 | [Clipboard, schemas, initial load & session/UI state](areas/E4-clipboard-schemas-load.md) | OPEN | 0 / 10 | 0 | 0 | 8/22/6 |
 | I1 | [Pointer pipeline, mode dispatcher & keyboard routing](areas/I1-pointer-modes-keyboard.md) | OPEN | 0 / 10 | 0 | 0 | 10/20/10 |
 | I2 | [Touch & pen gesture state machine](areas/I2-touch-pen-gestures.md) | OPEN | 0 / 10 | 0 | 0 | 10/22/8 |
@@ -80,3 +80,6 @@ After all areas are DONE: completeness-critic pass per APPROACH §8 — list the
 | RED-14 | Deleting a connector orphans any sibling anchored to its anchors — dangling ref, unroutable connector, and the view stops accepting edits (RED-02) | *Deleting a connector orphans any connector anchored to it (anchor-to-anchor)* |
 | RED-15 | Hiding or locking a layer leaves the entities it covers in `selectedIds`, so Delete still removes items the user can no longer see or edit | *Hiding or locking a layer does not drop the entities it covers from the live selection* |
 | SCN-03/04 | Paste keeps the original connector anchor ids, so one waypoint delete pinches both copies and the original's waypoint becomes unaddressable | *Paste does not regenerate connector anchor ids — the clone shares them with the original* |
+| SCN-06 | Paste validates the view before rectangles/text boxes/labels are layered on, so a pasted rectangle with a dangling colour ref lands and poisons the view | *Paste validates the view before rectangles, text boxes and labels are added — so those land unchecked* |
+| SCN-07 | The batch drag updaters enforce their "drag-only" contract by comment alone — an out-of-drag call moves the node for real with no undo entry and no validation | *The batch drag updaters are "drag-only" by convention only — an out-of-drag call is un-undoable* |
+| SCN-08 | `previewConnectorPaths` bypasses the open transaction's pending state, so a preview issued inside a transaction is erased by the commit | *Connector previews written during a transaction are erased by the commit* |

@@ -1163,3 +1163,88 @@ must follow the same map); add an anchor-id-uniqueness check to `validateView`
 so the class cannot come back through another duplication path (ZIP import,
 "duplicate page"). Repro:
 [`scn-03-04.explore.test.tsx`](packages/axoview-lib/src/__explore__/E3/scn-03-04.explore.test.tsx).
+
+## Paste validates the view before rectangles, text boxes and labels are added — so those land unchecked
+
+**Found by:** exploratory campaign SCN-06
+
+**Symptom:** `pasteItems` assembles the pasted nodes and connectors into a new
+view, runs `validateView` **once** on that intermediate view, and only then
+layers on the pasted rectangles, text boxes and labels through their per-entity
+reducers. Anything wrong with those three types is therefore never checked. A
+pasted rectangle carrying a colour id the target diagram does not have commits
+cleanly — and by RED-02 the resulting view then refuses **every** subsequent node
+move, because `updateViewItem` re-validates the whole view and throws on the
+first issue.
+
+**Root cause:**
+[`useSceneActions.pasteItems`](packages/axoview-lib/src/hooks/useSceneActions.ts#L1062-L1084)
+— the "validate once, abort the whole paste if invalid" guard is applied to
+`newView` before the `createRectangle` / `createTextBox` / `createLabel` calls
+that follow it in the same transaction.
+
+**Reachability:** copy a coloured rectangle from a diagram whose palette has that
+colour and paste it into one that does not (colours are per-model), or paste
+after deleting the colour from the palette.
+
+**Workaround:** delete the pasted rectangle to un-poison the view.
+
+**Status:** Open. Fix direction: build the *complete* view — rectangles, text
+boxes and labels included — before the single `validateView` call, so the
+all-or-nothing guarantee the code documents actually covers everything it
+pastes. Repro:
+[`scn-05-08.explore.test.tsx`](packages/axoview-lib/src/__explore__/E3/scn-05-08.explore.test.tsx).
+
+## The batch drag updaters are "drag-only" by convention only — an out-of-drag call is un-undoable
+
+**Found by:** exploratory campaign SCN-07
+
+**Symptom:** `batchUpdateViewItemTiles` (and its rectangle / text-box / label
+twins) write model **and** scene with `skipHistory` and no armed snapshot. They
+are documented "DRAG ONLY. Caller must be inside an open beginDragTransaction",
+but nothing enforces it. Called outside a drag the move really happens — the node
+is at its new tile — while `history.past` stays empty and `canUndo()` returns
+false: an edit the user can see and cannot undo. The same call also bypasses
+`validateView` entirely (an id that is not in the view is silently ignored where
+the reducer path would throw).
+
+**Root cause:** the contract lives in a comment. `useSceneActions` exports the
+batch updaters on the same surface as the safe CRUD actions, so any new caller —
+a keyboard nudge, an alignment command, a future "distribute evenly" — gets the
+un-undoable behaviour by default.
+
+**Reachability:** latent today (every current caller is inside a bracket); this is
+a trap for the next feature that reaches for the fast path.
+
+**Status:** Open. Fix direction: make the updaters assert (or no-op with a
+dev warning) when `dragInProgress` is false, which becomes trivial once the drag
+flag moves into the store — see the mid-drag entry (HIST-07). Repro:
+[`scn-05-08.explore.test.tsx`](packages/axoview-lib/src/__explore__/E3/scn-05-08.explore.test.tsx).
+
+## Connector previews written during a transaction are erased by the commit
+
+**Found by:** exploratory campaign SCN-08
+
+**Symptom:** `previewConnectorPaths` writes straight to the scene store
+(`sceneStoreApi.getState().actions.set(..., true)` inside a `flushSync`), while
+`transaction()` buffers its own copy of model+scene in `pendingStateRef` and
+writes that copy at commit. A preview firing while a transaction is open is
+therefore overwritten by the commit — the connector visibly snaps back to its
+pre-preview route at the end of the gesture. Outside a transaction the same
+preview persists (pinned by a control test), so the behaviour depends on whether
+some other component happens to have a transaction open.
+
+**Root cause:** two write paths with different notions of "current state" —
+`previewConnectorPaths` deliberately bypasses the transaction for latency
+(`flushSync` so the wire does not lag the nodes by a frame), and `transaction`'s
+commit has no way to know the store moved underneath it.
+
+**Reachability:** requires a transaction open across a mousemove. The current
+drag path uses `beginDragTransaction` (which freezes history but does not buffer
+state), so this is latent — but it is exactly the shape a "group operation with
+live preview" feature would take.
+
+**Status:** Open. Fix direction: have `previewConnectorPaths` write through the
+same `setState` the rest of `useSceneActions` uses (it is already
+transaction-aware), keeping `flushSync` for the non-transaction case. Repro:
+[`scn-05-08.explore.test.tsx`](packages/axoview-lib/src/__explore__/E3/scn-05-08.explore.test.tsx).
