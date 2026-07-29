@@ -12,7 +12,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 | E4 | [Clipboard, schemas, initial load & session/UI state](areas/E4-clipboard-schemas-load.md) | DONE | 15 / 10 | 12 | 0 | 8/22/6 |
 | I1 | [Pointer pipeline, mode dispatcher & keyboard routing](areas/I1-pointer-modes-keyboard.md) | DONE | 15 / 10 | 10 | 0 | 10/20/10 |
 | I2 | [Touch & pen gesture state machine](areas/I2-touch-pen-gestures.md) | DONE | 15 / 10 | 7 | 1 | 10/22/8 |
-| I3 | [Selection, drag engine & lasso/freehand marquee](areas/I3-selection-drag-lasso.md) | DONE | 15 / 10 | 4 | 2 | 10/20/14 |
+| I3 | [Selection, drag engine & lasso/freehand marquee](areas/I3-selection-drag-lasso.md) | DONE | 15 / 10 | 4 | 1 | 10/20/14 |
 | I4 | [Connector draw, reconnect & waypoint interactions](areas/I4-connector-interactions.md) | DONE | 15 / 10 | 8 | 0 | 9/19/11 |
 | I5 | [Pan/right-click, context menu, placement tools & transform handles](areas/I5-pan-menu-placement-transform.md) | DONE | 14 / 10 | 5 | 0 | 11/15/17 |
 | R1 | [Projection & coordinate transforms (iso/2D/screen, off-grid)](areas/R1-projection-transforms.md) | OPEN | 0 / 10 | 0 | 0 | 8/12/13 |
@@ -56,6 +56,14 @@ Engine (E1–E4) and interaction (I1–I5) first — highest seam density and ev
 ## Cross-area mop-up (final wave)
 
 After all areas are DONE: completeness-critic pass per APPROACH §8 — list the area *pairs* no hypothesis crossed, propose one hypothesis per suspicious pair.
+
+## Open product questions (owner triage)
+
+| ID | Question | State |
+|----|----------|-------|
+| SEL-15 | Should a marquee honour the additive modifier (Shift/Ctrl/Cmd) the click path already honours? | **OPEN** — industry standard is yes (Figma, Miro, Lucidchart, draw.io, Illustrator, Sketch, Inkscape, Blender, Finder, File Explorer); recommendation recorded in the area file |
+| TCH-06 | Should a cancelled press break the double-tap streak? | **OPEN** — industry standard is yes (Android `GestureDetector.cancel()`, iOS `touchesCancelled`); same handler omission as the filed TCH-14, so cheap to fix together |
+| SEL-12 | Should the marquee auto-scroll at the viewport edge? | **CLOSED 2026-07-29 — by design.** Lassoing off-screen items is not a requirement; the probe now pins the no-auto-scroll behaviour as intended |
 
 ## Bugs filed
 

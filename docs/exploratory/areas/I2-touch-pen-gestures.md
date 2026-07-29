@@ -86,10 +86,26 @@
   item, have the next press cancelled by the OS (notification, app switch, palm
   rejection), then tap again inside 300 ms: the details deck opens, exactly as
   for two clean taps. `lastTapTime`/`lastTapItem` are reset on several branches
-  of `onTouchPointerUp` but never by `onTouchPointerCancel`. Two real taps did
-  land on the same item inside the window, so this is defensible — but the user
-  performed three separate presses and got a double-tap. Owner call: reset the
-  streak on cancel, or leave it.
+  of `onTouchPointerUp` but never by `onTouchPointerCancel`.
+
+  **Industry standard (researched 2026-07-29): a cancelled pointer aborts the
+  in-progress multi-tap sequence.** Android's `GestureDetector` handles
+  `ACTION_CANCEL` by calling `cancel()`, which clears `mIsDoubleTapping` and
+  drops the pending double-tap timeout. iOS `UITapGestureRecognizer` with
+  `numberOfTapsRequired = 2` transitions to cancelled/failed on
+  `touchesCancelled`, so the tap count restarts. Both platforms treat
+  cancellation as "the OS took this gesture away" — and every reason it fires
+  (palm rejection, notification, app switch, scroll takeover) is a case where the
+  user's intent really was interrupted, so stitching the two surrounding taps
+  into one deliberate double-tap is the wrong read.
+
+  **Recommendation:** reset `lastTapTime`/`lastTapItem` in
+  `onTouchPointerCancel`. Note this is the SAME omission as **TCH-14** in the
+  same handler — `onTouchPointerUp` maintains the tap bookkeeping *and* demotes
+  pinch → pan; `onTouchPointerCancel` does neither. One shared
+  `endPointer(e, { cancelled })` helper closes both. That makes this cheap to
+  fix alongside a bug that is already filed, which is the main argument for
+  doing it rather than leaving it.
 
 ## Carry-forward notes
 

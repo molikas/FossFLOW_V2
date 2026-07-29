@@ -83,25 +83,39 @@
 | SEL-09 | Shift+click does not ADD a single item to an existing canvas selection | baseline gap | same as SEL-08 | `tests-exploratory/I3-selection/sel-02-15.explore.spec.ts` | FALSIFIED | Shift+click DOES add a second item — selection {A} → {A,B}. `resolveClickSelection` treats ctrl/meta/shift alike as the additive flag (change #10). |
 | SEL-10 | A multi-selection is silently lost (or kept pointing at stale geometry) across an iso↔2D projection toggle | baseline gap | `canvas-modes.spec.ts`, `canvas-mode-zoom-preserve.spec.ts` (no selection live) | `tests-exploratory/I3-selection/sel-02-15.explore.spec.ts` | FALSIFIED | A 2-item selection survives an iso↔2D toggle byte-for-byte; store invariants clean afterwards. Selection is stored as refs, not geometry, so the projection swap cannot invalidate it. |
 | SEL-11 | A multi-select drop where only SOME target tiles are occupied commits the free members and drops the blocked ones, breaking the group's relative layout | baseline gap + seed seam #4 | `drag-collision.spec.ts` (one node, fully blocked) | `tests-exploratory/I3-selection/sel-01-04-07-11.explore.spec.ts` | FALSIFIED | A two-node group dropped so one member targets an occupied tile moves RIGIDLY: both deltas {-3,+2}, obstacle unmoved, no tile shared. `computeNodeUpdates` is genuinely all-or-nothing across the node members — the tearing in SEL-04 comes from the non-node members only. |
-| SEL-12 | Dragging a marquee past the viewport edge does not auto-scroll, so items outside the viewport cannot be lassoed | baseline gap | `multi-select-drag-lasso.spec.ts` (in-viewport marquee) | `tests-exploratory/I3-selection/sel-02-15.explore.spec.ts` | SUSPECT | There is no marquee auto-scroll at all: holding the drag hard against the viewport edge for 700 ms left `scroll` at {0,0}. Off-screen items simply cannot be lassoed without zooming out first. No contract promises auto-scroll — raised as a product question. |
+| SEL-12 | Dragging a marquee past the viewport edge does not auto-scroll, so items outside the viewport cannot be lassoed | baseline gap | `multi-select-drag-lasso.spec.ts` (in-viewport marquee) | `tests-exploratory/I3-selection/sel-02-15.explore.spec.ts` | SUSPECT (closed — by design) | There is no marquee auto-scroll at all: holding the drag hard against the viewport edge for 700 ms left `scroll` at {0,0}. **Owner decision 2026-07-29: lassoing off-screen items is not required, so this is intended behaviour, not a gap.** The probe pins the observed — and now sanctioned — behaviour. |
 | SEL-13 | Ctrl+A includes items on hidden or locked layers | baseline gap | `hotkeys.spec.ts` Ctrl+A leg (no layers); `layers.spec.ts` (no Ctrl+A) | `tests-exploratory/I3-selection/sel-02-15.explore.spec.ts` | FALSIFIED | Ctrl+A correctly excludes an item on a hidden layer — only the visible node was selected. `collectSelectableRefs` is given `visibleIds`/`lockedIds` and honours them. (Contrast PTR-11: the ACQUISITION path is gated; it is the later layer-state change that is not re-validated.) |
 | SEL-14 | Hover state lags for an off-grid item: `updateHoverCursor` is gated on `hasMovedTile`, so moving within one tile onto/off the drawn body never updates `hoveredItem` | seed seam #9 | `off-grid-pointer.spec.ts` (asserts hover at the drawn point, not the within-tile transition) | `tests-exploratory/I3-selection/sel-02-15.explore.spec.ts` | FALSIFIED | Moving from the bare grid cell onto the DRAWN body inside one tile DOES set `hoveredItem` (null at the cell — correct, pixel-accurate hit-testing — then the node id on the body). First run read null in both spots, but that was a rig artifact: the setup drag leaves `mouse.mousedown` populated and `Cursor.mousemove` skips hover while a press is live (the TCH-02 shape). The residual cross-tile lag is the already-registered *Hover feedback lags the cursor by one mousemove* known issue. |
 | SEL-15 | A second marquee replaces the existing selection with no way to extend it — no modifier is honoured | baseline gap | `multi-select-drag-lasso.spec.ts` (single marquee) | `tests-exploratory/I3-selection/sel-02-15.explore.spec.ts` | SUSPECT | A second marquee REPLACES the selection even with Shift held — first marquee {A}, second {B}, result {B}. Click-selection treats Shift/Ctrl as additive (change #10, ADR 0006 §2 amended), so the same modifier means “add” on click and “replace” on marquee. Raised as a product question rather than filed. |
 
 ## Product questions (SUSPECT verdicts)
 
-- **SEL-12 — should the marquee auto-scroll at the viewport edge?** There is no
-  auto-scroll: holding a marquee drag against the edge for 700 ms moves the
-  canvas 0 px, so items outside the viewport cannot be lassoed at all — the user
-  must zoom out, select, then zoom back. Every comparable tool auto-scrolls. No
-  contract promises it, so this is a feature call, not a defect.
+- **SEL-12 — should the marquee auto-scroll at the viewport edge?**
+  **CLOSED 2026-07-29 — by design, no change wanted.** Owner decision: lassoing
+  off-screen items is not a requirement. Recorded observation stands (holding a
+  marquee drag against the edge for 700 ms moves the canvas 0 px), and the probe
+  now pins that as the intended behaviour rather than a gap.
 - **SEL-15 — should a marquee honour the additive modifier?** Click-selection
   treats Shift/Ctrl/Cmd as additive (change #10, ADR 0006 §2 gesture matrix
   amended, comment: "Shift joins Ctrl/Cmd as an additive-selection modifier on
   canvas"). A marquee ignores the same modifier and replaces the selection
-  outright. Either the marquee should extend, or the ADR's "on canvas" wording
-  should be narrowed to clicks — right now the two gestures disagree about what
-  one modifier means.
+  outright.
+
+  **Industry standard (researched 2026-07-29):** the same modifier that makes a
+  click additive also makes a marquee additive — this is close to universal.
+  Shift+drag extends the selection in Figma, Miro, Lucidchart, draw.io,
+  Illustrator, Sketch, Inkscape and Blender; Finder and Windows File Explorer do
+  it with Cmd/Ctrl+drag. A *subtract* modifier is a common second tier
+  (Alt/Option in the Adobe family, Ctrl in Blender) but is not baseline.
+
+  **Recommendation:** make the marquee additive under the modifier the click path
+  already honours. Axoview is the outlier specifically *because* it taught the
+  rule on the click path — a user who learns Shift=add from clicking will expect
+  it on a marquee. The change is one site each in `Lasso.mouseup` and
+  `FreehandLasso.mouseup` (merge into `selectedIds` instead of replacing);
+  `nextMouse.modifiers` already carries the flag per event, so nothing new has to
+  be plumbed. Owner call: adopt the standard, or narrow the ADR's "on canvas"
+  wording to clicks so the inconsistency is at least documented.
 
 ## Carry-forward notes
 

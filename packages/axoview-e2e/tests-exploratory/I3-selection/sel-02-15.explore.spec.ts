@@ -466,7 +466,7 @@ test.describe('SEL-10 — multi-selection across an iso↔2D toggle', () => {
 // SEL-12 — marquee past the viewport edge
 // ---------------------------------------------------------------------------
 test.describe('SEL-12 — dragging a marquee past the viewport edge', () => {
-  test('the canvas auto-scrolls so off-screen items can be lassoed', async ({
+  test('contract: the marquee does NOT auto-scroll (by design)', async ({
     app
   }) => {
     const { page } = app;
@@ -495,10 +495,10 @@ test.describe('SEL-12 — dragging a marquee past the viewport edge', () => {
     console.log(
       `SEL-12 observed — scroll ${JSON.stringify(scrollBefore)} -> ${JSON.stringify(scrollDuring)}`
     );
-    // SUSPECT, not a defect: there is no auto-scroll at all — holding the
-    // marquee against the viewport edge for 700 ms moves nothing, so anything
-    // off-screen simply cannot be lassoed without zooming out first. No
-    // contract promises auto-scroll; recorded as a product question.
+    // BY DESIGN (owner decision 2026-07-29): lassoing off-screen items is not a
+    // requirement, so the absence of auto-scroll is intended, not a gap. This
+    // assertion pins it — if auto-scroll is ever added deliberately, this probe
+    // goes red and the decision gets revisited rather than drifting silently.
     expect(JSON.stringify(scrollDuring)).toBe(JSON.stringify(scrollBefore));
   });
 });
