@@ -863,3 +863,66 @@ in the delete transaction — and, more durably, make selection resolution
 defensive so a dangling id degrades to "not selected" rather than to a reducer
 throw. Repro:
 [`hist-11-13.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/E1-history/hist-11-13.explore.spec.ts).
+
+## `deleteModelItem` corrupts the model: the deleted slot stays as `undefined`, then `validateView` throws on it
+
+**Found by:** exploratory campaign RED-01
+
+**Symptom:** [`deleteModelItem`](packages/axoview-lib/src/stores/reducers/modelItem.ts#L29-L37)
+removes an entry with `delete draft.model.items[i]` instead of `splice`. Immer's
+copy materialises that index, so the array keeps its length and index `i` is
+*present* holding `undefined` — not a sparse hole that `map`/`filter` would skip.
+Three things break immediately:
+- `validateView` line 222 (`ctx.model.items.map(i => i.id)`) throws
+  `TypeError: Cannot read properties of undefined`. Since `updateViewItem` runs
+  `validateView` on **every** item update, one call makes the whole view
+  permanently un-editable — every subsequent node move throws.
+- `modelSchema.safeParse` rejects the model, so the diagram would not reload.
+- `JSON.stringify` emits `null` for the slot, so the corruption is what gets saved.
+
+**Reachability:** `useSceneActions.deleteModelItem` is on the public action
+surface and `reducers.deleteModelItem` is exported from the reducers barrel, but
+**no in-app component calls either today** — deleting a node removes only the view
+item (see the orphaned-model-items entry, RED-08). So this is a live defect in a
+shipped, exported API that the app itself does not currently exercise: an embedder
+who calls it, or the first feature that wires up "remove this icon from the
+model", corrupts the document.
+
+**Workaround:** don't call it; delete view items instead.
+
+**Status:** Open. Fix direction: `splice(i, 1)` (what `deleteViewItem` already
+does), and independently make `validateView` defensive about holes so a single
+malformed array cannot take the whole editor down. Repro:
+[`red-01-02.explore.test.ts`](packages/axoview-lib/src/__explore__/E2/red-01-02.explore.test.ts).
+
+## One invalid entity anywhere in a view makes every node move and every node placement throw
+
+**Found by:** exploratory campaign RED-02
+
+**Symptom:** [`updateViewItem`](packages/axoview-lib/src/stores/reducers/viewItem.ts#L43-L48)
+runs `validateView` over the **whole** view after every update and throws on the
+**first** issue it finds — regardless of whether that issue has anything to do
+with the update. So a view that already contains one problem (a rectangle whose
+colour was removed from the palette, a connector anchor pointing at a missing
+item, a stale anchor-to-anchor ref) becomes un-editable: dragging *any* node, and
+placing a *new* node (`createViewItem` funnels through the same call), both throw.
+The throw is unhandled in the pointer handlers, and it also leaves the undo
+snapshot armed — see the phantom-history-entry entry (HIST-05).
+
+**Root cause:** the check is scoped to the action but the validation is scoped to
+the view, and its failure mode is a raw `throw` rather than a rejected write.
+`validateView` is also the only place these issues surface, so nothing repairs
+them — `useInitialDataManager` filters orphaned *connectors* on load, but not
+dangling colour refs on rectangles.
+
+**Reachability:** any diagram that acquires an issue after load — a colour
+deleted from the palette while a rectangle still uses it, a partially-migrated
+file, a hand-edited JSON import, or the `deleteModelItem` corruption above.
+
+**Workaround:** none in-app; the diagram must be repaired outside the editor.
+
+**Status:** Open. Fix direction: validate only what the action touched (or at
+minimum, only fail on issues the action *introduced* — diff the issue set against
+the pre-state), and surface a rejected write as a notification rather than an
+uncaught throw. Repro:
+[`red-01-02.explore.test.ts`](packages/axoview-lib/src/__explore__/E2/red-01-02.explore.test.ts).
