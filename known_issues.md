@@ -2411,3 +2411,60 @@ that state) before falling through to the pan logic. Note this is the mirror of
 PTR-01/02/03: read-only exposes the mutating keyboard paths it should not, and
 withholds the one read-only interaction it should offer. Repro:
 [`ctx-01-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I5-pan-menu/ctx-01-15.explore.spec.ts).
+
+## The project bounding box mis-frames the diagram: text boxes extend the wrong way, labels are not counted
+
+**Found by:** exploratory campaign PROJ-01 / PROJ-02 / PROJ-04
+
+**Symptom:** `getProjectBounds` is the frame both **fit-to-view**
+(`canvas-zoom-fit` -> `useDiagramUtils.fitToView` -> `getFitToViewParams`) and the
+**Export Image** dialog (`getUnprojectedBounds`) use to decide what the diagram
+occupies. It is wrong in three independent ways:
+
+1. **Text boxes extend in the wrong Y direction.** The bounds add
+   `tile + { x: size.width, y: size.height }`, but a text box grows to
+   *decreasing* tile y (`getTextBoxEndTile` returns `tile.y - (size.height - 1)`;
+   positive tile y is UP on screen in both projections). A 6-row box anchored at
+   `tile.y = 0` yields bounds `lowY = -3`, `highY = +9`: its own five lower rows
+   are **outside** the frame and six empty tiles **above** it are inside. The
+   miss grows one-for-one with the row count, so a tall notes box is the worst
+   case — fit-to-view leaves it clipped at the bottom with a band of empty
+   canvas on top, and the exported PNG crops the same way.
+2. **Floating labels are not enumerated at all.** `getProjectBounds` walks
+   `items`, `connectors`, `rectangles` and `textBoxes`; `view.labels` (ADR 0031)
+   is absent. A view holding one item at (0,0) and one Label at (40,40) returns
+   bounds of exactly (-3,-3)..(3,3) — the Label is 37 tiles outside. Labels are
+   free-floating and routinely placed away from the nodes, so a legend or a
+   callout chip simply falls off the fit and out of the export.
+3. **A pixel extent gets the tile-count `+1`.** `getUnprojectedBounds` projects
+   the four corner tiles to **pixels** and then sizes them with
+   `getBoundingBoxSize`, whose `highX - lowX + 1` is the *inclusive tile count*
+   convention. The reported width and height are each exactly 1 px too large,
+   and that leaks into the fit-to-view zoom. Cosmetic on its own; it is listed
+   here because it is the same unit-mix `getFitToViewParams` already fixed for
+   the *centre* ("getBoundingBoxSize adds +1 (inclusive tile COUNT)") and left
+   in place for the *size*.
+
+**Root cause:** `getProjectBounds` / `getUnprojectedBounds` in
+[`utils/renderer.ts`](packages/axoview-lib/src/utils/renderer.ts) are the only
+projection consumers with **zero tests** — there is no coverage of
+`getProjectBounds`, `getUnprojectedBounds` or `getFitToViewParams` anywhere in the
+repo, and `viewport.spec.ts` asserts only that fit-to-view changes the zoom to
+"a different value", never that the result actually frames the diagram. The
+text-box term predates `getTextBoxEndTile` and was never reconciled with it;
+`getVisualBounds` (currently unused) carries a verbatim copy of the same sign
+error, so a future consumer inherits it.
+
+**Workaround:** zoom and pan manually instead of using fit-to-view; for export,
+add a spacer element below a tall text box (or beyond a stray Label) so the
+bounds stretch to cover the real content.
+
+**Status:** Open. Fix direction: replace the text-box term with
+`getTextBoxEndTile(textBox, getTextBoxDimensions(textBox))` (which already
+handles both orientations), add a `view.labels` term, and size
+`getUnprojectedBounds` with a plain `high - low` rather than `getBoundingBoxSize`.
+Note the ADR-0023 `offset` is also not composed into these bounds; that one is
+currently harmless because `PROJECT_BOUNDING_BOX_PADDING` is 3 tiles per side —
+worth folding into the same fix so a padding change cannot re-open it
+(campaign PROJ-03, verdict FALSIFIED-but-latent). Repro:
+[`bounds-proj-01-02-03-04.explore.test.ts`](packages/axoview-lib/src/__explore__/R1/bounds-proj-01-02-03-04.explore.test.ts).
