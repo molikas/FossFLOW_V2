@@ -13,7 +13,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 | I1 | [Pointer pipeline, mode dispatcher & keyboard routing](areas/I1-pointer-modes-keyboard.md) | DONE | 15 / 10 | 10 | 0 | 10/20/10 |
 | I2 | [Touch & pen gesture state machine](areas/I2-touch-pen-gestures.md) | DONE | 15 / 10 | 7 | 1 | 10/22/8 |
 | I3 | [Selection, drag engine & lasso/freehand marquee](areas/I3-selection-drag-lasso.md) | DONE | 15 / 10 | 4 | 2 | 10/20/14 |
-| I4 | [Connector draw, reconnect & waypoint interactions](areas/I4-connector-interactions.md) | IN PROGRESS | 0 / 10 | 0 | 0 | 9/19/11 |
+| I4 | [Connector draw, reconnect & waypoint interactions](areas/I4-connector-interactions.md) | DONE | 15 / 10 | 8 | 0 | 9/19/11 |
 | I5 | [Pan/right-click, context menu, placement tools & transform handles](areas/I5-pan-menu-placement-transform.md) | OPEN | 0 / 10 | 0 | 0 | 11/15/17 |
 | R1 | [Projection & coordinate transforms (iso/2D/screen, off-grid)](areas/R1-projection-transforms.md) | OPEN | 0 / 10 | 0 | 0 | 8/12/13 |
 | R2 | [WebGL sprite-batch substrate (atlas, shaders, context loss)](areas/R2-webgl-substrate.md) | OPEN | 0 / 10 | 0 | 0 | 9/3/8 |
@@ -98,6 +98,12 @@ After all areas are DONE: completeness-critic pass per APPROACH §8 — list the
 | CLIP-10 | The single notification slot lets a success toast bury an unread error (ADR 0011 contract) | *The notification slot has no queue — a later toast silently buries an unread error* |
 | CLIP-13 | `updateViewItem` accepts an `iconScale` outside the schema's `[0.1,3]`, so a group resize saves a diagram that then refuses to load | *A group icon-resize can commit a scale outside the schema cap, bricking the next load* |
 | CLIP-14/15 | Unknown icon references and unbounded tile coordinates both pass schema + validateView | *Icon references and tile coordinates are unvalidated* |
+| CONN-01/02 | The endpoint-reconnect mode has no way out — Escape restores nothing and leaves you in it; an off-canvas release neither commits nor exits | *The endpoint-reconnect mode has no way out* |
+| CONN-04 | The connector’s end anchor is regenerated with a fresh id on every tile move while drawing | *The connector’s end anchor is given a brand-new id on every tile move while drawing* |
+| CONN-07/13 | A stray click while the connector tool is armed commits a zero-length (drag mode) or half-attached (click mode) connector — the documented empty-click revert does not exist | *A stray click while the connector tool is armed leaves a permanent half-attached or zero-length connector* |
+| CONN-10 | A node can be connected to itself — a zero-length self-loop that validates clean and saves | *A node can be connected to itself, producing a zero-length self-loop that validates clean* |
+| CONN-11 | Two connectors between the same node pair get byte-identical routes, so the second is permanently unclickable | *Two connectors between the same pair of nodes get byte-identical routes* |
+| CONN-15 | A connector can be anchored to a node on a locked (or hidden) layer — the connector hit-test has no interactability gate | *A connector can be anchored to a node on a locked layer* |
 | SEL-01 | Arrow-nudging an off-grid item erases its sub-tile `offset` and snaps it to the grid (ADR 0023 offset-omission class, keyboard consumer) | *Arrow-nudging an off-grid item erases its sub-tile offset and snaps it to the grid* |
 | SEL-02 | A connector-body drag splices its waypoint OUTSIDE the drag transaction — two history entries per gesture, and one undo leaves the stray waypoint | *Starting a drag on a connector body splices a waypoint outside the drag transaction* |
 | SEL-04 | A mixed node + rectangle group dragged into a collision tears: the node is blocked, the rectangle keeps going, both commit | *A mixed node + rectangle group dragged into a collision tears apart* |

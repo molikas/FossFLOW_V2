@@ -2124,3 +2124,176 @@ either move `beginDragTransaction` ahead of the `getAnchor` call in the drag-sta
 branch, or perform the splice inside `DragItems.entry` from the pressed
 connector/tile. Repro:
 [`sel-02-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I3-selection/sel-02-15.explore.spec.ts).
+
+## The endpoint-reconnect mode has no way out — Escape does not cancel it and an off-canvas release does not end it
+
+**Found by:** exploratory campaign CONN-01 / CONN-02
+
+**Symptom:** start dragging a connector endpoint to re-anchor it, then change
+your mind. Neither exit works:
+
+- **Escape** leaves the anchor wherever the pointer last was (measured: the
+  anchor went from `{item: <node>}` to `{tile:{4,3}}` and stayed there) AND
+  leaves the app in `RECONNECT_ANCHOR`, so the cursor is still a crosshair and
+  the next click re-anchors again. The user is stuck in a mode they cannot see.
+- **Releasing over a panel** (dock, properties deck — anywhere off the canvas)
+  neither commits nor exits: the mode is still `RECONNECT_ANCHOR` after the
+  button is up, so the reconnect keeps following the pointer with nothing
+  pressed.
+
+**Root cause:** `ReconnectAnchor.mousemove` rewrites the anchor ref on every
+tile as a live preview, but nothing stores the original to restore
+([ReconnectAnchor.ts:16-33](packages/axoview-lib/src/interaction/modes/ReconnectAnchor.ts#L16-L33)).
+`RECONNECT_ANCHOR` is deliberately absent from `TOOL_MODES_EXITED_BY_ESCAPE`
+([handleEscapeKey.ts:16-25](packages/axoview-lib/src/interaction/handleEscapeKey.ts#L16-L25))
+on the grounds that transient modes "own their own abort logic" — but this one
+has none, so Escape falls through to the panel-clear branch and does nothing
+visible. And `ReconnectAnchor.mouseup` early-returns unless
+`isRendererInteraction`
+([ReconnectAnchor.ts:34-37](packages/axoview-lib/src/interaction/modes/ReconnectAnchor.ts#L34-L37)),
+leaving the commit to the `exit()` safety net, which only runs on the NEXT mode
+change. `usePanHandlers.restoreModeAfterRightClick` has no `RECONNECT_ANCHOR`
+branch either, so right-click is not an escape hatch.
+
+**Workaround:** press a tool hotkey (`s`) to force a mode change, then undo.
+
+**Status:** Open. Fix direction: snapshot the original anchor ref in the mode
+state at entry and restore it on Escape (then return to CURSOR); and let
+`mouseup` commit-and-exit regardless of `isRendererInteraction` — the gesture
+began on the canvas, so where it ends should not decide whether it finishes.
+Repro:
+[`conn-01-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I4-connectors/conn-01-15.explore.spec.ts).
+
+## The connector's end anchor is given a brand-new id on every tile move while drawing
+
+**Found by:** exploratory campaign CONN-04
+
+**Symptom:** while a connector is being drawn, its second anchor's id changes on
+every tile the pointer crosses — measured three distinct ids across three moves.
+Anything that captured the id a frame earlier (an overlay React key, a selection
+ref, `uiState.mouse.targetAnchorId`) is pointing at an anchor that no longer
+exists, and every move is a full `updateConnector` inside the open transaction.
+
+**Root cause:** `Connector.mousemove` rebuilds `anchors[1]` with a fresh
+`generateId()` rather than updating the existing anchor's `ref` in place
+([Connector.ts:218, 225](packages/axoview-lib/src/interaction/modes/Connector.ts#L218)).
+
+**Workaround:** none needed for the common flow — the churn is invisible unless
+something holds the id across frames.
+
+**Status:** Open. Fix direction: generate the end-anchor id ONCE at
+`handleClickFirst`/`handleDragStart` and mutate only its `ref` on subsequent
+moves. Low user-visible impact today, but it is a latent trap for any feature
+that keys off anchor identity mid-draw (the ADR 0018 `data-anchor-id` path
+already does for waypoints). Repro:
+[`conn-01-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I4-connectors/conn-01-15.explore.spec.ts).
+
+## A stray click while the connector tool is armed leaves a permanent half-attached or zero-length connector
+
+**Found by:** exploratory campaign CONN-07 / CONN-13
+
+**Symptom:** two shapes of the same problem, one per interaction mode.
+
+- **Click mode (default).** Click a node to arm the connection, then click empty
+  canvas — the documented "stray-empty-click revert". No revert happens: the
+  connector is committed with one end on the node and the other anchored to the
+  bare tile that was clicked (measured `[{item: <node>}, {tile:{5,5}}]`).
+- **Drag mode.** A single click on empty canvas with no travel commits a
+  connector whose BOTH anchors are the same empty tile (measured
+  `[{tile:{5,5}}, {tile:{5,5}}]`) — a zero-length connector attached to nothing.
+
+Both survive, save and reload; neither is easy to select and delete because
+there is nothing to click.
+
+**Root cause:** click mode's `handleClickSecond` treats an empty tile as a valid
+free-floating endpoint (which it is, for a deliberate free-floating connector) —
+there is no "the user clicked away without meaning it" guard, so the documented
+revert does not exist in the code. Drag mode commits whatever `anchors[1]` last
+resolved to on mouseup with no tap-slop check
+([Connector.ts:256-270](packages/axoview-lib/src/interaction/modes/Connector.ts#L256-L270)),
+so a zero-travel press-release commits the start tile twice.
+
+**Workaround:** press Escape instead of clicking away (Escape DOES abort
+correctly — verified as a control).
+
+**Status:** Open. Fix direction: in drag mode, revert instead of committing when
+the gesture never exceeded tap-slop (the `exceedsTapSlop` helper already exists
+for this). In click mode, decide the intended semantics — either implement the
+documented empty-click revert, or drop the claim from the docs and keep
+free-floating endpoints as a feature. Repro:
+[`conn-01-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I4-connectors/conn-01-15.explore.spec.ts).
+
+## A node can be connected to itself, producing a zero-length self-loop that validates clean
+
+**Found by:** exploratory campaign CONN-10
+
+**Symptom:** in click mode, click the same node twice: a connector is created
+with BOTH anchors bound to that one node. It has no length, renders as nothing
+useful, passes `expectStoreInvariants` and the schema, and saves. The same shape
+is reachable from the reconnect path by dragging one endpoint onto the node the
+other endpoint already sits on.
+
+**Root cause:** nothing compares the two anchor refs. `handleClickSecond`
+resolves the second click to whatever `getItemAtTile` returns and writes it,
+and `createConnectorAt` already seeds BOTH anchors with the pressed item (which
+is why PTR-07's abandoned connector is also self-anchored) — so "same node
+twice" is the default state, not an edge case the code has to construct.
+
+**Workaround:** delete the connector.
+
+**Status:** Open. Fix direction: reject (or revert) a second click that resolves
+to the same item as the first anchor — the same place a "no duplicate connector
+between this pair" check would go. If self-loops are ever wanted as a feature
+they need real routing (a loop path), which does not exist today. Repro:
+[`conn-01-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I4-connectors/conn-01-15.explore.spec.ts).
+
+## Two connectors between the same pair of nodes get byte-identical routes and cannot be told apart
+
+**Found by:** exploratory campaign CONN-11
+
+**Symptom:** draw a second connector between the same two nodes (a normal thing
+to do when they have two distinct relationships). Both are routed along exactly
+the same tiles — measured `"2,1|1,2|1,3|1,4|1,5|1,6"` for both — so they render
+as one line. Clicking picks whichever the hit-test finds first, so the second
+connector is effectively unreachable: it cannot be selected, styled, labelled or
+deleted by pointer.
+
+**Root cause:** the pathfinder is a pure function of the two endpoints, with no
+awareness of connectors already routed between the same pair, and nothing
+offsets parallel edges (the standard fan-out / bundle treatment).
+
+**Workaround:** add a waypoint to one of them by dragging its body — that
+changes its route and makes both addressable again. Discoverable only by
+accident.
+
+**Status:** Open. Fix direction: offset parallel connectors between the same
+node pair (index-based perpendicular displacement at the midpoint is the usual
+approach), or at minimum make the hit-test disambiguate overlapping paths so
+each is reachable. Repro:
+[`conn-01-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I4-connectors/conn-01-15.explore.spec.ts).
+
+## A connector can be anchored to a node on a locked layer
+
+**Found by:** exploratory campaign CONN-15
+
+**Symptom:** lock a layer, then draw a connector to a node on it. The connection
+is made and the anchor binds to the locked node — an entity the user has
+explicitly declared un-editable, which cannot be selected, moved or deleted, is
+silently accepted as the target of a new relationship.
+
+**Root cause:** the connector hit-test has no interactability gate. Both
+`Connector.mousedown`/`handleClickSecond` and `ReconnectAnchor.mousemove` call
+`getItemAtTile({ tile, scene })`, which is purely geometric — unlike the
+`Cursor` paths, which are handed `isItemInteractable` (built from
+`lockedIds`/`visibleIds` in `processMouseUpdate`) and honour it. The same hole
+means a node on a HIDDEN layer is connectable too: the user connects to
+something they cannot see.
+
+**Workaround:** unlock the layer before connecting.
+
+**Status:** Open. Fix direction: thread `isItemInteractable` into the connector
+and reconnect hit-tests as the Cursor paths already do, so a locked or hidden
+node reads as empty tile to the connector tool. Note this is the same
+"acquisition paths are gated, this one is not" shape as PTR-11, from the other
+direction. Repro:
+[`conn-01-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I4-connectors/conn-01-15.explore.spec.ts).
