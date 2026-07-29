@@ -1,6 +1,6 @@
 # I3 — Selection, drag engine & lasso/freehand marquee
 
-**Status:** OPEN · **Counted hypotheses:** 0 / 10 · **Bugs:** 0 · **Hypothesis ID prefix:** `SEL-`
+**Status:** IN PROGRESS · **Counted hypotheses:** 0 / 10 · **Bugs:** 0 · **Hypothesis ID prefix:** `SEL-`
 
 **Scope:** CURSOR mode: hover cursor + hover outline, click/Ctrl/Shift-click selection, connector-anchor first-claim on clicks, Alt+click waypoint splice, drag-start slop detection and handoff to DRAG_ITEMS or LASSO. DragItems: CSS-only drag preview (module-level preview maps + --ff-drag-* vars), node collision, off-grid (ADR 0023) residual accounting, single-transaction commit on mouseup. Lasso (marquee AABB) and FreehandLasso (screen-space polygon) build multi-selections mirrored into selectedIds; arrow-key nudge and Delete act on those selections.
 
@@ -72,6 +72,21 @@
 
 | ID | Hypothesis | Source | Nearest existing tests | Probe | Verdict | Evidence |
 |----|-----------|--------|------------------------|-------|---------|----------|
+| SEL-01 | Arrow-nudging an off-grid item wipes its `offset` px residual — the nudge passes no offset and the batch updaters write `offset: u.offset` unconditionally — so the item silently snaps to the grid | seed seam #1 (mapper-CONFIRMED by reading) | `handleArrowKey.test.ts` (on-grid only); `off-grid-pointer.spec.ts` (mouse drag, no nudge) | — | PROPOSED | |
+| SEL-02 | Starting a drag on a connector body splices the new waypoint BEFORE the drag transaction opens, so it is its own history entry and an abandoned drag leaves the waypoint behind | seed seam #2 | `Cursor.getAnchorOrdering.test.ts` (index math); `connector-deep.spec.ts` (completed waypoint drags) | — | PROPOSED | |
+| SEL-03 | `altSpliceConsumed` is module-level and cleared only by `Cursor.mouseup`, so a press whose mouseup never reaches Cursor makes the NEXT click skip all selection logic once | seed seam #3 (module-level state) | `Cursor.waypointGestures.test.ts` (alt-click splice, matched up) | — | PROPOSED | |
+| SEL-04 | A mixed group (node + rectangle) dragged over an occupied tile tears: node updates are all-or-nothing, but rectangle/text-box/label previews keep following the cursor, so the group's relative layout silently changes | seed seam #4 | `drag-collision.spec.ts` (single node); `multi-select-drag.spec.ts` (no collision) | — | PROPOSED | |
+| SEL-05 | With a marquee selection live, a click on a dock/panel whose projected tile falls inside the marquee arms `isDragging`, so the next move starts a canvas DRAG_ITEMS from a panel gesture | seed seam #5 | `Lasso.intersection.test.ts`, `lassoDragParity.test.ts` (canvas events only) | — | PROPOSED | |
+| SEL-06 | FreehandLasso stores its path in SCREEN coordinates and converts to tiles at mouseup with the CURRENT zoom/scroll, so a wheel-zoom mid-draw skews the polygon against its earlier points | seed seam #6 | `FreehandLasso.test.ts` (no zoom mid-draw) | — | PROPOSED | |
+| SEL-07 | FreehandLasso stays in `FREEHAND_LASSO` with `mode.selection` after mouseup, and the Delete handler's lasso branch deliberately skips the editable-target guard — so Backspace typed into a panel input deletes the canvas selection | seed seam #7 | `handleDeleteKey.test.ts` (contentEditable guard on the OTHER branches) | — | PROPOSED | |
+| SEL-08 | Ctrl+click on an already-selected item does not toggle it OUT of the selection | baseline gap | `multiSelect.contract.test.ts` (store API directly), `multi-select-drag.spec.ts` (Ctrl+A) | — | PROPOSED | |
+| SEL-09 | Shift+click does not ADD a single item to an existing canvas selection | baseline gap | same as SEL-08 | — | PROPOSED | |
+| SEL-10 | A multi-selection is silently lost (or kept pointing at stale geometry) across an iso↔2D projection toggle | baseline gap | `canvas-modes.spec.ts`, `canvas-mode-zoom-preserve.spec.ts` (no selection live) | — | PROPOSED | |
+| SEL-11 | A multi-select drop where only SOME target tiles are occupied commits the free members and drops the blocked ones, breaking the group's relative layout | baseline gap + seed seam #4 | `drag-collision.spec.ts` (one node, fully blocked) | — | PROPOSED | |
+| SEL-12 | Dragging a marquee past the viewport edge does not auto-scroll, so items outside the viewport cannot be lassoed | baseline gap | `multi-select-drag-lasso.spec.ts` (in-viewport marquee) | — | PROPOSED | |
+| SEL-13 | Ctrl+A includes items on hidden or locked layers | baseline gap | `hotkeys.spec.ts` Ctrl+A leg (no layers); `layers.spec.ts` (no Ctrl+A) | — | PROPOSED | |
+| SEL-14 | Hover state lags for an off-grid item: `updateHoverCursor` is gated on `hasMovedTile`, so moving within one tile onto/off the drawn body never updates `hoveredItem` | seed seam #9 | `off-grid-pointer.spec.ts` (asserts hover at the drawn point, not the within-tile transition) | — | PROPOSED | |
+| SEL-15 | A second marquee replaces the existing selection with no way to extend it — no modifier is honoured | baseline gap | `multi-select-drag-lasso.spec.ts` (single marquee) | — | PROPOSED | |
 
 ## Product questions (SUSPECT verdicts)
 
