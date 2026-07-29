@@ -16,7 +16,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 | I4 | [Connector draw, reconnect & waypoint interactions](areas/I4-connector-interactions.md) | DONE | 15 / 10 | 8 | 0 | 9/19/11 |
 | I5 | [Pan/right-click, context menu, placement tools & transform handles](areas/I5-pan-menu-placement-transform.md) | DONE | 14 / 10 | 5 | 0 | 11/15/17 |
 | R1 | [Projection & coordinate transforms (iso/2D/screen, off-grid)](areas/R1-projection-transforms.md) | DONE | 15 / 10 | 6 | 2 | 8/12/13 |
-| R2 | [WebGL sprite-batch substrate (atlas, shaders, context loss)](areas/R2-webgl-substrate.md) | OPEN | 0 / 10 | 0 | 0 | 9/3/8 |
+| R2 | [WebGL sprite-batch substrate (atlas, shaders, context loss)](areas/R2-webgl-substrate.md) | DONE | 14 / 10 | 4 | 0 | 9/3/8 |
 | R3 | [Bulk GPU scene layers (build/invalidation, style parity, LOD)](areas/R3-gpu-scene-layers.md) | OPEN | 0 / 10 | 0 | 0 | 10/6/11 |
 | R4 | [Renderer orchestration (culling, hybrid promotion, fit-to-view)](areas/R4-renderer-orchestration.md) | OPEN | 0 / 10 | 0 | 0 | 10/0/11 |
 | R5 | [DOM overlays & presentation parity (labels, hit proxies, grid, compositor)](areas/R5-dom-overlays-parity.md) | OPEN | 0 / 10 | 0 | 0 | 9/23/14 |
@@ -139,3 +139,5 @@ After all areas are DONE: completeness-critic pass per APPROACH §8 — list the
 | PROJ-05 | A 2D Y-orientation text box draws one tile thick but claims its full row count, so multi-row boxes paint outside themselves and empty canvas beside them is clickable | *A 2D Y-orientation text box draws one tile thick but claims its full row count* |
 | PROJ-10 | Clicking two stacked nodes selects the one drawn underneath — item hit-testing scans `scene.items` array order and ignores zIndex/layer/isoDepth (the rectangle branch of the same function does sort) | *Clicking two stacked nodes selects the one drawn underneath (item hit-testing ignores z-order)* |
 | PROJ-12 | Selecting a connector attached to an off-grid node makes the wire jump at that node — only the DOM renderer applies `connectorEndpointVertexDelta`, the WebGL bulk path never reads `offset` | *Selecting a connector attached to an off-grid node makes the wire jump at that node* |
+| GL-02/05/12 | The chip atlas has no eviction: every rename or restyle leaks a slot, and when it finally overflows the affected chips are skipped with no signal and no scheduled rebuild (a small `MAX_TEXTURE_SIZE` brings it much closer) | *The chip atlas has no eviction — renaming nodes leaks slots until labels stop drawing* |
+| GL-07 | A GPU layer whose sprite batch fails to build renders nothing, permanently, behind a capability gate that has already passed — one `console.warn` and no retry | *A GPU layer that fails to build renders nothing, silently* |

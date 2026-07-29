@@ -2567,3 +2567,88 @@ were never covered.
 items in scope), and extend `renderedGeometry.invariant.test.tsx` with a
 connector-endpoint parity case so the two paths cannot drift again. Repro:
 [`geometry-proj-05-10-11-12.explore.test.tsx`](packages/axoview-lib/src/__explore__/R1/geometry-proj-05-10-11-12.explore.test.tsx).
+
+## The chip atlas has no eviction — renaming nodes leaks slots until labels stop drawing
+
+**Found by:** exploratory campaign GL-02 / GL-05 / GL-12
+
+**Symptom:** Node name chips are cached in the WebGL sprite batch's texture atlas
+under a **content key** that interpolates the node's name and every style token
+(`node|fontSize|bold|italic|strike|under|textColor|bg|border|radius|padX|padY|name`).
+Every rename, every colour or font change, every theme switch mints a NEW key,
+packs a NEW slot, and **leaks the old one** — the atlas has no LRU, no free list
+and no per-key eviction, only a total reset. In a long editing session the atlas
+fills with orphaned chips. When it finally overflows, the affected node names
+simply stop drawing: `packSlot` returns null, the chip is skipped for that
+build, and the compaction that would recover the space only runs inside the NEXT
+`beginInstances()` — which only a geometry change triggers. If the user's next
+action is a pan or a zoom (neither rebuilds geometry), the missing names persist
+on screen indefinitely.
+
+Nothing surfaces any of this. The `SpriteBatch` interface has no overflow flag,
+callback or counter, so the layer cannot know a chip is missing and cannot
+schedule the rebuild that would fix it.
+
+**Root cause:** [`glSpriteBatch.ts`](packages/axoview-lib/src/webgl/glSpriteBatch.ts)'s
+shelf packer only ever moves forward; `resetAtlas()` (drop the whole cache,
+rewind the cursor past the reserved dot/white region) is the sole way space is
+reclaimed, and it is armed only by `atlasFull` and consumed only by the next
+`beginInstances()`. Measured on the real packer through a recording WebGL2 stub:
+six version bumps of ONE logical chip occupy six distinct slots, and a single
+chip restyled repeatedly fills a 256 atlas by itself.
+
+**Aggravating factor — `MAX_TEXTURE_SIZE`.** The atlas is
+`Math.min(atlasSize, MAX_TEXTURE_SIZE)`. `NodesCanvas` asks for 8192 (4096 when
+`devicePixelRatio >= 2`), but a device that caps textures at 2048 silently gets
+2048 — measured to hold **less than a third** of the 85px chips a 4096 atlas
+holds — with no diagnostic anywhere. On such a device the overflow is reachable
+at an unremarkable diagram size.
+
+**Workaround:** any edit that changes geometry (move a node, place or delete
+anything) triggers the compaction and the missing names come back.
+
+**Status:** Open. Fix direction: (a) give `putCanvas` a free-list or a
+generation-tagged LRU so a superseded key's slot is reclaimed immediately, or at
+minimum evict the previous slot when a key's content changes; (b) expose an
+overflow signal on `SpriteBatch` (a counter or an `onAtlasFull` callback) so the
+layer can schedule one follow-up rebuild instead of waiting for a geometry
+change; (c) log once when `MAX_TEXTURE_SIZE` clamps the requested atlas, so a
+small-cap device is diagnosable. Repro:
+[`atlas-gl-01-02-03-04-05.explore.test.ts`](packages/axoview-lib/src/__explore__/R2/atlas-gl-01-02-03-04-05.explore.test.ts)
+(the probe drives the real `createSpriteBatch` through a recording WebGL2 stub —
+that harness is reusable for any future `glSpriteBatch` work).
+
+## A GPU layer that fails to build renders nothing, silently
+
+**Found by:** exploratory campaign GL-07
+
+**Symptom:** `isWebGL2Supported()` is the gate that decides whether the app shows
+the diagram or the `WebGLUnsupportedScreen`. It probes only that a `webgl2`
+context can be created and exposes `createVertexArray` — it does **not** compile
+the shaders or allocate the atlas. A browser or GPU that passes the probe but
+fails the real `createSpriteBatch` (shader compile, program link, atlas
+allocation, or context exhaustion) therefore gets past the gate, and the layer
+then does this:
+
+    console.warn('[NodesCanvas] WebGL2 sprite batch unavailable — node layer will not render');
+    return;
+
+The user sees an empty canvas. No message, no fallback, no retry — and because
+`isWebGL2Supported` is memoised for the tab's life, nothing re-evaluates. A
+diagram that is fine on the next reload looks like data loss.
+
+**Root cause:** the gate and the substrate disagree about what "supported"
+means, and each of the four bulk layers handles the mismatch on its own with a
+`console.warn` and an early return. Verified by driving the real
+`createSpriteBatch` with a context that satisfies exactly the gate's checks and
+fails shader compilation — it returns `null`, exactly as it would in the field.
+
+**Workaround:** reload the tab; a fresh context usually builds.
+
+**Status:** Open. Fix direction: make the gate agree with the substrate — have
+`isWebGL2Supported` (or a one-shot sibling) actually attempt a minimal
+`createSpriteBatch` and cache that result, so a failure routes to the existing
+`WebGLUnsupportedScreen` instead of a blank canvas; and give the per-layer
+failure path a user-visible notification plus one retry rather than a console
+line. Repro:
+[`atlas-gl-01-02-03-04-05.explore.test.ts`](packages/axoview-lib/src/__explore__/R2/atlas-gl-01-02-03-04-05.explore.test.ts).
