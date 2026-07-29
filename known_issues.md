@@ -1621,3 +1621,105 @@ Escape/Delete-guard split, keeping navigation-only keys — arrows-as-pan, F1 he
 making `EXPLORABLE_READONLY` gate the *pointer* effect's mutating modes for the
 same reason. Repro:
 [`ptr-01-03.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I1-pointer/ptr-01-03.explore.spec.ts).
+
+## An open modal dialog does not shield the canvas — Delete destroys the item behind it
+
+**Found by:** exploratory campaign PTR-05
+
+**Symptom:** select a node, press F1 (or open Settings / Export image / any MUI
+dialog), then press `Delete`. The node is removed from the diagram while the
+dialog is still on screen, so the user never sees the canvas change — they find
+the deletion later. Every other canvas shortcut behaves the same way with a
+modal open: `r` / `c` / `t` re-arm tools, `Ctrl+Z` undoes, `Ctrl+]` reorders,
+the arrow keys nudge the selection.
+
+**Root cause:** the keydown listener is bound to `window`
+([useInteractionManager.ts:614](packages/axoview-lib/src/interaction/useInteractionManager.ts#L614))
+and its only scope check is `isEditableTarget(e.target)` — a dialog body is not
+an input, so the keystroke falls straight through to the canvas dispatcher. MUI's
+`Dialog` traps *focus*, not window-level keydown listeners, so nothing else stops
+it. F2 is the one shortcut that guards on where the keystroke came from
+(`cameFromRenderer`, added for MQA #13); that check was never generalised.
+
+**Workaround:** clear the selection before opening a dialog.
+
+**Status:** Open. Fix direction: reuse the F2 `cameFromRenderer` test as a
+dispatcher-wide gate for the *mutating* shortcuts (Delete, clipboard, z-order,
+nudge, tool hotkeys), or gate on `uiState.dialog === null` plus "no MUI modal is
+open" (`document.querySelector('.MuiModal-root')`). Repro:
+[`ptr-05-12-14.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I1-pointer/ptr-05-12-14.explore.spec.ts).
+
+## Ctrl+C is hijacked everywhere — copying text out of the app silently does nothing
+
+**Found by:** exploratory campaign PTR-12
+
+**Symptom:** select any text that is not inside an `<input>` / `<textarea>` /
+Quill editor — a node's read-only notes in the ADR 0012 view-mode popover, a
+description in the properties panel, the Help dialog's text — and press `Ctrl+C`.
+No `copy` event fires, nothing reaches the OS clipboard, and the selection stays
+highlighted, so the user gets no feedback that the copy failed. What actually
+happened is that the canvas clipboard was overwritten with the current canvas
+selection (or a "nothing to copy" no-op).
+
+**Root cause:** `handleClipboardShortcuts`
+([useInteractionManager.ts:266-288](packages/axoview-lib/src/interaction/useInteractionManager.ts#L266-L288))
+calls `e.preventDefault()` unconditionally for `x` / `c` / `v` whenever
+Ctrl/Cmd is held. The only guard upstream is `isEditableTarget`
+([handleDeleteKey.ts:23-27](packages/axoview-lib/src/interaction/handleDeleteKey.ts#L23-L27)),
+which recognises editable *fields* but not a plain text selection in
+non-editable content. Preventing the keydown suppresses Chrome's native copy
+command entirely.
+
+**Workaround:** use the browser's Edit menu, or right-click → Copy (the OS menu
+survives off-canvas — see `contextmenu-scope.spec.ts`).
+
+**Status:** Open. Fix direction: skip the canvas clipboard shortcuts when
+`window.getSelection()` holds a non-collapsed range outside the renderer (and
+don't `preventDefault` in that case). The same reasoning applies to `Ctrl+A`,
+which force-selects the canvas instead of the text under the cursor. Repro:
+[`ptr-05-12-14.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I1-pointer/ptr-05-12-14.explore.spec.ts).
+
+## Ctrl+Shift+] / Ctrl+Shift+[ (bring to front / send to back) do nothing on a real keyboard
+
+**Found by:** exploratory campaign PTR-14
+
+**Symptom:** the canvas context menu advertises `Ctrl+Shift+]` as "bring to
+front" ([CanvasContextMenu.tsx:527](packages/axoview-lib/src/components/CanvasContextMenu/CanvasContextMenu.tsx#L527)),
+but pressing it on a physical keyboard changes nothing — the item's `zIndex` is
+untouched. `Ctrl+Shift+[` ("send to back") is dead the same way. The plain
+`Ctrl+]` / `Ctrl+[` nudges still work.
+
+**Root cause:** `handleZOrderShortcut` filters on the printable character:
+
+```ts
+if (!isCtrlOrCmd || (e.key !== ']' && e.key !== '[')) return;
+```
+
+([useInteractionManager.ts:425](packages/axoview-lib/src/interaction/useInteractionManager.ts#L425)).
+`KeyboardEvent.key` carries the *shifted* character, so a US keyboard sends `}`
+and `{` for those chords and the guard rejects them before `e.shiftKey` is ever
+consulted. The absolute branch inside `reorder` (`if (e.shiftKey)`) is therefore
+unreachable from the keyboard.
+
+**Why no existing test caught it:** `z-order.spec.ts` drives the chord with
+`page.keyboard.press('Control+Shift+]')`, and Playwright resolves that to
+`e.key === ']'` with `shiftKey: true` — a key identity no real keyboard produces.
+The probe records both side by side:
+
+```
+[{"key":"]","code":"BracketRight","ctrl":true,"shift":true},   ← page.keyboard.press
+ {"key":"}","code":"BracketRight","ctrl":true,"shift":true}]   ← CDP Input.dispatchKeyEvent
+```
+
+So the suite is green on a chord that cannot fire in the product — the
+synthetic-vs-real input class (ADR 0022 addendum) applied to the keyboard rather
+than the pointer.
+
+**Workaround:** use the context menu's "Bring to front" / "Send to back" items,
+or press `Ctrl+]` repeatedly.
+
+**Status:** Open. Fix direction: match on `e.code` (`BracketRight` /
+`BracketLeft`) instead of `e.key`, or accept `}` / `{` alongside `]` / `[`. The
+existing `z-order.spec.ts` assertion should move to `e.code` too, or it will keep
+passing over a broken shortcut. Repro:
+[`ptr-05-12-14.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I1-pointer/ptr-05-12-14.explore.spec.ts).

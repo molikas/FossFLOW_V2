@@ -10,7 +10,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 | E2 | [Reducers & cross-store cascades](areas/E2-reducers-cascades.md) | DONE | 15 / 10 | 10 | 1 | 8/7/8 |
 | E3 | [Scene actions, transactions & paste assembly](areas/E3-scene-actions-paste.md) | DONE | 15 / 10 | 12 | 0 | 9/8/7 |
 | E4 | [Clipboard, schemas, initial load & session/UI state](areas/E4-clipboard-schemas-load.md) | DONE | 15 / 10 | 12 | 0 | 8/22/6 |
-| I1 | [Pointer pipeline, mode dispatcher & keyboard routing](areas/I1-pointer-modes-keyboard.md) | IN PROGRESS | 3 / 10 | 3 | 0 | 10/20/10 |
+| I1 | [Pointer pipeline, mode dispatcher & keyboard routing](areas/I1-pointer-modes-keyboard.md) | IN PROGRESS | 6 / 10 | 6 | 0 | 10/20/10 |
 | I2 | [Touch & pen gesture state machine](areas/I2-touch-pen-gestures.md) | OPEN | 0 / 10 | 0 | 0 | 10/22/8 |
 | I3 | [Selection, drag engine & lasso/freehand marquee](areas/I3-selection-drag-lasso.md) | OPEN | 0 / 10 | 0 | 0 | 10/20/14 |
 | I4 | [Connector draw, reconnect & waypoint interactions](areas/I4-connector-interactions.md) | OPEN | 0 / 10 | 0 | 0 | 9/19/11 |
@@ -98,4 +98,7 @@ After all areas are DONE: completeness-critic pass per APPROACH §8 — list the
 | CLIP-10 | The single notification slot lets a success toast bury an unread error (ADR 0011 contract) | *The notification slot has no queue — a later toast silently buries an unread error* |
 | CLIP-13 | `updateViewItem` accepts an `iconScale` outside the schema's `[0.1,3]`, so a group resize saves a diagram that then refuses to load | *A group icon-resize can commit a scale outside the schema cap, bricking the next load* |
 | CLIP-14/15 | Unknown icon references and unbounded tile coordinates both pass schema + validateView | *Icon references and tile coordinates are unvalidated* |
+| PTR-05 | An open modal dialog does not shield the canvas — Delete destroys the selected item behind it | *An open modal dialog does not shield the canvas — Delete destroys the item behind it* |
+| PTR-12 | Ctrl+C over any non-input text selection is preventDefaulted, so copying text out of the app silently does nothing | *Ctrl+C is hijacked everywhere — copying text out of the app silently does nothing* |
+| PTR-14 | Ctrl+Shift+] / Ctrl+Shift+[ (bring to front / send to back) are dead on a real keyboard — the guard tests `e.key`, which is `}`/`{` when shifted; `z-order.spec.ts` is a false green | *Ctrl+Shift+] / Ctrl+Shift+[ … do nothing on a real keyboard* |
 | PTR-01/02/03 | Read-only (`EXPLORABLE_READONLY`, the `/display` viewer route) is fully keyboard-editable — tool hotkeys arm drawing tools, Delete destroys items, Ctrl+C/V duplicates them | *Read-only mode is keyboard-editable — the keydown dispatcher has no `editorMode` gate* |
