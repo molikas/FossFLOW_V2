@@ -56,7 +56,9 @@ Take the area marked `IN PROGRESS` if one exists, else the first `OPEN` area in 
 
 Known setup-throw traps:
 
+- **Playwright fixtures are LAZY — an e2e probe MUST destructure `app`, not just `page`.** `exploreTest` boots the diagram inside the `app` fixture; a test written `async ({ page })` never instantiates it, so the app never boots, `window.__axoview__` is undefined and every locator times out. Four R1 runs were thrown away on this, and one `test.fail` "confirmed" its bug purely because the locator timed out — a `test.fail` whose body dies on a missing selector is indistinguishable from evidence. Write `async ({ page, app })` even when `app` is unused.
 - **jsdom has no canvas 2D context.** `getTextBoxDimensions` throws `Could not get canvas context`, so *any* T1 probe that touches text boxes dies in the reducer. Call `installCanvasStub()` from `packages/axoview-lib/src/__explore__/canvasStub.ts` first. `canvasStub.explore.test.ts` guards the stub itself.
+- **`installCanvasStub()` is NOT enough for anything that DRAWS.** It provides only `font` / `measureText` (it was written for text measurement). `createSpriteBatch` rasterises its built-in dot and white texel and throws `dctx.clearRect is not a function` without the drawing calls — use `installDrawing2DStub()` from `src/__explore__/R2/glStub.ts` instead.
 - **`useCopyPaste` needs `<ClipboardProvider>`.** Use `ClipboardProviders` from `packages/axoview-lib/src/__explore__/E3/harness.tsx` instead of the bare store providers.
 
 Known silent-precondition traps (each cost a wrong verdict in I2–I5):
@@ -66,13 +68,20 @@ Known silent-precondition traps (each cost a wrong verdict in I2–I5):
 - **`uiState.mouse.mousedown` survives a completed gesture**, and `Cursor.mousemove` skips the hover path entirely while a press is live. Any probe measuring hover must clear it with a plain click first. (This is also a real finding — TCH-02.)
 - **A freshly created connector label is EMPTY and is discarded on Escape** (the empty-content lifecycle). Type text and commit before probing anything about it.
 - **A wrong selector reads as "0 elements", which looks exactly like "the feature is absent".** Verify the hook exists before concluding anything from a zero count.
+- **Do not conclude a platform behaviour from the spec — ask the browser.** R1/PROJ-15 was filed as a bug (an exponent-notation CSS length voiding a `transform`) on correct reading of the CSS 2.1 grammar; Chromium accepts it (CSS Values 4 permits scientific notation) and the entry had to be withdrawn. Related: a declaration containing `var()` is stored as an unresolved token stream, so `el.style.x` **always** round-trips whatever you assigned — `getComputedStyle` is the only valid oracle for "did the browser accept this?".
+- **A pure-math sweep can be right and still be inert.** Always pair "the arithmetic reaches this value" with "and here is the consumer that breaks on it". Three R2 hypotheses were true about the code and unreachable in the product (an unversioned cache whose keys are content-derived; a captured-UV trap on layers that pack at most two chips; an oversized-slot branch behind a clamped chip width).
 - **`getModelItemCount` reads `model.items`, which leaks deleted nodes forever (RED-08).** For "was it deleted?" use `getViewItemCount`.
 - **Playwright's `keyboard.press` sends the UNSHIFTED character for a shifted punctuation chord** — `press('Control+Shift+]')` yields `e.key === ']'` where a real keyboard sends `'}'`. This made `z-order.spec.ts` a false green over a shortcut that cannot fire in the product (I1/PTR-14). Drive such chords through CDP: `page.context().newCDPSession(page)` → `Input.dispatchKeyEvent` with `modifiers` (ctrl=2, shift=8, alt=1, meta=4) and the real `key`. Re-check any suite that presses chorded punctuation.
 
 ## What already exists — reuse it
 
 - **T1 harnesses.** `src/__explore__/E1/harness.tsx` (provider tree, seeded two-node view, `setup()`, `modelView`, `historyDepths`, `seqs`, `orphanSceneConnectors`, `drawConnector`, `placeIcon`), `E2/harness.ts` (bare reducer `State` builder — the reducers are pure, no React needed), `E3/harness.tsx` (adds `ClipboardProviders`, `makePastePayload`, `flushAnimationFrames` for rAF-scheduled work under fake timers).
-- **T2 fixture.** `packages/axoview-e2e/fixtures/explore.fixture.ts` — `exploreTest` (blank-diagram boot) / `exploreAppTest` (raw `/app`), both auto-asserting the console/pageerror oracle in teardown, plus `expectStoreInvariants` (INV-1…INV-11), `expectSchemaClean`, `expectModelHealthy`. **Grow the INV list** when an area confirms a new cross-store invariant. (INV-11, added by I1/PTR-11: no `selectedIds` entry may sit on a hidden or locked layer.)
+- **T2 fixture.** `packages/axoview-e2e/fixtures/explore.fixture.ts` — `exploreTest` (blank-diagram boot) / `exploreAppTest` (raw `/app`), both auto-asserting the console/pageerror oracle in teardown, plus `expectStoreInvariants` (INV-1…INV-11), `expectSchemaClean`, `expectModelHealthy`. **Always destructure `app`** (see the trap above — the fixture is lazy). **Grow the INV list** when an area confirms a new cross-store invariant. (INV-11, added by I1/PTR-11: no `selectedIds` entry may sit on a hidden or locked layer.)
+- **Rendering oracles (R1/R2 — the rendering block is NOT pixel-blind).**
+  - *Read-back pixel oracle* — every bulk WebGL canvas is created with `preserveDrawingBuffer: true`, so `drawImage`-ing it into a 2D canvas and counting non-transparent alpha answers "did this GPU layer paint?" (0 for an empty diagram, >0 for one node). `paintedPixels` in `tests-exploratory/R2-webgl/gl-08-13-14.explore.spec.ts`. Canvas hooks: `[data-testid="axoview-{nodes,labels}-canvas"]`.
+  - *Recording WebGL2 stub* — `src/__explore__/R2/glStub.ts`. `glSpriteBatch` feature-checks `createVertexArray` / `vertexAttribDivisor` / `getParameter` so a canvas-mock falls back to `null`; supplying those drives the REAL packer, UV math and staging buffer under jest while recording every upload and draw. Carries `installDrawing2DStub()`.
+  - *Context loss* — `canvas.getContext('webgl2')` returns the live context, so `getExtension('WEBGL_lose_context').loseContext()` / `.restoreContext()` drives the real recovery path; poll `isContextLost()` for the transition.
+  - *Geometry the app itself computes* — `window.__axoview__` store state, `CanvasPOM.tileToScreen`, `drawnClientPoint` in `helpers/offGrid.ts` (tile projection **plus** the off-grid residual). `iso-helper-smoke.spec.ts` is the canary if the projection math moves.
 - **T3 real-input patterns** (all proven in `tests-exploratory/I1-pointer/` … `I5-pan-menu/`):
   - *Real-mouse node drag* — `page.mouse.move/down/move(steps)/up`, then **assert `mode.type === 'DRAG_ITEMS'` before continuing** so a rig failure can't masquerade as evidence (`ptr-06-09-10-15.explore.spec.ts` `beginRealDrag`).
   - *Absolute page coords for a tile* — `CanvasPOM.tileToScreen(tile)` (interactions-box-relative) + `interactionsLayer().boundingBox()` origin. Existing helper `drawnClientPoint` in `helpers/offGrid.ts` does the same **including the off-grid `offset`**; pass `{...item, offset: undefined}` for the bare grid cell.
@@ -121,6 +130,18 @@ C. **`EXPLORABLE_READONLY` is inverted in both directions.** It exposes the muta
 D. **Touch is a second implementation of every interaction, and it drifts from its mouse twin.** Four I2 bugs are sibling-drift (double-tap vs dblclick, `onTouchPointerCancel` vs `onTouchPointerUp`, palette drop, pen hover). Wherever an area has a touch path, diff it against the mouse path rather than testing it alone.
 
 E. **Degenerate entities are creatable and rejected nowhere.** Self-loop connectors, zero-length connectors, half-attached connectors, zero-size rectangles. Consistent with the engine block's finding below — nothing validates identity or sanity, only references.
+
+**From the rendering block (R1–R2):**
+
+R-a. **One geometry, two derivations — and they drift.** Every confirmed R1 bug is a second place that re-derives what `renderedGeometry` / `getTextBoxEndTile` already knows: the projected bounds add a text box's height with the wrong Y sign (PROJ-01), the 2D-Y text box wrapper drops the row count its hit range keeps (PROJ-05), the WebGL connector path never reads the `offset` the DOM path composes (PROJ-12). When an area draws something, ask *which* derivation it used and whether a sibling uses another.
+
+R-b. **Sorted in one branch, unsorted in the next.** `getItemAtTile` rebuilds paint order for RECTANGLES and scans raw array order for ITEMS (PROJ-10). Where a function handles several entity types, diff the branches against each other before testing any of them.
+
+R-c. **Caches with no eviction and no signal.** The chip atlas only ever moves forward; a rename leaks a slot, and on overflow the chip is silently skipped with nothing on the API to notice it (GL-02/05/12). Any cache an area touches: ask what evicts, and what the caller learns when it fails.
+
+R-d. **Capability gates weaker than the thing they gate.** `isWebGL2Supported` passes where `createSpriteBatch` fails, and the layer answers with a `console.warn` and a blank canvas (GL-07). Any "is this supported?" probe is a candidate.
+
+R-e. **Unspecified-by-design is a product question, not a bug.** ADR 0023 makes `offset` a post-projection residual deliberately; nothing says what a projection switch should do with it (PROJ-07). Same for the 3-decimal ISO constants (PROJ-06). When the code is self-consistent and no ADR picks a side, record `SUSPECT` with a recommendation rather than filing.
 
 **From the engine block (E1–E4):**
 
