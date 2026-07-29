@@ -1,6 +1,6 @@
 # I4 — Connector draw, reconnect & waypoint interactions
 
-**Status:** OPEN · **Counted hypotheses:** 0 / 10 · **Bugs:** 0 · **Hypothesis ID prefix:** `CONN-`
+**Status:** IN PROGRESS · **Counted hypotheses:** 0 / 10 · **Bugs:** 0 · **Hypothesis ID prefix:** `CONN-`
 
 **Scope:** Connector tool with two interaction modes (uiState.connectorInteractionMode 'click' = arm-then-second-click, 'drag' = press-drag-release), both bracketed by beginDragTransaction/commitDragTransaction; stray-empty-click revert; ReconnectAnchor click-to-reconnect for endpoint anchors; ConnectorAnchorOverlay renders counter-scaled (1/zoom) endpoint/waypoint handles with data-anchor-id used for DOM-precise hit identification; Cursor hosts anchor-first-claim, Alt+click waypoint removal, and waypoint drag creation.
 
@@ -63,8 +63,25 @@
 
 ## Hypotheses
 
+*(Ledger-wide ID scan before proposing: seam #1 — the abort-path asymmetry for a tool hotkey / Ctrl+A mid-connection — was already probed and filed as **PTR-07/08** in area I1, so it is deliberately NOT re-proposed here.)*
+
 | ID | Hypothesis | Source | Nearest existing tests | Probe | Verdict | Evidence |
 |----|-----------|--------|------------------------|-------|---------|----------|
+| CONN-01 | `RECONNECT_ANCHOR` has no cancel: `mousemove` already rewrote the anchor ref, Esc is not in the tool-exit set and restores nothing, so Esc mid-reconnect leaves the anchor moved AND the user stuck in the mode | seed seam #2 | `handleEscapeKey.test.ts` (no RECONNECT_ANCHOR case); `connector-deep.spec.ts` (completed reconnects) | — | PROPOSED | |
+| CONN-02 | `ReconnectAnchor.mouseup` is gated on `isRendererInteraction`, so a release over a panel neither commits nor exits — the reconnect stays live after the button is up | seed seam #3 | none — no test releases a reconnect off-canvas | — | PROPOSED | |
+| CONN-03 | Connector draw/reconnect hit-test with `getItemAtTile({tile, scene})` and no ADR-0023 `point`, so connecting to a visibly-moved off-grid node binds the anchor to an empty tile instead of the node | seed seam #4 | `off-grid-pointer.spec.ts` (select/drag, not connect); `connector-creation.spec.ts` (on-grid) | — | PROPOSED | |
+| CONN-04 | `Connector.mousemove` regenerates `anchors[1]` with a fresh id on EVERY tile move, so any id captured mid-draw (overlay key, selection ref, `targetAnchorId`) goes stale within a frame | seed seam #5 | `Connector.test.ts` (first press only) | — | PROPOSED | |
+| CONN-05 | Endpoint reconnect can only be entered through the fragile tile-equality fallback — only waypoints carry `data-anchor-id` — so at low zoom a click on the endpoint handle fails to start a reconnect | seed seam #6 | `Cursor.getAnchorOrdering.test.ts` (ordering math, not entry) | — | PROPOSED | |
+| CONN-06 | Alt+click waypoint removal with two overlapping connectors removes a waypoint from an arbitrary one (`scene.hitConnectors` array order decides) | seed seam #7 | `Cursor.waypointGestures.test.ts` (single connector) | — | PROPOSED | |
+| CONN-07 | In `drag` interaction mode a zero-travel click on empty canvas commits a zero-length free-floating connector (no tap-slop revert like click mode's empty-start guard) | seed seam #8 | `connector-realmouse.spec.ts` (real drag); `Connector.test.ts` (click mode) | — | PROPOSED | |
+| CONN-08 | Dragging an existing endpoint onto a different node does not re-anchor it | baseline gap | `connector-deep.spec.ts` (creation + selection); nothing drags an endpoint | — | PROPOSED | |
+| CONN-09 | Direct waypoint editing is broken: dragging a waypoint does not move it, or Alt+click does not remove it | baseline gap ("waypoint FOLLOW is covered; direct editing is not") | `multi-select-drag.spec.ts` (waypoint follows a group drag) | — | PROPOSED | |
+| CONN-10 | A connector drawn from a node back to itself is accepted and produces a degenerate zero-length self-loop | baseline gap ("self-loop") + PTR-07's finding that the provisional state IS self-anchored | none | — | PROPOSED | |
+| CONN-11 | Two connectors between the same node pair are routed identically, so they overlap exactly and only one can ever be selected | baseline gap ("multiple parallel connectors") | `connector-selection-clarity.spec.ts` (single connector) | — | PROPOSED | |
+| CONN-12 | Dragging a connector's midpoint label does not reposition it | baseline gap | `connector-dot-and-label-placement.spec.ts` (placement, not drag) | — | PROPOSED | |
+| CONN-13 | The documented stray-empty-click revert does not fire: a second click on empty canvas in click mode leaves a connector anchored to a bare tile | scope statement ("stray-empty-click revert") | `Connector.test.ts` (arms on empty canvas; no second click) | — | PROPOSED | |
+| CONN-14 | Reconnecting an endpoint onto the node it is already attached to corrupts the anchor (duplicate/self ref) instead of being a no-op | boundary / degenerate input | none | — | PROPOSED | |
+| CONN-15 | A connector can be anchored to a node on a locked or hidden layer — the connector hit-test has no interactability gate | cross-feature F4×I4 | `layers.spec.ts` (visibility only); `Connector.test.ts` (no layers) | — | PROPOSED | |
 
 ## Product questions (SUSPECT verdicts)
 
