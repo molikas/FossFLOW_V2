@@ -16,8 +16,8 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 | I4 | [Connector draw, reconnect & waypoint interactions](areas/I4-connector-interactions.md) | DONE | 15 / 10 | 8 | 0 | 9/19/11 |
 | I5 | [Pan/right-click, context menu, placement tools & transform handles](areas/I5-pan-menu-placement-transform.md) | DONE | 14 / 10 | 5 | 0 | 11/15/17 |
 | R1 | [Projection & coordinate transforms (iso/2D/screen, off-grid)](areas/R1-projection-transforms.md) | DONE | 15 / 10 | 6 | 2 | 8/12/13 |
-| R2 | [WebGL sprite-batch substrate (atlas, shaders, context loss)](areas/R2-webgl-substrate.md) | DONE | 14 / 10 | 4 | 0 | 9/3/8 |
-| R3 | [Bulk GPU scene layers (build/invalidation, style parity, LOD)](areas/R3-gpu-scene-layers.md) | OPEN | 0 / 10 | 0 | 0 | 10/6/11 |
+| R2 | [WebGL sprite-batch substrate (atlas, shaders, context loss)](areas/R2-webgl-substrate.md) | DONE | 13 / 10 | 4 | 0 | 9/3/8 |
+| R3 | [Bulk GPU scene layers (build/invalidation, style parity, LOD)](areas/R3-gpu-scene-layers.md) | IN PROGRESS | 4 / 10 | 1 | 1 | 10/6/11 |
 | R4 | [Renderer orchestration (culling, hybrid promotion, fit-to-view)](areas/R4-renderer-orchestration.md) | OPEN | 0 / 10 | 0 | 0 | 10/0/11 |
 | R5 | [DOM overlays & presentation parity (labels, hit proxies, grid, compositor)](areas/R5-dom-overlays-parity.md) | OPEN | 0 / 10 | 0 | 0 | 9/23/14 |
 | A1 | [Diagram lifecycle: open/save/dirty/autosave state machine](areas/A1-diagram-lifecycle.md) | OPEN | 0 / 10 | 0 | 0 | 10/20/14 |
@@ -65,6 +65,7 @@ After all areas are DONE: completeness-critic pass per APPROACH §8 — list the
 | TCH-06 | Should a cancelled press break the double-tap streak? | **OPEN** — industry standard is yes (Android `GestureDetector.cancel()`, iOS `touchesCancelled`); same handler omission as the filed TCH-14, so cheap to fix together |
 | PROJ-06 | Should the ISO area quads use the exact projection ratio (0.7075 / 0.4095) instead of the 3-decimal constants? | **OPEN** — drift is hypot(0.05, 0.05) px per tile of width; a 20-tile rectangle's far corner is 1.41 px from the tile it claims. Never flips a hit-test; the constants were kept deliberately so an extraction changed no pixel |
 | PROJ-07 | Should the off-grid `offset` be re-projected on an iso↔2D switch? | **OPEN** — it is not: a residual inside the ISO tile diamond can sit outside the 2D tile square, so the item is drawn over a neighbouring cell in 2D. Recommendation (with reasoning) in the area file |
+| GPU-13 | Should a per-element `zIndex` be able to cross an entity type (lift a connector above a node)? | **OPEN** — it cannot: all four bulk canvases share one stacking context and cross-type order is fixed by mount order, so the z-order controls are silently inert across types |
 | SEL-12 | Should the marquee auto-scroll at the viewport edge? | **CLOSED 2026-07-29 — by design.** Lassoing off-screen items is not a requirement; the probe now pins the no-auto-scroll behaviour as intended |
 
 ## Bugs filed
@@ -141,3 +142,4 @@ After all areas are DONE: completeness-critic pass per APPROACH §8 — list the
 | PROJ-12 | Selecting a connector attached to an off-grid node makes the wire jump at that node — only the DOM renderer applies `connectorEndpointVertexDelta`, the WebGL bulk path never reads `offset` | *Selecting a connector attached to an off-grid node makes the wire jump at that node* |
 | GL-02/05/12 | The chip atlas has no eviction: every rename or restyle leaks a slot, and when it finally overflows the affected chips are skipped with no signal and no scheduled rebuild (a small `MAX_TEXTURE_SIZE` brings it much closer) | *The chip atlas has no eviction — renaming nodes leaks slots until labels stop drawing* |
 | GL-07 | A GPU layer whose sprite batch fails to build renders nothing, permanently, behind a capability gate that has already passed — one `console.warn` and no retry | *A GPU layer that fails to build renders nothing, silently* |
+| GPU-04 | A floating Label paints at any zoom but its hit proxy is gone below 0.4 — visible, and completely inert | *A floating Label is visible but inert below zoom 0.4* |

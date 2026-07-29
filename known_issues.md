@@ -2652,3 +2652,39 @@ fails shader compilation — it returns `null`, exactly as it would in the field
 failure path a user-visible notification plus one retry rather than a console
 line. Repro:
 [`atlas-gl-01-02-03-04-05.explore.test.ts`](packages/axoview-lib/src/__explore__/R2/atlas-gl-01-02-03-04-05.explore.test.ts).
+
+## A floating Label is visible but inert below zoom 0.4
+
+**Found by:** exploratory campaign GPU-04
+
+**Symptom:** Zoom out past 40% and every floating Label is still drawn on the
+canvas but stops responding entirely — it cannot be clicked, selected, dragged,
+double-clicked to edit, or right-clicked for its context menu. The chip looks
+exactly as interactive as it does at 100%. There is no cue that it has gone
+dead, and the only way back is to zoom in.
+
+Measured: at the default zoom (verified above 0.4) a committed Label paints on
+`axoview-labels-canvas` and has at least one `[data-label-hit-id]` proxy in the
+DOM. At `zoom = 0.3` the chip still paints and the proxy count is **0**.
+
+**Root cause:** draw visibility and hit visibility are decided in two different
+files against two different thresholds.
+[`LabelsCanvas`](packages/axoview-lib/src/components/SceneLayers/Labels/LabelsCanvas.tsx)
+paints Label chips with **no zoom gate at all**, while
+[`LabelHitLayer`](packages/axoview-lib/src/components/SceneLayers/Labels/LabelHitLayer.tsx)
+mounts its pixel-accurate hit proxies only when `zoom >= HIT_MIN_ZOOM` (0.4).
+Everything below that is drawn-but-unhittable. The same split exists for node
+name chips against `LABEL_LOD_ZOOM` (0.25) in `NodesCanvas`, so the three
+thresholds (none / 0.25 / 0.4) do not line up anywhere, and the `readableLabels`
+accessibility setting widens the gap rather than closing it: it forces chips to
+draw further out while the hit layer stays absent below 0.4.
+
+**Workaround:** zoom to 40% or more before interacting with a Label.
+
+**Status:** Open. Fix direction: make the hit layer's threshold follow the draw
+threshold rather than lead it — either drop `HIT_MIN_ZOOM` to match the chip LOD
+(and let the proxy boxes shrink with zoom), or gate the CHIP on the same value so
+an inert Label is at least not drawn. The underlying rule is worth stating once
+in the rendering guidelines: nothing may be painted at a zoom where it cannot be
+hit. Repro:
+[`gpu-04-06-07-08-13.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R3-gpu-layers/gpu-04-06-07-08-13.explore.spec.ts).
