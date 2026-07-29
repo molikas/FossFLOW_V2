@@ -1575,3 +1575,49 @@ which preserves ratios and stays legal. Repro:
 `validateModel` (and derive `requiredPacks` from it), and give `coords` a sane
 `.int().min()/.max()` bound consistent with the grid's addressable range. Repro:
 [`clip-08-15.explore.test.tsx`](packages/axoview-lib/src/__explore__/E4/clip-08-15.explore.test.tsx).
+
+## Read-only mode is keyboard-editable — the keydown dispatcher has no `editorMode` gate
+
+**Found by:** exploratory campaign PTR-01 / PTR-02 / PTR-03
+
+**Symptom:** with `editorMode: 'EXPLORABLE_READONLY'` — the mode the app runs the
+`/display/<diagramId>` viewer route in ([App.tsx:355](packages/axoview-app/src/App.tsx#L355))
+— every canvas keyboard shortcut still works and still mutates the model:
+
+- `r` / `c` / `t` / `l` arm `RECTANGLE.DRAW` / `CONNECTOR` / `TEXTBOX` / `LASSO`,
+  and a canvas drag then really draws the shape (a rectangle appears in
+  `view.rectangles`);
+- `Delete` removes whatever `itemControls` names — and the ADR 0012 view-mode
+  info popover pins `itemControls` on a click, so a viewer's own click plus
+  Delete destroys the item;
+- `Ctrl+C` / `Ctrl+V` / `Ctrl+X` copy, paste and cut view items;
+- the same holds for `Ctrl+]`/`Ctrl+[` (z-order) and the arrow-key nudge.
+
+`editorMode` stays `EXPLORABLE_READONLY` throughout, so nothing in the UI
+signals that the "read-only" diagram is being edited.
+
+**Root cause:** the two halves of `useInteractionManager` are gated differently.
+The *pointer* effect returns early on `mode.type === 'INTERACTIONS_DISABLED'`
+([useInteractionManager.ts:886](packages/axoview-lib/src/interaction/useInteractionManager.ts#L886)),
+but `EXPLORABLE_READONLY` does not map to that mode — `getStartingMode`
+([utils/common.ts:72-84](packages/axoview-lib/src/utils/common.ts#L72-L84))
+gives it `PAN`, which is a live interactive mode. The *keydown* effect
+([useInteractionManager.ts:548-637](packages/axoview-lib/src/interaction/useInteractionManager.ts#L548-L637))
+is bound unconditionally and only ONE of its delegates consults `editorMode`:
+`handleFunctionKeys` guards F2 with `if (uiState.editorMode !== 'EDITABLE') return`
+(added for MQA #13). `handleToolHotkeys`, `handleClipboardShortcuts`,
+`handleDeleteOrBackspace`, `handleZOrderShortcut`, `handleSelectAll` and
+`handleArrowKey` have no such check.
+
+**Workaround:** none from inside the viewer. The mutation is local to the
+viewer's own store, so it does not corrupt the source diagram unless a save path
+is reachable — but it does mean a shared/read-only link renders content the
+owner never authored, and the viewer can silently delete what they came to read.
+
+**Status:** Open. Fix direction: gate the whole keydown dispatcher on
+`uiState.editorMode === 'EDITABLE'` (early-return in `handleKeyDown` after the
+Escape/Delete-guard split, keeping navigation-only keys — arrows-as-pan, F1 help
+— available to viewers), rather than adding a per-delegate check. Consider also
+making `EXPLORABLE_READONLY` gate the *pointer* effect's mutating modes for the
+same reason. Repro:
+[`ptr-01-03.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I1-pointer/ptr-01-03.explore.spec.ts).
