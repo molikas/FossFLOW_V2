@@ -320,7 +320,6 @@ export function DiagramLifecycleProvider({
   const markProjectExported = useCallback(() => {
     setSessionWorkUnexported(false);
   }, []);
-  const hasUnsavedChangesRef = useRef(false);
   const sessionWorkUnexportedRef = useRef(false);
   useEffect(() => {
     sessionWorkUnexportedRef.current = sessionWorkUnexported;
@@ -332,31 +331,11 @@ export function DiagramLifecycleProvider({
     return () => window.removeEventListener('axoview-session-changed', handler);
   }, [serverStorageAvailable]);
 
-  // beforeunload — warn before leaving with unsaved/un-exported work. Places
-  // model: un-exported session work needs the warning even while a Drive
-  // diagram is open (remote autosave covers only the OPEN diagram, never the
-  // session place), so the session flag is keyed on the deploy, not the mode.
-  useEffect(() => {
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      const trigger =
-        hasUnsavedChangesRef.current ||
-        (!serverStorageAvailable && sessionWorkUnexportedRef.current);
-      if (!trigger) return;
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', onBeforeUnload);
-    return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [serverStorageAvailable]);
-
   // In server mode the single-diagram hasUnsavedChanges is driven by saveStatus.
   // In session mode it uses dirtyDiagramIds as before.
   const hasUnsavedChanges = remoteStorageActive
     ? false  // toolbar uses saveStatus directly in server mode
     : dirtyDiagramIds.has(currentDiagram?.id ?? '__unsaved__');
-  useEffect(() => {
-    hasUnsavedChangesRef.current = hasUnsavedChanges;
-  }, [hasUnsavedChanges]);
 
   // ---------------------------------------------------------------------------
   // Auto-save (server mode only)
@@ -493,6 +472,42 @@ export function DiagramLifecycleProvider({
   const scratchBufferRef = useRef<Map<string, DiagramData>>(new Map());
   const dirtyDiagramIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => { dirtyDiagramIdsRef.current = dirtyDiagramIds; }, [dirtyDiagramIds]);
+
+  // ---------------------------------------------------------------------------
+  // "Leaving now loses work" — single owner (thread A-a)
+  // ---------------------------------------------------------------------------
+  // This question used to have two beforeunload listeners answering it with
+  // different conditions: one hard-false in remote mode, the other keyed on
+  // `saveStatus === 'saving'` only — so a FAILED autosave, the state where the
+  // work is most at risk, waved the user out of the tab (A1/LIFE-02). One
+  // predicate now, read live from refs so the listener never re-binds.
+  //
+  // Places model: un-exported session work needs the warning even while a Drive
+  // diagram is open (remote autosave covers only the OPEN diagram, never the
+  // session place), so the session terms are keyed on the deploy, not the mode.
+  const hasUnsavedWork = useCallback(
+    (): boolean =>
+      autoSave.hasUnsavedWork() ||             // queued, in flight, or failed
+      dirtyDiagramIdsRef.current.size > 0 ||   // session-place work not written
+      (!serverStorageAvailable && sessionWorkUnexportedRef.current),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- autoSave.hasUnsavedWork is stable; the rest are refs
+    [autoSave.hasUnsavedWork, serverStorageAvailable]
+  );
+  const hasUnsavedWorkRef = useRef(hasUnsavedWork);
+  useEffect(() => { hasUnsavedWorkRef.current = hasUnsavedWork; }, [hasUnsavedWork]);
+  const beforeUnloadMessageRef = useRef('');
+  useEffect(() => { beforeUnloadMessageRef.current = t('alert.beforeUnload'); }, [t]);
+
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!hasUnsavedWorkRef.current()) return;
+      e.preventDefault();
+      e.returnValue = beforeUnloadMessageRef.current;
+      return e.returnValue;
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, []);
 
   // Storage ref so callbacks don't stale
   const storageRef = useRef(storage);
@@ -789,24 +804,8 @@ export function DiagramLifecycleProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- persist keyed on diagrams; isDiagramsInitialized is a one-way guard and t only affects the error toast
   }, [diagrams]);
 
-  // ---------------------------------------------------------------------------
-  // Warn before unload
-  // ---------------------------------------------------------------------------
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      const hasPending = remoteStorageActive
-        ? autoSave.saveStatus === 'saving'
-        : dirtyDiagramIds.size > 0;
-      if (hasPending) {
-        e.preventDefault();
-        e.returnValue = t('alert.beforeUnload');
-        return e.returnValue;
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- listener reads autoSave.saveStatus/dirtyDiagramIds; t only labels the prompt, no need to re-bind on locale change
-  }, [dirtyDiagramIds, autoSave.saveStatus, remoteStorageActive]);
+  // (The second beforeunload listener that lived here is gone — `hasUnsavedWork`
+  // above is the single owner of "leaving now loses work". A1/LIFE-02.)
 
   // ---------------------------------------------------------------------------
   // Build save payload (session mode / Ctrl+S in server mode)
@@ -1133,13 +1132,17 @@ export function DiagramLifecycleProvider({
     ) => {
       if (!storageRef.current) return;
       try {
+        // Flush pending writes for the OPEN diagram before anything moves.
+        // Unconditionally: nesting this in the place-change branch meant that
+        // creating a blank diagram in the SAME place carried a queued edit into
+        // `handleDiagramManagerLoad`, which discarded it (A1/LIFE-09).
+        await autoSave.saveNow();
         // Places model: a new diagram is born into an explicit place, or the
         // default one (Drive when signed in on the storage-less deploy). The
         // active provider follows it BEFORE the create so the manager routes
-        // the write — flushing any pending autosave to the old place first.
+        // the write.
         const targetPlace = placeId ?? defaultPlaceId;
         if (storageManager && storageManager.activeProviderId !== targetPlace) {
-          await autoSave.saveNow();
           autoSave.resetStatus();
           setActiveProviderId(targetPlace);
         }
@@ -1390,18 +1393,30 @@ export function DiagramLifecycleProvider({
   const handleSaveClick = useCallback(async () => {
     if (remoteStorageActive && storage) {
       if (currentDiagram) {
-        await autoSave.saveNow();
-        if (autoSave.saveStatus === 'idle') {
-          try {
-            const data = buildSaveData();
-            await storage.saveDiagram(currentDiagram.id, data);
-            const savedAt = new Date();
-            setLastSaved(savedAt);
-            notificationStore.push({ severity: 'success', message: `"${currentDiagram.name}" saved` });
-          } catch {
-            // ADR 0011 — failure-of-intent: explicit dialog, not a toast.
-            setSaveError(true);
-          }
+        // The flush reports its own outcome. Reading `autoSave.saveStatus` back
+        // out of this closure was a render behind the flush just awaited, so a
+        // save inside the debounce window ('saving') skipped the whole branch
+        // and a retry from 'error' did nothing at all (A1/LIFE-03, A1/LIFE-04).
+        const flushed = await autoSave.saveNow();
+        if (flushed === 'saved') {
+          // The queued model is what every autosave tick writes — it just
+          // landed, so confirm it rather than writing the same bytes twice.
+          notificationStore.push({ severity: 'success', message: `"${currentDiagram.name}" saved` });
+          return;
+        }
+        if (flushed === 'error') {
+          // ADR 0011 — failure-of-intent: explicit dialog, not a toast.
+          setSaveError(true);
+          return;
+        }
+        try {
+          const data = buildSaveData();
+          await storage.saveDiagram(currentDiagram.id, data);
+          const savedAt = new Date();
+          setLastSaved(savedAt);
+          notificationStore.push({ severity: 'success', message: `"${currentDiagram.name}" saved` });
+        } catch {
+          setSaveError(true);
         }
       }
     } else {

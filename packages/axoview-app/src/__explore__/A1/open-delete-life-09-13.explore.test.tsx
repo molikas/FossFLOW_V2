@@ -1,10 +1,10 @@
 /**
- * A1 — LIFE-09 (create-blank drops the previous diagram's pending edit) and
- * LIFE-13 (LoadDialog delete leaves storage and the last-opened pointer behind).
+ * A1 — LIFE-13 (LoadDialog delete leaves storage and the last-opened pointer
+ * behind). It needs the real provider: the delete goes through the rendered
+ * LoadDialog → ConfirmDialog pair and has no context-level entry point at all.
  *
- * Both need the real provider: LIFE-09 is about which branch the `saveNow()`
- * call sits inside, LIFE-13 goes through the rendered LoadDialog → ConfirmDialog
- * pair (the delete has no context-level entry point at all).
+ * LIFE-09 lived here too; it was fixed and promoted to
+ * `src/providers/__tests__/DiagramLifecycleProvider.save.test.tsx`.
  */
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -46,14 +46,7 @@ jest.mock('../../providers/AppStorageContext', () => ({
   AppStorageProvider: ({ children }: { children: unknown }) => children
 }));
 
-import {
-  renderLifecycle,
-  emitModelUpdate,
-  appStorageValue,
-  consumeLoadEcho,
-  makeStorage,
-  MODEL
-} from './harness';
+import { renderLifecycle, appStorageValue, makeStorage } from './harness';
 import { notificationStore } from '../../stores/notificationStore';
 
 beforeEach(() => {
@@ -63,67 +56,6 @@ beforeEach(() => {
 afterEach(() => {
   jest.restoreAllMocks();
   localStorage.clear();
-});
-
-// ---------------------------------------------------------------------------
-// LIFE-09 — `handleCreateBlankDiagram` flushes only when the PLACE changes:
-//
-//   if (storageManager && storageManager.activeProviderId !== targetPlace) {
-//     await autoSave.saveNow(); autoSave.resetStatus(); setActiveProviderId(...)
-//   }
-//
-// and then `handleDiagramManagerLoad` unconditionally calls
-// `autoSave.resetStatus()`, which THROWS AWAY the queued model. Creating a new
-// diagram in the place you are already in therefore discards the previous
-// diagram's last two seconds of edits.
-// ---------------------------------------------------------------------------
-describe('LIFE-09 — "New diagram" in the same place discards the pending edit', () => {
-  async function bootWithPendingEdit() {
-    const d = makeStorage();
-    appStorage = appStorageValue({
-      remoteStorageActive: true,
-      storage: d.storage,
-      activeProviderId: 'local' // === defaultPlaceId, so the flush branch is skipped
-    });
-    const h = renderLifecycle();
-    await act(async () => { await h.ctx().openDiagramById('diag-1', 'Diag One'); });
-    expect(h.ctx().currentDiagram?.id).toBe('diag-1'); // precondition
-    await consumeLoadEcho(h.ctx());
-    d.saveCalls.length = 0;
-
-    await emitModelUpdate(h.ctx(), MODEL('precious-edit'));
-    // PRECONDITION: an edit really is queued and unwritten.
-    expect(h.ctx().saveStatus).toBe('saving');
-    expect(d.saveCalls).toHaveLength(0);
-    return { h, d };
-  }
-
-  it('characterization: the queued edit is never written, and the new diagram opens fine', async () => {
-    const { h, d } = await bootWithPendingEdit();
-
-    await act(async () => { await h.ctx().handleCreateBlankDiagram(null); });
-
-    // PRECONDITION: the create really happened and adopted the new diagram —
-    // so a zero write-count below is the discard, not a dead code path.
-    expect(d.createCalls).toHaveLength(1);
-    expect(h.ctx().currentDiagram?.id).toBe('new-1');
-
-    // The previous diagram's edit was never sent anywhere.
-    expect(d.saveCalls.filter((c) => c.id === 'diag-1')).toHaveLength(0);
-    // And the status bar reads clean, so nothing tells the user.
-    expect(h.ctx().saveStatus).toBe('idle');
-  });
-
-  it.failing('LIFE-09: creating a diagram flushes the previous one first', async () => {
-    const { h, d } = await bootWithPendingEdit();
-    await act(async () => { await h.ctx().handleCreateBlankDiagram(null); });
-    expect(d.createCalls).toHaveLength(1); // precondition
-    // Expected: same guarantee `openDiagramById` and `handleNewDiagram` give
-    // (both await saveNow() unconditionally). Actual: the flush is nested in
-    // the place-change branch and resetStatus() then drops the queue.
-    expect(d.saveCalls.filter((c) => c.id === 'diag-1').map((c) => c.title))
-      .toEqual(['precious-edit']);
-  });
 });
 
 // ---------------------------------------------------------------------------
