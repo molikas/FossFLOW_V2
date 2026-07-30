@@ -37,6 +37,7 @@ import fs from 'fs';
 import { appTest as test, expect } from '../fixtures/app.fixture';
 import { AppToolbarPOM } from '../pom/AppToolbarPOM';
 import { EmptyStateScreenPOM } from '../pom/EmptyStateScreenPOM';
+import { importFileViaDialog } from '../helpers/import';
 import { byAxoviewId, byLibTestId } from '../helpers/selectors';
 import {
   getModelConnectorCount,
@@ -129,18 +130,14 @@ test.describe('Import / Export JSON — J7 + J8', () => {
     const emptyState = new EmptyStateScreenPOM(page);
     await emptyState.expectVisible();
 
-    // The empty-tree Import button triggers a native file chooser (App.tsx
-    // handleImportClick → importFileInputRef.click). Arm the listener before
-    // clicking — the chooser opens synchronously.
-    const [fileChooser] = await Promise.all([
-      page.waitForEvent('filechooser', { timeout: 5_000 }),
-      emptyState.clickImport()
-    ]);
-    await fileChooser.setFiles(FIXTURE_JSON);
+    // A3/ZIP-09 (owner ruling): one import flow — the Import button opens
+    // `ImportDialog` for an empty tree as much as a populated one, and the
+    // import is explicitly confirmed with its destination on screen.
+    await emptyState.clickImport();
+    await importFileViaDialog(page, FIXTURE_JSON);
 
-    // handleDirectImportFile (App.tsx) calls storage.createDiagram + then
-    // openDiagramById, which mounts the canvas with the imported model on
-    // the active view.
+    // The dialog's single-JSON path creates the diagram and opens it, which
+    // mounts the canvas with the imported model on the active view.
     await byLibTestId(page, 'axoview-canvas').waitFor({ state: 'visible', timeout: 10_000 });
     await waitForDebugBridge(page);
 

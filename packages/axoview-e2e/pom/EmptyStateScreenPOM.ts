@@ -15,10 +15,11 @@
  * still click the hook; `clickCreateCardTop` clicks the icon region to prove the
  * whole square — not just the old button — fires the action.
  *
- * `clickImport()` triggers a native file chooser when the file tree is empty
- * (App.tsx handleImportClick → importFileInputRef.current?.click()). Tests
- * intercept that via `page.waitForEvent('filechooser')` rather than asserting
- * a visible dialog — the empty-state path bypasses the in-tree ImportDialog.
+ * `clickImport()` opens `ImportDialog` — the ONE import flow (A3/ZIP-09, owner
+ * ruling 2026-07-30). It used to fire a native file chooser directly and import
+ * straight to root, so the destination was never shown and `replaceAll`
+ * appeared and disappeared on incidental state. Drive the rest of the flow with
+ * `helpers/import.ts`.
  */
 import { Page } from '@playwright/test';
 import { byAxoviewId } from '../helpers/selectors';

@@ -44,6 +44,7 @@ import { appTest as test, expect } from '../fixtures/app.fixture';
 import { AppToolbarPOM } from '../pom/AppToolbarPOM';
 import { DialogsPOM } from '../pom/DialogsPOM';
 import { EmptyStateScreenPOM } from '../pom/EmptyStateScreenPOM';
+import { importFileViaDialog } from '../helpers/import';
 import { byAxoviewId, byLibTestId } from '../helpers/selectors';
 import { getModelItemCount, waitForDebugBridge } from '../helpers/store';
 import {
@@ -169,14 +170,11 @@ async function importZipFromEmptyState(
 ) {
   const emptyState = new EmptyStateScreenPOM(page);
   await emptyState.expectVisible();
-  const [fileChooser] = await Promise.all([
-    page.waitForEvent('filechooser', { timeout: 5_000 }),
-    emptyState.clickImport()
-  ]);
-  await fileChooser.setFiles(zipPath);
-  // handleDirectImportFile is async — wait for sessionStorage to reflect the
-  // import. Notifications fire after createDiagram resolves; polling the
-  // sessionStorage count is the deterministic signal.
+  // A3/ZIP-09 (owner ruling): one import flow, with the destination named on
+  // screen and the import explicitly confirmed.
+  await emptyState.clickImport();
+  await importFileViaDialog(page, zipPath);
+  // The import is async — poll sessionStorage rather than the toast.
   await expect.poll(() => sessionDiagramCount(page), { timeout: 10_000 }).toBeGreaterThan(0);
 }
 

@@ -187,7 +187,7 @@ test.describe('Smoke — J20: empty state → New / Import buttons work', () => 
     await expect.poll(() => getModelItemCount(page), { timeout: 5_000 }).toBe(0);
   });
 
-  test('J20 (import): empty state Import button triggers file chooser', async ({ page, app }) => {
+  test('J20 (import): empty state Import button opens the one import flow', async ({ page, app }) => {
     void app;
     await clearDiagramStorage(page);
     await page.reload();
@@ -195,13 +195,17 @@ test.describe('Smoke — J20: empty state → New / Import buttons work', () => 
     const emptyState = new EmptyStateScreenPOM(page);
     await emptyState.expectVisible();
 
-    // The empty-tree Import path fires `importFileInputRef.current?.click()`
-    // — a native file picker that doesn't render a visible dialog. Playwright
-    // surfaces this via a `filechooser` event; arming the listener before
-    // the click is the canonical pattern (race-free).
+    // A3/ZIP-09 (owner ruling 2026-07-30): the empty tree no longer skips the
+    // dialog and imports straight to root. Every entry point opens
+    // `ImportDialog`, so the destination is named on screen before anything is
+    // written; the native chooser is one click further in.
+    await emptyState.clickImport();
+    const dialog = page.getByRole('dialog').filter({ hasText: 'Import' });
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+
     const [fileChooser] = await Promise.all([
       page.waitForEvent('filechooser', { timeout: 5_000 }),
-      emptyState.clickImport()
+      dialog.getByRole('button', { name: 'Choose file…' }).click()
     ]);
     expect(fileChooser.isMultiple()).toBe(false);
   });
