@@ -355,6 +355,103 @@ describe('parseProject — errors', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// A3/ZIP-01 — a cyclic folder graph used to freeze the tab. `importProject` and
+// `wipeWorkspace` each climbed `parentId` with no visited set, and nothing
+// between `parseProject` and the walk looked at the shape of the graph
+// (`validateFolderIds` checks the id characters only). A few hundred bytes, well
+// under every anti-zip-bomb cap, and the only way out was closing the tab.
+//
+// Promoted from the probe lane (`__explore__/A3/zip-01-to-15`).
+// ---------------------------------------------------------------------------
+describe('parseProject — cyclic folder graphs', () => {
+  const zipWithFolders = async (folders: unknown[]) => {
+    const zip = new JSZip();
+    zip.file(
+      'manifest.json',
+      JSON.stringify({
+        format: PROJECT_FORMAT,
+        version: PROJECT_FORMAT_VERSION,
+        exportedAt: new Date().toISOString(),
+        exportedBy: 'test',
+        scope: 'project',
+        folders,
+        diagrams: []
+      })
+    );
+    return zip.generateAsync({ type: 'blob' });
+  };
+
+  const folder = (id: string, parentId: string | null) => ({
+    id,
+    name: id,
+    parentId,
+    createdAt: '2026-01-01T00:00:00.000Z'
+  });
+
+  it('rejects a two-folder loop with BAD_FOLDER_GRAPH instead of hanging', async () => {
+    const blob = await zipWithFolders([folder('a', 'b'), folder('b', 'a')]);
+    await expect(parseProject(blob)).rejects.toMatchObject({
+      name: 'ProjectZipError',
+      code: 'BAD_FOLDER_GRAPH'
+    });
+  });
+
+  it('rejects a self-parented folder', async () => {
+    const blob = await zipWithFolders([folder('a', 'a')]);
+    await expect(parseProject(blob)).rejects.toMatchObject({
+      code: 'BAD_FOLDER_GRAPH'
+    });
+  });
+
+  it('rejects a longer transitive loop', async () => {
+    const blob = await zipWithFolders([
+      folder('a', 'b'),
+      folder('b', 'c'),
+      folder('c', 'a')
+    ]);
+    await expect(parseProject(blob)).rejects.toMatchObject({
+      code: 'BAD_FOLDER_GRAPH'
+    });
+  });
+
+  it('accepts the acyclic control, including a dangling parent', async () => {
+    const blob = await zipWithFolders([
+      folder('a', null),
+      folder('b', 'a'),
+      // A parent that is not in the archive is treated as top level, as before —
+      // the loop check must not turn that into a rejection.
+      folder('c', 'not-in-this-archive')
+    ]);
+    const parsed = await parseProject(blob);
+    expect(parsed.manifest.folders).toHaveLength(3);
+  });
+
+  it('importProject terminates on a cyclic graph handed to it directly', async () => {
+    // `importProject` is exported, so a caller can bypass `parseProject`. The
+    // walk must terminate on its own rather than rely on the parse-time gate.
+    const storage = new FakeStorage();
+    const parsed: ParsedProject = {
+      manifest: {
+        format: PROJECT_FORMAT,
+        version: PROJECT_FORMAT_VERSION,
+        exportedAt: new Date().toISOString(),
+        exportedBy: 'test',
+        scope: 'project',
+        folders: [folder('a', 'b'), folder('b', 'a')] as never,
+        diagrams: []
+      },
+      diagrams: new Map()
+    };
+    const result = await importProject(
+      { storage },
+      parsed,
+      { destination: { kind: 'root' } }
+    );
+    expect(result.folderCount).toBe(2);
+  }, 5000);
+});
+
 describe('parseProject leaves workspace untouched on error', () => {
   it('a failed parse does not modify storage', async () => {
     const dst = new FakeStorage();

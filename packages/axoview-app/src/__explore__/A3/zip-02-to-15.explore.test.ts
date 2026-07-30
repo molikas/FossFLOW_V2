@@ -165,74 +165,10 @@ async function zipOf(manifest: unknown, files: Record<string, string>): Promise<
 
 // ---------------------------------------------------------------------------
 // ZIP-01 — a folder cycle makes the import's depth walk unbounded.
-// ---------------------------------------------------------------------------
-describe('ZIP-01 — a folder-parent cycle makes the import walk unbounded', () => {
-  /**
-   * The walk is a private closure, so it is observed through the `Array.find`
-   * it calls once per step. Capping the call count converts what would be a
-   * hung worker into a signal — a plain timeout cannot help, because the loop
-   * is synchronous and never yields.
-   */
-  async function importWithFindCap(parsed: ParsedProject, cap: number) {
-    const real = Array.prototype.find;
-    let finds = 0;
-    // eslint-disable-next-line no-extend-native
-    Array.prototype.find = function (this: unknown[], ...args: Parameters<typeof real>) {
-      if (++finds > cap) throw new Error('FIND_CAP');
-      return real.apply(this, args) as unknown;
-    } as typeof real;
-    try {
-      await importProject({ storage: new FakeStorage() }, parsed, { destination: { kind: 'root' } });
-      return { capped: false, finds };
-    } catch (e) {
-      if ((e as Error).message === 'FIND_CAP') return { capped: true, finds };
-      throw e;
-    } finally {
-      // eslint-disable-next-line no-extend-native
-      Array.prototype.find = real;
-    }
-  }
-
-  const CYCLE = parsedOf({
-    folders: [
-      { id: 'fa', name: 'A', parentId: 'fb' },
-      { id: 'fb', name: 'B', parentId: 'fa' }
-    ]
-  });
-  const ACYCLIC = parsedOf({
-    folders: [
-      { id: 'fa', name: 'A', parentId: null },
-      { id: 'fb', name: 'B', parentId: 'fa' }
-    ]
-  });
-
-  it('characterization: an acyclic manifest finishes in a handful of steps, a cyclic one never does', async () => {
-    // PRECONDITION: the same shape and size of manifest completes normally, so
-    // the cap below is hit by the cycle and not by the instrumentation.
-    const ok = await importWithFindCap(ACYCLIC, 10_000);
-    expect(ok.capped).toBe(false);
-    expect(ok.finds).toBeLessThan(100);
-
-    const bad = await importWithFindCap(CYCLE, 10_000);
-    expect(bad.capped).toBe(true);
-  });
-
-  it('the same file already knows the fix: rewriteIds handles the cycle without looping', () => {
-    // `rewriteIds` maps parents through `idMap` with no walk, and
-    // `collectFolderSubtree` (export side) carries a `seen` set — so the two
-    // unguarded walks in `importProject`/`wipeWorkspace` are the outliers.
-    const r = rewriteIds(CYCLE);
-    expect(r.folders).toHaveLength(2);
-    expect(r.folders.every((f) => f.parentId !== null)).toBe(true);
-  });
-
-  it.failing('ZIP-01: importing a cyclic manifest terminates', async () => {
-    const bad = await importWithFindCap(CYCLE, 10_000);
-    // Expected: refuse the manifest (or break the cycle) the way the export
-    // walk does. Actual: `while (cur && cur.parentId)` climbs forever.
-    expect(bad.capped).toBe(false);
-  });
-});
+// ZIP-01 (a cyclic folder graph froze the tab) was fixed — `parseProject`
+// rejects the loop with BAD_FOLDER_GRAPH and both walks carry a visited set —
+// and its probes promoted to
+// `src/services/project/__tests__/projectZip.test.ts`.
 
 // ---------------------------------------------------------------------------
 // ZIP-02 — out-of-scope `link` refs keep the old id.

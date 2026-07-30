@@ -283,6 +283,56 @@ const validateFolderIds = (manifest: ProjectManifest): void => {
   }
 };
 
+/**
+ * Depth of a folder in the parent chain, and the one place that knows a chain
+ * can be a loop.
+ *
+ * A3/ZIP-01: `importProject` and `wipeWorkspace` each climbed `parentId` with no
+ * visited set, so a manifest with `A.parent = B` and `B.parent = A` — a few
+ * hundred bytes, well under every anti-zip-bomb cap — spun forever and froze the
+ * tab with no error and no way out. The export side's `collectFolderSubtree`
+ * already carried a `seen` set for exactly this.
+ *
+ * Returns `null` when the chain revisits a folder, which is what makes the loop
+ * reportable rather than merely survivable.
+ */
+const folderDepth = (
+  folder: FolderMeta,
+  folders: FolderMeta[]
+): number | null => {
+  const seen = new Set<string>([folder.id]);
+  let depth = 0;
+  let cur: FolderMeta | undefined = folder;
+  while (cur && cur.parentId) {
+    const parentId: string = cur.parentId;
+    const next: FolderMeta | undefined = folders.find((x) => x.id === parentId);
+    if (!next) break; // dangling parent: treat as top level, as before
+    if (seen.has(next.id)) return null;
+    seen.add(next.id);
+    cur = next;
+    depth += 1;
+  }
+  return depth;
+};
+
+/**
+ * Reject a cyclic folder graph at parse time, so the user gets the import-error
+ * dialog instead of a frozen tab (A3/ZIP-01). `validateFolderIds` checked the id
+ * characters only; nothing between `parseProject` and the walk looked at the
+ * shape of the graph.
+ */
+const validateFolderGraph = (manifest: ProjectManifest): void => {
+  const folders = manifest.folders ?? [];
+  for (const folder of folders) {
+    if (folderDepth(folder, folders) === null) {
+      throw new ProjectZipError(
+        `Folder "${folder.name || folder.id}" is inside itself — the archive's folder tree contains a loop`,
+        'BAD_FOLDER_GRAPH'
+      );
+    }
+  }
+};
+
 const readTreeManifest = async (
   zip: JSZip
 ): Promise<TreeManifest | undefined> => {
@@ -302,6 +352,7 @@ export const parseProject = async (file: File | Blob): Promise<ParsedProject> =>
   const manifest = await readManifest(zip);
   const diagrams = await loadDiagrams(zip, manifest);
   validateFolderIds(manifest);
+  validateFolderGraph(manifest);
   const treeManifest = await readTreeManifest(zip);
   return { manifest, diagrams, treeManifest };
 };
@@ -377,18 +428,11 @@ const wipeWorkspace = async (storage: StorageProvider): Promise<void> => {
   const diagrams = await storage.listDiagrams();
   for (const d of diagrams) await storage.deleteDiagram(d.id, false);
   const folders = await storage.listFolders();
-  // Delete children before parents — sort by depth (parent chain length).
-  const depth = (f: FolderMeta): number => {
-    let n = 0;
-    let cur: FolderMeta | undefined = f;
-    while (cur && cur.parentId) {
-      const next = folders.find((x) => x.id === cur!.parentId);
-      if (!next) break;
-      cur = next;
-      n++;
-    }
-    return n;
-  };
+  // Delete children before parents — sort by depth (parent chain length). A
+  // cycle here comes from STORAGE, not from the archive, so it cannot be
+  // rejected at parse time: `folderDepth` returns null and those folders sort
+  // last, which still deletes them (A3/ZIP-01).
+  const depth = (f: FolderMeta): number => folderDepth(f, folders) ?? -1;
   const sorted = [...folders].sort((a, b) => depth(b) - depth(a));
   for (const f of sorted) await storage.deleteFolder(f.id, false);
 };
@@ -412,18 +456,13 @@ export const importProject = async (
     rootOverride = await storage.createFolder(opts.destination.name, null);
   }
 
-  // Recreate folder tree. Parents must exist before children; sort by depth ascending.
-  const depthIn = (f: FolderMeta): number => {
-    let n = 0;
-    let cur: FolderMeta | undefined = f;
-    while (cur && cur.parentId) {
-      const next = rewritten.folders.find((x) => x.id === cur!.parentId);
-      if (!next) break;
-      cur = next;
-      n++;
-    }
-    return n;
-  };
+  // Recreate folder tree. Parents must exist before children; sort by depth
+  // ascending. `parseProject` has already rejected a cyclic graph, so the null
+  // branch is unreachable for a parsed archive — it is kept because
+  // `importProject` is exported and can be called with a hand-built
+  // `ParsedProject` (A3/ZIP-01).
+  const depthIn = (f: FolderMeta): number =>
+    folderDepth(f, rewritten.folders) ?? Number.MAX_SAFE_INTEGER;
   const folderRemap = new Map<string, string>();
   const ordered = [...rewritten.folders].sort((a, b) => depthIn(a) - depthIn(b));
   for (const f of ordered) {
