@@ -249,6 +249,13 @@ const dupes = (list: string[]) => {
  *         §3). Proved live by E2/RED-15 (lock/hide leaves the entity selected)
  *         and by I1/PTR-11, where the stale selection lets the arrow keys walk
  *         a locked layer across the canvas.
+ *  INV-12 every connector on the ACTIVE view has a scene entry. Established by
+ *         R4/RND-12: the Renderer's connector hybrid only promotes a connector
+ *         to the DOM when it is `unroutable` or degenerate, and ConnectorsCanvas
+ *         skips one whose path is missing — so a connector with NO scene entry
+ *         renders nowhere at all while staying hit-testable. `syncConnector`
+ *         always writes either a path or an unroutable stub, so a gap here means
+ *         a sync was skipped (the D-9 / SCN-15 cross-view class).
  */
 export async function expectStoreInvariants(page: Page, label = '') {
   const s = await readStoreSnapshot(page);
@@ -349,6 +356,12 @@ export async function expectStoreInvariants(page: Page, label = '') {
   expect(
     untouchableSelection,
     `INV-11 selectedIds hold entities on a hidden or locked layer${at}`
+  ).toEqual([]);
+
+  // INV-12
+  expect(
+    s.view.connectorIds.filter((id) => !s.sceneConnectorIds.includes(id)),
+    `INV-12 active-view connectors with no scene entry (render nowhere)${at}`
   ).toEqual([]);
 }
 

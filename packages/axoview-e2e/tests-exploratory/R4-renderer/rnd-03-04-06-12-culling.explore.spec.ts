@@ -559,3 +559,72 @@ test.describe('RND-12 — a connector with no scene entry', () => {
     expect(await paintedPixels(page, 'axoview-connectors-canvas')).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// RND-11 — can the trailing settle-flush be lost?
+// ---------------------------------------------------------------------------
+
+/*
+ * The coarseBounds subscriber throttles mid-gesture and arms a `setTimeout`
+ * (PAN_SETTLE_MS = 120 ms) to flush the final cull. Its cleanup clears that
+ * timer WITHOUT committing `pending`, so a teardown inside the settle window
+ * would strand the cull one throttle window stale. The effect's only dep is
+ * `screenToTile`, so the sole way to tear it down mid-gesture is a projection
+ * switch. Same oracle as RND-03: compare the live draw count against a forced
+ * re-cull.
+ */
+test.describe('RND-11 — a projection switch inside the settle window', () => {
+  test('a mode switch landing mid-pan still leaves the cull current', async ({
+    page,
+    app
+  }) => {
+    void app;
+    test.setTimeout(240_000);
+    const canvas = new CanvasPOM(page);
+    for (const t of [
+      { x: 0, y: 0 },
+      { x: 3, y: -3 },
+      { x: -3, y: 3 },
+      { x: 5, y: 0 }
+    ]) {
+      const p = await canvas.tileToScreen(t);
+      if (p.x > 20 && p.y > 20 && p.x < 1200 && p.y < 620) {
+        await placeIconViaMouse(page, p);
+      }
+    }
+    expect(
+      await getViewItemCount(page),
+      'PRECONDITION: several nodes were placed'
+    ).toBeGreaterThan(2);
+    await closeElementsDock(page);
+    await page.evaluate(() =>
+      (window as any).__axoview__.ui.getState().actions.setItemControls(null)
+    );
+    await page.waitForTimeout(700);
+
+    // A continuous stream of scroll writes — the "gesture" the throttle is for.
+    const panned = await page.evaluate(async () => {
+      const ui = (window as any).__axoview__.ui;
+      for (let i = 0; i < 24; i += 1) {
+        const s = ui.getState();
+        s.actions.setScroll({
+          position: { x: s.scroll.position.x - 24, y: s.scroll.position.y - 12 },
+          offset: { ...s.scroll.offset }
+        });
+        await new Promise((r) => setTimeout(r, 16));
+      }
+      return ui.getState().scroll.position;
+    });
+    expect(panned.x, 'PRECONDITION: the pan really moved scroll').toBeLessThan(0);
+
+    // Tear the subscriber down INSIDE the settle window (< PAN_SETTLE_MS).
+    await page.evaluate(() =>
+      (window as any).__axoview__.ui.getState().actions.setCanvasMode('2D')
+    );
+    await page.waitForTimeout(900);
+
+    const afterSwitch = await drawCount(page);
+    await forceRecull(page);
+    expect(afterSwitch).toBe(await drawCount(page));
+  });
+});

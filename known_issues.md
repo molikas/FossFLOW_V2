@@ -3059,3 +3059,83 @@ hoist the decision into a shared `useLabelLod()` so bulk and overlay cannot
 disagree. Worth deciding once, with GPU-04/GPU-05, what the whole label-threshold
 ladder should be. Repro:
 [`rnd-05-13-14-15-promotion.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R4-renderer/rnd-05-13-14-15-promotion.explore.spec.ts).
+
+## Fit-to-view frames the diagram into the whole window, docks included
+
+**Found by:** exploratory campaign RND-06
+
+**Symptom:** Click `canvas-zoom-fit` with the Elements panel open and the
+leftmost part of the diagram lands *behind* the panel. Fit-to-view's whole
+promise is "everything is now visible"; with either dock open it is not, and the
+user has to pan after fitting — which is what they clicked fit to avoid. The
+same applies to the right sidebar and, proportionally, to the bottom dock.
+
+Measured on a 50-tile-wide diagram with the Elements panel open:
+`document.elementFromPoint` at the leftmost node's post-fit screen position
+returns `div[data-axoview-id="canvas-icon-grid-item"]` — an icon tile in the
+panel — not the canvas.
+
+**Root cause:** both fit paths measure the RENDERER CONTAINER, which is
+`position: absolute; inset: 0` over the whole app area, and the docks are
+siblings rendered *over* it rather than beside it (Axoview.tsx: "Canvas always
+fills the full container — sidebars overlay on top"). The Renderer's deferred
+open-time fit reads `containerRef.current.getBoundingClientRect()`;
+`useDiagramUtils.fitToView` reads the store's `rendererSize`, which the same
+ResizeObserver fills from the same element. Neither has any notion of an
+occluded region, so `getFitToViewParams` centres the content in a viewport that
+is partly covered. This is the same "the renderer rect spans the docks" fact
+that already produced TCH-05 and CTX-01 on the hit-testing side.
+
+**Workaround:** close the docks before fitting.
+
+**Status:** Open. Fix direction: give fit-to-view a VISIBLE viewport rather than
+the container rect — subtract the open docks' widths/heights (they are already
+in uiState: `leftDock`/`rightSidebarOpen` and their fixed widths) and centre on
+the resulting inset box. Note this is arguably a product call rather than a
+defect — some tools fit to the full canvas and let panels overlap — so decide it
+once and state it, ideally alongside RND-01 (the missing `MIN_ZOOM` clamp on the
+same function). Repro:
+[`rnd-03-04-06-12-culling.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R4-renderer/rnd-03-04-06-12-culling.explore.spec.ts).
+
+## An imported element whose id contains a comma has no drag preview
+
+**Found by:** exploratory campaign RND-04
+
+**Symptom:** Open a diagram whose element ids contain commas — nothing validates
+the character set of an id, so any hand-written or externally generated JSON can
+carry them (see *Nothing enforces id uniqueness…* and *Icon references and tile
+coordinates are unvalidated*) — and dragging such a node shows no movement at
+all. The pointer moves, the drag is genuinely live, but the node stays painted at
+its old tile and jumps to the new one only on release. The same key is used for
+group icon-resize (`resizingNodesKey`) and for the multi-selected-connector set
+(`selectedConnectorKey`), so a lasso'd connector with a comma in its id also
+loses its selection halo.
+
+Measured: with a normal id, a live drag mounts exactly one `[data-drag-id]`
+overlay and `NodesCanvas` reports `data-draw-count = 0` (the node was skipped on
+the bulk because it is now in the DOM). With the id rewritten to
+`imported,node`, the drag set is exactly `[ITEM:imported,node]` — the gesture is
+real — yet the overlay count is **0** and `data-draw-count` is **1**.
+
+**Root cause:**
+[`Renderer.tsx`](packages/axoview-lib/src/components/Renderer/Renderer.tsx)
+builds its hybrid-promotion keys as comma-joined id strings
+(`mode.items.map(i => i.id).join(',')`) so that the zustand selectors return a
+primitive and re-render only on drag start/end rather than per frame — then
+splits them back on `','`. An id containing a comma comes out as two fragments
+that match no element, so `hybridIds` is non-empty but `hybridNodes` resolves to
+nothing: the node is neither added to the DOM overlay nor removed from the canvas
+set, and the `--ff-drag` CSS-variable preview (which `DragItems` writes onto
+`[data-drag-id]`) has nothing to write to. The commit path is unaffected, which
+is why the node teleports into place at the end.
+
+**Workaround:** none from the UI; re-save the diagram after any edit that
+regenerates ids, or avoid commas in ids at import time.
+
+**Status:** Open. Fix direction: the join/split is a performance trick, not a
+data structure — use a delimiter that cannot appear in an id (`\u0000`), or keep
+the primitive selector and derive the Set from `mode.items` directly with the key
+only as a memo dependency. Both are one-line changes. The broader point belongs
+with the id-validation cluster: ids are treated as opaque strings everywhere
+except the handful of places that pack them into one. Repro:
+[`rnd-03-04-06-12-culling.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R4-renderer/rnd-03-04-06-12-culling.explore.spec.ts).
