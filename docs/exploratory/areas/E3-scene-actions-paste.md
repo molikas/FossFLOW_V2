@@ -2,6 +2,12 @@
 
 **Status:** DONE · **Counted hypotheses:** 15 / 10 · **Bugs:** 12 · **Hypothesis ID prefix:** `SCN-`
 
+
+**Remediation (wave 1, 2026-07-30).** SCN-08 (`1b916b01`, as a consequence of
+the HIST-08 delegation) and SCN-13 (`5d6a969b`) are fixed; probes promoted to
+`hooks/__tests__/historyBrackets.test.tsx` and the identity/range class gate. The
+rest of the area is wave 3/4 work.
+
 **Scope:** useSceneActions is the write facade: per-entity CRUD wrapping reducers.view with saveToHistoryBeforeChange; transaction() buffers state in pendingStateRef and commits with two skipHistory sets; beginDragTransaction/commitDragTransaction implement freeze-based one-entry drags; immer-free batch updaters (batchUpdateViewItemTiles/Rectangles/TextBoxTiles/LabelTiles) and previewConnectorPaths (flushSync scene-only write) are the drag hot path; pasteItems does a single structural build + one validateView + computePathsAsync (rAF-batched provisional-path routing); deleteSelectedItems cascades multi-kind deletes incl. waypoint-anchor splices; createView/deleteView/switchView drive view lifecycle through useView.changeView (SYNC_SCENE + uiState.setView). useSceneData is the read facade (currentView fallback logic, hit vs render connector lists).
 
 **Code:**

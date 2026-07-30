@@ -7,15 +7,17 @@
 **Reusable rigs left behind.** `__explore__/A2/local-place-*` carries a `recordFetch(answer)` helper that captures url/method/parsed-body per call (what the existing `LocalStorageProvider.test` fetch mock cannot do) and a `trapKey(key)` per-key `QuotaExceededError` trap. `__explore__/A2/drive-stor-*` drives the real `GoogleDriveProvider` with a stateful fetch double that commits a write *before* answering 503 — the shape any "is this retry safe?" probe needs. Two file-scoping traps cost a run each: a `jest.doMock` + `jest.resetModules()` pair leaks across tests in one file (it fed the STOR-11 probe a stubbed `fetchRuntimeConfig`, whose fetch count then silently read 0), and re-importing a React component through a reset module registry gives a null dispatcher — so `manager-stor-10`, `config-stor-11` and `remount-stor-12` each live alone.
 
 
-**Remediation (wave 1, 2026-07-30):** STOR-10, STOR-11 (owner ruling) and
-STOR-12 fixed in `3af90693`; probes promoted to
-`providers/__tests__/AppStorageContext.place.test.tsx`,
-`services/storage/__tests__/StorageManager.test.ts` and
-`hooks/__tests__/useRuntimeConfig.test.ts`. **Record correction:** none of this
-area's `known_issues: A2/STOR-nn` entries were ever filed to known_issues.md —
-the register goes straight from A1/LIFE-15 to A3/ZIP-01. This file is the
-evidence of record for the ten still-open rows; wave 1's storage cluster files
-each entry as it fixes it (see the correction note in known_issues.md).
+**Remediation (wave 1, 2026-07-30) — AREA CLOSED.** Every confirmed bug in this
+area is fixed: STOR-10/11/12 in `3af90693`, STOR-01..09/13/14/16 in `2b0e5f41`
+(STOR-15 stays DEFERRED — it needs two live Google accounts). **Record
+correction discharged:** all thirteen `known_issues: A2/STOR-nn` entries this
+file promised are now actually in known_issues.md. Both lane files are retired;
+their probes live in `LocalStorageProvider.test.ts`,
+`GoogleDriveProvider.test.ts`, `driveTransfer.test.ts`, `leanModel.test.ts`,
+`AppStorageContext.place.test.tsx`, `StorageManager.test.ts`,
+`useRuntimeConfig.test.ts` and `useFileTree.orphans.test.ts`. Two halves are
+routed forward with their reasons: STOR-14's icon-override case (wave 4 — it
+needs the bundled catalog, which is itself empty: F5/ICON-01/02).
 
 **Scope:** StorageManager is a module-level singleton delegating StorageProvider calls to the active provider ('local' | 'google-drive'). LocalStorageProvider dual-paths: server REST (/api/diagrams etc., when /api/config says serverStorage) with sessionStorage/localStorage fallback. GoogleDriveProvider maps diagrams/folders to Drive files under a marker-discovered root folder with lean-save (ADR 0003: strip pack icons, record requiredPacks), retry/backoff, and 401->markExpired. driveTransfer implements MOVE semantics session->Drive (create, verify, delete source). AppStorageContext boots from a cached 800ms /api/config probe (ADR 0009 D2) and derives serverStorageAvailable/remoteStorageActive/defaultPlaceId.
 

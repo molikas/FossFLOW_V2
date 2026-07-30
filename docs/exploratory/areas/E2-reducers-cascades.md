@@ -2,6 +2,14 @@
 
 **Status:** DONE · **Counted hypotheses:** 15 / 10 · **Bugs:** 10 · **Hypothesis ID prefix:** `RED-`
 
+
+**Remediation (wave 1, 2026-07-30).** RED-03, RED-04 and RED-05 are fixed
+(`5d6a969b`, `2168faa5`) — layer `order` is normalised after every mutation, the
+write site refuses a layer id naming no layer, and the load path repairs one that
+arrives in a file. The identity/range **class gate** for this whole family is
+`schemas/__tests__/modelIdentity.contract.test.ts`. The rest of the area is
+wave 3/4 work.
+
 **Scope:** Pure-ish functions over State={model,scene} dispatched via reducers.view({action,payload,ctx:{viewId}}). Own all entity CRUD: view items (tile moves cascade UPDATE_CONNECTOR→syncConnector re-route for every touching connector; deletes cascade connector deletion), connectors (create/update sync scene path; unroutable fallback on getConnectorPath throw), textBoxes (geometry-affecting updates re-measure scene size), labels/rectangles (model-only), layers (delete unassigns layerId from 5 entity arrays), SYNC_SCENE (rebuilds scene from INITIAL_SCENE_STATE for one view). TIMESTAMPED_ACTIONS set stamps view.lastUpdated. updateViewItem is the only reducer that runs validateView and THROWS on the first issue.
 
 **Code:**

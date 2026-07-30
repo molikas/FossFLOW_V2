@@ -5,13 +5,13 @@
 
 | Workspace | Passing | Suites |
 |---|---|---|
-| `axoview-lib` | 1753 (+1 skipped) | 157 |
-| `axoview-app` | 323 | 31 |
+| `axoview-lib` | 1780 (+1 skipped) | 159 |
+| `axoview-app` | 356 | 34 |
 | `axoview-backend` | 102 | 7 |
 | `axoview-worker` | 124 | 4 |
-| **Total** | **2302 (+1 skipped)** | **199** |
+| **Total** | **2362 (+1 skipped)** | **204** |
 
-*(lib `+16` / `+2` suites and app `+55` / `+5` suites on 2026-07-30 — wave 1 of the
+*(lib `+43` / `+4` suites and app `+88` / `+8` suites on 2026-07-30 — wave 1 of the
 exploratory-campaign remediation, all of it probes promoted out of the
 quarantined lane under the ADR 0047 §2 flip rule, plus the model identity/range
 class gate. See the additions below.)*
@@ -45,6 +45,11 @@ provider or store — none of them mock the thing under test.
 - **[`StorageManager.test.ts`](../../packages/axoview-app/src/services/storage/__tests__/StorageManager.test.ts)** · 3 tests · the provider registry, which had none: active-id reporting, unknown-provider refusal, and `setServerStorage` reaching every registered provider. A2/STOR-10.
 - **[`useLayerActions.history.test.tsx`](../../packages/axoview-lib/src/hooks/__tests__/useLayerActions.history.test.tsx)** · 4 tests · a layer op is its own logical action: fresh sequence, one action per Ctrl+Z, no stranded text-box scene size, no orphan scene connector on the next undo. E1/HIST-01.
 
+- **[`historyBrackets.test.tsx`](../../packages/axoview-lib/src/hooks/__tests__/historyBrackets.test.tsx)** · 9 tests · the transaction / drag brackets and the pre-snapshot they arm, driven through TWO `useSceneActions()` instances under one provider pair — the configuration the app actually runs, and the one a per-hook ref could not model. Pins that a foreign mid-drag write does not move where undo lands, that `useHistory.transaction` groups scene CRUD into one entry, that a throwing reducer leaves no armed snapshot, that a new action clears both redo stacks, that a leaked drag bracket is recoverable, and that a write made inside a bracket by another route survives the commit. E1/HIST-02, 05, 06, 07, 08; E3/SCN-08.
+- **[`repairModel.test.ts`](../../packages/axoview-lib/src/utils/__tests__/repairModel.test.ts)** · 13 tests · the identity/range repair applied on the way in, per the owner's repair-don't-reject ruling. Every case asserts both that the violation is gone AND that the model still parses — including the non-finite coordinate, which the schema rejects, so those files do not open at all today. Carries the "a clean file is byte-identical" control that stops the repair firing spuriously. E4/CLIP-01, E4/CLIP-15, E2/RED-03.
+- **[`leanModel.test.ts`](../../packages/axoview-app/src/services/storage/__tests__/leanModel.test.ts)** · 5 tests · what ADR 0003 lean-save may and may not discard. A2/STOR-14.
+- **[`importedBlob.test.ts`](../../packages/axoview-app/src/services/storage/__tests__/importedBlob.test.ts)** · 5 tests · the field whitelist an imported document passes through. A3/ZIP-06.
+- **[`useFileTree.orphans.test.ts`](../../packages/axoview-app/src/hooks/__tests__/useFileTree.orphans.test.ts)** · 4 tests · a Drive diagram whose folder is not in the tree is re-homed to root rather than vanishing. A2/STOR-13.
 - **[`modelIdentity.contract.test.ts`](../../packages/axoview-lib/src/schemas/__tests__/modelIdentity.contract.test.ts)** · 11 tests · **CLASS GATE** (ADR 0047 §3) for the campaign's biggest cross-area finding: the model has reference-integrity checks but no identity or range checks. It scans for the *class*, not the individual bugs — the range half derives the bounded fields from `viewItemSchema` through `safeParse`, so adding a schema bound without a write-site clamp fails it, and it asserts the discovery found something so it cannot become a vacuous green. Verified red by removing the `iconScale` clamp. The identity half pins `layer.order` as a permutation of 0..n-1 across every layer mutation, the refusal of a layer id that names no layer, and that a default page name is never one already on screen. E2/RED-03/04/05, E3/SCN-13, E4/CLIP-13.
 
 Three existing suites absorbed the rest rather than growing new files:

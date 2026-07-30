@@ -2,6 +2,16 @@
 
 **Status:** DONE · **Counted hypotheses:** 15 / 10 · **Bugs:** 12 · **Hypothesis ID prefix:** `CLIP-`
 
+
+**Remediation (wave 1, 2026-07-30).** CLIP-01, CLIP-13 and CLIP-15 are fixed
+(`5d6a969b`, `2168faa5`) under the owner's **repair-don't-reject** ruling: the
+write sites refuse new violations and `utils/repairModel.ts` repairs the ones
+already in users' files, because making them schema errors would stop those files
+opening — which is exactly what CLIP-02 (still open) is filed for. **CLIP-14's
+icon-reference half is held for wave 4**: `validateModelItem` leaves icon refs
+alone deliberately (icons come from packs loaded separately), so the real fix is
+the `requiredPacks` derivation, which belongs with F5/ICON-01/02.
+
 **Scope:** uiStateStore owns all ephemeral/session state: zoom/scroll, editorMode/mode, selection (selectedIds + itemControls with mirroring contracts ADR-0006/0022), transient drag previews (labelDrag/labelMove(s)/iconScaleDrag/editingTextBoxSize), annotation strokes with their own linear undo, persisted prefs, dirty flag, notification slot, contextMenu, per-view preview layer overrides. Clipboard is an instance-scoped ref holding live (frozen) model object references; useCopyPaste resolves selection→payload, cut deletes, paste remaps ids/offsets/anchors and routes async. useInitialDataManager normalises legacy shapes (title→name, label seeding, XSS sanitize), drops invalid connectors, zod-validates via modelSchema.superRefine(validateModel), then seeds stores and clears history. useDirtyTracker subscribes to modelStore post-load.
 
 **Code:**

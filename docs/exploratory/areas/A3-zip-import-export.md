@@ -9,6 +9,17 @@
 - **`expect(err).toBeInstanceOf(ProjectZipError)` FAILS even for a genuine one.** The app's `tsconfig.json` targets `es5`, so ts-jest downlevels `class extends Error` and the subclass prototype is lost; `.name` and `.code` survive. rsbuild configures no target/browserslist, so the shipped bundle does not downlevel this way — it is a probe artifact, not a product defect. Assert on `.code`/`.name`. (Same family as the S1 trap where a `jest.mock` dropped a class an `instanceof` depended on. Note `projectZip.readManifest` does its own `e instanceof ProjectZipError` re-throw guard, which is why the distinction matters.)
 - **Baseline correction (thread S-f):** the harvested invariant claiming cross-diagram links live in Quill content HTML and in `headerLink` is **stale**. `modelItems.link` is the only schema field that can hold a diagram id — `textBox` has no link field and `headerLink` is a `z.string().max(2048)` URL. ZIP-02 is real for a different reason (out-of-scope refs), not for that one.
 
+
+**Remediation (wave 1, 2026-07-30) — AREA CLOSED.** Every confirmed bug is
+fixed: ZIP-01 (`cef61900`), ZIP-05/07/11/13/15 (`11cae8e7`), ZIP-03/10
+(`e894a593`), ZIP-08 (`96a8bff8`), ZIP-02 (`d195c032`), ZIP-06 + the ZIP-09
+one-import-flow ruling (`087f3a8c`). Probes promoted to
+`services/project/__tests__/projectZip.test.ts`,
+`utils/__tests__/importSummary.test.ts`,
+`components/__tests__/ImportErrorDialog.test.tsx` and
+`services/storage/__tests__/importedBlob.test.ts`; the lane keeps only the three
+FALSIFIED rows (`zip-04-12-14.explore.test.ts`).
+
 **Scope:** ADR 0001 zip format: manifest.json (format 'axoview-project' + legacy 'fossflow-project', version '1'), diagrams/<id>.json, optional tree-manifest.json. parseProject enforces anti-zip-bomb caps (100MB archive, 50MB/entry, 5000 diagrams) and id regex; importProject rewrites all ids (rewriteIds + 'link'-key reference rewriting), recreates folders depth-ordered, supports destinations root/newFolder/replaceAll (typed 'replace' confirm wipes the workspace first). Export walks storage.listFolders/listDiagrams/loadDiagram per scope (project/folder/diagram). Two import entry points: App.tsx direct file input (empty tree) and ImportDialog (routes to createTargetPlace in FileExplorer).
 
 **Code:**

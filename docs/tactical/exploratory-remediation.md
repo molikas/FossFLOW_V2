@@ -5,7 +5,12 @@
 > - [docs/exploratory/DECISIONS.md](../exploratory/DECISIONS.md) — the 22 owner rulings this plan implements (incl. the ADR amendments each ruling names)
 > - [docs/exploratory/LEDGER.md](../exploratory/LEDGER.md) — per-area bug counts; [known_issues.md](../../known_issues.md) — the 172 filed entries (`Found by: exploratory campaign <ID>`)
 >
-> **Status:** Wave 0 COMPLETE (campaign closed, 22 rulings, branch cut) · **Owner:** molikas · **Last updated:** 2026-07-30
+> **Status:** Waves 0 and 1 COMPLETE · **Owner:** molikas · **Last updated:** 2026-07-30
+>
+> Wave 2 is next. Read the wave 1 section first — it carries the four items
+> deliberately routed forward (HIST-03/04 to wave 5, CLIP-14 and STOR-14's
+> override half to wave 4, MOP-01 to wave 2) and the two CI gates the probe lane
+> had broken.
 >
 > This is a **short-lived working doc.** Delete it after the work merges; ADRs are the durable record. PLAN.md gets a one-line entry referencing ADR 0047 once shipped — see "Wrap-up" below.
 
@@ -68,72 +73,87 @@ lands documentation, quarantined probes and the three config lines only, and the
 quarantine check above proves none of it reaches the regression suites. It runs
 for the first product-code wave.*
 
-### Wave 1 — Data integrity 🔴 (E1/E3/E4 + A1/A2 clusters, ~86 filed bugs)
+### Wave 1 — Data integrity ✅ 2026-07-30
 
-**Progress 2026-07-30:** clusters 1 and 2 complete; cluster 3 partially done
-(seq-pinning half); cluster 4 partially done (class gate + everything closable at
-a write site); cluster 5 half done (the whole A3 project-ZIP block bar ZIP-06/09; the twelve A2
-entries remain). Every landed item carries its
-promoted regression and its `Fixed in <sha>` annotation — see "Wave 1 landed" below.
+**Closed.** 46 campaign entries annotated `Fixed` (or `Partially fixed`, with the
+remainder named and routed to the wave that owns it), every probe promoted or
+retired with its reason recorded in place, two class-gate sections landed, and
+`npm run test:regression` green. Three owner decisions were implemented:
+STOR-11 (cache success only), ZIP-09 (one import flow), HIST-08 (delegate), plus
+the **repair-don't-reject** ruling for identity/range violations already present
+in users' files.
 
-- [x] **Autosave/save cluster (A1):** flush-not-cancel on unmount/disable/reset; failed saves count as unsaved work in both `beforeunload` guards; un-stale the Retry gate. (Thread A-b/A-c in the area files.) — `2b629c6e`, LIFE-01..09.
-- [x] **Single-source-of-truth cluster (A1/A2):** active place, diagram title, unsaved-work tri-state — one owner each (thread A-a); STOR-11 config-probe cache-success-only ruling. — `3af90693`, STOR-10/11/12 + LIFE-12 (the unsaved-work tri-state landed with the autosave cluster).
-- [ ] **Undo integrity cluster (E1/E3):** orphaned `pendingPre`, no-op-set snapshot swallow, seq pinning, per-view resync (D-9/SCN-15/SCN-08 share one per-view-scene fix), HIST-08 delegation ruling.
-  - [x] Seq pinning — HIST-01 (`07c7fa78`): `useLayerActions.commit()` allocates its own logical-action sequence and arms both stores.
-  - [ ] Orphaned `pendingPre` (HIST-05) — needs a `withHistory(...)` wrapper around the ~21 mutating bodies in `useSceneActions` so a throwing reducer discards the armed snapshot instead of leaving it for the next `skipHistory` writer.
-  - [ ] Per-hook-instance transaction/drag state (HIST-06, HIST-07) **and the HIST-08 delegation ruling** are one change: `transactionInProgress` / `dragInProgress` / `pendingStateRef` must move from per-hook refs to provider-scoped state. Delegating `useHistory.transaction` to a *fresh* `useSceneActions()` instance does **not** satisfy the ruling — the caller's own instance still wouldn't be suppressed.
-  - [ ] No-op-set snapshot swallow (HIST-02): the fix is cross-store — a new logical action must invalidate the redo future on BOTH stacks. Note the tension with the MQA #5 comment in `sceneStore.set()` (a transient no-op write must NOT clobber `future`); the discriminator is "new logical action" vs "coordinated write", not "zero patches".
-  - [ ] Trim asymmetry (HIST-03) and per-view scene (D-9/SCN-15/SCN-08) both point at the same restructure: one shared history stack, and scene history keyed by view. Size this with HIST-10 (wave 5) rather than patching around it.
-  - [ ] **HIST-04 is deliberately deferred to wave 5**: making `createView` undoable while `ui.view` still points at the created page leaves a dangling active view (E3/SCN-09's shape). It needs HIST-10's "always navigate" ruling.
-- [~] **`validateModel` identity/range gate (E2/E4):** duplicate ids, dangling layer refs, unbounded tiles, colliding layer order, duplicate page names — one validation pass closes ~7 entries; ships as a **class gate** (main-suite contract test). — `5d6a969b`, partial.
-  - [x] Class gate landed: `schemas/__tests__/modelIdentity.contract.test.ts`. It *scans* for the class — the range half derives the bounded fields from `viewItemSchema` via `safeParse`, so a new schema bound without a write-site clamp fails it. Verified it can go red. It found one unfiled instance (`zIndex` declared `int()`, fractional writes accepted); also clamped.
-  - [x] RED-04/RED-05 (layer `order` permutation), SCN-13 (page names), CLIP-13 (`iconScale` clamp), RED-03 write-site half.
-  - [ ] **Owner call needed before the rest: reject or repair?** CLIP-01 (duplicate ids), CLIP-15 (unbounded tiles) and RED-03's import/paste half all concern violations that are *already in users' saved files* — that is the bug. Adding the check to `validateModel` makes `modelSchema.safeParse` fail, i.e. those files stop opening, which is exactly the harm E4/CLIP-02 is filed for. The alternatives are (a) repair-on-load (dedupe/drop/clamp silently, notify), (b) repair + a one-time report, (c) hard reject. Wave 1 fixed only what could be closed at the write site, where refusing is free. CLIP-14's icon-ref half additionally conflicts with the deliberate "icons may come from packs not in `model.icons`" decision in `validateModelItem` and needs the `requiredPacks` derivation its entry names.
-- [~] **Storage provider cluster (A2/A3):** remaining STOR/ZIP entries incl. ZIP-09 single-import-flow ruling and the ZIP-01 non-terminating walk. **Also files the missing A2 known_issues entries** — see the record correction below.
-  - [x] **The whole A3 project-ZIP block except ZIP-06/ZIP-09**: ZIP-01 (`cef61900`), ZIP-05/07/11/13/15 (`11cae8e7`), ZIP-03/10 (`e894a593`), ZIP-08 (`96a8bff8`), ZIP-02 (`d195c032`). The lane file is down to the three FALSIFIED rows (`zip-04-12-14.explore.test.ts`).
-  - [ ] **ZIP-06 + the ZIP-09 single-import-flow ruling** — one item, not two. ZIP-06 (a single-JSON import can file itself into a folder that does not exist) is a field-whitelist fix on the JSON path, and the ruling reshapes that path anyway: every entry point opens `ImportDialog`, the empty tree preselects root instead of skipping the dialog, and the resolved destination place is named on screen and passed explicitly. Do them together.
-  - [ ] **A2/STOR-01..09, 13, 14, 16** — twelve entries, **none of which has a known_issues entry yet** (see the record correction). File each as you fix it. This is now the largest remaining block in wave 1.
+- [x] **Autosave/save cluster (A1)** — `2b629c6e`. LIFE-01..09: flush-not-cancel
+  on unmount / disable / reset, failed saves count as unsaved work in one
+  `beforeunload` owner, the Retry gate reads the flush's own outcome, writes
+  serialise.
+- [x] **Single-source-of-truth cluster (A1/A2)** — `3af90693`. STOR-10/11/12 +
+  LIFE-12: the manager singleton owns the active place, one `applyDiagramName`
+  owns the title, `fetchRuntimeConfig` caches success only.
+- [x] **Undo integrity cluster (E1/E3)** — `07c7fa78`, `1b916b01`. HIST-01
+  (layer ops allocate their own sequence), HIST-05 (`withHistory` discards an
+  armed snapshot on a throw), HIST-06 (the keydown dispatcher closes a leaked
+  drag bracket), HIST-07 + HIST-08 (the transaction/drag/pending trio moves to
+  the scene store's provider-scoped `editSession`; `useHistory.transaction`
+  delegates), HIST-02 (a new action clears BOTH futures), and E3/SCN-08 as a
+  consequence of the bracket no longer snapshotting the stores at open.
+- [x] **`validateModel` identity/range gate (E2/E4)** — `5d6a969b`, `2168faa5`.
+  Write sites: RED-03/04/05, SCN-13, CLIP-13. Load path (repair-don't-reject):
+  CLIP-01, CLIP-15, RED-03's import half. **Class gate**
+  (`schemas/__tests__/modelIdentity.contract.test.ts`) scans for the class in
+  three sections — range (derived from `viewItemSchema` via `safeParse`),
+  identity, and repair — and was verified able to go red.
+- [x] **Storage provider cluster (A2/A3)** — `cef61900`, `11cae8e7`, `e894a593`,
+  `96a8bff8`, `d195c032`, `2b0e5f41`, `087f3a8c`. The whole A3 project-ZIP block
+  (ZIP-01, 02, 03, 05, 06, 07, 08, 10, 11, 13, 15 + the ZIP-09 ruling) and the
+  whole A2 provider block (STOR-01..09, 13, 14, 16). **A2's twelve entries were
+  filed to known_issues.md for the first time** — see the record correction.
 
-**Regression gate (2026-07-30, run against the final state of the commits below):**
-`npm test` per package — lib **157 suites / 1753** (+1 skipped), app **31 / 323**,
-backend 7 / 102, worker 4 / 124 — and the full Playwright suite **178 passed
-(24.8 min)**. `tsc --noEmit` clean in both packages, docs lint OK, and the
-quarantine re-verified across all five configs (zero `__explore__` /
-`tests-exploratory` files discovered by any default config). This is the e2e half
-wave 0 deferred to "the first product-code wave".
+**Deliberately not in wave 1, with the reason recorded in the entry:**
 
-*(`npm run test:e2e` does not work on Windows — the script's
-`node_modules/.bin/playwright` path is not resolvable by cmd.exe. Use
-`npx playwright test --config packages/axoview-e2e/playwright.config.ts`.)*
-
-#### Wave 1 landed (2026-07-30)
-
-| Commit | Closes | Promoted to |
+| Item | Routed to | Why |
 |---|---|---|
-| `2b629c6e` | A1/LIFE-01, 02, 03, 04, 05, 06, 07, 08, 09 | `hooks/__tests__/useAutoSave.test.ts`, `providers/__tests__/DiagramLifecycleProvider.save.test.tsx` |
-| `3af90693` | A2/STOR-10, 11 (ruling), 12; A1/LIFE-12 | `providers/__tests__/AppStorageContext.place.test.tsx`, `services/storage/__tests__/StorageManager.test.ts`, `hooks/__tests__/useRuntimeConfig.test.ts`, the provider save suite |
-| `07c7fa78` | E1/HIST-01 | `hooks/__tests__/useLayerActions.history.test.tsx` |
-| `5d6a969b` | E2/RED-03 (write site), RED-04, RED-05; E3/SCN-13; E4/CLIP-13 | `schemas/__tests__/modelIdentity.contract.test.ts` (the class gate) |
-| `cef61900` | A3/ZIP-01 | `services/project/__tests__/projectZip.test.ts` |
-| `11cae8e7` | A3/ZIP-05, 07, 11, 13, 15 | same, + `utils/__tests__/importSummary.test.ts` |
-| `e894a593` | A3/ZIP-03, 10 | `services/project/__tests__/projectZip.test.ts` |
-| `96a8bff8` | A3/ZIP-08 | `components/__tests__/ImportErrorDialog.test.tsx` |
-| `d195c032` | A3/ZIP-02 | `services/project/__tests__/projectZip.test.ts` |
+| E1/HIST-04 (page creation not undoable) | Wave 5 | Undoing a `createView` while `ui.view` points at the created page leaves a dangling active view (E3/SCN-09's shape). Needs HIST-10's "always navigate". |
+| E1/HIST-03 (independent 50-entry trimming) | Wave 5 | The two stacks trim independently; making one logical action trim as a unit is the same restructure HIST-10 needs (one shared stack / page-stamped entries). |
+| E4/CLIP-14's icon-reference half | Wave 4 | `validateModelItem` leaves icon refs alone on purpose (icons come from packs loaded separately). The real fix is the `requiredPacks` derivation, which belongs with F5/ICON-01/02. |
+| A2/STOR-14's override half | Wave 4 | Detecting a user's override of a bundled icon needs the bundled catalog — and the app's half of that catalog is empty, which IS F5/ICON-01/02. |
+| A2/STOR-15 | Manual | Needs two live Google accounts; DEFERRED in the area file, never counted. |
+| MOP-01 (`shareUuid` on every copy path) | Wave 2 | Copy identity belongs in one change across duplicate + both import paths, not spread across whichever path is touched first. |
 
-Two things found while landing it, both recorded where they belong:
+**Two CI gates were red on this branch before wave 1 and are green now** — both
+the same shape, the quarantined lane leaking into a gate ADR 0047 §1 says it must
+never reach:
 
-- **The CI type-check gate was red on this branch.** `npm run lint` is
-  `tsc --noEmit` per workspace and it swept `src/__explore__`, which carries
-  ~30 type errors by design (probes are written fast and type-checked per-file
-  by ts-jest). ADR 0047 §1 says the lane never reaches CI; both packages'
-  `tsconfig.json` now exclude it. Fixed in `2b629c6e` — it had been red since
-  wave 0 merged the campaign branch.
-- **Area A2's known_issues entries were never filed.** The area file records 13
-  confirmed bugs, each ending `known_issues: A2/STOR-nn`, but the register goes
-  straight from A1/LIFE-15 to A3/ZIP-01. A record correction sits at the head of
-  where they belong (`029a8b47`), with STOR-11 and STOR-12 filed. **Wave 1's
-  storage cluster must file the remaining eleven as it fixes them** — do not
-  assume an entry exists to annotate.
+- `npm run lint` (`tsc --noEmit` per workspace) swept `src/__explore__`, which
+  carries ~30 type errors by design. Both tsconfigs exclude it (`2b629c6e`).
+- `npx knip` (hard-fail since 2026-06-10) reported every probe file as dead code.
+  `knip.json` ignores the lane (`087f3a8c`).
+
+*When adding a gate, check it against the lane as well as against the product.*
+
+#### Wave 1 landed
+
+| Commit | Closes |
+|---|---|
+| `2b629c6e` | A1/LIFE-01..09 · the tsc gate |
+| `3af90693` | A2/STOR-10, 11 (ruling), 12; A1/LIFE-12 |
+| `07c7fa78` | E1/HIST-01 |
+| `5d6a969b` | E2/RED-03 (write site), 04, 05; E3/SCN-13; E4/CLIP-13 · **class gate** |
+| `cef61900` | A3/ZIP-01 |
+| `11cae8e7` | A3/ZIP-05, 07, 11, 13, 15 |
+| `e894a593` | A3/ZIP-03, 10 |
+| `96a8bff8` | A3/ZIP-08 |
+| `d195c032` | A3/ZIP-02 |
+| `2168faa5` | E4/CLIP-01, E4/CLIP-15, E2/RED-03 (import half) — repair-on-load |
+| `1b916b01` | E1/HIST-02, 05, 06, 07, 08 (ruling); E3/SCN-08 |
+| `2b0e5f41` | A2/STOR-01..09, 13, 14, 16 |
+| `087f3a8c` | A3/ZIP-06, ZIP-09 (ruling) · the knip gate |
+
+**Record correction carried out of wave 1:** area A2's thirteen confirmed bugs
+each ended `known_issues: A2/STOR-nn` in the area file, but not one had reached
+the register — it went straight from A1/LIFE-15 to A3/ZIP-01. All thirteen are
+filed now. **Worth checking the same way for the other areas before trusting the
+campaign's "190 filed entries" total.**
 
 ### Wave 2 — Trust & security 🟠 (S1/S2/S3 + readonly class, ~40 filed bugs)
 - [ ] **Readonly enforcement class (F2/I1 subset):** enumerate every mutation surface against the readonly gate (VIEW-11, PTR-01..03, CTX-15); ships the **per-surface-opt-in class gate**.

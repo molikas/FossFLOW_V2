@@ -6272,9 +6272,12 @@ the root when the field is absent.
 
 **Workaround:** delete `folderId` from the file before importing it.
 
-**Status:** Open. Fix direction: whitelist the model fields on the way in
-(the create's destination argument should win), which also closes `id` and
-`deletedAt`. Repro: [`json-import-zip-06-09.explore.test.ts`](packages/axoview-app/src/__explore__/A3/json-import-zip-06-09.explore.test.ts).
+**Status:** Fixed in 087f3a8c (2026-07-30) — `sanitizeImportedBlob` strips the
+fields storage owns (`id`, `folderId`, `deletedAt`) from an imported document and
+applies the resolved name, so the create's destination argument wins. Landed
+together with the A3/ZIP-09 ruling, which removes the second single-JSON call
+site entirely. Promoted regression:
+[`importedBlob.test.ts`](packages/axoview-app/src/services/storage/__tests__/importedBlob.test.ts).
 
 ## Exporting and re-importing a project brings deleted diagrams back
 
