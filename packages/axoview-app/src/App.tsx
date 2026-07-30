@@ -266,14 +266,14 @@ function EditorShell() {
         });
         refreshFileTree();
         setFileExplorerOpen(true);
+        const shortfall = imported.diagramCount < parsed.manifest.diagrams.length;
         notificationStore.push({
-          severity: imported.diagramCount < parsed.manifest.diagrams.length
-            ? 'warning'
-            : 'success',
+          severity: shortfall || imported.droppedLinks > 0 ? 'warning' : 'success',
           message: buildZipImportSummary(
             imported.diagramCount,
             imported.folderCount,
-            parsed.manifest.diagrams.length
+            parsed.manifest.diagrams.length,
+            imported.droppedLinks
           )
         });
       } else {

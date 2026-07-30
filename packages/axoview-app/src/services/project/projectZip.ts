@@ -422,15 +422,41 @@ const newId = (prefix: 'diagram' | 'folder'): string => {
   return `${prefix}_${Date.now().toString(36)}_${rand}`;
 };
 
-const rewriteRefsInModel = (model: unknown, idMap: Map<string, string>): unknown => {
+/**
+ * `modelItem.link` holds a DIAGRAM ID (the node's "linked diagram" — the URL
+ * lives on `headerLink`), so a value that is not in this import's id map names a
+ * diagram in the workspace the archive came FROM. A3/ZIP-02: it used to be
+ * carried through verbatim, so a folder-scope export produced nodes whose link
+ * resolves against the importer's own storage — a dead link that looks live.
+ *
+ * A dead link is worse than none, so it is dropped and counted. URL-shaped
+ * values are left alone: nothing in the persisted model should put one here,
+ * and silently deleting a user's URL would be the worse failure of the two.
+ */
+const isUrlLike = (v: string): boolean =>
+  /^[a-z][a-z0-9+.-]*:/i.test(v) || v.startsWith('//') || v.startsWith('/') || v.startsWith('#');
+
+const rewriteRefsInModel = (
+  model: unknown,
+  idMap: Map<string, string>,
+  dropped: { count: number }
+): unknown => {
   if (model == null || typeof model !== 'object') return model;
-  if (Array.isArray(model)) return model.map((m) => rewriteRefsInModel(m, idMap));
+  if (Array.isArray(model)) {
+    return model.map((m) => rewriteRefsInModel(m, idMap, dropped));
+  }
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(model as Record<string, unknown>)) {
-    if (k === 'link' && typeof v === 'string' && idMap.has(v)) {
-      out[k] = idMap.get(v);
+    if (k === 'link' && typeof v === 'string') {
+      if (idMap.has(v)) {
+        out[k] = idMap.get(v);
+      } else if (!isUrlLike(v)) {
+        dropped.count += 1; // omit the key entirely
+      } else {
+        out[k] = v;
+      }
     } else {
-      out[k] = rewriteRefsInModel(v, idMap);
+      out[k] = rewriteRefsInModel(v, idMap, dropped);
     }
   }
   return out;
@@ -441,6 +467,8 @@ export interface RewriteResult {
   diagrams: Array<DiagramMeta & { newId: string }>;
   models: Map<string, unknown>; // newId → rewritten model
   idMap: Map<string, string>; // oldId → newId (folders + diagrams)
+  /** Cross-diagram links dropped because their target is not in this archive (A3/ZIP-02). */
+  droppedLinks: number;
 }
 
 export const rewriteIds = (parsed: ParsedProject): RewriteResult => {
@@ -461,12 +489,13 @@ export const rewriteIds = (parsed: ParsedProject): RewriteResult => {
   }));
 
   const models = new Map<string, unknown>();
+  const dropped = { count: 0 };
   for (const d of parsed.manifest.diagrams) {
     const raw = parsed.diagrams.get(d.id);
-    models.set(idMap.get(d.id)!, rewriteRefsInModel(raw, idMap));
+    models.set(idMap.get(d.id)!, rewriteRefsInModel(raw, idMap, dropped));
   }
 
-  return { folders, diagrams, models, idMap };
+  return { folders, diagrams, models, idMap, droppedLinks: dropped.count };
 };
 
 // ----------------------------------------------------------------------------
@@ -494,7 +523,12 @@ export const importProject = async (
   ctx: ImportContext,
   parsed: ParsedProject,
   opts: ImportProjectOpts
-): Promise<{ folderCount: number; diagramCount: number }> => {
+): Promise<{
+  folderCount: number;
+  diagramCount: number;
+  /** Cross-diagram links dropped because their target was not in the archive (A3/ZIP-02). */
+  droppedLinks: number;
+}> => {
   const { storage } = ctx;
 
   // A3/ZIP-03: `replaceAll` used to wipe FIRST. A failure anywhere in the
@@ -610,5 +644,9 @@ export const importProject = async (
     for (const f of sorted) await storage.deleteFolder(f.id, false);
   }
 
-  return { folderCount: rewritten.folders.length, diagramCount };
+  return {
+    folderCount: rewritten.folders.length,
+    diagramCount,
+    droppedLinks: rewritten.droppedLinks
+  };
 };

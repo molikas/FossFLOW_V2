@@ -597,6 +597,66 @@ describe('folder ordering survives a round trip (ZIP-10)', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// A3/ZIP-02 — `modelItem.link` holds a diagram id, and a partial (folder-scope)
+// export carries links whose target is not in the archive. They used to be
+// written through verbatim, so the imported node linked to an id that resolves
+// against the IMPORTER's storage: a dead link that looks live.
+// ---------------------------------------------------------------------------
+describe('importProject — cross-diagram links', () => {
+  const parsedWithLink = (link: string): ParsedProject => ({
+    manifest: {
+      format: PROJECT_FORMAT,
+      version: PROJECT_FORMAT_VERSION,
+      exportedAt: new Date().toISOString(),
+      exportedBy: 'test',
+      scope: 'project',
+      folders: [],
+      diagrams: [
+        { id: 'inzip', name: 'In Zip', folderId: null, lastModified: '', file: 'diagrams/inzip.json' }
+      ] as never
+    },
+    diagrams: new Map([
+      ['inzip', { ...sampleModel('In Zip'), items: [{ id: 'n1', name: 'N', link }] }]
+    ])
+  });
+
+  const importedModel = async (parsed: ParsedProject) => {
+    const storage = new FakeStorage();
+    const result = await importProject({ storage }, parsed, {
+      destination: { kind: 'root' }
+    });
+    const data = Array.from(storage.diagrams.values())[0].data as {
+      items: Array<{ link?: string }>;
+    };
+    return { result, item: data.items[0] };
+  };
+
+  it('drops a link whose target is not in the archive, and reports it', async () => {
+    const { result, item } = await importedModel(parsedWithLink('outside-the-zip'));
+    expect(result.diagramCount).toBe(1); // precondition: the import really ran
+    expect(item.link).toBeUndefined();
+    expect(result.droppedLinks).toBe(1);
+  });
+
+  it('rewrites a link whose target IS in the archive', async () => {
+    const parsed = parsedWithLink('inzip');
+    const { result, item } = await importedModel(parsed);
+    expect(result.droppedLinks).toBe(0);
+    // Remapped to the fresh id, not left as the source workspace's.
+    expect(item.link).toBeDefined();
+    expect(item.link).not.toBe('inzip');
+  });
+
+  it('leaves a URL alone (deleting a real URL would be the worse failure)', async () => {
+    for (const url of ['https://example.com/x', 'mailto:a@b.c', '#anchor']) {
+      const { result, item } = await importedModel(parsedWithLink(url));
+      expect(item.link).toBe(url);
+      expect(result.droppedLinks).toBe(0);
+    }
+  });
+});
+
 describe('parseProject — cyclic folder graphs', () => {
   const zipWithFolders = async (folders: unknown[]) => {
     const zip = new JSZip();

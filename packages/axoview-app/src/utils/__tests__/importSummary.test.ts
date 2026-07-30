@@ -26,4 +26,18 @@ describe('buildZipImportSummary', () => {
   it('says nothing extra when the two agree', () => {
     expect(buildZipImportSummary(2, 0, 2)).not.toMatch(/could not be imported/);
   });
+
+  // A3/ZIP-02 — links to diagrams the archive does not contain are dropped, and
+  // the user is told rather than left with a node that silently lost its link.
+  it('names dropped cross-diagram links', () => {
+    expect(buildZipImportSummary(2, 0, 2, 1)).toBe(
+      'Imported 2 diagrams at the top level — 1 link to a diagram outside the archive was removed'
+    );
+  });
+
+  it('reports both kinds of shortfall together', () => {
+    expect(buildZipImportSummary(2, 0, 3, 2)).toMatch(
+      /1 diagram in the archive could not be imported; 2 links to diagrams outside the archive were removed/
+    );
+  });
 });

@@ -10,15 +10,26 @@
 export function buildZipImportSummary(
   diagramCount: number,
   folderCount: number,
-  claimedDiagramCount: number = diagramCount
+  claimedDiagramCount: number = diagramCount,
+  /** Cross-diagram links dropped because their target was not in the archive (A3/ZIP-02). */
+  droppedLinks: number = 0
 ): string {
   const parts = [`${diagramCount} diagram${diagramCount !== 1 ? 's' : ''}`];
   if (folderCount > 0) {
     parts.push(`${folderCount} folder${folderCount !== 1 ? 's' : ''}`);
   }
   const summary = `Imported ${parts.join(' across ')} at the top level`;
+  const notes: string[] = [];
   const missing = claimedDiagramCount - diagramCount;
-  return missing > 0
-    ? `${summary} — ${missing} diagram${missing !== 1 ? 's' : ''} in the archive could not be imported`
-    : summary;
+  if (missing > 0) {
+    notes.push(
+      `${missing} diagram${missing !== 1 ? 's' : ''} in the archive could not be imported`
+    );
+  }
+  if (droppedLinks > 0) {
+    notes.push(
+      `${droppedLinks} link${droppedLinks !== 1 ? 's' : ''} to ${droppedLinks !== 1 ? 'diagrams' : 'a diagram'} outside the archive ${droppedLinks !== 1 ? 'were' : 'was'} removed`
+    );
+  }
+  return notes.length > 0 ? `${summary} — ${notes.join('; ')}` : summary;
 }

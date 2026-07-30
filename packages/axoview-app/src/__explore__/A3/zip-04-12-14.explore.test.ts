@@ -172,62 +172,11 @@ async function zipOf(manifest: unknown, files: Record<string, string>): Promise<
 
 // ---------------------------------------------------------------------------
 // ZIP-02 — out-of-scope `link` refs keep the old id.
-// ---------------------------------------------------------------------------
-describe('ZIP-02 — a link to a diagram outside the zip stays pointing at the old id', () => {
-  const PARTIAL = () =>
-    parsedOf({
-      diagrams: [meta('inzip', 'In Zip')],
-      models: {
-        // `modelItems.link` is the only schema field that can hold a diagram id
-        // (verified against the lib schemas), and this one names a diagram the
-        // folder-scope export left behind.
-        inzip: model('In Zip', { items: [{ id: 'n1', name: 'N', link: 'outside-the-zip' }] })
-      }
-    });
-
-  it('characterization: the rewrite leaves the foreign id verbatim and reports nothing', async () => {
-    const s = new FakeStorage();
-    const result = await importProject({ storage: s }, PARTIAL(), { destination: { kind: 'root' } });
-
-    // PRECONDITION: the import really ran and really created the diagram.
-    expect(result.diagramCount).toBe(1);
-    const created = Array.from(s.diagrams.values())[0].data as { items: Array<{ link: string }> };
-
-    // The in-zip diagram got a fresh id (so the rewrite pass definitely ran)…
-    expect(Array.from(s.diagrams.keys())[0]).not.toBe('inzip');
-    // …while the cross-diagram reference still names the source workspace's id.
-    expect(created.items[0].link).toBe('outside-the-zip');
-    // And nothing in the return value mentions an unresolved reference.
-    expect(Object.keys(result)).toEqual(['folderCount', 'diagramCount']);
-  });
-
-  it('control: a link INSIDE the zip is rewritten, so the pass works', async () => {
-    const s = new FakeStorage();
-    const parsed = parsedOf({
-      diagrams: [meta('a', 'A'), meta('b', 'B')],
-      models: {
-        a: model('A', { items: [{ id: 'n1', link: 'b' }] }),
-        b: model('B')
-      }
-    });
-    await importProject({ storage: s }, parsed, { destination: { kind: 'root' } });
-    const a = Array.from(s.diagrams.values()).find(
-      (d) => (d.data as { title: string }).title === 'A'
-    )!.data as { items: Array<{ link: string }> };
-    expect(a.items[0].link).not.toBe('b');
-    expect(a.items[0].link).toMatch(/^diagram_/);
-  });
-
-  it.failing('ZIP-02: an unresolvable link is cleared or reported', async () => {
-    const s = new FakeStorage();
-    const result = await importProject({ storage: s }, PARTIAL(), { destination: { kind: 'root' } });
-    expect(result.diagramCount).toBe(1); // precondition
-    const created = Array.from(s.diagrams.values())[0].data as { items: Array<{ link?: string }> };
-    // Expected: a reference the importer cannot satisfy is dropped (or at least
-    // surfaced), not silently aimed at a stranger's id.
-    expect(created.items[0].link).toBeUndefined();
-  });
-});
+// ZIP-02 (a link to a diagram outside the archive was carried through verbatim,
+// so it resolved against the IMPORTER's storage) was fixed — the link is
+// dropped, counted, and reported in the import summary — and its probes
+// promoted to `src/services/project/__tests__/projectZip.test.ts` and
+// `src/utils/__tests__/importSummary.test.ts`.
 
 // ---------------------------------------------------------------------------
 // ZIP-03 — replaceAll's wipe is not transactional.
