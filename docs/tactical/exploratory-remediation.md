@@ -95,10 +95,12 @@ promoted regression and its `Fixed in <sha>` annotation — see "Wave 1 landed" 
   - [ ] **A2/STOR-01..09, 13, 14, 16** — twelve entries, **none of which has a known_issues entry yet** (see the record correction). File each as you fix it. This is now the largest remaining block in wave 1.
 
 **Regression gate (2026-07-30, run against the final state of the commits below):**
-`npm test` per package — lib **157 suites / 1753** (+1 skipped), app **30 / 300**,
+`npm test` per package — lib **157 suites / 1753** (+1 skipped), app **31 / 323**,
 backend 7 / 102, worker 4 / 124 — and the full Playwright suite **178 passed
-(26.2 min)**. `tsc --noEmit` clean in both packages, docs lint OK. This is the
-e2e half wave 0 deferred to "the first product-code wave".
+(24.8 min)**. `tsc --noEmit` clean in both packages, docs lint OK, and the
+quarantine re-verified across all five configs (zero `__explore__` /
+`tests-exploratory` files discovered by any default config). This is the e2e half
+wave 0 deferred to "the first product-code wave".
 
 *(`npm run test:e2e` does not work on Windows — the script's
 `node_modules/.bin/playwright` path is not resolvable by cmd.exe. Use
