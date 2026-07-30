@@ -231,45 +231,10 @@ describe('ZIP-02 — a link to a diagram outside the zip stays pointing at the o
 
 // ---------------------------------------------------------------------------
 // ZIP-03 — replaceAll's wipe is not transactional.
-// ---------------------------------------------------------------------------
-describe('ZIP-03 — a failure mid-wipe leaves the workspace half-destroyed', () => {
-  async function seeded() {
-    const s = new FakeStorage();
-    const f = await s.createFolder('Keep');
-    await s.createDiagram(model('One'), f);
-    await s.createDiagram(model('Two'), f);
-    await s.createDiagram(model('Three'), null);
-    s.calls = {};
-    return s;
-  }
-
-  it('characterization: the first deletions stick, the import never starts, the error escapes', async () => {
-    const s = await seeded();
-    expect(s.diagrams.size).toBe(3); // precondition
-    s.failOn = { method: 'deleteDiagram', nth: 2 };
-
-    const parsed = parsedOf({ diagrams: [meta('new', 'New')], models: { new: model('New') } });
-    await expect(
-      importProject({ storage: s }, parsed, { destination: { kind: 'replaceAll' } })
-    ).rejects.toThrow(/injected/);
-
-    // One diagram is gone, two survive, the folder survives — and nothing was
-    // imported, so the user has neither their old workspace nor the new one.
-    expect(s.diagrams.size).toBe(2);
-    expect(s.folders.size).toBe(1);
-    expect(s.calls.createDiagram).toBeUndefined();
-  });
-
-  it.failing('ZIP-03: a failed replaceAll leaves the workspace as it was', async () => {
-    const s = await seeded();
-    s.failOn = { method: 'deleteDiagram', nth: 2 };
-    const parsed = parsedOf({ diagrams: [meta('new', 'New')], models: { new: model('New') } });
-    await importProject({ storage: s }, parsed, { destination: { kind: 'replaceAll' } }).catch(() => {});
-    // Expected: all-or-nothing (the parse step already models this — "a failed
-    // parse does not modify storage"). Actual: sequential deletes, no rollback.
-    expect(s.diagrams.size).toBe(3);
-  });
-});
+// ZIP-03 (a failed replaceAll destroyed the workspace and imported nothing) was
+// fixed — the import creates first and deletes the old content only once every
+// create has succeeded — and its probes promoted to
+// `src/services/project/__tests__/projectZip.test.ts`.
 
 // ---------------------------------------------------------------------------
 // ZIP-04 — does the per-entry cap actually work against the installed JSZip?
@@ -390,50 +355,10 @@ describe('ZIP-08 — the nine import failure codes all reach the user as one mes
 
 // ---------------------------------------------------------------------------
 // ZIP-10 — the tree manifest is exported, parsed, and then dropped.
-// ---------------------------------------------------------------------------
-describe('ZIP-10 — folder ordering never survives a round trip', () => {
-  it('characterization: the tree manifest is in the zip and in ParsedProject, and the import ignores it', async () => {
-    const src = new FakeStorage();
-    const f = await src.createFolder('Ordered');
-    await src.createDiagram(model('One'), f);
-    src.manifest = { folders: [{ id: f, order: 7 }] } as unknown as TreeManifest;
-
-    // Scope it to a SINGLE diagram — the manifest is written regardless.
-    const only = Array.from(src.diagrams.keys())[0];
-    const { blob } = await exportProject(
-      { storage: src, exporterTag: 'probe' },
-      { scope: 'diagram', diagramId: only }
-    );
-    const parsed = await parseProject(blob);
-
-    // PRECONDITION: the whole workspace's ordering rode along in a zip that
-    // contains no folders at all.
-    expect(parsed.manifest.folders).toEqual([]);
-    expect(parsed.treeManifest).toEqual({ folders: [{ id: f, order: 7 }] });
-
-    const dest = new FakeStorage();
-    await importProject({ storage: dest }, parsed, { destination: { kind: 'root' } });
-    // `importProject` never reads `parsed.treeManifest` and never calls
-    // `saveTreeManifest` — the destination keeps its empty default.
-    expect(dest.manifest).toEqual({ folders: [] });
-  });
-
-  it.failing('ZIP-10: the imported workspace receives the tree manifest from the zip', async () => {
-    const src = new FakeStorage();
-    const f = await src.createFolder('Ordered');
-    await src.createDiagram(model('One'), f);
-    src.manifest = { folders: [{ id: f, order: 7 }] } as unknown as TreeManifest;
-    const { blob } = await exportProject({ storage: src, exporterTag: 'probe' }, { scope: 'project' });
-    const parsed = await parseProject(blob);
-    expect(parsed.treeManifest).toBeDefined(); // precondition
-
-    const dest = new FakeStorage();
-    await importProject({ storage: dest }, parsed, { destination: { kind: 'root' } });
-    // Expected: ADR 0001 lists tree-manifest.json as part of the format, so an
-    // importer that parses it should apply it (remapped through idMap).
-    expect((dest.manifest as { folders: unknown[] }).folders).toHaveLength(1);
-  });
-});
+// ZIP-10 (folder ordering never survived a round trip) was fixed — the export
+// scopes the tree manifest and the import applies it, remapped through the ids
+// it just minted — and its probes promoted to
+// `src/services/project/__tests__/projectZip.test.ts`.
 
 // ---------------------------------------------------------------------------
 // ZIP-11 — one unreadable diagram kills the whole export.

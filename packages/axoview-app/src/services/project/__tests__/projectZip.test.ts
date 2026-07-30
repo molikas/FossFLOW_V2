@@ -464,6 +464,114 @@ describe('parseProject / importProject — diagram fidelity', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// A3/ZIP-03 and ZIP-10 — what "replace everything" costs when it fails, and
+// what survives a round trip. Promoted from the probe lane.
+// ---------------------------------------------------------------------------
+describe('importProject — replaceAll is not destructive until it has succeeded', () => {
+  it('leaves the workspace as it was when a create fails (ZIP-03)', async () => {
+    const storage = new FakeStorage();
+    const { d1, d2 } = await seedWorkspace(storage);
+    const before = {
+      diagrams: (await storage.listDiagrams()).map((d) => d.id).sort(),
+      folders: (await storage.listFolders()).map((f) => f.id).sort()
+    };
+    expect(before.diagrams).toContain(d1); // precondition: there IS something to lose
+    expect(before.diagrams).toContain(d2);
+
+    const parsed: ParsedProject = {
+      manifest: {
+        format: PROJECT_FORMAT,
+        version: PROJECT_FORMAT_VERSION,
+        exportedAt: new Date().toISOString(),
+        exportedBy: 'test',
+        scope: 'project',
+        folders: [],
+        diagrams: [
+          { id: 'x1', name: 'X1', folderId: null, lastModified: '', file: 'diagrams/x1.json' }
+        ] as never
+      },
+      diagrams: new Map([['x1', sampleModel('X1')]])
+    };
+    storage.createDiagram = async () => {
+      throw new Error('backend down');
+    };
+
+    await expect(
+      importProject({ storage }, parsed, { destination: { kind: 'replaceAll' } })
+    ).rejects.toThrow('backend down');
+
+    // The old workspace used to be gone by this point, with nothing imported.
+    expect((await storage.listDiagrams()).map((d) => d.id).sort()).toEqual(before.diagrams);
+    expect((await storage.listFolders()).map((f) => f.id).sort()).toEqual(before.folders);
+  });
+
+  it('still replaces the old content when the import succeeds', async () => {
+    const storage = new FakeStorage();
+    const { d1 } = await seedWorkspace(storage);
+    const parsed: ParsedProject = {
+      manifest: {
+        format: PROJECT_FORMAT,
+        version: PROJECT_FORMAT_VERSION,
+        exportedAt: new Date().toISOString(),
+        exportedBy: 'test',
+        scope: 'project',
+        folders: [],
+        diagrams: [
+          { id: 'x1', name: 'X1', folderId: null, lastModified: '', file: 'diagrams/x1.json' }
+        ] as never
+      },
+      diagrams: new Map([['x1', sampleModel('X1')]])
+    };
+
+    await importProject({ storage }, parsed, { destination: { kind: 'replaceAll' } });
+
+    const names = (await storage.listDiagrams()).map((d) => d.name);
+    expect(names).toEqual(['X1']);
+    expect(await storage.listFolders()).toEqual([]);
+    expect(storage.diagrams.has(d1)).toBe(false);
+  });
+});
+
+describe('folder ordering survives a round trip (ZIP-10)', () => {
+  it('carries the tree manifest into the target, remapped to the new ids', async () => {
+    const source = new FakeStorage();
+    const { networking, internal } = await seedWorkspace(source);
+    // A deliberate ordering the user set in the explorer.
+    await source.saveTreeManifest({
+      folders: [
+        { id: internal, name: 'Internal', parentId: networking, order: 0 },
+        { id: networking, name: 'Networking', parentId: null, order: 1 }
+      ] as never
+    });
+
+    const { blob } = await exportProject(
+      { storage: source, exporterTag: 'test' },
+      { scope: 'project' }
+    );
+    const parsed = await parseProject(blob);
+    expect(parsed.treeManifest?.folders).toHaveLength(2); // precondition
+
+    const target = new FakeStorage();
+    await importProject({ storage: target }, parsed, {
+      destination: { kind: 'root' }
+    });
+
+    const targetFolders = await target.listFolders();
+    const manifest = await target.getTreeManifest();
+    // The import used to ignore `treeManifest` entirely — every ordering was lost.
+    expect(manifest.folders).toHaveLength(2);
+    // …and every id in it names a folder that actually exists here now.
+    const realIds = new Set(targetFolders.map((f) => f.id));
+    for (const f of manifest.folders) expect(realIds.has(f.id)).toBe(true);
+    // Ordering preserved: Internal before Networking, as the source recorded.
+    const byOrder = [...manifest.folders].sort(
+      (a, b) => ((a as never as {order:number}).order) - ((b as never as {order:number}).order)
+    );
+    expect(byOrder.map((f) => f.name)).toEqual(['Internal', 'Networking']);
+  });
+});
+
 describe('parseProject — cyclic folder graphs', () => {
   const zipWithFolders = async (folders: unknown[]) => {
     const zip = new JSZip();

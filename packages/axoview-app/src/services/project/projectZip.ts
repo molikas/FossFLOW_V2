@@ -187,9 +187,19 @@ export const exportProject = async (
   zip.file('manifest.json', JSON.stringify(manifest, null, 2));
 
   // Tree manifest is best-effort — failure must not block export.
+  // A3/ZIP-10: scope it to the folders actually in this archive, so a
+  // folder-scope export does not ship ordering rows for folders the importer
+  // will never see.
   try {
     const treeManifest = await storage.getTreeManifest();
-    zip.file('tree-manifest.json', JSON.stringify(treeManifest));
+    const exportedIds = new Set(folders.map((f) => f.id));
+    zip.file(
+      'tree-manifest.json',
+      JSON.stringify({
+        ...treeManifest,
+        folders: (treeManifest.folders ?? []).filter((f) => exportedIds.has(f.id))
+      })
+    );
   } catch {
     // skip
   }
@@ -477,9 +487,18 @@ export const importProject = async (
 ): Promise<{ folderCount: number; diagramCount: number }> => {
   const { storage } = ctx;
 
-  if (opts.destination.kind === 'replaceAll') {
-    await wipeWorkspace(storage);
-  }
+  // A3/ZIP-03: `replaceAll` used to wipe FIRST. A failure anywhere in the
+  // import then left the workspace destroyed and nothing imported — the one
+  // destination where a partial failure is unrecoverable. Snapshot what is
+  // there, import alongside it, and delete the old content only once every
+  // create has succeeded.
+  const replacing = opts.destination.kind === 'replaceAll';
+  const preexisting = replacing
+    ? {
+        diagrams: (await storage.listDiagrams()).map((d) => d.id),
+        folders: await storage.listFolders()
+      }
+    : null;
 
   const rewritten = rewriteIds(parsed);
 
@@ -531,6 +550,54 @@ export const importProject = async (
     const named = d.name ? { ...model, name: d.name, title: d.name } : model;
     await storage.createDiagram(named, folderId);
     diagramCount++;
+  }
+
+  // A3/ZIP-10: carry the exported folder ordering into the new workspace,
+  // remapped through the ids the import just minted. Best-effort, like the
+  // export side — a workspace with the content but the old ordering is a far
+  // better outcome than a failed import.
+  if (parsed.treeManifest) {
+    try {
+      const remappedFolders = (parsed.treeManifest.folders ?? [])
+        .map((f) => {
+          const rewrittenId = rewritten.idMap.get(f.id);
+          const realId = rewrittenId ? folderRemap.get(rewrittenId) : undefined;
+          if (!realId) return null;
+          const parentRewritten = f.parentId
+            ? rewritten.idMap.get(f.parentId)
+            : undefined;
+          return {
+            ...f,
+            id: realId,
+            parentId: parentRewritten
+              ? folderRemap.get(parentRewritten) ?? null
+              : rootOverride
+          };
+        })
+        .filter((f): f is FolderMeta => f !== null);
+      if (remappedFolders.length > 0) {
+        const existing = await storage.getTreeManifest();
+        const carried = new Set(remappedFolders.map((f) => f.id));
+        await storage.saveTreeManifest({
+          ...existing,
+          folders: [
+            ...(existing.folders ?? []).filter((f) => !carried.has(f.id)),
+            ...remappedFolders
+          ]
+        });
+      }
+    } catch {
+      // Ordering is cosmetic — never fail an import over it.
+    }
+  }
+
+  // Every create succeeded: now the old workspace can go (A3/ZIP-03).
+  if (preexisting) {
+    for (const id of preexisting.diagrams) await storage.deleteDiagram(id, false);
+    const oldDepth = (f: FolderMeta): number =>
+      folderDepth(f, preexisting.folders) ?? -1;
+    const sorted = [...preexisting.folders].sort((a, b) => oldDepth(b) - oldDepth(a));
+    for (const f of sorted) await storage.deleteFolder(f.id, false);
   }
 
   return { folderCount: rewritten.folders.length, diagramCount };

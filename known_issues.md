@@ -5977,9 +5977,12 @@ diagram.
 
 **Workaround:** check the file tree against the number in the toast.
 
-**Status:** Open. Fix direction: build the message from `importProject`'s return
-value (it is already correct) and say something when the two disagree. Repro:
-[`zip-01-to-15.explore.test.ts`](packages/axoview-app/src/__explore__/A3/zip-01-to-15.explore.test.ts).
+**Status:** Fixed in 11cae8e7 (2026-07-30) — the summary is built from
+`importProject`'s return value, and when it disagrees with the manifest's claim
+the toast says so and drops from success to warning. `buildZipImportSummary`
+moved to `utils/importSummary.ts` so it can be tested without dragging
+react-router in. Promoted regression:
+[`importSummary.test.ts`](packages/axoview-app/src/utils/__tests__/importSummary.test.ts).
 
 ## A JSON file can file itself into a folder that does not exist
 
@@ -6034,10 +6037,11 @@ Measured end to end through a real ZIP: a soft-deleted diagram appears in
 
 **Workaround:** empty the trash before exporting.
 
-**Status:** Open. Fix direction: decide whether the trash is part of a project
-export (defensible either way) and make export and import agree — either filter
-`deletedAt` rows out, or carry the flag through the import.
-Repro: [`zip-01-to-15.explore.test.ts`](packages/axoview-app/src/__explore__/A3/zip-01-to-15.explore.test.ts).
+**Status:** Fixed in 11cae8e7 (2026-07-30) — the export filters `deletedAt` rows,
+so export and import now hold the same position: the trash is not part of a
+project export. (The alternative — carrying the flag through the import — was
+available and is recorded in the entry above; filtering keeps the archive a
+description of the live workspace.) Promoted regression: [`projectZip.test.ts`](packages/axoview-app/src/services/project/__tests__/projectZip.test.ts).
 
 ## Every import failure shows the same message, and one of them is wrong
 
@@ -6128,9 +6132,10 @@ Measured with both halves in one test: a failing `loadDiagram` rejects
 **Workaround:** export a narrower scope (a folder or a single diagram) to route
 around the unreadable one.
 
-**Status:** Open. Fix direction: skip the failures, record them in the manifest
-or the return value, and let the dialog report "exported 41 of 42". Repro:
-[`zip-01-to-15.explore.test.ts`](packages/axoview-app/src/__explore__/A3/zip-01-to-15.explore.test.ts).
+**Status:** Fixed in 11cae8e7 (2026-07-30) — the export skips a diagram it cannot
+read, returns it in `skipped`, and `ExportProjectZipDialog` reports which ones
+are missing from the archive the user just downloaded. 41 of 42 reach disk
+instead of none. Promoted regression: [`projectZip.test.ts`](packages/axoview-app/src/services/project/__tests__/projectZip.test.ts).
 
 ## Importing renames a diagram back to a stale title
 
@@ -6158,9 +6163,10 @@ Sees'`, imported as `'Old Title'`.
 **Workaround:** rename from the file explorer (which syncs both) before
 exporting.
 
-**Status:** Open. Fix direction: pass the manifest name into the create (or
-rename right after it), so the import preserves what the export recorded.
-Repro: [`zip-01-to-15.explore.test.ts`](packages/axoview-app/src/__explore__/A3/zip-01-to-15.explore.test.ts).
+**Status:** Fixed in 11cae8e7 (2026-07-30) — the import writes the manifest's
+name onto both `name` and `title` before the create, so what the export recorded
+(the name the workspace actually showed) wins over the blob's stale title.
+Promoted regression: [`projectZip.test.ts`](packages/axoview-app/src/services/project/__tests__/projectZip.test.ts).
 
 ## A corrupt diagram entry imports as a blank diagram and counts as a success
 
@@ -6189,10 +6195,10 @@ overcount). Measured with all three in one manifest: two diagrams created, named
 
 **Workaround:** none — the blank diagram has to be deleted by hand.
 
-**Status:** Open. Fix direction: validate each diagram entry as an object during
-`parseProject` and reject with `BAD_DIAGRAM`, so all three cases take the one
-path that already exists. Repro:
-[`zip-01-to-15.explore.test.ts`](packages/axoview-app/src/__explore__/A3/zip-01-to-15.explore.test.ts).
+**Status:** Fixed in 11cae8e7 (2026-07-30) — `parseProject` rejects a diagram
+entry that is not an object with `BAD_DIAGRAM`, so `null`, a number and an array
+all take the one error path that already existed instead of importing as a blank
+diagram that counts as a success. Promoted regression: [`projectZip.test.ts`](packages/axoview-app/src/services/project/__tests__/projectZip.test.ts).
 
 ## Deleting the open diagram blanks the canvas before the storage delete, so a failed delete hides work that is still there
 
