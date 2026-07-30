@@ -1,7 +1,10 @@
 /**
- * A1 — LIFE-11 (Ctrl+S writes on a read-only route), LIFE-12 (toolbar rename
- * never reaches the model title) and LIFE-15 (the Load dialog never consults
- * the storage provider, so imported icons are gone after a reload).
+ * A1 — LIFE-11 (Ctrl+S writes on a read-only route) and LIFE-15 (the Load
+ * dialog never consults the storage provider, so imported icons are gone after
+ * a reload).
+ *
+ * LIFE-12 lived here too; it was fixed and promoted to
+ * `src/providers/__tests__/DiagramLifecycleProvider.save.test.tsx`.
  *
  * `useParams` is mocked through a mutable `routeParams` so one file can render
  * both the editor route and the owner-readonly route. `isReadonlyUrl` also
@@ -132,67 +135,6 @@ describe('LIFE-11 — Ctrl+S on the owner-readonly /display route writes', () =>
     // Expected: a read-only view cannot write. Actual: it writes and claims
     // success.
     expect(d.saveCalls).toHaveLength(0);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// LIFE-12 — `handleRenameCurrentDiagram` updates `diagramName` and
-// `currentDiagram.name` and calls `storage.renameDiagram`, but never touches
-// `currentModel.title`. Its sibling `notifyDiagramRenamedFromTree` DOES
-// (`{...currentModelRef.current, title: trimmed}` + a preserveViewport reload).
-// `buildSaveData` prefers `currentModel?.title`, so the next save writes the
-// OLD name back into the blob.
-// ---------------------------------------------------------------------------
-describe('LIFE-12 — the toolbar rename never reaches the saved title', () => {
-  async function bootOpen() {
-    const d = makeStorage({
-      loadDiagram: async () => ({ title: 'Old Name', items: [], views: [] })
-    } as never);
-    appStorage = appStorageValue({ remoteStorageActive: true, storage: d.storage });
-    const h = renderLifecycle();
-    await act(async () => { await h.ctx().openDiagramById('diag-1', 'Old Name'); });
-    expect(h.ctx().currentModel?.title).toBe('Old Name'); // precondition
-    await consumeLoadEcho(h.ctx());
-    // consumeLoadEcho's own model would overwrite the title, so restore it the
-    // way a real load echo does (the lib echoes the loaded model back).
-    await act(async () => { h.ctx().handleModelUpdated(MODEL('Old Name') as never); });
-    // `notifyDiagramRenamedFromTree` gates its model write on
-    // `axoviewRef.current` (the mounted editor). jsdom has no Axoview, so stub
-    // the ref — without it the SIBLING path would look broken too and the
-    // asymmetry this probe is measuring would be a rig artefact, not a finding.
-    h.ctx().axoviewRef.current = { load: jest.fn() } as never;
-    d.saveCalls.length = 0;
-    return { h, d };
-  }
-
-  it('characterization: the two rename paths disagree about the model title', async () => {
-    const { h, d } = await bootOpen();
-
-    // (a) toolbar rename
-    await act(async () => { await h.ctx().handleRenameCurrentDiagram('Toolbar Name'); });
-    // PRECONDITION: the rename really took effect where it does reach.
-    expect(d.renameCalls).toEqual([{ id: 'diag-1', name: 'Toolbar Name' }]);
-    expect(h.ctx().diagramName).toBe('Toolbar Name');
-    // …but not in the model:
-    expect(h.ctx().currentModel?.title).toBe('Old Name');
-
-    // (b) the file-tree rename, same provider, does reach it.
-    await act(async () => { h.ctx().notifyDiagramRenamedFromTree('diag-1', 'Tree Name'); });
-    expect(h.ctx().currentModel?.title).toBe('Tree Name');
-  });
-
-  it.failing('LIFE-12: after a toolbar rename the next save writes the new name', async () => {
-    const { h, d } = await bootOpen();
-    await act(async () => { await h.ctx().handleRenameCurrentDiagram('Toolbar Name'); });
-    expect(d.renameCalls).toHaveLength(1); // precondition
-    d.saveCalls.length = 0;
-
-    await act(async () => { await h.ctx().handleSaveClick(); });
-    // PRECONDITION: a save really happened, so the title below is the payload's.
-    expect(d.saveCalls).toHaveLength(1);
-    // Expected: the blob carries the name the user typed. Actual:
-    // buildSaveData reads currentModel.title, which the toolbar rename skipped.
-    expect(d.saveCalls[0].title).toBe('Toolbar Name');
   });
 });
 

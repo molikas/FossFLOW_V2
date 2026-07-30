@@ -68,15 +68,20 @@ interface StorageDouble {
   storage: StorageProvider;
   saveCalls: Array<{ id: string; title: string }>;
   createCalls: Array<{ title: string }>;
+  renameCalls: Array<{ id: string; name: string }>;
   /** When set, every saveDiagram rejects with this. */
   failSaveWith: Error | null;
+  /** When set, every renameDiagram rejects with this. */
+  failRenameWith: Error | null;
 }
 
 function makeStorage(): StorageDouble {
   const d: StorageDouble = {
     saveCalls: [],
     createCalls: [],
+    renameCalls: [],
     failSaveWith: null,
+    failRenameWith: null,
     storage: null as unknown as StorageProvider
   };
   d.storage = {
@@ -91,7 +96,10 @@ function makeStorage(): StorageDouble {
     loadDiagram: async () => ({ title: 'loaded', items: [], views: [] }),
     listDiagrams: async () => [],
     deleteDiagram: async () => {},
-    renameDiagram: async () => {}
+    renameDiagram: async (id: string, name: string) => {
+      d.renameCalls.push({ id, name });
+      if (d.failRenameWith) throw d.failRenameWith;
+    }
   } as unknown as StorageProvider;
   return d;
 }
@@ -304,6 +312,58 @@ describe('the unsaved-work guard', () => {
     expect(h.ctx().dirtyDiagramIds.has('__unsaved__')).toBe(true); // precondition
 
     expect(unloadIsBlocked()).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// LIFE-12 — the toolbar rename updated the breadcrumb and the storage row but
+// not `currentModel.title`, which is what `buildSaveData` writes: the next save
+// put the OLD name back in the blob, and Export JSON shipped it. Its file-tree
+// sibling did it correctly, three functions away.
+// ---------------------------------------------------------------------------
+describe('renaming the open diagram', () => {
+  /** `applyDiagramName` pushes the renamed model into the canvas when one is mounted. */
+  function stubCanvas(h: { ctx: () => LifecycleCtx }) {
+    h.ctx().axoviewRef.current = { load: jest.fn() } as never;
+  }
+
+  it('reaches the model title, so the next save writes the new name', async () => {
+    const { h, d } = await bootRemoteWithOpenDiagram();
+    stubCanvas(h);
+
+    await act(async () => { await h.ctx().handleRenameCurrentDiagram('Toolbar Name'); });
+
+    expect(d.renameCalls).toEqual([{ id: 'diag-1', name: 'Toolbar Name' }]); // precondition
+    expect(h.ctx().diagramName).toBe('Toolbar Name');
+    expect(h.ctx().currentModel?.title).toBe('Toolbar Name');
+
+    d.saveCalls.length = 0;
+    await act(async () => { await h.ctx().handleSaveClick(); });
+    expect(d.saveCalls).toHaveLength(1);
+    expect(d.saveCalls[0].title).toBe('Toolbar Name');
+  });
+
+  it('agrees with the file-tree rename path', async () => {
+    const { h } = await bootRemoteWithOpenDiagram();
+    stubCanvas(h);
+
+    await act(async () => { h.ctx().notifyDiagramRenamedFromTree('diag-1', 'Tree Name'); });
+
+    expect(h.ctx().diagramName).toBe('Tree Name');
+    expect(h.ctx().currentModel?.title).toBe('Tree Name');
+  });
+
+  it('reverts every copy — model title included — when the rename fails', async () => {
+    const { h, d } = await bootRemoteWithOpenDiagram();
+    stubCanvas(h);
+    d.failRenameWith = new Error('backend down');
+
+    await act(async () => { await h.ctx().handleRenameCurrentDiagram('Toolbar Name'); });
+
+    expect(d.renameCalls).toHaveLength(1); // precondition: it really was attempted
+    expect(h.ctx().diagramName).toBe('Diag One');
+    expect(h.ctx().currentModel?.title).toBe('Diag One');
+    expect(toasts.filter((x) => x.severity === 'error')).toHaveLength(1);
   });
 });
 

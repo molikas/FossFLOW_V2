@@ -51,31 +51,53 @@ export async function fetchRuntimeConfig(): Promise<RuntimeConfig> {
   if (cached) return cached;
   if (inflight) return inflight;
   inflight = (async () => {
+    let response: Response;
     try {
       // 800ms is generous for any healthy backend (docker prod ≈45ms) and
       // caps the worst case when the backend is absent — Chrome/Windows can
       // otherwise spend ~2s on a dual-stack connect probe before reporting
       // ECONNREFUSED to JS.
-      const response = await fetch(`${apiBaseUrl()}/api/config`, {
+      response = await fetch(`${apiBaseUrl()}/api/config`, {
         signal: AbortSignal.timeout(800)
       });
-      if (!response.ok) throw new Error(String(response.status));
-      const data = (await response.json()) as Partial<RuntimeConfig>;
-      cached = { ...DEFAULT_CONFIG, ...data };
-      // The build-time id is a true fallback: if the backend omits or nulls
-      // googleClientId, keep whatever was baked in at build (local dev).
-      if (!cached.googleClientId) cached.googleClientId = BUILD_TIME_CLIENT_ID;
-      if (!cached.googleApiKey) cached.googleApiKey = BUILD_TIME_API_KEY;
-      if (!cached.googleProjectNumber) cached.googleProjectNumber = BUILD_TIME_PROJECT_NUMBER;
     } catch (err) {
-      // ADR 0009 D2: explicit Local-mode fallback on /api/config failure.
-      // The previous silent swallow hid backend outages on boot.
+      // A2/STOR-11 (owner ruling 2026-07-30) — cache success only. A transport
+      // failure, including the 800 ms timeout above, is not an answer: fall
+      // back for THIS caller but never latch it, so a slow-but-healthy backend
+      // cannot hide a whole server workspace for the life of the page. ADR 0009
+      // D2's single-probe fast path is unchanged, and `inflight` still dedupes
+      // the concurrent callers of a boot.
       console.warn(
-        '[useRuntimeConfig] /api/config probe failed; falling back to defaults (Local mode)',
+        '[useRuntimeConfig] /api/config probe failed; falling back to defaults (Local mode) for this call — the next one will re-probe',
         err
       );
-      cached = { ...DEFAULT_CONFIG };
+      return { ...DEFAULT_CONFIG };
     }
+
+    // A response — including a 4xx/5xx — is this deploy answering, so it is
+    // cacheable in the way a timeout is not.
+    if (!response.ok) {
+      console.warn(
+        '[useRuntimeConfig] /api/config returned',
+        response.status,
+        '; falling back to defaults (Local mode)'
+      );
+      cached = { ...DEFAULT_CONFIG };
+      return cached;
+    }
+    try {
+      const data = (await response.json()) as Partial<RuntimeConfig>;
+      cached = { ...DEFAULT_CONFIG, ...data };
+    } catch (err) {
+      console.warn('[useRuntimeConfig] /api/config returned unparseable JSON', err);
+      cached = { ...DEFAULT_CONFIG };
+      return cached;
+    }
+    // The build-time id is a true fallback: if the backend omits or nulls
+    // googleClientId, keep whatever was baked in at build (local dev).
+    if (!cached.googleClientId) cached.googleClientId = BUILD_TIME_CLIENT_ID;
+    if (!cached.googleApiKey) cached.googleApiKey = BUILD_TIME_API_KEY;
+    if (!cached.googleProjectNumber) cached.googleProjectNumber = BUILD_TIME_PROJECT_NUMBER;
     return cached;
   })();
   try {

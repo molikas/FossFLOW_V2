@@ -83,6 +83,52 @@ describe('fetchRuntimeConfig', () => {
     expect(cfg.authMode).toBe('none');
   }, 3000);
 
+  // A2/STOR-11 (owner ruling 2026-07-30 — cache success only). A backend that
+  // is merely slow used to be demoted to Local mode for the life of the page:
+  // the fallback was written into the module cache and `if (cached)` won
+  // forever, so a server deploy's whole workspace was invisible until reload.
+  test('does not cache a transport failure — the next caller re-probes', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    let calls = 0;
+    (global as any).fetch = async () => {
+      calls++;
+      // First probe times out (what AbortSignal.timeout throws); the backend
+      // was healthy all along and answers the second.
+      if (calls === 1) throw new DOMException('TimeoutError', 'TimeoutError');
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ serverStorage: true })
+      } as Response;
+    };
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { fetchRuntimeConfig } = require('../useRuntimeConfig');
+
+    const first = await fetchRuntimeConfig();
+    expect(first.serverStorage).toBe(false); // fell back for THIS caller
+    expect(calls).toBe(1); // precondition: the probe really was issued
+
+    const second = await fetchRuntimeConfig();
+    expect(calls).toBe(2);
+    expect(second.serverStorage).toBe(true);
+  });
+
+  test('does cache a response that was actually received, non-ok included', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    let calls = 0;
+    (global as any).fetch = async () => {
+      calls++;
+      return { ok: false, status: 404, json: async () => ({}) } as Response;
+    };
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { fetchRuntimeConfig } = require('../useRuntimeConfig');
+    await fetchRuntimeConfig();
+    await fetchRuntimeConfig();
+    // A 404 is this deploy saying "no config endpoint" — an answer, unlike a
+    // timeout, so the single-probe fast path (ADR 0009 D2) still holds.
+    expect(calls).toBe(1);
+  });
+
   test('caches the resolved config across calls', async () => {
     let calls = 0;
     (global as any).fetch = async () => {

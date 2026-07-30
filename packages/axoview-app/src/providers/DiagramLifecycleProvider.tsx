@@ -1318,24 +1318,51 @@ export function DiagramLifecycleProvider({
   // ---------------------------------------------------------------------------
   // Rename current diagram
   // ---------------------------------------------------------------------------
+  /**
+   * Single owner of "the open diagram is now called X" (thread A-a).
+   *
+   * The toolbar rename used to update the breadcrumb and the storage row while
+   * leaving `currentModel.title` on the old name — and `buildSaveData` prefers
+   * `currentModel.title`, so the next save wrote the stale name back into the
+   * blob and Export JSON shipped it (A1/LIFE-12). Its file-tree sibling, three
+   * functions away, did it correctly. Both go through here now.
+   *
+   * Storage is the caller's business: this only owns the in-memory copies.
+   */
+  const applyDiagramName = useCallback((name: string) => {
+    setDiagramName(name);
+    setCurrentDiagram((prev) => (prev ? { ...prev, name } : prev));
+    if (!currentModelRef.current) return;
+    const updatedModel = { ...currentModelRef.current, title: name };
+    setCurrentModel(updatedModel);
+    currentModelRef.current = updatedModel;
+    if (axoviewRef.current) {
+      // Push it into the canvas so the lib's model agrees. The echo is
+      // swallowed by isAfterLoadRef, so this is not a user edit.
+      isAfterLoadRef.current = true;
+      axoviewRef.current.load(updatedModel as InitialData, { preserveViewport: true });
+    }
+  }, []);
+
   const handleRenameCurrentDiagram = useCallback(
     async (newName: string) => {
       const trimmed = newName.trim();
       if (!trimmed || !currentDiagramRef.current) return;
       const diag = currentDiagramRef.current;
-      setDiagramName(trimmed);
-      setCurrentDiagram({ ...diag, name: trimmed });
+      applyDiagramName(trimmed);
       if (remoteStorageActive && storageRef.current) {
         try {
           await storageRef.current.renameDiagram(diag.id, trimmed);
           setFileTreeRefreshToken((n) => n + 1);
         } catch {
           notificationStore.push({ severity: 'error', message: 'Rename failed' });
-          setDiagramName(diag.name);
-          setCurrentDiagram(diag);
+          // Revert every copy, model title included — a half-revert is what
+          // A4/FEX-16 is about on the tree side.
+          applyDiagramName(diag.name);
         }
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- applyDiagramName is stable
     [remoteStorageActive]
   );
 
@@ -1377,14 +1404,8 @@ export function DiagramLifecycleProvider({
     if (!currentDiagramRef.current || currentDiagramRef.current.id !== id) return;
     const trimmed = newName.trim();
     if (!trimmed) return;
-    setDiagramName(trimmed);
-    setCurrentDiagram((prev) => (prev ? { ...prev, name: trimmed } : prev));
-    if (axoviewRef.current && currentModelRef.current) {
-      const updatedModel = { ...currentModelRef.current, title: trimmed };
-      setCurrentModel(updatedModel);
-      isAfterLoadRef.current = true;
-      axoviewRef.current.load(updatedModel as InitialData, { preserveViewport: true });
-    }
+    applyDiagramName(trimmed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- applyDiagramName is stable
   }, []);
 
   // ---------------------------------------------------------------------------
