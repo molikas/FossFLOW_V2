@@ -5707,9 +5707,10 @@ R-a.
 
 **Workaround:** rename from the file explorer (F2) rather than the toolbar.
 
-**Status:** Open. Fix direction: have `handleRenameCurrentDiagram` reuse
-`notifyDiagramRenamedFromTree`'s model write (or call it) so both paths run one
-ritual. Repro: [`readonly-rename-life-11-12-15.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/readonly-rename-life-11-12-15.explore.test.tsx).
+**Status:** Fixed in 3af90693 (2026-07-30) — both rename paths go through one
+`applyDiagramName`, which owns the breadcrumb, `currentDiagram.name` and
+`currentModel.title` together; a failed rename reverts all three. Promoted
+regression: [`DiagramLifecycleProvider.save.test.tsx`](packages/axoview-app/src/providers/__tests__/DiagramLifecycleProvider.save.test.tsx).
 
 ## Deleting a diagram from the Load dialog does not delete it
 
@@ -5771,6 +5772,69 @@ the canvas. Only the last-opened diagram escapes, because
 storage provider (as `openDiagramById` does) and use the list entry only for the
 name/timestamps. Repro:
 [`readonly-rename-life-11-12-15.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/readonly-rename-life-11-12-15.explore.test.tsx).
+
+## Record correction — area A2's entries were never filed (2026-07-30)
+
+The 2026-07 exploratory campaign's A2 area file
+([A2-storage-places.md](docs/exploratory/areas/A2-storage-places.md)) records 13
+confirmed bugs, each ending `known_issues: A2/STOR-nn`, but no A2 entry ever
+reached this register — the file goes straight from A1/LIFE-15 to A3/ZIP-01.
+Found while landing wave 1 of the remediation
+([exploratory-remediation.md](docs/tactical/exploratory-remediation.md)). The
+area file is the evidence of record for those findings; entries are filed here
+as each is fixed, starting with the two below. Same lesson as the campaign's own
+MOP-02: a frozen record and the register drift, and the correction belongs in
+the register.
+
+## The active storage place is remembered in two places, and a route change splits them
+
+**Found by:** exploratory campaign A2/STOR-12
+
+**Symptom:** Open a Google Drive diagram, navigate to any `/display/*` route and
+come back. The app now behaves as if you were in the local place — the autosave
+branch, the status cluster and the navigation guards all read
+`remoteStorageActive: false` — while every read and write still goes to Drive.
+
+**Root cause:** "which place is active" was held twice: in the module-level
+`StorageManager` singleton, which outlives every React tree, and in
+`AppStorageProvider`'s `useState('local')`, which does not. `EditorPage` is the
+element of every route, so an in-app route change remounts the provider (measured
+in a real browser, not inferred from the router's source) and re-seeds the React
+copy to `'local'` while the singleton keeps routing to Drive.
+
+**Workaround:** reload the page after coming back from a `/display` route.
+
+**Status:** Fixed in 3af90693 (2026-07-30) — the singleton owns the active place
+and the provider state seeds from it (`useState(() => manager.activeProviderId)`).
+Promoted regression:
+[`AppStorageContext.place.test.tsx`](packages/axoview-app/src/providers/__tests__/AppStorageContext.place.test.tsx).
+
+## A slow /api/config probe hides a whole server workspace for the session
+
+**Found by:** exploratory campaign A2/STOR-11 (product question — ruled 2026-07-30)
+
+**Symptom:** On a server deploy whose backend answers correctly but slowly (cold
+start, loaded host, tunnelled dev backend), the app boots into Local mode with a
+`console.warn` as the only trace: the file tree shows an empty *local* place
+rather than an error, and the user's server-stored diagrams stay invisible until
+they happen to reload.
+
+**Root cause:** `fetchRuntimeConfig` wrote its Local-mode fallback into the
+module-level `cached`, and `if (cached) return cached` then won for the life of
+the page — so a *transport* failure (the 800 ms `AbortSignal.timeout`) was
+latched as the answer. Measured: a backend answering in 1.2 s yields
+`serverStorage: false` and is never re-probed; the same backend at 400 ms is
+detected correctly.
+
+**Workaround:** reload.
+
+**Status:** Fixed in 3af90693 (2026-07-30) — owner ruling
+([DECISIONS.md](docs/exploratory/DECISIONS.md)): cache success only. A response
+that was actually received is cached (4xx/5xx included — that is this deploy
+answering); a transport failure falls back for that caller alone. `inflight`
+still dedupes concurrent boot callers, so ADR 0009 D2's single-probe fast path is
+unchanged. Promoted regression:
+[`useRuntimeConfig.test.ts`](packages/axoview-app/src/hooks/__tests__/useRuntimeConfig.test.ts).
 
 ## A project ZIP whose folders form a loop freezes the app
 
