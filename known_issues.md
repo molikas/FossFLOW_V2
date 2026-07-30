@@ -4406,3 +4406,79 @@ on a typed error the way `DriveShareError` already does, and map 404 → "This d
 no longer exists" / 5xx → the retryable treatment `share-error.spec.ts` already covers.
 Repro:
 [`drv-06-08-09-10-13-14.explore.test.tsx`](packages/axoview-app/src/__explore__/S3/drv-06-08-09-10-13-14.explore.test.tsx).
+
+## A multi-row text box whose rows are not `<p>`/`<li>` measures one row tall
+
+**Found by:** exploratory campaign TXT-01 / TXT-02
+
+**Symptom:** A text box whose content is plain text with newlines, or HTML whose
+rows are `<div>` blocks or `<br>` breaks, paints every row on the canvas but
+occupies a ONE-row footprint. Its selection outline, its transform-handle box and
+its `getItemAtTile` hit area cover only the first row; the remaining rows overhang
+into the neighbouring tiles, where clicking them selects whatever is underneath.
+For the plain-text case the box is also far too WIDE — all the lines are measured
+as one continuous run.
+
+**Root cause:** `scene.textBoxes[id].size` has exactly one writer,
+`syncTextBox` → `getTextBoxDimensions` (`utils/isoMath.ts`), and both of its
+row-counting helpers only recognise the block vocabulary the Quill editor emits:
+
+- `countHtmlLines` returns 1 immediately when the content does not start with
+  `<` — so `"alpha\nbeta\ngamma"` is one row, even though the resting render
+  hands that string to a `white-space: pre` `<Typography>` that draws three.
+- Its regex is `/<\/(p|li|h[1-6]|blockquote|pre)>/gi`, so `<div>` rows count
+  zero (floored to 1) and `<br>` inside one `<p>` counts as a single row.
+  `sanitizeHtml` keeps both `<div>` and `<br>` (DOMPurify's html profile), so
+  they reach `dangerouslySetInnerHTML` unchanged and lay out as N rows.
+- `splitIntoMeasurableBlocks` has the same two blind spots on the WIDTH axis: a
+  non-HTML string becomes a single block holding every line, so `getTextWidth`
+  measures the lines concatenated.
+
+Neither shape is producible from the on-canvas editor (Quill normalises
+everything to `<p>`/`<li>`), but both are producible by the supported input
+surfaces — hand-edited or imported JSON, a project ZIP, or a diagram from the
+upstream lineage. The repo's own `packages/axoview-e2e/fixtures/view-mode-info-diagram.json`
+already stores a plain-text `content`.
+
+**Workaround:** open the box in the on-canvas editor and press a key; the commit
+re-serialises the content as `<p>` rows and the next `syncTextBox` measures it
+correctly.
+
+**Status:** Open. Fix direction: give `countHtmlLines` / `splitIntoMeasurableBlocks`
+a non-HTML branch that splits on `\n` (matching `white-space: pre`), and extend
+the block vocabulary to `div` plus a `<br>` count inside each block — or
+normalise legacy content to `<p>` rows in `useInitialDataManager` the way
+`foldTextBoxStyleFlags` already normalises the legacy style flags. Repro:
+[`measure-txt-01-02-11-14.explore.test.ts`](packages/axoview-lib/src/__explore__/F1/measure-txt-01-02-11-14.explore.test.ts).
+
+## A text box whose text starts with '<' silently loses that token
+
+**Found by:** exploratory campaign TXT-14
+
+**Symptom:** A text box reading `<T> is a type parameter` renders as
+` is a type parameter` — the `<T>` is gone, on the canvas and in the on-canvas
+editor. Opening and saving the diagram once makes the loss permanent: the stored
+`content` no longer contains the token.
+
+**Root cause:** "is this content HTML?" is decided by
+`content.trim().startsWith('<')` (`isHtmlContent` in `utils/richTextTransform.ts`,
+mirrored inline in `TextBox.tsx`). Plain text beginning with an angle bracket
+answers yes, so it is routed to `sanitizeHtml` and `dangerouslySetInnerHTML`,
+and DOMPurify drops the unknown `<T>` element while keeping its text content —
+here, nothing. `useInitialDataManager` writes the sanitized string BACK into the
+model (`content: sanitizeHtml(normalizeQuillHtmlSpaces(folded.content))`), so
+the token cannot be recovered after one load.
+
+`TextBoxInlineEditor`'s seed comment states that "plain-text legacy content
+[is] escaped so a literal leading '<' can't be misparsed (catalog I-23)", but
+the escape lives in `ensureHtmlContent`'s `plainTextToHtml` branch, which runs
+only when `isHtmlContent` is FALSE — i.e. never for exactly the input it was
+meant to protect. The guard is unreachable code.
+
+**Workaround:** none once loaded. Before loading, wrap the value in `<p>` and
+escape the brackets by hand (`<p>&lt;T&gt; is a type parameter</p>`).
+
+**Status:** Open. Fix direction: sniff on a real tag (e.g.
+`/^\s*<\/?[a-z][a-z0-9]*[\s/>]/i`) rather than a bare `<`, so a
+non-tag angle bracket takes the plain-text branch that already escapes it, and
+apply the same sniff at both consumers. Repro: [`measure-txt-01-02-11-14.explore.test.ts`](packages/axoview-lib/src/__explore__/F1/measure-txt-01-02-11-14.explore.test.ts).
