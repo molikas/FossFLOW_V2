@@ -5,15 +5,16 @@
 
 | Workspace | Passing | Suites |
 |---|---|---|
-| `axoview-lib` | 1741 (+1 skipped) | 156 |
-| `axoview-app` | 295 | 30 |
+| `axoview-lib` | 1753 (+1 skipped) | 157 |
+| `axoview-app` | 300 | 30 |
 | `axoview-backend` | 102 | 7 |
 | `axoview-worker` | 124 | 4 |
-| **Total** | **2262 (+1 skipped)** | **197** |
+| **Total** | **2279 (+1 skipped)** | **198** |
 
-*(lib `+4` / `+1` suite and app `+27` / `+4` suites on 2026-07-30 — wave 1 of the
+*(lib `+16` / `+2` suites and app `+32` / `+4` suites on 2026-07-30 — wave 1 of the
 exploratory-campaign remediation, all of it probes promoted out of the
-quarantined lane under the ADR 0047 §2 flip rule. See the additions below.)*
+quarantined lane under the ADR 0047 §2 flip rule, plus the model identity/range
+class gate. See the additions below.)*
 
 > Most of the lib delta since the 2026-07-15 measurement (1544→1737, 150→155) predates this sync — it accumulated across the intervening waves and was simply never re-measured. The 2026-07-28 session itself added only the two `driveSharing` policy-rejection cases (app 266→268).
 
@@ -44,8 +45,12 @@ provider or store — none of them mock the thing under test.
 - **[`StorageManager.test.ts`](../../packages/axoview-app/src/services/storage/__tests__/StorageManager.test.ts)** · 3 tests · the provider registry, which had none: active-id reporting, unknown-provider refusal, and `setServerStorage` reaching every registered provider. A2/STOR-10.
 - **[`useLayerActions.history.test.tsx`](../../packages/axoview-lib/src/hooks/__tests__/useLayerActions.history.test.tsx)** · 4 tests · a layer op is its own logical action: fresh sequence, one action per Ctrl+Z, no stranded text-box scene size, no orphan scene connector on the next undo. E1/HIST-01.
 
+- **[`modelIdentity.contract.test.ts`](../../packages/axoview-lib/src/schemas/__tests__/modelIdentity.contract.test.ts)** · 11 tests · **CLASS GATE** (ADR 0047 §3) for the campaign's biggest cross-area finding: the model has reference-integrity checks but no identity or range checks. It scans for the *class*, not the individual bugs — the range half derives the bounded fields from `viewItemSchema` through `safeParse`, so adding a schema bound without a write-site clamp fails it, and it asserts the discovery found something so it cannot become a vacuous green. Verified red by removing the `iconScale` clamp. The identity half pins `layer.order` as a permutation of 0..n-1 across every layer mutation, the refusal of a layer id that names no layer, and that a default page name is never one already on screen. E2/RED-03/04/05, E3/SCN-13, E4/CLIP-13.
+
 `useRuntimeConfig.test.ts` also gained two cases for the STOR-11 ruling (a
-transport failure is never cached; a received response still is).
+transport failure is never cached; a received response still is), and
+`projectZip.test.ts` five for A3/ZIP-01 (a cyclic folder graph is rejected at
+parse time, and both folder walks terminate on their own).
 
 **The lane stays out of CI.** Wave 1 also excluded `src/__explore__` from both
 packages' `tsconfig.json`: `npm run lint` is `tsc --noEmit` and was sweeping the

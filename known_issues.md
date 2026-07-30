@@ -5877,9 +5877,14 @@ manifest completes in under 100 calls, the cyclic one is still going at 10 000.
 
 **Workaround:** none from inside the app.
 
-**Status:** Open. Fix direction: add the `seen` set both walks are missing, or
-validate the folder graph in `parseProject` and reject with a domain error.
-Repro: [`zip-01-to-15.explore.test.ts`](packages/axoview-app/src/__explore__/A3/zip-01-to-15.explore.test.ts).
+**Status:** Fixed in cef61900 (2026-07-30) — both halves. `parseProject` rejects
+a cyclic folder graph with a domain error (`BAD_FOLDER_GRAPH`), so the reachable
+path now surfaces the import-error dialog; and one `folderDepth` helper carrying
+the `seen` set replaces both walks, so they terminate on their own —
+`wipeWorkspace` needs that independently (its folders come from storage, where a
+cycle cannot be rejected at parse time) and `importProject` is exported, so a
+caller can bypass the parse gate. Promoted regression:
+[`projectZip.test.ts`](packages/axoview-app/src/services/project/__tests__/projectZip.test.ts).
 
 ## Importing part of a project leaves its cross-diagram links pointing nowhere
 

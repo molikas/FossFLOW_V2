@@ -72,7 +72,7 @@ for the first product-code wave.*
 
 **Progress 2026-07-30:** clusters 1 and 2 complete; cluster 3 partially done
 (seq-pinning half); cluster 4 partially done (class gate + everything closable at
-a write site). Cluster 5 not started. Every landed item carries its
+a write site); cluster 5 started (ZIP-01, the freeze). Every landed item carries its
 promoted regression and its `Fixed in <sha>` annotation — see "Wave 1 landed" below.
 
 - [x] **Autosave/save cluster (A1):** flush-not-cancel on unmount/disable/reset; failed saves count as unsaved work in both `beforeunload` guards; un-stale the Retry gate. (Thread A-b/A-c in the area files.) — `2b629c6e`, LIFE-01..09.
@@ -88,7 +88,9 @@ promoted regression and its `Fixed in <sha>` annotation — see "Wave 1 landed" 
   - [x] Class gate landed: `schemas/__tests__/modelIdentity.contract.test.ts`. It *scans* for the class — the range half derives the bounded fields from `viewItemSchema` via `safeParse`, so a new schema bound without a write-site clamp fails it. Verified it can go red. It found one unfiled instance (`zIndex` declared `int()`, fractional writes accepted); also clamped.
   - [x] RED-04/RED-05 (layer `order` permutation), SCN-13 (page names), CLIP-13 (`iconScale` clamp), RED-03 write-site half.
   - [ ] **Owner call needed before the rest: reject or repair?** CLIP-01 (duplicate ids), CLIP-15 (unbounded tiles) and RED-03's import/paste half all concern violations that are *already in users' saved files* — that is the bug. Adding the check to `validateModel` makes `modelSchema.safeParse` fail, i.e. those files stop opening, which is exactly the harm E4/CLIP-02 is filed for. The alternatives are (a) repair-on-load (dedupe/drop/clamp silently, notify), (b) repair + a one-time report, (c) hard reject. Wave 1 fixed only what could be closed at the write site, where refusing is free. CLIP-14's icon-ref half additionally conflicts with the deliberate "icons may come from packs not in `model.icons`" decision in `validateModelItem` and needs the `requiredPacks` derivation its entry names.
-- [ ] **Storage provider cluster (A2/A3):** remaining STOR/ZIP entries incl. ZIP-09 single-import-flow ruling and the ZIP-01 non-terminating walk. **Also files the missing A2 known_issues entries** — see the record correction below.
+- [~] **Storage provider cluster (A2/A3):** remaining STOR/ZIP entries incl. ZIP-09 single-import-flow ruling and the ZIP-01 non-terminating walk. **Also files the missing A2 known_issues entries** — see the record correction below.
+  - [x] ZIP-01 non-terminating walk (`cef61900`) — the freeze, and the highest-severity item in the cluster. Rejected at parse time AND both walks made to terminate; `wipeWorkspace` needs the latter independently because its folders come from storage.
+  - [ ] Everything else: A2/STOR-01..09, 13, 14, 16 (twelve, none of which has a known_issues entry yet — file as you fix) and A3/ZIP-02, 03, 05, 06, 07, 08, 10, 11, 13, 15, plus the ZIP-09 single-import-flow ruling. This is the largest remaining block in wave 1.
 
 #### Wave 1 landed (2026-07-30)
 
@@ -98,6 +100,7 @@ promoted regression and its `Fixed in <sha>` annotation — see "Wave 1 landed" 
 | `3af90693` | A2/STOR-10, 11 (ruling), 12; A1/LIFE-12 | `providers/__tests__/AppStorageContext.place.test.tsx`, `services/storage/__tests__/StorageManager.test.ts`, `hooks/__tests__/useRuntimeConfig.test.ts`, the provider save suite |
 | `07c7fa78` | E1/HIST-01 | `hooks/__tests__/useLayerActions.history.test.tsx` |
 | `5d6a969b` | E2/RED-03 (write site), RED-04, RED-05; E3/SCN-13; E4/CLIP-13 | `schemas/__tests__/modelIdentity.contract.test.ts` (the class gate) |
+| `cef61900` | A3/ZIP-01 | `services/project/__tests__/projectZip.test.ts` |
 
 Two things found while landing it, both recorded where they belong:
 
