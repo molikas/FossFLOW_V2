@@ -5945,10 +5945,11 @@ storage" — but only for failures before the wipe.
 
 **Workaround:** export a project ZIP before using "replace all".
 
-**Status:** Open. Fix direction: import first into a staging destination and
-delete the old content only once every create has succeeded; failing that, catch
-per item and report what was lost. Repro:
-[`zip-01-to-15.explore.test.ts`](packages/axoview-app/src/__explore__/A3/zip-01-to-15.explore.test.ts).
+**Status:** Fixed in e894a593 (2026-07-30) — the import snapshots the existing
+workspace, creates alongside it, and deletes the old content only once every
+create has succeeded. A failure mid-import now leaves the workspace as it was
+rather than destroying it and importing nothing. Promoted regression (including
+the positive control that replaceAll still replaces): [`projectZip.test.ts`](packages/axoview-app/src/services/project/__tests__/projectZip.test.ts).
 
 ## The import success message counts diagrams that were not imported
 
@@ -6102,9 +6103,12 @@ still has its empty default.
 
 **Workaround:** re-order folders by hand after importing.
 
-**Status:** Open. Fix direction: apply the tree manifest on import, remapping its
-folder ids through the importer's `idMap`, and filter it to the exported scope on
-the way out. Repro: [`zip-01-to-15.explore.test.ts`](packages/axoview-app/src/__explore__/A3/zip-01-to-15.explore.test.ts).
+**Status:** Fixed in e894a593 (2026-07-30) — the import applies the archive's
+tree manifest, remapping each folder id through the ids it just minted, and
+merges rather than replaces so an import into an existing workspace keeps the
+rows already there; the export scopes the manifest to the folders actually in the
+archive. Best-effort on both sides — ordering is cosmetic and must never fail an
+import. Promoted regression: [`projectZip.test.ts`](packages/axoview-app/src/services/project/__tests__/projectZip.test.ts).
 
 ## One unreadable diagram aborts the whole project export
 
