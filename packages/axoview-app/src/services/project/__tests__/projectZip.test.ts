@@ -330,6 +330,31 @@ describe('parseProject — errors', () => {
     });
   });
 
+  // A3/ZIP-08: a manifest with no version is corrupt, not from the future. It
+  // used to be told "exported by a newer Axoview (version undefined); please
+  // upgrade" — sending the user to look for an update that does not exist.
+  it('rejects a missing or non-string version with BAD_MANIFEST', async () => {
+    for (const version of [undefined, 42, null]) {
+      const zip = new JSZip();
+      zip.file(
+        'manifest.json',
+        JSON.stringify({
+          format: PROJECT_FORMAT,
+          version,
+          exportedAt: new Date().toISOString(),
+          exportedBy: 'test',
+          scope: 'project',
+          folders: [],
+          diagrams: []
+        })
+      );
+      const blob = await zip.generateAsync({ type: 'blob' });
+      await expect(parseProject(blob)).rejects.toMatchObject({
+        code: 'BAD_MANIFEST'
+      });
+    }
+  });
+
   it('rejects missing diagram file with MISSING_DIAGRAM', async () => {
     const zip = new JSZip();
     zip.file(

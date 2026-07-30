@@ -15,10 +15,65 @@ import { useTranslation } from 'react-i18next';
 interface ImportErrorDialogProps {
   open: boolean;
   onDismiss: () => void;
+  /**
+   * The failure that got us here. A3/ZIP-08: nine distinct `ProjectZipError`
+   * codes all reached the user as "This file isn't a valid Axoview diagram",
+   * which is actively wrong for four of them — a 200 MB archive, an archive
+   * missing a diagram file, and one from a newer Axoview are all valid Axoview
+   * files. Omitted → the generic copy, which is right for a plain parse
+   * failure.
+   */
+  error?: unknown;
 }
 
-export function ImportErrorDialog({ open, onDismiss }: ImportErrorDialogProps) {
+/**
+ * Distinct copy per failure class, keyed on `ProjectZipError.code`. Anything
+ * not listed falls through to the generic body (A3/ZIP-08).
+ */
+const BODY_BY_CODE: Record<string, { key: string; fallback: string }> = {
+  TOO_LARGE: {
+    key: 'dialog.importError.bodyTooLarge',
+    fallback:
+      'This archive is too large to import. Try exporting a single folder instead of the whole project.'
+  },
+  UNSUPPORTED_VERSION: {
+    key: 'dialog.importError.bodyNewerVersion',
+    fallback:
+      'This project was exported by a newer version of Axoview. Update Axoview and try again.'
+  },
+  MISSING_DIAGRAM: {
+    key: 'dialog.importError.bodyIncomplete',
+    fallback:
+      'This archive is incomplete — it lists diagrams whose files are missing. Try exporting it again.'
+  },
+  BAD_DIAGRAM: {
+    key: 'dialog.importError.bodyIncomplete',
+    fallback:
+      'This archive is incomplete — it lists diagrams whose files are missing. Try exporting it again.'
+  },
+  BAD_MANIFEST: {
+    key: 'dialog.importError.bodyCorrupt',
+    fallback:
+      "This archive is damaged — its manifest could not be read. Try exporting it again."
+  },
+  BAD_FOLDER_GRAPH: {
+    key: 'dialog.importError.bodyCorrupt',
+    fallback:
+      "This archive is damaged — its manifest could not be read. Try exporting it again."
+  }
+};
+
+export function ImportErrorDialog({
+  open,
+  onDismiss,
+  error
+}: ImportErrorDialogProps) {
   const { t } = useTranslation('app');
+  const code =
+    error && typeof error === 'object' && 'code' in error
+      ? String((error as { code: unknown }).code)
+      : undefined;
+  const body = code ? BODY_BY_CODE[code] : undefined;
 
   return (
     <Dialog
@@ -40,10 +95,12 @@ export function ImportErrorDialog({ open, onDismiss }: ImportErrorDialogProps) {
       </DialogTitle>
       <DialogContent sx={{ pt: 0 }}>
         <Typography variant="body2" color="text.secondary">
-          {t(
-            'dialog.importError.body',
-            "This file isn't a valid Axoview diagram. Make sure it's a .json or .zip exported from Axoview."
-          )}
+          {body
+            ? t(body.key, body.fallback)
+            : t(
+                'dialog.importError.body',
+                "This file isn't a valid Axoview diagram. Make sure it's a .json or .zip exported from Axoview."
+              )}
         </Typography>
       </DialogContent>
       <DialogActions sx={{ px: 2.5, pb: 2.5, pt: 1 }}>

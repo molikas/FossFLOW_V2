@@ -283,75 +283,13 @@ describe('ZIP-04 — the per-entry zip-bomb cap reads a private JSZip field', ()
 
 // ---------------------------------------------------------------------------
 // ZIP-08 — every import failure renders the same sentence.
-// ---------------------------------------------------------------------------
-describe('ZIP-08 — the nine import failure codes all reach the user as one message', () => {
-  /**
-   * NOTE (rig trap): `expect(err).toBeInstanceOf(ProjectZipError)` FAILS here
-   * even for a genuine ProjectZipError — the app's tsconfig targets es5, so
-   * ts-jest downlevels `class extends Error` and the subclass prototype is
-   * lost. `.name` and `.code` survive, so assert on those. rsbuild configures
-   * no target/browserslist, so the shipped bundle does not downlevel this way;
-   * it is a probe artifact, not a product defect. (Same family as the S1 trap
-   * where a jest.mock dropped a class an `instanceof` depended on.)
-   */
-  const codeOf = async (blob: Blob) => {
-    const err = (await parseProject(blob).catch((e) => e)) as ProjectZipError;
-    expect(err.name).toBe('ProjectZipError');
-    return { code: err.code, message: err.message };
-  };
-
-  it('characterization: distinct causes get distinct codes and bespoke messages', async () => {
-    // A manifest with no version at all is classified as "too new".
-    const noVersion = await codeOf(
-      await zipOf({ format: PROJECT_FORMAT, folders: [], diagrams: [] }, {})
-    );
-    expect(noVersion.code).toBe('UNSUPPORTED_VERSION');
-    expect(noVersion.message).toMatch(/newer Axoview \(version undefined\)/);
-    expect(noVersion.message).toMatch(/please upgrade/);
-
-    // A valid-but-incomplete archive gets its own code and message…
-    const missing = await codeOf(
-      await zipOf(
-        { format: PROJECT_FORMAT, version: PROJECT_FORMAT_VERSION, folders: [], diagrams: [{ id: 'a', name: 'A', file: 'diagrams/a.json' }] },
-        {}
-      )
-    );
-    expect(missing.code).toBe('MISSING_DIAGRAM');
-
-    // …and so does a non-Axoview zip.
-    const wrongFormat = await codeOf(
-      await zipOf({ format: 'something-else', version: '1', folders: [], diagrams: [] }, {})
-    );
-    expect(wrongFormat.code).toBe('BAD_FORMAT');
-  });
-
-  it('characterization: the dialog the user sees takes no error and says one thing', () => {
-    // `App.tsx`'s catch is `console.error(...); setImportError(true)` — the error
-    // object is dropped on the floor — and `ImportErrorDialog`'s props are
-    // `{ open, onDismiss }`, with the body a constant.
-    const dialogSource = require('fs').readFileSync(
-      'packages/axoview-app/src/components/ImportErrorDialog.tsx',
-      'utf8'
-    ) as string;
-    // PRECONDITION: we are reading the right file.
-    expect(dialogSource).toContain('dialog-import-error');
-    // No error/code/message is threaded in…
-    expect(dialogSource).not.toMatch(/ProjectZipError|error|code/);
-    // …and the single body line claims the file is not a valid Axoview diagram,
-    // which is wrong for UNSUPPORTED_VERSION, MISSING_DIAGRAM and TOO_LARGE.
-    expect(dialogSource).toContain("isn't a valid Axoview diagram");
-  });
-
-  it.failing('ZIP-08: a manifest missing its version reads as corrupt, not as too new', async () => {
-    const noVersion = await codeOf(
-      await zipOf({ format: PROJECT_FORMAT, folders: [], diagrams: [] }, {})
-    );
-    // Expected: BAD_MANIFEST — the file is broken, and telling the user to
-    // upgrade an already-current app sends them nowhere. Actual: any version
-    // that is not exactly '1', including absent, is "newer".
-    expect(noVersion.code).toBe('BAD_MANIFEST');
-  });
-});
+// ZIP-08 (nine distinct failure codes reached the user as one message, and the
+// one it showed was wrong for four of them) was fixed — the error reaches
+// `ImportErrorDialog`, which maps the code to copy that is true for THAT
+// failure, and a versionless manifest is BAD_MANIFEST rather than
+// UNSUPPORTED_VERSION. Probes promoted to
+// `src/components/__tests__/ImportErrorDialog.test.tsx` and
+// `src/services/project/__tests__/projectZip.test.ts`.
 
 // ---------------------------------------------------------------------------
 // ZIP-10 — the tree manifest is exported, parsed, and then dropped.

@@ -189,7 +189,9 @@ function EditorShell() {
   const [linkedDiagrams, setLinkedDiagrams] = useState<Array<{ id: string; name: string }>>([]);
   const [treeIsEmpty, setTreeIsEmpty] = useState(true);
   const [showImportDialog, setShowImportDialog] = useState(false);
-  const [importError, setImportError] = useState(false);
+  // A3/ZIP-08: hold the error itself, not just a boolean — the dialog maps its
+  // `code` to copy that is true for THAT failure.
+  const [importError, setImportError] = useState<unknown>(null);
   const importFileInputRef = useRef<HTMLInputElement>(null);
 
   // Lib dispatches two custom events for diagram-link affordances:
@@ -289,7 +291,7 @@ function EditorShell() {
       // ADR 0011 — failure-of-intent: the user picked a file to import and it
       // could not be parsed. Surface the explicit dialog instead of a toast.
       console.error('handleDirectImportFile failed:', err);
-      setImportError(true);
+      setImportError(err ?? new Error('Import failed'));
     }
   }, [storage, refreshFileTree, openDiagramById, setFileExplorerOpen]);
 
@@ -553,8 +555,9 @@ function EditorShell() {
       {/* ADR 0011 — direct (empty-tree) file import parse failure. No retry;
           re-picking a file is the recovery affordance. */}
       <ImportErrorDialog
-        open={importError}
-        onDismiss={() => setImportError(false)}
+        open={importError !== null}
+        error={importError}
+        onDismiss={() => setImportError(null)}
       />
 
       {/* First-connect Google Drive root-folder chooser (default vs custom). */}

@@ -273,6 +273,16 @@ const readManifest = async (zip: JSZip): Promise<ProjectManifest> => {
       'BAD_FORMAT'
     );
   }
+  // A3/ZIP-08: a manifest with no `version` (or a non-string one) is corrupt,
+  // not from the future — it used to be told "exported by a newer Axoview
+  // (version undefined); please upgrade", which sends the user to look for an
+  // update that does not exist.
+  if (typeof manifest.version !== 'string' || manifest.version === '') {
+    throw new ProjectZipError(
+      'manifest.json has no version — the archive is incomplete or corrupt',
+      'BAD_MANIFEST'
+    );
+  }
   if (!SUPPORTED_VERSIONS.has(manifest.version)) {
     throw new ProjectZipError(
       `This project was exported by a newer Axoview (version ${manifest.version}); please upgrade.`,
