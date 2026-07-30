@@ -2597,6 +2597,27 @@ reclaimed, and it is armed only by `atlasFull` and consumed only by the next
 six version bumps of ONE logical chip occupy six distinct slots, and a single
 chip restyled repeatedly fills a 256 atlas by itself.
 
+**Measured in the browser, from ordinary product state (GPU-14).** The overflow
+needs neither a rename-churned session nor a small-cap device — plain floating
+Labels reach it. `LabelsCanvas` asks `createSpriteBatch(canvas)` for the
+**default 4096** atlas where `NodesCanvas` asks for 8192 (4096 at
+`devicePixelRatio >= 2`), so the floating-Label layer overflows roughly four
+times sooner than the node layer. With 120 simultaneously visible Labels the
+layer drew 120/120 chips; at **300** it drew **276** — 24 chips silently absent
+from the frame — while `data-build-count` advanced exactly as it does for a
+complete build, and no further rebuild came to trigger the compaction. Injecting
+the 300 in ONE step on a fresh page (so no earlier generation had leaked into the
+atlas) gives the same 276: the threshold is the chips themselves, not
+fragmentation. Any view holding a few hundred visible Label chips — a zoomed-out
+diagram, a fit-to-view — is in that band.
+
+**The export readiness gate cannot see it either (GPU-14).** With 276 of 300 chips
+drawn, the node layer still published `data-all-icons-drawn="true"` — that flag
+tracks icon *bitmap* availability only, and there is no equivalent signal for a
+chip that failed to pack. So `waitForIconsDrawn` reports "ready" and the image
+export captures the incomplete frame. The only trace anywhere is that
+`data-draw-count` is lower than the entity count, which no consumer compares.
+
 **Aggravating factor — `MAX_TEXTURE_SIZE`.** The atlas is
 `Math.min(atlasSize, MAX_TEXTURE_SIZE)`. `NodesCanvas` asks for 8192 (4096 when
 `devicePixelRatio >= 2`), but a device that caps textures at 2048 silently gets
@@ -2679,6 +2700,14 @@ thresholds (none / 0.25 / 0.4) do not line up anywhere, and the `readableLabels`
 accessibility setting widens the gap rather than closing it: it forces chips to
 draw further out while the hit layer stays absent below 0.4.
 
+Measured for node names too (GPU-05): at `zoom = 0.15` with `readableLabels`
+**off**, `NodesCanvas` reports `data-labels-drawn = 0` and there are no
+`[data-axoview-id="canvas-label-hit"]` proxies — nothing visible, nothing to
+grab, consistent. Turning the accessibility setting **on** at the same zoom
+brings the chip back (`data-labels-drawn = 1`) while the proxy count stays at
+**0**. So the setting whose purpose is to keep labels readable when zoomed out
+is precisely the setting that manufactures inert ones.
+
 **Workaround:** zoom to 40% or more before interacting with a Label.
 
 **Status:** Open. Fix direction: make the hit layer's threshold follow the draw
@@ -2688,3 +2717,139 @@ an inert Label is at least not drawn. The underlying rule is worth stating once
 in the rendering guidelines: nothing may be painted at a zoom where it cannot be
 hit. Repro:
 [`gpu-04-06-07-08-13.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R3-gpu-layers/gpu-04-06-07-08-13.explore.spec.ts).
+
+## One unreachable icon url disables the icon layer's readiness flag for the session
+
+**Found by:** exploratory campaign GPU-01 / GPU-03
+
+**Symptom:** Point one node's icon at a url that fails to load (a 404, a dead
+CDN, an offline moment) and two things follow for the rest of the session:
+
+1. That icon never draws — expected — but `NodesCanvas` also never republishes
+   `data-all-icons-drawn="true"`. That attribute is the image-export readiness
+   gate, so every image export from then on waits out its full icon budget
+   (400 ms before the first capture, then a further 2 000 ms of polling that
+   ends in giving up) instead of capturing as soon as the layer is ready.
+2. The failure is permanent even after the server recovers. The url is never
+   requested a second time, so the icon cannot come back without a full
+   remount of the canvas — reopening the diagram, or reloading the page.
+
+Measured on a blank diagram with one node: with a healthy icon the layer reaches
+`data-all-icons-drawn="true"` in well under a second. Repointing the same icon at
+a 404 url leaves the flag at `"false"` 8 s later (20× the export dialog's initial
+budget) with the layer rebuilding normally. In the recovery probe the icon url
+was requested exactly **once**; after the route started serving a valid PNG and
+the layer was forced through three further geometry rebuilds (a projection switch
+plus two `readableLabels` toggles), the request count stayed at 1 and the flag
+stayed `"false"`.
+
+**Root cause:**
+[`NodesCanvas.getImage`](packages/axoview-lib/src/components/SceneLayers/Nodes/NodesCanvas.tsx)
+has no `onerror` path at all. It gates an icon on `img.decode()` (correctly — the
+black-atlas-tile fix above), and the rejection path reads:
+
+```ts
+img.decode().then(markReady).catch(() => {
+  if (img.complete && img.naturalWidth > 0) markReady();
+  else img.onload = markReady;            // <- a load that already FAILED
+});
+```
+
+For a failed load `complete` is `true` and `naturalWidth` is `0`, so the `else`
+branch runs and installs an `onload` handler on an image that will never load
+again: nothing can ever add the url to `decodedRef`, and `buildInstances` sets
+`allIconsDrawn = false` on every subsequent build. Separately, the `Image` is
+inserted into `iconCacheRef` *before* the decode resolves and is never removed on
+failure, so every later build takes the `existing` branch and returns `null`
+without re-requesting — a transient failure is cached as a permanent one.
+
+**Workaround:** reload the diagram once the icon url is reachable again. Exports
+still succeed (the gate is bounded, not a hang); they are just slower and omit
+the icon.
+
+**Status:** Open. Fix direction: give the decode fallback a real failure branch —
+`img.onerror` (and the already-failed case `complete && naturalWidth === 0`)
+should drop the url from `iconCacheRef` so the next build retries, and mark the
+icon *resolved-as-unavailable* so the readiness flag can still flip (draw the
+tombstone icon rather than nothing, which is what an unknown icon *ref* already
+does). Both halves are ~10 lines inside `getImage`. Repro:
+[`gpu-01-03-icons.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R3-gpu-layers/gpu-01-03-icons.explore.spec.ts).
+
+## A long node name is cut mid-glyph on the canvas and wrapped in the DOM
+
+**Found by:** exploratory campaign GPU-09
+
+**Symptom:** A node whose name is too long for the 250 px label chip renders two
+different ways depending on whether it is selected. Unselected (the WebGL bulk
+path) the name is drawn as ONE line that runs off the edge of its chip texture and
+is cut mid-glyph — no ellipsis, no fade, no cue that anything is missing. Select
+the node and the DOM label takes over: the same name wraps over several lines
+inside the chip, clipped at a line boundary with the expand affordance available.
+Clicking a node therefore changes both the shape of its label and how much of the
+name you can read.
+
+Measured with a 68-character name at zoom 0.65: the full name needs 612 px on one
+line against a 226 px chip interior, so roughly a third of it fits. On the bulk
+canvas the chip is clamped to 250 scene px and text pixels reach right into the
+last columns before the border (a control chip with a short name leaves that band
+blank). The DOM label for the same node holds all 68 characters, lays them out
+over 3 lines and shows 2 of them.
+
+**Root cause:**
+[`rasterizeNodeChip`](packages/axoview-lib/src/webgl/itemRaster.ts) calls
+`ctx.fillText(name, textX, …)` with **no `maxWidth` argument and no clip path**,
+onto a scratch canvas sized from the already-clamped `chipW`
+(`measureNodeLabel` caps the chip at `LABEL_CHIP_MAX_W` = 250). Anything past the
+edge is discarded by the canvas bounds. The DOM path
+([`Node.tsx`](packages/axoview-lib/src/components/SceneLayers/Nodes/Node/Node.tsx)'s
+`LabelTitle`) instead sets `wordBreak: 'break-word'` / `overflowWrap: 'anywhere'`
+inside the same `maxWidth`, so it wraps. Two renderers, one entity, two
+truncation rules — the R-a "one geometry, two derivations" thread again, this time
+for text layout.
+
+**Workaround:** keep node names short, or select the node to read the rest.
+
+**Status:** Open. Fix direction: make the bulk chip agree with the DOM on *one*
+rule. Cheapest is `fillText(name, x, y, innerW)` (squeezes to fit — ugly) or a
+measured ellipsis (`…`) in `rasterizeNodeChip`; the faithful option is to wrap the
+bulk chip the way the DOM does, which means `measureNodeLabel` returning a line
+list and `chipH` growing per line. Either way the two paths should share the
+line-breaking decision rather than each inventing one. Repro:
+[`gpu-05-09-12.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R3-gpu-layers/gpu-05-09-12.explore.spec.ts).
+
+## A grouping rectangle changes shape from rounded to square when you grab it
+
+**Found by:** exploratory campaign GPU-15
+
+**Symptom:** Grouping rectangles are drawn with rounded corners while idle and
+with **square** corners for the duration of a drag, snapping back on release. The
+rectangle visibly changes shape at the moment it is grabbed and again when it is
+dropped.
+
+Measured in 2D mode on a 4×4-tile rectangle: mid-drag the DOM rect publishes
+`rx="21.5"` (the `cornerRadius` 22 less half the stroke), while the bulk WebGL
+layer paints all four corners of the rectangle's bounding box — a square
+footprint.
+
+**Root cause:** the two rectangle renderers disagree, and the bulk one says so in
+its own header:
+[`RectanglesCanvas`](packages/axoview-lib/src/components/SceneLayers/Rectangles/RectanglesCanvas.tsx)
+— "Only corner radius (rounded rects) is still approximated (sharp corners) on
+the bulk". It emits four analytic-AA edge quads plus a round *join* disc per
+corner, which rounds the stroke join at a radius of `strokeW/2`, not the
+rectangle's 22 px corner radius. The DOM
+[`Rectangle`](packages/axoview-lib/src/components/SceneLayers/Rectangles/Rectangle.tsx)
+passes `cornerRadius={22}` to `IsoTileArea`, which puts it on the SVG `rect`'s
+`rx`. Because the Renderer keeps only the *dragged* rectangle in the DOM, the two
+shapes are never on screen at the same time — which is exactly why the mismatch
+survived: nothing compares them.
+
+**Workaround:** none needed; cosmetic.
+
+**Status:** Open, cosmetic. Known and deliberate as an approximation, but the
+user-visible consequence (a shape change on grab) was never recorded. Fix
+direction: either round the bulk corners for real (an analytic rounded-rect
+`shapeMode` in the sprite shader — the SDF is cheap and the layer already has
+analytic line and disc modes), or drop the DOM rect's `cornerRadius` to 0 so both
+paths draw the square the bulk already draws. Repro:
+[`gpu-14-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R3-gpu-layers/gpu-14-15.explore.spec.ts).

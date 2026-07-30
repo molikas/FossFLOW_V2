@@ -195,6 +195,11 @@ test.describe('GPU-06 — projection switch invalidation across the four layers'
 
 // ---------------------------------------------------------------------------
 // GPU-08 — layer-visibility toggle invalidation
+//
+// SUPERSEDED: this stub skips because a blank-diagram boot configures no layers.
+// `gpu-08-layer-visibility.explore.spec.ts` seeds the layer set through
+// `model.actions.set({ views })` and carries the real verdict (FALSIFIED). Kept
+// as the record of why the first attempt could not answer the question.
 // ---------------------------------------------------------------------------
 
 test.describe('GPU-08 — hiding a layer must repaint every bulk canvas that shows it', () => {
