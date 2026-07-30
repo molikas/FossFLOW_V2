@@ -3393,3 +3393,362 @@ rather than a committed entity.
 have the modes publish the resolved placement to uiState so the ghost renders
 exactly what will be committed rather than recomputing it). Repro:
 [`ovl-07-10-11-gestures.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R5-overlays/ovl-07-10-11-gestures.explore.spec.ts).
+
+## A Drive scope-403 during a token refresh hangs the awaiting write forever
+
+**Found by:** exploratory campaign AUTH-01
+
+**Symptom:** A Drive request that 403s for insufficient scopes while a token
+refresh is in flight leaves every other Drive operation that was waiting on that
+refresh permanently pending. There is no error, no toast, no failure dialog and no
+timeout — the save simply never completes. The blocking "Google Drive access is
+required" dialog appears, but the autosave behind it is stuck rather than failed,
+so its ADR 0011 error surface never runs and the save-status indicator never
+leaves its in-progress state.
+
+**Root cause:** `markDriveScopeMissing()` in
+[`authStore.ts`](packages/axoview-app/src/stores/authStore.ts) sets
+`DRIVE_ACCESS_REQUIRED` and nulls the token but — unlike its sibling
+`markExpired()`, which does both — it neither drains `_waiters` nor calls
+`clearAuthTimeout()`. Every `getValidToken()` caller that piggybacked on the
+in-flight `REFRESHING` request is parked on a waiter that nothing will ever
+settle: a late `_onToken` and a late `_onError` both bail on the
+`AUTHENTICATING/RECONNECTING/REFRESHING` status guard, and the armed 25 s
+silent-request timeout consults the same guard. Measured: after
+`markDriveScopeMissing()` the waiter list still holds the entry (1, not 0) and the
+promise is unsettled after a simulated hour; `markExpired()` on the identical
+setup resolves it to `null`.
+
+**Workaround:** Reload the page. The token is in-memory only, so nothing is lost
+beyond the unsaved edits the hung write was carrying.
+
+**Status:** Open. Fix direction: give `markDriveScopeMissing()` the same
+`clearAuthTimeout()` + `_waiters` drain + `_absorbStaleError: false` reset
+`markExpired()` already performs — the two functions are the same shape and should
+share it. Repro:
+[`auth-01-02-04.explore.test.ts`](packages/axoview-app/src/__explore__/S1/auth-01-02-04.explore.test.ts).
+
+## "Grant Drive access" can end in a signed-out session with a "Sign-in cancelled" toast
+
+**Found by:** exploratory campaign AUTH-02
+
+**Symptom:** From the blocking Drive-access dialog, clicking "Grant Drive access"
+and completing Google's consent screen can leave the user signed out, with an
+info toast claiming "Sign-in cancelled" — even though they cancelled nothing and
+granted everything asked for. Clicking Grant again works, so the failure looks
+random.
+
+**Root cause:** `signIn()` sets `_absorbStaleError` from the status it supersedes
+(`RECONNECTING`/`REFRESHING`), which is the PR-59 guard that stops a superseded
+silent request's late error from being mistaken for the popup's own cancellation.
+`grantDriveAccess()` opens an identical interactive request but pins
+`_absorbStaleError: false` unconditionally — and it is reachable with a silent
+request still in flight, because `markDriveScopeMissing()` can park the session in
+`DRIVE_ACCESS_REQUIRED` mid-refresh without cancelling anything (see AUTH-01).
+The superseded refresh's late error then takes `_onError`'s final branch:
+`UNAUTHENTICATED` + "Sign-in cancelled", after which the consent grant the user
+actually completed is discarded on `_onToken`'s status guard. Measured end state:
+`status: 'UNAUTHENTICATED'`, `accessToken: null`, info toast queued. The same
+chain driven through `signIn()` absorbs the stale error and reaches
+`AUTHENTICATED`.
+
+**Workaround:** Click "Grant Drive access" again (or sign in from the avatar
+menu) — the second attempt has no superseded request behind it.
+
+**Status:** Open. Fix direction: derive `_absorbStaleError` in
+`grantDriveAccess()` the same way `signIn()` does, or better, factor the
+"interactive request supersedes whatever was in flight" preamble into one helper
+both call. Fixing AUTH-01 also removes the main route into this state. Repro:
+[`auth-01-02-04.explore.test.ts`](packages/axoview-app/src/__explore__/S1/auth-01-02-04.explore.test.ts).
+
+## A stale Drive 401 during sign-in discards the sign-in the user just completed
+
+**Found by:** exploratory campaign AUTH-04
+
+**Symptom:** A user whose session is expiring clicks "Sign in again", completes
+the Google popup — and lands back on the expired-session state, with a second
+"Your Google session expired" warning toast that appeared while the popup was
+still open. The grant is silently thrown away.
+
+**Root cause:** `markExpired()` guards only against re-entry
+(`status === 'SESSION_EXPIRED'`), not against landing on top of a live request. A
+Drive request issued before the click comes back 401 (expected — that is what
+prompted the sign-in), `GoogleDriveProvider.request()` calls
+`authStore.markExpired()`, and the store flips to `SESSION_EXPIRED`, empties
+`_waiters` and pushes another persistent notice while the interactive request is
+still in flight. `signIn()`'s waiter resolves on both outcomes, so the caller sees
+a "completed" sign-in; moments later the real grant arrives and `_onToken` drops
+it because the status is no longer one of the three in-flight states. Measured:
+`status: 'SESSION_EXPIRED'` and `accessToken: null` after a full-scope grant.
+
+**Workaround:** Sign in a second time — by then no stale request remains.
+
+**Status:** Open. Fix direction: `markExpired()` should not clobber
+`AUTHENTICATING` (the user is actively re-authenticating and a 401 about the OLD
+token tells us nothing about the new one) — either skip the transition entirely or
+record it as pending and apply it only if the request fails. Repro:
+[`auth-01-02-04.explore.test.ts`](packages/axoview-app/src/__explore__/S1/auth-01-02-04.explore.test.ts).
+
+## The stuck-popup auth timeout is swallowed by the stale-error absorber
+
+**Found by:** exploratory campaign AUTH-03
+
+**Symptom:** For a remembered user whose boot reconnect is still in flight, a
+sign-in whose popup never calls back (COOP-blocked `window.closed` polling — the
+exact scenario the timeout exists for) leaves the toolbar showing a bare spinner
+forever. Nothing recovers it: no toast, no error, no return to the avatar. Only a
+page reload clears it.
+
+**Root cause:** `armAuthTimeout()` in
+[`authStore.ts`](packages/axoview-app/src/stores/authStore.ts) recovers a stuck
+handshake by synthesising a failure through `_onError({ type: 'timeout' })` — and
+`_onError` is the one function that may decide to *absorb* an error. When an
+interactive `signIn()` superseded a silent request, `_absorbStaleError` is set, so
+the synthetic timeout is treated as the superseded request's late error: absorbed,
+with an early `return` that never reaches `clearAuthTimeout()`. The timer callback
+has already nulled `pendingAuthTimeout` and nothing re-arms it, so the safety net
+fires exactly once and is consumed by the guard. Measured: `AUTHENTICATING` still
+set after a further simulated hour, both waiters unsettled. The same timeout on a
+plain `signIn()` recovers to `UNAUTHENTICATED`.
+
+**Workaround:** Reload the page.
+
+**Status:** Open. Fix direction: the timeout is not a GIS callback and should not
+be routed through the absorber — give it its own recovery path (or tag the
+synthetic error so `_onError` never absorbs it), and re-arm the timer when an
+error IS absorbed so the request still has a deadline. Repro:
+[`auth-03-07.explore.test.ts`](packages/axoview-app/src/__explore__/S1/auth-03-07.explore.test.ts).
+
+## A second sign-in click opens a second Google popup, and closing the first cancels it
+
+**Found by:** exploratory campaign AUTH-07
+
+**Symptom:** Two Google sign-in popups can be open at once. Dismissing the first
+(now redundant) one drops the app to signed-out with a "Sign-in cancelled" toast,
+and the grant completed in the second popup is then ignored — so the user
+consented and is still signed out.
+
+**Root cause:** `signIn()` has no in-flight guard: called while already
+`AUTHENTICATING` it appends a second waiter, re-arms the timeout and fires a
+second `requestToken()`. Because the prior status was `AUTHENTICATING` rather than
+`RECONNECTING`/`REFRESHING`, `_absorbStaleError` stays false, so the first
+popup's `popup_closed` error takes `_onError`'s cancel branch and settles both
+waiters. `AuthControl` collapses to a spinner during `AUTHENTICATING` and
+`DriveDisplayGate`'s button is `disabled`, but
+[`LocalModeBanner`](packages/axoview-app/src/components/LocalModeBanner.tsx)'s
+"Sign in to save to Google Drive" button and the persistent expired notice's
+"Sign in again" action are both live throughout. Measured: 2 `requestToken` calls,
+2 waiters, then `UNAUTHENTICATED` with `accessToken: null` after the second
+popup's full-scope grant.
+
+**Workaround:** Click sign-in once and wait for the popup to settle.
+
+**Status:** Open. Fix direction: make `signIn()` idempotent — when a request is
+already in flight, attach a waiter and return instead of issuing a second GIS
+request (the same piggyback `getValidToken()` already does). Repro:
+[`auth-03-07.explore.test.ts`](packages/axoview-app/src/__explore__/S1/auth-03-07.explore.test.ts).
+
+## A scope-less grant fails in-flight Drive writes as "Not signed in" behind the re-consent dialog
+
+**Found by:** exploratory campaign AUTH-06
+
+**Symptom:** When a token refresh comes back without the `drive.file` scope, the
+blocking "Google Drive access is required" dialog opens — and at the same instant
+every Drive operation that was waiting on that refresh fails with "Not signed in
+to Google". The user sees a save failure that contradicts the dialog they are
+being asked to act on, and the caller cannot tell "re-consent needed" from
+"signed out".
+
+**Root cause:** `_onToken`'s scope-less hard stop nulls `accessToken` and then
+settles the waiter list with `w.resolve()` (not `reject`). A `getValidToken()`
+piggybacker's resolve callback reads `get().accessToken ?? null`, so it returns
+`null` — and `GoogleDriveProvider.request()` maps a null token to
+`DriveError('Not signed in to Google', 401)`. Measured: a `saveDiagram` parked on
+the refresh waiter rejects with exactly that error and status 401, with zero Drive
+fetches attempted (the token itself is correctly withheld).
+
+**Workaround:** Grant Drive access in the dialog and retry the save.
+
+**Status:** Open. Fix direction: reject scope-less-grant waiters with a
+distinguishable reason (or resolve them with a typed
+`DRIVE_ACCESS_REQUIRED` outcome) so callers can suppress their own error surface
+while the blocking dialog owns the recovery — the single-slot notification
+contract (ADR 0011) makes two competing surfaces especially costly. Repro:
+[`auth-06-08-09-14.explore.test.ts`](packages/axoview-app/src/__explore__/S1/auth-06-08-09-14.explore.test.ts).
+
+## An exhausted Drive rate limit is mistaken for a missing scope and parks the session
+
+**Found by:** exploratory campaign AUTH-08
+
+**Symptom:** Creating a diagram while Google Drive is rate-limiting the app ends
+with the blocking "Google Drive access is required" dialog and a discarded access
+token, instead of a retriable "Drive is busy" failure. The user is asked to
+re-consent to a permission they never lost.
+
+**Root cause:** `GoogleDriveProvider.request()` carefully classifies a 403 as
+rate-limit (retriable) versus permanent — and then throws
+`DriveError(message, 403)` for both, discarding the classification. The only
+production consumer that acts on a 403,
+`handleCreateBlankDiagram` in
+[`DiagramLifecycleProvider.tsx`](packages/axoview-app/src/providers/DiagramLifecycleProvider.tsx),
+tests just `name === 'DriveError' && err.status === 403` and calls
+`markDriveScopeMissing()`, which nulls a perfectly valid token and sets
+`driveScopeGranted: false`. Measured: a `rateLimitExceeded` 403 retries the full
+backoff run (4 fetches) and then throws with the same name and status as an
+`insufficientPermissions` 403 that fails fast (1 fetch).
+
+**Workaround:** "Continue without Drive", then sign in again once the rate limit
+clears.
+
+**Status:** Open. Fix direction: carry the classification on the thrown error
+(e.g. a `reason` field, or distinct statuses for retriable-403 vs
+scope-403) and narrow the consumer's predicate to the scope case. Pairs with the
+AUTH-09 entry below — the same missing distinction, in the other direction. Repro:
+[`auth-06-08-09-14.explore.test.ts`](packages/axoview-app/src/__explore__/S1/auth-06-08-09-14.explore.test.ts).
+
+## A revoked Drive scope only reaches the re-consent dialog from "new diagram"
+
+**Found by:** exploratory campaign AUTH-09
+
+**Symptom:** If the `drive.file` grant is revoked out-of-band (Google account
+permissions page, admin policy), every Drive operation fails with a generic error
+— "Request had insufficient authentication scopes." in a toast or the save-failure
+dialog — and the session keeps reporting itself as signed in. The blocking
+re-consent dialog that exists for exactly this condition never appears. Only
+"New diagram" routes there.
+
+**Root cause:** `GoogleDriveProvider.request()` wires the 401 twin
+(`authStore.markExpired()`) but has no 403 counterpart:
+`markDriveScopeMissing()` is called from exactly one place in the codebase,
+`handleCreateBlankDiagram`'s catch. So save, load, list, rename, move, folder
+operations and the tree manifest all dead-end. Measured: after an
+`insufficientPermissions` 403 on `saveDiagram`, `status` is still
+`'AUTHENTICATED'` and `driveScopeGranted` is still `true`.
+
+**Workaround:** Create a new blank diagram — its catch routes to the dialog — or
+sign out and sign back in with the Drive checkbox ticked.
+
+**Status:** Open. Fix direction: classify the scope 403 in
+`request()` (see AUTH-08) and call `markDriveScopeMissing()` there, so every Drive
+path inherits the recovery ladder instead of one call site re-implementing it.
+Repro:
+[`auth-06-08-09-14.explore.test.ts`](packages/axoview-app/src/__explore__/S1/auth-06-08-09-14.explore.test.ts).
+
+## A userinfo failure makes a working Google session render as signed out, with no way to sign out
+
+**Found by:** exploratory campaign AUTH-05
+
+**Symptom:** If the one `oauth2/v3/userinfo` call that follows a grant fails
+(offline blip, CSP, a 403 from Google), the sign-in appears not to have happened:
+the toolbar shows the grey "signed out" person icon whose menu offers "Sign in
+with Google", with no name, no avatar and **no Sign out item** — while Drive saves
+and opens work normally against the live token. The account is also not
+remembered, so the next reload does not attempt the silent reconnect.
+
+**Root cause:** `fetchUserInfo()` treats its own failure as cosmetic ("the token
+is still valid") and returns without setting `user` or writing the profile hint.
+But [`AuthControl`](packages/axoview-app/src/components/AuthControl.tsx) gates the
+whole signed-in branch on `!!user` — `signedIn = (status === 'AUTHENTICATED' ||
+status === 'REFRESHING') && !!user` — so an authenticated, token-holding session
+with no profile falls through to the "UNAUTHENTICATED, never signed in here"
+branch. Measured with `fetch` rejecting: `status: 'AUTHENTICATED'`,
+`getValidToken()` returns the token, `user: null`, no `auth-avatar` and no
+`auth-signout` in the DOM; the same grant with userinfo succeeding renders both.
+
+**Workaround:** Reload the page (the token does not survive, so this signs you
+out) — or ignore it, since Drive still works.
+
+**Status:** Open. Fix direction: either render the signed-in control from
+`status` alone with a placeholder identity (the avatar already falls back to `?`),
+or retry / synthesise a minimal `user` on userinfo failure. The sign-out
+affordance in particular must not depend on a cosmetic fetch. Repro:
+[`auth-05-10-11.explore.test.tsx`](packages/axoview-app/src/__explore__/S1/auth-05-10-11.explore.test.tsx).
+
+## Cancelling "Use a different Google account" signs the viewer out of the account that was working
+
+**Found by:** exploratory campaign AUTH-11
+
+**Symptom:** On a `/display/drive/:fileId` link that the signed-in account cannot
+open, the gate offers "Use a different Google account". Clicking it and then
+closing Google's chooser without picking leaves the viewer strictly worse off than
+before: the gate's explanation no longer names which account it tried ("You're
+signed in as …" degrades to the generic copy), the avatar's amber-dot reconnect
+affordance is gone, and no re-read is attempted.
+
+**Root cause:**
+[`DriveDisplayGate.handleSwitchAccount()`](packages/axoview-app/src/components/DriveDisplayGate.tsx)
+calls `signOut()` before `signIn()` — deliberately, so the cleared profile hint
+makes Google show the account chooser instead of silently re-picking the same
+account. But `signOut()` also nulls `user` and clears the hint *irreversibly*, and
+nothing restores them when the sign-in that follows is cancelled. The recovery
+affordance for a cancelled sign-in (`needsReconnect = !!user && (SESSION_EXPIRED ||
+UNAUTHENTICATED)`) is precisely the thing `signOut()` just destroyed. Measured:
+after `_onError('popup_closed')` the email is absent from the DOM, `user` is null,
+`needsReconnect` is false and `retryDriveDisplayRead` was never called.
+
+**Workaround:** Reload the page and sign in again.
+
+**Status:** Open. Fix direction: get the chooser without discarding the session —
+pass `prompt: 'select_account'` through the bridge (GIS supports it and
+`AuthProvider` already narrows to it) and only sign out once a different account
+has actually been granted; or snapshot the identity and restore it if the
+interactive attempt does not succeed. Repro:
+[`auth-05-10-11.explore.test.tsx`](packages/axoview-app/src/__explore__/S1/auth-05-10-11.explore.test.tsx).
+
+## A mid-session Drive scope loss keeps the account remembered, so a reload walks back into the blocking dialog
+
+**Found by:** exploratory campaign AUTH-12
+
+**Symptom:** When the Drive permission is lost mid-session and the blocking
+"Google Drive access is required" dialog appears, reloading the page — the
+instinctive way out of a modal with no Escape — lands straight back in the same
+dialog, because the boot reconnect silently re-acquires the same scope-less token.
+
+**Root cause:** `_onToken`'s scope-less hard stop calls `clearProfileHint()` with
+an explicit rationale: an identity-only grant "isn't worth a boot reconnect, so a
+reload lands on a clean signed-out state instead of looping back into this
+prompt". Its sibling `markDriveScopeMissing()`, which parks the session in the
+identical state from a Drive 403, does not. The hint survives, so the fresh page
+load is "remembered" and `UNAUTHENTICATED` — exactly the condition
+`AuthBridge` re-arms `attemptSilentReconnect()` from. Measured across a simulated
+reload (fresh store module): hint intact, `requestToken({ prompt: '', hint })`
+fired, and the still-scope-less grant lands back in `DRIVE_ACCESS_REQUIRED`; the
+`_onToken` twin on the same condition clears the hint.
+
+**Workaround:** Click "Continue without Drive" in the dialog (that calls
+`signOut()`, which does clear the hint) before reloading.
+
+**Status:** Open. Fix direction: `markDriveScopeMissing()` should call
+`clearProfileHint()` like its twin — the two functions park the session in the
+same state and should leave the same trail. Repro:
+[`auth-12-13-15-16.explore.test.ts`](packages/axoview-app/src/__explore__/S1/auth-12-13-15-16.explore.test.ts).
+
+## Signing in as a second Google account reuses the first account's Drive root folder id
+
+**Found by:** exploratory campaign AUTH-16
+
+**Symptom:** Sign out of one Google account and sign in as another without
+reloading, and the file tree shows an empty Drive place; creating a diagram there
+fails or lands somewhere the second account cannot see. Reloading fixes it.
+
+**Root cause:** `signOut()` clears the profile hint but neither of the Drive root
+caches: the `axoview-drive-root` localStorage entry survives, and so does
+`GoogleDriveProvider`'s in-memory `rootFolderId` — and `StorageManager` holds one
+provider instance for the page lifetime. `resolveRoot()` short-circuits on the
+in-memory id (`if (this.rootFolderId) return this.rootFolderId`), so the second
+account never reaches `probeRoot()`, never runs the `folderExists()` check that
+would 404 and heal the localStorage copy, and never re-runs marker discovery.
+Measured: after account A resolves its root and signs out, account B's first
+`listDiagrams(null)` issues `'root-of-account-A' in parents` under account B's
+bearer token and returns `[]`, and `createDiagram` POSTs
+`"parents":["root-of-account-A"]`.
+
+**Workaround:** Reload the page after switching accounts.
+
+**Status:** Open. Fix direction: invalidate the per-account caches on sign-out
+(and on a fresh grant for a different email) — `rootFolderId = null`, `rootProbe =
+null`, remove `axoview-drive-root`. Related: the root cache is never revalidated
+within a session either ("Deleting the Drive root folder mid-session is not
+detected" above); a single "invalidate + re-probe" entry point would close both.
+Repro:
+[`auth-12-13-15-16.explore.test.ts`](packages/axoview-app/src/__explore__/S1/auth-12-13-15-16.explore.test.ts).

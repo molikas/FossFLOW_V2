@@ -24,7 +24,9 @@ module.exports = {
     '^axoview$': path.join(__dirname, 'jest.axoviewMock.js')
   },
   setupFilesAfterEnv: [path.join(__dirname, 'jest.setup.js')],
-  testPathIgnorePatterns: ['/node_modules/', '/build/', '\\.d\\.ts$'],
+  // '/__explore__/' quarantines the exploratory-campaign probes (APPROACH.md §7)
+  // from `npm test`; jest.explore.config.js drops exactly that entry.
+  testPathIgnorePatterns: ['/node_modules/', '/build/', '\\.d\\.ts$', '/__explore__/'],
   coverageDirectory: 'coverage',
   collectCoverageFrom: [
     'src/**/*.{ts,tsx}',
