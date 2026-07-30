@@ -706,11 +706,11 @@ hole exists symmetrically in [modelStore.tsx](packages/axoview-lib/src/stores/mo
 
 **Workaround:** switch pages and back (rebuilds the scene from the model).
 
-**Status:** Open. Fix direction: redo invalidation is a property of the logical
-action, not of one store — clear BOTH futures when either store records a new
-entry (e.g. in the `saveToHistoryBeforeChange` / `allocateHistorySequence`
-boundary), or make the no-op branch still reset `future`. Repro:
-[`hist-02-03.explore.test.tsx`](packages/axoview-lib/src/__explore__/E1/hist-02-03.explore.test.tsx).
+**Status:** Fixed in 1b916b01 (2026-07-30) — a new logical action clears BOTH redo
+stacks, not just the one that happens to push an entry for it. The store whose
+patch set for that action is empty never pushed, and so never cleared its own
+future: `canRedo` stayed true and Redo re-applied a stale scene patch. Promoted
+regression: [`historyBrackets.test.tsx`](packages/axoview-lib/src/hooks/__tests__/historyBrackets.test.tsx).
 
 ## Independent 50-entry history trimming splits one logical action across the two stacks
 
@@ -772,10 +772,11 @@ view — e.g. a stale selection, see the INV-2 note in the campaign ledger) and
 
 **Workaround:** none.
 
-**Status:** Open. Fix direction: wrap the reducer call in the write helpers so a
-throw disarms `pendingPre` on both stores, and/or make `skipHistory=true` mean
-"never record" rather than "do not arm". Repro:
-[`hist-05-08.explore.test.tsx`](packages/axoview-lib/src/__explore__/E1/hist-05-08.explore.test.tsx).
+**Status:** Fixed in 1b916b01 (2026-07-30) — every mutating action in
+`useSceneActions` runs through `withHistory`, which discards the armed
+pre-snapshot in both stores when the reducer throws. Nothing downstream can pick
+it up any more, so a page switch's SYNC_SCENE records nothing. Promoted
+regression: [`historyBrackets.test.tsx`](packages/axoview-lib/src/hooks/__tests__/historyBrackets.test.tsx).
 
 ## A leaked drag bracket makes later edits un-undoable, and the next Ctrl+Z destroys them
 
@@ -808,8 +809,13 @@ the bracket open); this entry records the store-level blast radius once it happe
 **Workaround:** perform any pointer interaction (which runs the lazy mode exit)
 before using the keyboard.
 
-**Status:** Open. Fix direction: a `rollbackDragTransaction` / freeze timeout, plus
-an assertion that `set()` never applies while frozen. Related: HIST-07 below.
+**Status:** Fixed in 1b916b01 (2026-07-30) — `useInteractionManager`'s keydown
+handler commits any open drag bracket before dispatching, which is the reachable
+trigger: the mode's exit runs lazily on the next MOUSE event, so a lost mouseup
+followed by a keyboard-only action was where the leak did its damage. It is the
+same "no-op when no drag is open" call `usePanHandlers` and `handleEscapeKey`
+already make. Promoted regression (the recovery path, driven from a second hook
+instance): [`historyBrackets.test.tsx`](packages/axoview-lib/src/hooks/__tests__/historyBrackets.test.tsx).
 
 ## A mid-drag edit from another component corrupts the drag's undo entry
 
@@ -831,11 +837,12 @@ The store itself owns `pendingPre`/`pendingPreFrozen`, so the guard belongs ther
 
 **Workaround:** none.
 
-**Status:** Open. Fix direction: move the drag/transaction flags into the stores
-(next to `pendingPreFrozen`, which is already store-owned) so every hook instance
-observes the same state, and make `saveToHistory()` a no-op while frozen. Related:
-HIST-06 above. Repro:
-[`hist-05-08.explore.test.tsx`](packages/axoview-lib/src/__explore__/E1/hist-05-08.explore.test.tsx).
+**Status:** Fixed in 1b916b01 (2026-07-30) — `dragInProgress` (with the
+transaction flag and the pending state) moved from per-HOOK refs to the scene
+store's provider-scoped `editSession`, so every `useSceneActions()` instance
+under one provider pair sees the same bracket. A foreign write mid-drag no longer
+re-arms the frozen pre-drag snapshot, and undo lands the item on its origin.
+Promoted regression: [`historyBrackets.test.tsx`](packages/axoview-lib/src/hooks/__tests__/historyBrackets.test.tsx).
 
 ## Deleting a selected item leaves it selected — `uiState.selectedIds` keeps the dead id
 
@@ -1250,10 +1257,11 @@ drag path uses `beginDragTransaction` (which freezes history but does not buffer
 state), so this is latent — but it is exactly the shape a "group operation with
 live preview" feature would take.
 
-**Status:** Open. Fix direction: have `previewConnectorPaths` write through the
-same `setState` the rest of `useSceneActions` uses (it is already
-transaction-aware), keeping `flushSync` for the non-transaction case. Repro:
-[`scn-05-08.explore.test.tsx`](packages/axoview-lib/src/__explore__/E3/scn-05-08.explore.test.tsx).
+**Status:** Fixed in 1b916b01 (2026-07-30) — as a consequence of the E1/HIST-08
+delegation work: the transaction bracket no longer snapshots both stores at open
+and write that snapshot back at close. It starts empty and flushes only what
+`setState` produced, so a preview issued inside a transaction (by any route)
+survives the commit. Promoted regression: [`historyBrackets.test.tsx`](packages/axoview-lib/src/hooks/__tests__/historyBrackets.test.tsx).
 
 ## A dangling active view makes reads and writes disagree — the canvas shows page 1 while every edit throws
 
