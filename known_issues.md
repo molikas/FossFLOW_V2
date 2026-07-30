@@ -6076,11 +6076,14 @@ as what the caller does with it.
 
 **Workaround:** none — the cause is not recoverable from the UI.
 
-**Status:** Open. Fix direction: pass the error into `ImportErrorDialog` and map
-the codes to distinct copy (at minimum: not-an-Axoview-file, too large,
-incomplete archive, newer version), and reclassify a missing/non-string
-`version` as `BAD_MANIFEST`. Repro:
-[`zip-01-to-15.explore.test.ts`](packages/axoview-app/src/__explore__/A3/zip-01-to-15.explore.test.ts).
+**Status:** Fixed in 96a8bff8 (2026-07-30) — the error reaches
+`ImportErrorDialog`, which maps `ProjectZipError.code` to copy that is true for
+that failure (too large / newer version / incomplete archive / damaged manifest),
+with the generic body kept for anything unclassified. A versionless manifest is
+reclassified `BAD_MANIFEST`. Promoted regressions:
+[`ImportErrorDialog.test.tsx`](packages/axoview-app/src/components/__tests__/ImportErrorDialog.test.tsx)
+and
+[`projectZip.test.ts`](packages/axoview-app/src/services/project/__tests__/projectZip.test.ts).
 
 ## Folder ordering never survives an export/import round trip
 
