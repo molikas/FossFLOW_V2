@@ -5381,10 +5381,10 @@ for everything typed since the previous successful save.
 **Workaround:** after "Save failed", touch the diagram again (move any element)
 to re-queue the model, then wait for the status to clear.
 
-**Status:** Open. Fix direction: on the catch path put `pending` back into
-`pendingRef` unless a newer one arrived (`pendingRef.current ??= pending`), which
-also makes `saveNow()` and Retry work as written. Repro:
-[`autosave-life-01-05-06-07-08.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/autosave-life-01-05-06-07-08.explore.test.tsx).
+**Status:** Fixed in 2b629c6e (2026-07-30) — the catch path puts the model back in
+`pendingRef` unless a newer edit has superseded it, so `saveNow()`, Ctrl+S and the
+StatusCluster Retry all have something to send. Promoted regression:
+[`useAutoSave.test.ts`](packages/axoview-app/src/hooks/__tests__/useAutoSave.test.ts).
 
 ## After a failed auto-save the tab closes without warning
 
@@ -5411,9 +5411,10 @@ finding S-e ("enum coverage stops at the values the happy path produces").
 **Workaround:** watch the status cluster — do not close the tab while it reads
 "Save failed".
 
-**Status:** Open. Fix direction: treat `'error'` as pending in the second guard
-(`saveStatus !== 'idle'`), which also covers the A1/LIFE-01 re-queue. Repro:
-[`save-life-02-03-04-14.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/save-life-02-03-04-14.explore.test.tsx).
+**Status:** Fixed in 2b629c6e (2026-07-30) — the two guards are now one
+`hasUnsavedWork()` predicate (queued, in flight, or failed, plus session-place
+dirt), so the failure state is the loudest rather than the quietest. Promoted
+regression: [`DiagramLifecycleProvider.save.test.tsx`](packages/axoview-app/src/providers/__tests__/DiagramLifecycleProvider.save.test.tsx).
 
 ## The "Retry" button after a failed auto-save does nothing
 
@@ -5441,10 +5442,11 @@ service classifies a failure correctly and the consumer drops it.
 **Workaround:** make another edit to the diagram; the next debounced auto-save
 re-queues and (once the backend is healthy) succeeds.
 
-**Status:** Open. Fix direction: read the status from a ref (or return it from
-`saveNow()`) rather than the closure, and treat `'error'` as a state a manual
-save must attempt rather than one it must skip. Repro:
-[`save-life-02-03-04-14.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/save-life-02-03-04-14.explore.test.tsx).
+**Status:** Fixed in 2b629c6e (2026-07-30) — `saveNow()` returns a
+`FlushOutcome` (`nothing-pending` | `saved` | `error`) and `handleSaveClick` acts
+on that instead of the closure-stale `saveStatus`; with A1/LIFE-01's re-queue,
+Retry writes the unsaved model and confirms it. Promoted regression:
+[`DiagramLifecycleProvider.save.test.tsx`](packages/axoview-app/src/providers/__tests__/DiagramLifecycleProvider.save.test.tsx).
 
 ## Ctrl+S right after an edit saves but never says so
 
@@ -5468,9 +5470,10 @@ just edited something.
 is the whole symptom. Wait for the status cluster to stop saying "Saving…" if you
 want confirmation.
 
-**Status:** Open. Fix direction: same as A1/LIFE-03 (read the post-flush status),
-after which this branch reports normally. Repro:
-[`save-life-02-03-04-14.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/save-life-02-03-04-14.explore.test.tsx).
+**Status:** Fixed in 2b629c6e (2026-07-30) — same change as A1/LIFE-03: the
+flush reports its own outcome, so a save inside the debounce window confirms like
+any other (and writes the edit exactly once). Promoted regression:
+[`DiagramLifecycleProvider.save.test.tsx`](packages/axoview-app/src/providers/__tests__/DiagramLifecycleProvider.save.test.tsx).
 
 ## An armed auto-save is cancelled, never flushed — nothing ever drains the debounce
 
@@ -5504,9 +5507,10 @@ first), but it is the same defect and the same fix.
 
 **Workaround:** pause for two seconds after your last edit before navigating.
 
-**Status:** Open. Fix direction: flush rather than cancel on unmount, and clear
-the armed timer when `enabled` goes false. Repro:
-[`autosave-life-01-05-06-07-08.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/autosave-life-01-05-06-07-08.explore.test.tsx).
+**Status:** Fixed in 2b629c6e (2026-07-30) — the unmount cleanup flushes the
+queue instead of clearing the timer over it, and `enabled:false` now disarms an
+already-armed timer while keeping the queued model for an explicit flush
+(A1/LIFE-07). Promoted regression: [`useAutoSave.test.ts`](packages/axoview-app/src/hooks/__tests__/useAutoSave.test.ts).
 
 ## `saveNow()` reports "flushed" while the write is still in flight
 
@@ -5538,9 +5542,10 @@ moves"). ADR 0037 §2 requires that ordering.
 **Workaround:** pause for a few seconds after your last edit before signing out
 or switching diagrams.
 
-**Status:** Open. Fix direction: keep the in-flight promise in a ref and have
-`saveNow()` await it as well as any queued model. Repro:
-[`autosave-life-01-05-06-07-08.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/autosave-life-01-05-06-07-08.explore.test.tsx).
+**Status:** Fixed in 2b629c6e (2026-07-30) — the in-flight write is kept in a
+ref and `saveNow()` awaits it, so callers that treat the resolution as "the old
+place is flushed" (token revoke, place swap) get what they assumed. Promoted
+regression: [`useAutoSave.test.ts`](packages/axoview-app/src/hooks/__tests__/useAutoSave.test.ts).
 
 ## Overlapping auto-saves report "saved" while the newer write is still outstanding
 
@@ -5566,9 +5571,10 @@ read-modify-write) applied to the client.
 
 **Workaround:** none. Treat "Saved at" as advisory on a slow link.
 
-**Status:** Open. Fix direction: sequence the writes (chain on the in-flight
-promise) or version them and ignore a completion that is not the latest. Repro:
-[`autosave-life-01-05-06-07-08.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/autosave-life-01-05-06-07-08.explore.test.tsx).
+**Status:** Fixed in 2b629c6e (2026-07-30) — writes serialise (each queues
+behind the one on the wire) and a success only reports `idle` when nothing newer
+is queued, so an older write can neither land after nor report over a newer one.
+Promoted regression: [`useAutoSave.test.ts`](packages/axoview-app/src/hooks/__tests__/useAutoSave.test.ts).
 
 ## "New diagram" throws away the last two seconds of the diagram you were in
 
@@ -5601,9 +5607,11 @@ shape — one ritual written several times, each forgetting a different part.
 **Workaround:** pause two seconds after your last edit before creating a new
 diagram.
 
-**Status:** Open. Fix direction: hoist `await autoSave.saveNow()` out of the
-place-change branch so it runs on every create, matching the other two paths.
-Repro: [`open-delete-life-09-13.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/open-delete-life-09-13.explore.test.tsx).
+**Status:** Fixed in 2b629c6e (2026-07-30) — `await autoSave.saveNow()` is
+hoisted out of the place-change branch, and `resetStatus()` flushes the queue
+rather than discarding it (the pending model is keyed by its own diagram id, so
+it cannot collide with the diagram being adopted). Promoted regression:
+[`DiagramLifecycleProvider.save.test.tsx`](packages/axoview-app/src/providers/__tests__/DiagramLifecycleProvider.save.test.tsx).
 
 ## A corrupt session list makes the app unbootable
 
