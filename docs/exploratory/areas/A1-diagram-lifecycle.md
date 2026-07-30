@@ -10,6 +10,15 @@
 - **`notifyDiagramRenamedFromTree` gates its model write on `axoviewRef.current`**, which is null with no Axoview mounted. Stub it (`ctx.axoviewRef.current = { load: jest.fn() }`) or the path you are comparing against looks broken too.
 - **`useAppStorage` is the control surface** — mock the module to return `appStorageValue({ remoteStorageActive, storage, activeProviderId })`. `remoteStorageActive` picks the autosave-vs-session-dirty branch and almost every A1 finding lives on one side of it. `useParams` through a mutable `routeParams` + `window.history.pushState` reaches the readonly routes (`isReadonlyUrl` also reads `location.pathname`).
 
+
+**Remediation (wave 1, 2026-07-30):** LIFE-01..09 fixed in `2b629c6e` and
+LIFE-12 in `3af90693`; their probes are promoted to
+`hooks/__tests__/useAutoSave.test.ts` and
+`providers/__tests__/DiagramLifecycleProvider.save.test.tsx`, so the `Probe`
+column below names lane files that no longer exist for those rows. Still open:
+LIFE-11 (wave 2, readonly class), LIFE-13 and LIFE-15 (wave 1 storage cluster).
+LIFE-10 and LIFE-14 unchanged.
+
 **Scope:** The 1850-line DiagramLifecycleProvider owns currentDiagram/currentModel, session-mode dirty tracking (dirtyDiagramIds Set + scratchBufferRef Map keyed by id or '__unsaved__'), server/Drive-mode debounced autosave (useAutoSave, 2s), three read-only URL loaders (public-share /display/p/:uuid, owner-readonly /display/:id, Drive /display/drive/:fileId) sharing applyLoadedDiagram, Ctrl+S/Ctrl+O shortcuts, rename/delete-from-tree sync, saveAllDirty, place-following on open/create (setActiveProviderId before load), Google sign-out canvas fallback, beforeunload guards, and the sessionWorkUnexported export guard.
 
 **Code:**

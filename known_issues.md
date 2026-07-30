@@ -645,12 +645,12 @@ can no longer tell the two actions apart. `commit()` also never calls
 **Workaround:** none at the user level. Undo once more and redo to re-route, or
 avoid interleaving layer/z-order edits with connector and text-box edits.
 
-**Status:** Open. Fix direction: call `allocateHistorySequence()` in
-`useLayerActions.commit()` before `saveToHistory()`, and save/commit the scene
-store alongside the model store — i.e. reuse `useSceneActions`'
-`saveToHistoryBeforeChange` rather than hand-rolling a second commit path
-(the sibling-drift bug class). Repro:
-[`hist-01-04.explore.test.tsx`](packages/axoview-lib/src/__explore__/E1/hist-01-04.explore.test.tsx).
+**Status:** Fixed in 07c7fa78 (2026-07-30) — `useLayerActions.commit()` performs
+the same ritual as `useSceneActions.saveToHistoryBeforeChange`: one
+`allocateHistorySequence()` for the logical action, then arm BOTH stores. A layer
+op now carries its own seq, so `useHistory.undo` stops dragging the previous
+action's scene entry down with it. Promoted regression:
+[`useLayerActions.history.test.tsx`](packages/axoview-lib/src/hooks/__tests__/useLayerActions.history.test.tsx).
 
 ## Creating a page is not undoable, and Ctrl+Z after it silently reverts the previous action
 

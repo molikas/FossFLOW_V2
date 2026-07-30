@@ -2,6 +2,15 @@
 
 **Status:** DONE · **Counted hypotheses:** 15 / 10 · **Bugs:** 9 · **Hypothesis ID prefix:** `HIST-`
 
+
+**Remediation (wave 1, 2026-07-30):** HIST-01 fixed in `07c7fa78`; its probes
+are promoted to `hooks/__tests__/useLayerActions.history.test.tsx` and the lane
+file is now `hist-04.explore.test.tsx`. Everything else in this area is open —
+see the wave 1 sub-tasks in
+[exploratory-remediation.md](../../tactical/exploratory-remediation.md) for why
+HIST-04 is deliberately held for wave 5 (it needs HIST-10's "always navigate"
+ruling) and why HIST-06/07/08 are one change rather than three.
+
 **Scope:** modelStore owns the document (version/title/description/colors/icons/items/views) plus a 50-entry immer-patch undo stack; sceneStore owns derived render caches (scene.connectors[id].path(+unroutable), scene.textBoxes[id].size) plus its own independent 50-entry stack. Every history entry is stamped with a module-global logical-action sequence (historySequence.ts, D-7); useHistory steps only the stack(s) whose top entry carries max(undo)/min(redo) seq, then resyncScene re-routes connectors whose path is empty via SYNC_SCENE written skipHistory. Mutations: actions.set(partial, skipHistory) computes patches against a pendingPre snapshot captured by saveToHistory(); freezePendingPre/unfreezePendingPre implement live-drag one-entry commits.
 
 **Code:**

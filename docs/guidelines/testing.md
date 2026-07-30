@@ -1,15 +1,19 @@
 # Regression Test Suite Reference
 
-**Last updated:** 2026-07-28 (totals re-measured across all four workspaces)
+**Last updated:** 2026-07-30 (exploratory remediation wave 1 — promoted suites; totals re-measured for lib + app)
 **Unit / integration totals** (measured 2026-07-28 via per-workspace `npm test`):
 
 | Workspace | Passing | Suites |
 |---|---|---|
-| `axoview-lib` | 1737 (+1 skipped) | 155 |
-| `axoview-app` | 268 | 26 |
+| `axoview-lib` | 1741 (+1 skipped) | 156 |
+| `axoview-app` | 295 | 30 |
 | `axoview-backend` | 102 | 7 |
 | `axoview-worker` | 124 | 4 |
-| **Total** | **2231 (+1 skipped)** | **192** |
+| **Total** | **2262 (+1 skipped)** | **197** |
+
+*(lib `+4` / `+1` suite and app `+27` / `+4` suites on 2026-07-30 — wave 1 of the
+exploratory-campaign remediation, all of it probes promoted out of the
+quarantined lane under the ADR 0047 §2 flip rule. See the additions below.)*
 
 > Most of the lib delta since the 2026-07-15 measurement (1544→1737, 150→155) predates this sync — it accumulated across the intervening waves and was simply never re-measured. The 2026-07-28 session itself added only the two `driveSharing` policy-rejection cases (app 266→268).
 
@@ -27,6 +31,26 @@ E2E suite lives at [`packages/axoview-e2e/`](../../packages/axoview-e2e/) (Playw
 - **Don't swap the dev server for a precompiled prod bundle to raise `workers`.** A `NODE_ENV=production` build tree-shakes out the `window.__axoview__` debug bridge that ~every spec reads (gated in `Axoview.tsx` by `enableDebugTools || exposeStoreBridge || NODE_ENV !== 'production'`); the whole suite would fail on `waitForDebugBridge`. If that route is ever needed for within-runner parallelism, re-expose the bridge via `exposeStoreBridge` behind a **CI-only build flag** (never the Cloudflare prod build).
 
 To scale further, raise the shard count (`SHARD_TOTAL` + the matrix list in the workflow, kept in sync) — diminishing past ~6 shards because a fixed ~3 min setup (npm ci + build:lib + Playwright install + dev-server boot) is paid per shard.
+
+### Exploratory remediation wave 1 — save path, storage places, layer history (2026-07-30)
+
+Promoted from the 2026-07 campaign's quarantined probe lane as each bug was
+fixed (ADR 0047 §2). All five are behavioural suites over the real hook,
+provider or store — none of them mock the thing under test.
+
+- **[`useAutoSave.test.ts`](../../packages/axoview-app/src/hooks/__tests__/useAutoSave.test.ts)** · 11 tests · the debounced write path, which had none. Pins flush-not-cancel on unmount / `enabled:false` / `resetStatus()`, the failed-write re-queue, `saveNow()` awaiting an in-flight write and reporting its own outcome, and write serialisation (an older write can neither land after nor report "saved" over a newer one). A1/LIFE-01, 05, 06, 07, 08, 09.
+- **[`DiagramLifecycleProvider.save.test.tsx`](../../packages/axoview-app/src/providers/__tests__/DiagramLifecycleProvider.save.test.tsx)** · 10 tests · the real provider under jsdom (a closure read and a `beforeunload` listener are not observable below the component). Manual save inside the debounce window, retry after a failed autosave, the single unsaved-work guard, the two rename paths, and the create-blank flush. A1/LIFE-02, 03, 04, 09, 12, 14.
+- **[`AppStorageContext.place.test.tsx`](../../packages/axoview-app/src/providers/__tests__/AppStorageContext.place.test.tsx)** · 1 test · the active place survives a provider remount, because the `StorageManager` singleton owns it. A2/STOR-12.
+- **[`StorageManager.test.ts`](../../packages/axoview-app/src/services/storage/__tests__/StorageManager.test.ts)** · 3 tests · the provider registry, which had none: active-id reporting, unknown-provider refusal, and `setServerStorage` reaching every registered provider. A2/STOR-10.
+- **[`useLayerActions.history.test.tsx`](../../packages/axoview-lib/src/hooks/__tests__/useLayerActions.history.test.tsx)** · 4 tests · a layer op is its own logical action: fresh sequence, one action per Ctrl+Z, no stranded text-box scene size, no orphan scene connector on the next undo. E1/HIST-01.
+
+`useRuntimeConfig.test.ts` also gained two cases for the STOR-11 ruling (a
+transport failure is never cached; a received response still is).
+
+**The lane stays out of CI.** Wave 1 also excluded `src/__explore__` from both
+packages' `tsconfig.json`: `npm run lint` is `tsc --noEmit` and was sweeping the
+probes in, so the CI type-check gate had been red since the campaign branch
+merged. Probes are still type-checked per-file by ts-jest when they run.
 
 ### ADR 0023 hardening additions — off-grid rendered geometry (2026-07-23)
 

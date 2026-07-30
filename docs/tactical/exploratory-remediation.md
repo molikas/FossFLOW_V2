@@ -69,11 +69,45 @@ quarantine check above proves none of it reaches the regression suites. It runs
 for the first product-code wave.*
 
 ### Wave 1 — Data integrity 🔴 (E1/E3/E4 + A1/A2 clusters, ~86 filed bugs)
-- [ ] **Autosave/save cluster (A1):** flush-not-cancel on unmount/disable/reset; failed saves count as unsaved work in both `beforeunload` guards; un-stale the Retry gate. (Thread A-b/A-c in the area files.)
-- [ ] **Single-source-of-truth cluster (A1/A2):** active place, diagram title, unsaved-work tri-state — one owner each (thread A-a); STOR-11 config-probe cache-success-only ruling.
+
+**Progress 2026-07-30:** clusters 1 and 2 complete; cluster 3 partially done
+(seq-pinning half). Clusters 4 and 5 not started. Every landed item carries its
+promoted regression and its `Fixed in <sha>` annotation — see "Wave 1 landed" below.
+
+- [x] **Autosave/save cluster (A1):** flush-not-cancel on unmount/disable/reset; failed saves count as unsaved work in both `beforeunload` guards; un-stale the Retry gate. (Thread A-b/A-c in the area files.) — `2b629c6e`, LIFE-01..09.
+- [x] **Single-source-of-truth cluster (A1/A2):** active place, diagram title, unsaved-work tri-state — one owner each (thread A-a); STOR-11 config-probe cache-success-only ruling. — `3af90693`, STOR-10/11/12 + LIFE-12 (the unsaved-work tri-state landed with the autosave cluster).
 - [ ] **Undo integrity cluster (E1/E3):** orphaned `pendingPre`, no-op-set snapshot swallow, seq pinning, per-view resync (D-9/SCN-15/SCN-08 share one per-view-scene fix), HIST-08 delegation ruling.
+  - [x] Seq pinning — HIST-01 (`07c7fa78`): `useLayerActions.commit()` allocates its own logical-action sequence and arms both stores.
+  - [ ] Orphaned `pendingPre` (HIST-05) — needs a `withHistory(...)` wrapper around the ~21 mutating bodies in `useSceneActions` so a throwing reducer discards the armed snapshot instead of leaving it for the next `skipHistory` writer.
+  - [ ] Per-hook-instance transaction/drag state (HIST-06, HIST-07) **and the HIST-08 delegation ruling** are one change: `transactionInProgress` / `dragInProgress` / `pendingStateRef` must move from per-hook refs to provider-scoped state. Delegating `useHistory.transaction` to a *fresh* `useSceneActions()` instance does **not** satisfy the ruling — the caller's own instance still wouldn't be suppressed.
+  - [ ] No-op-set snapshot swallow (HIST-02): the fix is cross-store — a new logical action must invalidate the redo future on BOTH stacks. Note the tension with the MQA #5 comment in `sceneStore.set()` (a transient no-op write must NOT clobber `future`); the discriminator is "new logical action" vs "coordinated write", not "zero patches".
+  - [ ] Trim asymmetry (HIST-03) and per-view scene (D-9/SCN-15/SCN-08) both point at the same restructure: one shared history stack, and scene history keyed by view. Size this with HIST-10 (wave 5) rather than patching around it.
+  - [ ] **HIST-04 is deliberately deferred to wave 5**: making `createView` undoable while `ui.view` still points at the created page leaves a dangling active view (E3/SCN-09's shape). It needs HIST-10's "always navigate" ruling.
 - [ ] **`validateModel` identity/range gate (E2/E4):** duplicate ids, dangling layer refs, unbounded tiles, colliding layer order, duplicate page names — one validation pass closes ~7 entries; ships as a **class gate** (main-suite contract test).
-- [ ] **Storage provider cluster (A2/A3):** remaining STOR/ZIP entries incl. ZIP-09 single-import-flow ruling and the ZIP-01 non-terminating walk.
+- [ ] **Storage provider cluster (A2/A3):** remaining STOR/ZIP entries incl. ZIP-09 single-import-flow ruling and the ZIP-01 non-terminating walk. **Also files the missing A2 known_issues entries** — see the record correction below.
+
+#### Wave 1 landed (2026-07-30)
+
+| Commit | Closes | Promoted to |
+|---|---|---|
+| `2b629c6e` | A1/LIFE-01, 02, 03, 04, 05, 06, 07, 08, 09 | `hooks/__tests__/useAutoSave.test.ts`, `providers/__tests__/DiagramLifecycleProvider.save.test.tsx` |
+| `3af90693` | A2/STOR-10, 11 (ruling), 12; A1/LIFE-12 | `providers/__tests__/AppStorageContext.place.test.tsx`, `services/storage/__tests__/StorageManager.test.ts`, `hooks/__tests__/useRuntimeConfig.test.ts`, the provider save suite |
+| `07c7fa78` | E1/HIST-01 | `hooks/__tests__/useLayerActions.history.test.tsx` |
+
+Two things found while landing it, both recorded where they belong:
+
+- **The CI type-check gate was red on this branch.** `npm run lint` is
+  `tsc --noEmit` per workspace and it swept `src/__explore__`, which carries
+  ~30 type errors by design (probes are written fast and type-checked per-file
+  by ts-jest). ADR 0047 §1 says the lane never reaches CI; both packages'
+  `tsconfig.json` now exclude it. Fixed in `2b629c6e` — it had been red since
+  wave 0 merged the campaign branch.
+- **Area A2's known_issues entries were never filed.** The area file records 13
+  confirmed bugs, each ending `known_issues: A2/STOR-nn`, but the register goes
+  straight from A1/LIFE-15 to A3/ZIP-01. A record correction sits at the head of
+  where they belong (`029a8b47`), with STOR-11 and STOR-12 filed. **Wave 1's
+  storage cluster must file the remaining eleven as it fixes them** — do not
+  assume an entry exists to annotate.
 
 ### Wave 2 — Trust & security 🟠 (S1/S2/S3 + readonly class, ~40 filed bugs)
 - [ ] **Readonly enforcement class (F2/I1 subset):** enumerate every mutation surface against the readonly gate (VIEW-11, PTR-01..03, CTX-15); ships the **per-surface-opt-in class gate**.
