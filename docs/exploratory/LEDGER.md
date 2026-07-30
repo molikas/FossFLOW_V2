@@ -24,7 +24,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 | A2 | [Storage providers & places model (local/session/Drive, move-to-Drive)](areas/A2-storage-places.md) | DONE | 15 / 10 | 13 | 1 | 17/7/8 |
 | A3 | [Project ZIP & import/export (JSON, ZIP, image)](areas/A3-zip-import-export.md) | DONE | 15 / 10 | 11 | 1 | 9/9/6 |
 | A4 | [File explorer, folders & multi-diagram management](areas/A4-file-explorer-multidiagram.md) | DONE | 16 / 10 | 15 | 0 | 9/3/14 |
-| A5 | [App chrome: boot, dialogs, settings, i18n, theming, storage hygiene](areas/A5-app-chrome-boot-i18n.md) | OPEN | 0 / 10 | 0 | 0 | 10/6/14 |
+| A5 | [App chrome: boot, dialogs, settings, i18n, theming, storage hygiene](areas/A5-app-chrome-boot-i18n.md) | DONE | 12 / 10 | 10 | 1 | 10/6/14 |
 | S1 | [Google identity & token lifecycle (GIS auth store, gates)](areas/S1-google-identity-auth.md) | DONE | 16 / 10 | 12 | 1 | 7/7/6 |
 | S2 | [Share backend: session snapshots, routes, Express/Worker parity](areas/S2-share-backend.md) | DONE | 15 / 10 | 12 | 1 | 9/6/9 |
 | S3 | [Drive-native sharing & readonly preview ladder](areas/S3-drive-sharing-preview.md) | DONE | 15 / 10 | 10 | 1 | 10/14/9 |
@@ -270,3 +270,11 @@ All 21 questions were reviewed with the owner on **2026-07-30** and closed; ever
 | FEX-14 | `driveRootMissing` is a render-time read of a cache with no subscription — the "Finish Google Drive setup…" row survives the root becoming ready | *The Drive section can keep showing "Finish Google Drive setup…" after the root is configured* |
 | FEX-15 | One transient `listDiagrams` failure at sign-in consumes the once-per-grant migration offer for the whole session | *One transient listing failure permanently consumes the "move session diagrams to Drive" offer* |
 | FEX-16 | A failed rename is rolled back in the tree only — the open diagram keeps (and will save) a name that exists nowhere in storage | *A failed rename is rolled back in the tree only…* |
+| CHR-01/03 | The quota-full "Clear All Diagrams" sweeps the `axoview-` *config* prefix: it deletes the profile hint, Drive root cache, icon prefs, folders and manifest, deletes no diagram, and strands every foldered diagram (A4/FEX-01) | *The quota-full "Clear All Diagrams" deletes your settings and none of your diagrams* |
+| CHR-02 | The storage gauge measures localStorage config bytes, labels them "Axoview diagrams", and never reads the store the diagrams are in | *The storage gauge labels preference bytes "Axoview diagrams"…* |
+| CHR-04 | "Export All Diagrams" — the backup beside the destructive clear — reads a pre-places-model key, so it exports a stale copy or nothing at all | *"Export All Diagrams" … silently does nothing* |
+| CHR-05 | The boot service-worker cleanup awaits `serviceWorker.ready`, which never resolves without an active worker — the chain never settles | *The boot-time service-worker cleanup never finishes…* |
+| CHR-06 | A storage migration that throws partway still writes the "done" sentinel, so the un-migrated keys are invisible forever | *A storage migration that fails partway is recorded as complete…* |
+| CHR-07 | `apiBaseUrl()` sniffs the environment by port, which the Docker deployment shares — every API call bypasses the nginx proxy and is blocked by the app's own CSP | *The Docker deployment sends every API call cross-origin, where the app's own CSP blocks it* |
+| CHR-09/10 | Every shipped locale is missing strings (34–66) and carries keys en-US dropped; the known_issues entry names nine of them as fully covered | *Every shipped locale is missing strings — including the nine documented as fully covered* |
+| CHR-11 | One download helper written five times, every copy revoking the object URL in the same tick as the click | *One file-download helper is written five times…* |

@@ -1,6 +1,8 @@
 # A5 — App chrome: boot, dialogs, settings, i18n, theming, storage hygiene
 
-**Status:** OPEN · **Counted hypotheses:** 0 / 10 · **Bugs:** 0 · **Hypothesis ID prefix:** `CHR-`
+**Status:** DONE · **Counted hypotheses:** 12 / 10 · **Bugs:** 10 · **Suspects:** 1 · **Hypothesis ID prefix:** `CHR-`
+
+**Closed 2026-07-30.** Deliberately scoped AWAY from the auth-token seams: `authStore`, the gates and the Drive display ladder are S1/S3 territory and were closed there (31 counted, 22 bugs between them), so counting them again here would double-count one surface. What was left — and had zero tests — is the storage-hygiene escape hatch, the boot utilities, the deployment sniffing and the locale catalogues. Verdicts: 10 BUG, 1 SUSPECT (CHR-08), 1 FALSIFIED (CHR-12).
 
 > Auth-token seams here overlap S1 — dedupe hypothesis IDs across the two ledgers before counting.
 
@@ -71,7 +73,51 @@
 
 | ID | Hypothesis | Source | Nearest existing tests | Probe | Verdict | Evidence |
 |----|-----------|--------|------------------------|-------|---------|----------|
+| CHR-01 | `LocalStorageInspector`'s "Clear All Diagrams" sweeps localStorage by the `axoview-` prefix — the *configuration* prefix — so it deletes the profile hint, Drive root cache, icon-pack prefs, folders and manifest, and no diagram | seed seam | none (zero tests) | `__explore__/A5/storage-hygiene-chr-01-to-04` | BUG | T1 confirmed through the rendered component (Clear → Confirm). After the sweep: `axoview-google-profile`, `axoview-drive-root`, `axoview-enabled-icon-packs`, `axoview-folders`, `axoview-tree-manifest` all gone; `axoview_diagrams` and `axoview_diagram_d1` (sessionStorage, underscore) untouched. The dialog that opens only when the profile is out of space frees nothing, and signs the user out of Drive on the next boot. known_issues: A5/CHR-01. |
+| CHR-02 | The gauge measures localStorage `axoview-` bytes and labels them "Axoview diagrams", so the number shown at the moment of decision excludes every diagram; the 5 MB denominator is a guess about one of the two stores | seed seam | none | `__explore__/A5/storage-hygiene-chr-01-to-04` | BUG | T1 confirmed. With a 50 KB session diagram seeded, the "Axoview diagrams" line renders in *bytes* — it is measuring preferences. `calculateStorage` never reads sessionStorage, where the diagrams are. known_issues: A5/CHR-02. |
+| CHR-03 | Because the clear removes `axoview-folders` while sessionStorage diagrams keep their `folderId`, it reproduces A4/FEX-01: the foldered diagrams are invisible everywhere afterwards | cross-area consumer (A4/FEX-01) | none | `__explore__/A5/storage-hygiene-chr-01-to-04` | BUG | T1 confirmed. After Clear, the folder list is gone and the surviving diagram still carries `folderId: 'f1'`; `buildTree` descends from `parentId === null`, so it renders nowhere and is not in the trash either. The "clear" hides work rather than deleting it — and frees nothing. Filed with A5/CHR-01. |
+| CHR-04 | "Export All Diagrams" — the backup offered beside the destructive clear — reads the pre-places-model `axoview-diagrams` localStorage key, so it exports a stale copy or nothing at all | dead-path sweep | none | `__explore__/A5/storage-hygiene-chr-01-to-04` | BUG | T1 confirmed. With both session keys populated, the click creates no object URL and no anchor click: no file, no error, no toast. The safety net offered before an irreversible action is inert. known_issues: A5/CHR-04. |
+| CHR-05 | `serviceWorkerRegistration.unregister()` awaits `navigator.serviceWorker.ready`, which never resolves when no worker is registered — so the boot cleanup chain never settles, and its `.catch` assumes an `Error` | seed seam | none | `__explore__/A5/boot-migration-chr-05-to-08` | BUG | T1 confirmed with a timer-free settle oracle: with `ready` pending the chain is unsettled after a full microtask + macrotask drain; with a registration it unregisters exactly once; a string rejection logs `undefined` (`error.message`). Harmless today, but anything sequenced after it hangs on every boot. `getRegistrations()` is the API that answers the question being asked. known_issues: A5/CHR-05. |
+| CHR-06 | `migrateFossflowStorageKeys` swallows a throw inside `migrateStorage` and still writes the "done" sentinel, so a partial migration is permanent | boundary / interleaving | none | `__explore__/A5/boot-migration-chr-05-to-08` | BUG | T1 confirmed. With `setItem` throwing on the second migrated key (a nearly-full profile — the profile with the most legacy data), the run reports `{ran: true}`, the sentinel is `done`, `fossflow-*` keys remain, and the next boot short-circuits: data present in the profile, invisible to every reader, forever. The sentinel's own `catch` already reasons the other way. known_issues: A5/CHR-06. |
+| CHR-07 | `apiBaseUrl()` decides "dev split vs same-origin" from `hostname === 'localhost' && port === '3000'`, which the Docker deployment also matches | bug-class recurrence (environment sniffing) | none | `__explore__/A5/boot-migration-chr-05-to-08` | BUG | T1 + source confirmed. `compose.dev.yml` publishes nginx as `"3000:80"`, so `npm run docker:run` serves from the same host:port as `npm start`; there `/api/` is same-origin behind `proxy_pass http://localhost:3001`, and the CSP nginx emits is `connect-src 'self'` with no `localhost:3001`. So in the documented Docker deployment every API call bypasses the proxy AND is blocked by the app's own CSP. known_issues: A5/CHR-07. |
+| CHR-08 | `appDisplayBase()` anchors share links to `window.location.origin` at call time, so a link created from a preview host / staging domain / embedding context bakes in that origin | seed seam | `shareUrl` tests (dev-port case only) | `__explore__/A5/boot-migration-chr-05-to-08` | SUSPECT | T1 confirmed the behaviour: from `https://pr-42--preview.example.dev` the copied link is `https://pr-42--preview.example.dev/app/display/p/<uuid>`, and `driveSharing.ts` uses the same builder — but which origin *should* win is a product decision no ADR makes. The doc comment deliberately chose page-origin over the backend-derived host (a fix for a real bug); the preview/iframe case was simply not considered. → product question below. |
+| CHR-09 | The 12 non-English catalogues have drifted from `en-US`, and nothing gates them — including the nine that known_issues names as fully covered | ADR-contract / stale-record (thread S-f shape) | none | `__explore__/A5/i18n-download-chr-09-to-11` | BUG | T1 confirmed by key-set diff: **every** locale is short — 34 keys for es-ES/pt-BR/fr-FR/hi-IN/bn-BD/ru-RU/it-IT/tr-TR/pl-PL, 35 for zh-CN, 65–66 for de-DE/id-ID. The known_issues entry "Partial-coverage i18n locales (de-DE + id-ID)" tells users to switch to "one of the fully-covered locales", listing nine that are not. Novel against the existing debt entries, which are about *hardcoded* strings and *two* locales. known_issues: A5/CHR-09. |
+| CHR-10 | Drift runs the other way too: catalogues carry keys `en-US` no longer has (renames/deletions the translations never followed) | parity | none | `__explore__/A5/i18n-download-chr-09-to-11` | BUG | T1 confirmed. Every one of the 12 locales holds at least one key absent from the reference (1–3 each). i18next resolves per key, so neither direction is ever reported at runtime. Filed with A5/CHR-09. |
+| CHR-11 | The file-download idiom is hand-written in five places, and every copy revokes the object URL in the same tick as `.click()` without attaching the anchor | bug-class recurrence (sibling drift / dual implementation) | none | `__explore__/A5/i18n-download-chr-09-to-11` | BUG | T1 source sweep confirmed across `utils/downloadBlob.ts` (one caller), `LocalStorageInspector`, `DiagramLifecycleProvider`, `DiagnosticsOverlay` and the lib's `exportOptions`: all five click-then-revoke synchronously, none appends the anchor, and no copy reuses the shared helper. This is the ADR 0047 dual-implementation class at five copies. known_issues: A5/CHR-11. |
+| CHR-12 | `for (const key in localStorage)` (used by both the gauge and the clear) enumerates more than the stored keys | boundary | none | `__explore__/A5/storage-hygiene-chr-01-to-04` | FALSIFIED | The enumeration IS wrong — WebIDL makes interface operations and attributes enumerable, so `for…in` yields `getItem`, `setItem`, `removeItem`, `clear`, `key` and `length` alongside the stored keys, in browsers as well as jsdom. But both consumers are accidentally safe: `calculateStorage` guards on `localStorage.getItem(key)` (null for every prototype name) and `confirmClear` filters on the `axoview-` prefix (which none of them has). Anti-pattern, not a defect — the CHR-01 finding is about the prefix, not the walk. |
 
 ## Product questions (SUSPECT verdicts)
 
-*none yet*
+### CHR-08 — which origin should a share link be anchored to?
+
+**Observed.** `appDisplayBase()` builds every read-only link — public-snapshot
+(`shareUrl.ts`) and Drive-native (`driveSharing.ts`) — from
+`window.location.origin` at call time. A link copied from a preview deployment,
+a staging domain, a LAN IP or an embedding context therefore carries that host,
+and recipients may not be able to reach it.
+
+**Why it is a question, not a bug.** The current behaviour is a deliberate fix:
+the backend returns a `url` derived from `req.get('host')`, which in `npm run
+dev` is the API port, not the page the user is on — so the code was changed to
+anchor to the page origin, and the doc comment says so. Nothing states what
+should happen when the page origin is itself not the canonical one, and no ADR
+(0040 routing, 0042 Drive sharing) names a canonical public base.
+
+**Industry practice.** Products that mint shareable links overwhelmingly resolve
+them against a *configured* public base URL (GitLab `external_url`, Sentry
+`system.url-prefix`, Grafana `root_url`, Discourse `hostname`), falling back to
+the request/page origin only when unset — precisely because preview, proxy and
+LAN origins otherwise leak into durable links. The counter-argument for this app
+is that it is deployment-light and self-hostable with no config step, and the
+page origin is right in every single-origin deployment.
+
+**Options.** (a) Keep page-origin, document it. (b) Add an optional public-base
+to the runtime config `useRuntimeConfig` already fetches, page-origin as
+fallback — the industry default, one config key, no behaviour change for
+existing deployments. (c) Warn in the share UI when the current origin looks
+non-canonical (localhost / bare IP / preview pattern).
+
+**Recommendation:** (b), with (a)'s documentation. Cheap, matches practice, and
+leaves the default behaviour intact for every deployment that is already correct.
+
+**Owner ruling:** *pending — raised at the 2026-07-30 campaign close-out.*

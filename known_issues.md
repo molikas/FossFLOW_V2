@@ -6373,3 +6373,245 @@ every later caller returns at the first line (probe `FEX-15a`).
 dialog actually opens — let `enumerateSession` distinguish failure from empty
 and leave both refs armed on failure. Repro:
 [`migrate-fex-15.explore.test.tsx`](packages/axoview-app/src/__explore__/A4/migrate-fex-15.explore.test.tsx).
+
+## The quota-full "Clear All Diagrams" deletes your settings and none of your diagrams
+
+**Found by:** exploratory campaign A5/CHR-01 (and A5/CHR-03)
+
+**Symptom:** localStorage fills up, the Storage Manager opens, and the user
+presses "Clear All Diagrams" and confirms "This will remove all saved
+diagrams". Nothing is freed and no diagram is deleted. What *is* deleted: the
+Google profile hint (the next boot cannot silently reconnect), the Drive root
+cache (the Drive section falls back to "Finish Google Drive setup…" — A4/FEX-14),
+the enabled icon-pack preference, the folder tree, the tree manifest, the
+last-opened pointer and the explorer's open/closed state.
+
+Worse, the folders are deleted while the diagrams keep their `folderId`
+(CHR-03): every diagram that was inside a folder now points at a folder that
+does not exist, which `buildTree` renders nowhere and the trash does not hold
+either (A4/FEX-01). The clear makes work invisible instead of deleting it —
+and the storage it occupies is still occupied.
+
+**Root cause:** `LocalStorageInspector.confirmClear` sweeps `localStorage` for
+keys starting `axoview-`. The app uses two prefixes with two stores:
+session-place *diagrams* live in `sessionStorage` under `axoview_` (underscore)
+— `SESSION_DIAGRAMS_KEY = 'axoview_diagrams'` and `axoview_diagram_<id>` in
+`LocalStorageProvider` — while folders, the tree manifest and every preference
+live in `localStorage` under `axoview-` (hyphen). The sweep hits exactly the
+set that is not diagrams. The component predates the places model (2026-07-06)
+and was never re-pointed.
+
+Measured: after Clear, `axoview-google-profile`, `axoview-drive-root`,
+`axoview-enabled-icon-packs`, `axoview-folders` and `axoview-tree-manifest` are
+gone; `axoview_diagrams` and `axoview_diagram_d1` are untouched, and the
+surviving diagram still carries `folderId: 'f1'` for a folder that no longer
+exists.
+
+**Workaround:** none — and the action is irreversible (it hard-reloads).
+
+**Status:** Open. Fix direction: delete session-place diagrams through the
+provider rather than by key prefix (so folders and diagrams stay coherent), and
+never sweep configuration keys. Repro:
+[`storage-hygiene-chr-01-to-04.explore.test.tsx`](packages/axoview-app/src/__explore__/A5/storage-hygiene-chr-01-to-04.explore.test.tsx).
+
+## The storage gauge labels preference bytes "Axoview diagrams" and never measures the diagrams
+
+**Found by:** exploratory campaign A5/CHR-02
+
+**Symptom:** The Storage Manager — shown at the moment the user must decide
+what to delete — reports "Axoview diagrams: 412 Bytes" for a workspace holding
+50 KB of diagrams, and a percentage bar that is a fraction of a 5 MB cap it
+assumes. The number the user acts on measures preferences.
+
+**Root cause:** `calculateStorage` walks `localStorage` only, and buckets a key
+as a diagram when it starts with `axoview-` — the configuration prefix
+(see A5/CHR-01). Session-place diagrams are in `sessionStorage` under
+`axoview_`, so they contribute zero to both the "diagrams" line and the total.
+The `~5 MB` denominator is a hardcoded assumption about one of the two stores,
+while the quota error that opened the dialog can come from either.
+
+Measured: with a 50 KB session diagram seeded, the "Axoview diagrams" line
+reads in bytes, not kilobytes.
+
+**Workaround:** none.
+
+**Status:** Open. Fix direction: measure both stores, bucket by the real key
+sets, and use `navigator.storage.estimate()` where available instead of the 5 MB
+guess. Repro:
+[`storage-hygiene-chr-01-to-04.explore.test.tsx`](packages/axoview-app/src/__explore__/A5/storage-hygiene-chr-01-to-04.explore.test.tsx).
+
+## "Export All Diagrams" — the backup offered before the destructive clear — silently does nothing
+
+**Found by:** exploratory campaign A5/CHR-04
+
+**Symptom:** In the Storage Manager, "Export All Diagrams" is the safety net
+next to "Clear All Diagrams". With diagrams in the session place it produces no
+file, no error and no toast — the click appears to do nothing. Users who take
+the backup before clearing get nothing.
+
+**Root cause:** `exportAllDiagrams` reads `localStorage.getItem('axoview-diagrams')`
+and returns early when it is null. That key is the pre-places-model store,
+written only by `DiagramLifecycleProvider`'s legacy session-mode effect; the
+session place writes `sessionStorage`'s `axoview_diagrams` / `axoview_diagram_<id>`.
+When the legacy key does exist, the exported file is that stale copy rather than
+the current workspace.
+
+Measured: with both session keys populated, clicking Export creates no object
+URL and no anchor click.
+
+**Workaround:** export from the file explorer (Export project ZIP) instead.
+
+**Status:** Open. Fix direction: route the export through the storage provider
+(the project-ZIP exporter already does), or drop the button rather than offer a
+backup that is not one. Repro:
+[`storage-hygiene-chr-01-to-04.explore.test.tsx`](packages/axoview-app/src/__explore__/A5/storage-hygiene-chr-01-to-04.explore.test.tsx).
+
+## The boot-time service-worker cleanup never finishes on a machine that has no service worker
+
+**Found by:** exploratory campaign A5/CHR-05
+
+**Symptom:** Harmless today, load-bearing tomorrow: `index.tsx` ends every boot
+with `serviceWorkerRegistration.unregister()`, and on the overwhelmingly common
+case — no service worker registered — that promise chain never settles. Anything
+ever sequenced after it (a cleanup, a telemetry ping, an `await` in a future
+refactor) would hang forever, on every boot, with no error.
+
+**Root cause:** `unregister()` awaits `navigator.serviceWorker.ready`, which by
+spec resolves only when there is an ACTIVE registration — it does not reject or
+resolve when there is none. The API that answers the question being asked is
+`navigator.serviceWorker.getRegistrations()`, which resolves to `[]`. The same
+function's `.catch(error => console.error(error.message))` also assumes an
+`Error`: a string rejection logs `undefined`, and a null/undefined rejection
+throws inside the handler.
+
+Measured: with `ready` pending, the chain is still unsettled after the
+microtask queue and a macrotask drain; with a resolved registration,
+`unregister()` is called exactly once; with a string rejection the handler logs
+`undefined`.
+
+**Workaround:** none needed today.
+
+**Status:** Open. Fix direction: `getRegistrations().then(rs => rs.forEach(r => r.unregister()))`,
+and log the rejection value rather than `.message`. Repro:
+[`boot-migration-chr-05-to-08.explore.test.ts`](packages/axoview-app/src/__explore__/A5/boot-migration-chr-05-to-08.explore.test.ts).
+
+## A storage migration that fails partway is recorded as complete, stranding the rest of the data forever
+
+**Found by:** exploratory campaign A5/CHR-06
+
+**Symptom:** A user upgrading from the FossFLOW-era build on a nearly-full
+browser profile — i.e. exactly the user with the most legacy data — can have
+half their keys migrated and the other half left under the old prefix. Nothing
+reads the old prefix, and the migration never runs again, so that data is
+present in the profile and invisible to the app permanently.
+
+**Root cause:** `migrateFossflowStorageKeys` wraps each `migrateStorage(...)`
+call in a `try {} catch {}` that swallows the error ("skip — best effort"), and
+then writes the `axoview_migration_v1` sentinel unconditionally. A
+QuotaExceededError partway through the key loop therefore ends as
+`{ ran: true }` with legacy keys still in place; the next boot short-circuits on
+the sentinel. The sentinel's own `catch` reasons correctly about this case
+("can't set sentinel; migration will retry next boot") — the migration body
+does not.
+
+Measured: with `setItem` throwing on the second migrated key, the sentinel is
+`done`, `fossflow-*` keys remain, and a second `migrateFossflowStorageKeys()`
+returns `ran: false` and changes nothing.
+
+**Workaround:** clear `axoview_migration_v1` from localStorage by hand and
+reload.
+
+**Status:** Open. Fix direction: only write the sentinel when both passes
+completed without throwing (or record per-store progress), so a partial run is
+retried. Repro:
+[`boot-migration-chr-05-to-08.explore.test.ts`](packages/axoview-app/src/__explore__/A5/boot-migration-chr-05-to-08.explore.test.ts).
+
+## The Docker deployment sends every API call cross-origin, where the app's own CSP blocks it
+
+**Found by:** exploratory campaign A5/CHR-07
+
+**Symptom:** `npm run docker:run` (`compose.dev.yml`) serves the app at
+`http://localhost:3000`. Every `/api/*` call the SPA makes is addressed to
+`http://localhost:3001` instead — bypassing the nginx proxy that fronts the API
+and violating the app's own Content-Security-Policy, whose `connect-src` is
+`'self'`. Server storage appears broken in the deployment the README documents.
+
+**Root cause:** `apiBaseUrl()` identifies the dev split (`SPA :3000 → backend
+:3001`) by sniffing `window.location.hostname === 'localhost' && port === '3000'`.
+`compose.dev.yml` publishes nginx as `"3000:80"`, so the container is served
+from the same hostname and port as `npm start`, and the sniff cannot tell them
+apart. In the container `/api/` is same-origin behind `location /api/ { proxy_pass
+http://localhost:3001; }`, and the CSP nginx emits (`connect-src 'self'`) does
+not include `localhost:3001` — a different port is a different origin.
+
+Measured from source: `compose.dev.yml` publishes `"3000:80"`; `nginx.conf`
+proxies `/api/` and emits `connect-src 'self'` with no `localhost:3001`
+allowance; `apiBaseUrl()` returns `http://localhost:3001` for a
+`http://localhost:3000` page.
+
+**Workaround:** publish the container on a host port other than 3000
+(e.g. `"3100:80"`).
+
+**Status:** Open. Fix direction: decide the split from a build/runtime signal
+rather than the port — `process.env.NODE_ENV`, a define, or the runtime config
+`useRuntimeConfig` already fetches — and default to same-origin `/api`. Repro:
+[`boot-migration-chr-05-to-08.explore.test.ts`](packages/axoview-app/src/__explore__/A5/boot-migration-chr-05-to-08.explore.test.ts).
+
+## Every shipped locale is missing strings — including the nine documented as fully covered
+
+**Found by:** exploratory campaign A5/CHR-09 (and A5/CHR-10)
+
+**Symptom:** All twelve non-English catalogues are short of `en-US`: 34 keys
+each for zh-CN, es-ES, pt-BR, fr-FR, hi-IN, bn-BD, ru-RU, it-IT, tr-TR and
+pl-PL, 35 for zh-CN, and 65–66 for de-DE and id-ID. The missing strings fall
+back to English mid-screen. This contradicts the existing entry *"Partial-coverage
+i18n locales (de-DE + id-ID)"* above, which tells users to "switch … to one of
+the fully-covered locales (zh-CN, es-ES, pt-BR, fr-FR, hi-IN, bn-BD, ru-RU,
+it-IT, tr-TR)" — none of which is fully covered.
+
+Drift runs the other way too (CHR-10): every catalogue also carries 1–3 keys
+that `en-US` no longer has — renames or deletions the translations never
+followed. i18next resolves per key, so neither direction is ever reported.
+
+**Root cause:** nothing keeps the catalogues in step. `src/i18n/*.json` are
+hand-maintained and copied verbatim into the bundle by rsbuild; no lint, test or
+CI gate compares key sets, so every feature that adds strings to `en-US` widens
+the gap silently. (This is the *record* being wrong as much as the data — the
+same stale-invariant class as the S1–S3 thread S-f.)
+
+**Workaround:** use en-US for complete coverage.
+
+**Status:** Open. The translation debt itself is deferred (see the two entries
+above); what is new here is that no locale is complete and the documented
+"fully-covered" list is false. Fix direction: land a key-set contract test
+(en-US as the superset, both directions) so the gap is a visible number, and
+correct the partial-coverage entry to name all twelve. Repro:
+[`i18n-download-chr-09-to-11.explore.test.ts`](packages/axoview-app/src/__explore__/A5/i18n-download-chr-09-to-11.explore.test.ts).
+
+## One file-download helper is written five times, and every copy revokes the URL before the download can start
+
+**Found by:** exploratory campaign A5/CHR-11
+
+**Symptom:** Downloads (Export JSON, project ZIP, diagnostics bundle, storage
+backup) can silently produce nothing on browsers that treat a revoked object URL
+as a cancelled download — the app's own class of "the click appeared to do
+nothing" report. Fixing it means finding all five copies.
+
+**Root cause:** the same eight lines exist in `utils/downloadBlob.ts` (one
+caller: `ExportProjectZipDialog`), `LocalStorageInspector.exportAllDiagrams`,
+`DiagramLifecycleProvider`'s JSON export, `DiagnosticsOverlay.downloadFile` and
+the lib's `exportOptions.downloadFile`. Every copy calls `a.click()` and then
+`URL.revokeObjectURL(...)` synchronously in the same block, and none attaches
+the anchor to the document first. The shared helper that exists is used by
+exactly one of the five surfaces — the ADR 0047 "app/lib dual implementations of
+one contract" class, here at five.
+
+Measured by source sweep across all five files.
+
+**Workaround:** none.
+
+**Status:** Open. Fix direction: one helper (lib-side, re-exported for the app)
+that appends the anchor, clicks, and revokes on a later tick; delete the four
+copies. Ships naturally with the dual-implementation class gate (ADR 0047 §3).
+Repro:
+[`i18n-download-chr-09-to-11.explore.test.ts`](packages/axoview-app/src/__explore__/A5/i18n-download-chr-09-to-11.explore.test.ts).
