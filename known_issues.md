@@ -4968,3 +4968,79 @@ only way out is the undocumented Escape/V key.
 or finish the feature — and when finishing it, reset
 `annotation.tool` to `'select'` (or keep the palette mounted) whenever the
 chrome is hidden. Repro: [`view-modes.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F2-view/view-modes.explore.spec.ts).
+
+## Bolding a multi-selection wipes its italic and underline
+
+**Found by:** exploratory campaign STYL-01 / STYL-06
+
+**Symptom:** Select two floating Labels where one is italic, press the strip's
+**B**. Both go bold — and the italic one silently loses its italic. The same
+happens to underline and strikethrough, on node labels and connector labels as
+well, and the text-box path reaches the same place by a different route: with a
+bold box and a plain box selected, one press un-bolds the bold one and leaves
+the plain one plain (or bolds both, depending on which box you selected first).
+
+**Root cause:** `TopBarStyleControls.toggleFormat` builds a full quartet from
+the REPRESENTATIVE member (`sel = bulk.ids[0]`) and hands the whole thing to
+the bulk fan-out:
+
+```js
+const next = {
+  bold:      name === 'bold' ? !formatValue.bold : !!formatValue.bold,
+  italic:    name === 'italic' ? !formatValue.italic : !!formatValue.italic,
+  underline: …, strike: …
+};
+updateLabel(label.id, { isBold: next.bold, isItalic: next.italic,
+                        isStrikethrough: next.strike, isUnderline: next.underline });
+```
+
+`updateLabel` is the bulk-aware shadow (`applyToTargets('LABEL', …)`), so
+every selected label receives the representative's values for all four fields —
+not just the one the user pressed. `formatValue` also reads the representative
+only, so there is no mixed state and the press direction is decided by one
+arbitrary member (STYL-02, STYL-08).
+
+The text-box branch has the same defect in a different shape:
+`next = !getWholeContentFormats(representative).bold`, then
+`applyInlineFormat(target.content, 'bold', next)` per target — the value is
+per-target but the DIRECTION is not.
+
+**Workaround:** style items one at a time.
+
+**Status:** Open. Fix direction: send only the pressed field
+(`{ isBold: next }`) instead of the quartet, and derive `next` from the
+whole selection (`all ? false : true`) rather than from the representative —
+one change fixes the wipe, the missing mixed state and the
+representative-order dependence together. Repro: [`strip.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F3-styling/strip.explore.spec.ts) (labels), [`bulk-styl-08-10-12.explore.test.ts`](packages/axoview-lib/src/__explore__/F3/bulk-styl-08-10-12.explore.test.ts) (text
+boxes).
+
+## The text-box border opacity slider does nothing on a box with no border
+
+**Found by:** exploratory campaign STYL-05
+
+**Symptom:** Select a text box that has no border, open the strip's Border
+popover and drag the Opacity slider. Nothing appears. Pressing a line style or
+the width slider in the same popover DOES produce a visible border — because
+those two seed a colour and opacity does not. The dragged value is stored all
+the same, so a later style press produces a border at whatever opacity was left
+behind rather than the opaque default.
+
+**Root cause:** Two of the three writers in that popover carry a seed and the
+third does not:
+
+```js
+onChange={(style) => updateTextBox(id, { borderStyle: style,
+  ...(textBox.borderColor ? {} : { borderColor: '#000000' }) })}   // seeds
+onChange={(borderWidth) => updateTextBox(id, { borderWidth,
+  ...(textBox.borderColor ? {} : { borderColor: '#000000' }) })}   // seeds
+onChange={(v) => updateTextBox(id, { borderOpacity: v >= 1 ? undefined : v })} // does not
+```
+
+and `TextBox`'s `borderCss` returns `undefined` whenever `borderColor`
+is absent, so an opacity-only write can never render.
+
+**Workaround:** set a line style or width first, then the opacity.
+
+**Status:** Open. Fix direction: give the opacity writer the same seed as its
+two siblings — or hoist the seed into one `ensureBorderColor()` helper the
+whole popover calls, so a fourth control cannot miss it. Repro: [`bulk-styl-08-10-12.explore.test.ts`](packages/axoview-lib/src/__explore__/F3/bulk-styl-08-10-12.explore.test.ts).
