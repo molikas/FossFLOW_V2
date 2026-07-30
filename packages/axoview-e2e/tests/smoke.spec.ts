@@ -16,9 +16,10 @@
  *
  * J20 verification: with all storage cleared the boot lands on
  * EmptyStateScreen; the New button creates a blank diagram (canvas mounts
- * + debug bridge attaches), and the Import button triggers a native file
- * chooser (intercepted via `page.waitForEvent('filechooser')` — the empty-
- * tree path bypasses the in-tree ImportDialog per App.tsx handleImportClick).
+ * + debug bridge attaches), and the Import button opens `ImportDialog` — the
+ * ONE import flow (A3/ZIP-09, owner ruling 2026-07-30). The empty tree used to
+ * bypass the dialog and import straight to root; the native chooser now sits
+ * one click further in, behind "Choose file…".
  */
 import { appTest as test, expect } from '../fixtures/app.fixture';
 import { AppToolbarPOM } from '../pom/AppToolbarPOM';
