@@ -110,7 +110,14 @@ test.describe('OVL-07 — the label drag loses its owner on a mid-gesture zoom',
     expect(await labelDragState(page), 'the preview was cleared').toBeNull();
   });
 
-  test('a zoom below HIT_MIN_ZOOM mid-drag unmounts the layer and drops the gesture', async ({
+  /**
+   * VERDICT (FALSIFIED): crossing HIT_MIN_ZOOM mid-drag DOES take the proxy div
+   * out of the DOM, but the gesture survives — `active` makes the layer RETURN
+   * NULL, which does not unmount the component, so the safety-net cleanup never
+   * runs and the window-bound pointerup still commits. The two-owner seam is
+   * real; the gesture is owned by window listeners, not by the div.
+   */
+  test('the drag survives its own proxy layer disappearing mid-gesture', async ({
     page,
     app
   }) => {
@@ -127,8 +134,10 @@ test.describe('OVL-07 — the label drag loses its owner on a mid-gesture zoom',
     await page.mouse.down();
     await page.mouse.move(cx, cy + 30, { steps: 6 });
     await page.mouse.move(cx, cy + 70, { steps: 6 });
-    const live = await labelDragState(page);
-    expect(live?.id, 'PRECONDITION: the drag engaged').toBe(item.id);
+    expect(
+      (await labelDragState(page))?.id,
+      'PRECONDITION: the drag engaged'
+    ).toBe(item.id);
 
     // The same thing a wheel-zoom does mid-gesture — cross the 0.4 line the
     // proxy layer mounts behind.
@@ -136,44 +145,17 @@ test.describe('OVL-07 — the label drag loses its owner on a mid-gesture zoom',
     await page.waitForTimeout(400);
     expect(
       await page.locator(proxyFor(item.id)).count(),
-      'PRECONDITION: the proxy layer really unmounted'
+      'PRECONDITION: the proxy div really did leave the DOM'
     ).toBe(0);
 
     await page.mouse.up();
     await page.waitForTimeout(500);
 
-    // Characterization: the offset the user dragged to is gone.
-    expect((await firstViewItem(page)).labelHeight).toBe(before);
+    // The offset the user dragged to is committed anyway, and the preview
+    // channel is cleared.
+    expect((await firstViewItem(page)).labelHeight).not.toBe(before);
     expect(await labelDragState(page)).toBeNull();
   });
-
-  test.fail(
-    'BUG: a live label drag must survive a zoom (or commit what it previewed)',
-    async ({ page, app }) => {
-      void app;
-      test.setTimeout(180_000);
-      const canvas = new CanvasPOM(page);
-      const item = await setupNamedNode(page, canvas);
-      const before = item.labelHeight ?? 20;
-      const rect = (await page.locator(proxyFor(item.id)).boundingBox())!;
-      const cx = rect.x + rect.width / 2;
-      const cy = rect.y + rect.height / 2;
-      await page.mouse.move(cx, cy);
-      await page.mouse.down();
-      await page.mouse.move(cx, cy + 30, { steps: 6 });
-      await page.mouse.move(cx, cy + 70, { steps: 6 });
-      expect(
-        (await labelDragState(page))?.id,
-        'PRECONDITION: the drag engaged'
-      ).toBe(item.id);
-      await setZoom(page, 0.3);
-      await page.waitForTimeout(400);
-      await page.mouse.up();
-      await page.waitForTimeout(500);
-
-      expect((await firstViewItem(page)).labelHeight).not.toBe(before);
-    }
-  );
 });
 
 // ---------------------------------------------------------------------------
