@@ -952,14 +952,14 @@ that persist.
 
 **Workaround:** re-assign the entity to a real layer, or to "no layer".
 
-**Status:** Partially fixed in 5d6a969b (2026-07-30) — the write site is closed:
-`ASSIGN_LAYER_TO_ITEMS` refuses a layer id that names no layer in the view, and
-the class gate pins it. **Still open:** a dangling ref arriving through paste or
-import is accepted by `modelSchema` + `validateView` as before. Closing that half
-needs the reject-vs-repair call for files that already carry one — a strict load
-gate would refuse to open them, which is the harm E4/CLIP-02 is filed for. Class
-gate: [`modelIdentity.contract.test.ts`](packages/axoview-lib/src/schemas/__tests__/modelIdentity.contract.test.ts). Remaining repro:
-[`red-03.explore.test.ts`](packages/axoview-lib/src/__explore__/E2/red-03.explore.test.ts).
+**Status:** Fixed in 2168faa5 (2026-07-30) — both halves. The write site
+(`ASSIGN_LAYER_TO_ITEMS`) refuses a layer id that names no layer in the view
+(`5d6a969b`), and the load path repairs one that arrives in a file: a dangling
+`layerId` becomes unassigned, which the app already renders as visible and
+editable. Per the owner's repair-don't-reject ruling, `validateView` deliberately
+still accepts the reference — flagging it there would make a file carrying one
+un-openable AND (via E2/RED-02) make every edit in that view throw. Promoted
+regressions: [`repairModel.test.ts`](packages/axoview-lib/src/utils/__tests__/repairModel.test.ts) and the class gate [`modelIdentity.contract.test.ts`](packages/axoview-lib/src/schemas/__tests__/modelIdentity.contract.test.ts).
 
 ## Layer `order` values collide — after a delete, or after a partial reorder
 
@@ -1419,11 +1419,14 @@ is an intentional no-op.
 **Reachability:** any merge/import path that concatenates two id spaces — ZIP
 import, "duplicate page", a paste bug like SCN-03, or a hand-edited file.
 
-**Status:** Open. Fix direction: one `assertUniqueIds` pass in `validateModel`
-covering `items`, `views`, and per-view `items`/`connectors`/`rectangles`/
-`textBoxes`/`labels`/`layers` plus anchor ids — it is O(n) with a Set and would
-have caught SCN-03 as well. Repro:
-[`clip-01-03.explore.test.ts`](packages/axoview-lib/src/__explore__/E4/clip-01-03.explore.test.ts).
+**Status:** Fixed in 2168faa5 (2026-07-30) — owner ruling: **repair, don't reject.**
+`modelSchema` deliberately still accepts a duplicate id, because making it an
+error would stop every file this bug has already produced from opening (the
+E4/CLIP-02 harm). Instead the load path repairs: `utils/repairModel.ts` keeps the
+FIRST occurrence and drops the shadowed twin — which was already unreachable, so
+nothing the user could see changes — across model items, views, every view
+collection and connector anchor ids, and reports what it did. Promoted
+regressions: [`repairModel.test.ts`](packages/axoview-lib/src/utils/__tests__/repairModel.test.ts) and the class gate [`modelIdentity.contract.test.ts`](packages/axoview-lib/src/schemas/__tests__/modelIdentity.contract.test.ts).
 
 ## One connector with an unresolvable anchor-to-anchor ref makes the whole diagram refuse to open
 
@@ -1576,10 +1579,15 @@ Promoted regression + class gate: [`modelIdentity.contract.test.ts`](packages/ax
   but nothing bounds magnitude: a tile at `1e12` loads clean, overflows the
   projection math and puts content where no viewport can reach it.
 
-**Status:** Open. Fix direction: add an `INVALID_ITEM_ICON_REF` check to
-`validateModel` (and derive `requiredPacks` from it), and give `coords` a sane
-`.int().min()/.max()` bound consistent with the grid's addressable range. Repro:
-[`clip-08-15.explore.test.tsx`](packages/axoview-lib/src/__explore__/E4/clip-08-15.explore.test.tsx).
+**Status:** Partially fixed in 2168faa5 (2026-07-30) — the **tile-coordinate**
+half (CLIP-15) is closed: `utils/repairModel.ts` clamps a non-finite or absurd
+coordinate on load, per the owner's repair-don't-reject ruling. Non-finite is the
+sharp case — the schema rejects it, so those files do not open at all today. The
+**icon-reference** half is still open and is deliberately not a validation
+change: `validateModelItem` leaves icon refs alone on purpose (icons may come
+from packs that are loaded separately and are not in `model.icons`), so the real
+fix is the `requiredPacks` derivation the entry names, which belongs with the
+wave 4 icon work. Promoted regressions: [`repairModel.test.ts`](packages/axoview-lib/src/utils/__tests__/repairModel.test.ts) and the class gate [`modelIdentity.contract.test.ts`](packages/axoview-lib/src/schemas/__tests__/modelIdentity.contract.test.ts).
 
 ## Read-only mode is keyboard-editable — the keydown dispatcher has no `editorMode` gate
 
