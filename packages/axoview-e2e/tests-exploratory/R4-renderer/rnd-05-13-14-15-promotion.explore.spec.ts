@@ -322,6 +322,36 @@ test.describe('RND-05 — below the label LOD zoom, only the promoted node keeps
 // ---------------------------------------------------------------------------
 
 test.describe('RND-14 — panning the selected node off-screen drops its overlay', () => {
+  /**
+   * CONTROL (added after R5/OVL-11 hit the same trap): `handleFunctionKeys`
+   * drops F2 unless the keystroke came from inside the renderer or from
+   * document.body, and placing an icon leaves focus in the Elements grid. So
+   * "F2 mounted no editor" only means something once F2 is shown to WORK for the
+   * same selection without the pan.
+   */
+  test('CONTROL: with the node on screen, F2 does mount the inline editor', async ({
+    page,
+    app
+  }) => {
+    void app;
+    test.setTimeout(180_000);
+    const canvas = new CanvasPOM(page);
+    const at = await canvas.tileToScreen({ x: 0, y: 0 });
+    await placeIconViaMouse(page, at);
+    await expect.poll(() => getViewItemCount(page)).toBe(1);
+    const id = await firstItemId(page);
+    await selectItem(page, id!);
+    await expect(page.locator(`[data-drag-id="${id}"]`)).toHaveCount(1);
+    await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
+    expect(
+      await page.evaluate(() => document.activeElement?.tagName ?? null),
+      'PRECONDITION: focus is on body so F2 is not filtered out'
+    ).toBe('BODY');
+    await page.keyboard.press('F2');
+    await page.waitForTimeout(600);
+    expect(await page.locator('[contenteditable="true"]').count()).toBeGreaterThan(0);
+  });
+
   test('itemControls still names it, but its DOM copy and rename affordance are gone', async ({
     page,
     app
@@ -358,13 +388,16 @@ test.describe('RND-14 — panning the selected node off-screen drops its overlay
 
     // …but the DOM overlay is gone, so F2 has nothing to talk to.
     await expect(page.locator(`[data-drag-id="${id}"]`)).toHaveCount(0);
-    await page.locator('[data-axoview-id="canvas-interactions"]').click({
-      position: { x: 5, y: 5 },
-      force: true
-    }).catch(() => undefined);
     await selectItem(page, id!);
+    // Same focus reset the CONTROL above proves is sufficient, so a null result
+    // here is about the missing overlay and not about the F2 focus filter.
+    await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
+    expect(
+      await page.evaluate(() => document.activeElement?.tagName ?? null),
+      'PRECONDITION: focus is on body so F2 is not filtered out'
+    ).toBe('BODY');
     await page.keyboard.press('F2');
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(600);
     expect(
       await page.locator('[contenteditable="true"]').count(),
       'no inline rename editor was mounted'

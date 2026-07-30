@@ -19,7 +19,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 | R2 | [WebGL sprite-batch substrate (atlas, shaders, context loss)](areas/R2-webgl-substrate.md) | DONE | 13 / 10 | 4 | 0 | 9/3/8 |
 | R3 | [Bulk GPU scene layers (build/invalidation, style parity, LOD)](areas/R3-gpu-scene-layers.md) | DONE | 15 / 10 | 7 | 1 | 10/6/11 |
 | R4 | [Renderer orchestration (culling, hybrid promotion, fit-to-view)](areas/R4-renderer-orchestration.md) | DONE | 15 / 10 | 9 | 1 | 10/0/11 |
-| R5 | [DOM overlays & presentation parity (labels, hit proxies, grid, compositor)](areas/R5-dom-overlays-parity.md) | IN PROGRESS | 0 / 10 | 0 | 0 | 9/23/14 |
+| R5 | [DOM overlays & presentation parity (labels, hit proxies, grid, compositor)](areas/R5-dom-overlays-parity.md) | DONE | 13 / 10 | 7 | 0 | 9/23/14 |
 | A1 | [Diagram lifecycle: open/save/dirty/autosave state machine](areas/A1-diagram-lifecycle.md) | OPEN | 0 / 10 | 0 | 0 | 10/20/14 |
 | A2 | [Storage providers & places model (local/session/Drive, move-to-Drive)](areas/A2-storage-places.md) | OPEN | 0 / 10 | 0 | 0 | 17/7/8 |
 | A3 | [Project ZIP & import/export (JSON, ZIP, image)](areas/A3-zip-import-export.md) | OPEN | 0 / 10 | 0 | 0 | 9/9/6 |
@@ -152,3 +152,10 @@ After all areas are DONE: completeness-critic pass per APPROACH §8 — list the
 | RND-07 | A link inside a resting text box is unclickable: the full-viewport interactions box is mounted above the TextBoxes layer, so ADR 0034's `#diagram:` navigation handler is unreachable code | *A link inside a text box cannot be clicked* |
 | RND-09 | Fit-to-view does not reserve room for a raised node name chip (+280 px vs 3 tiles of padding) — a fourth omission in `getProjectBounds` | *The project bounding box mis-frames the diagram…* → item 4 |
 | RND-13/15 | Hybrid promotion restacks: a selected or dragged element is drawn in a DOM overlay mounted above its bulk canvas, so it jumps in front of every node — and of the floating-Label canvas — until deselected | *Selecting an element restacks it above the rest of the diagram* |
+| OVL-02 | The readable-labels counter-scale is computed from the base-font CONSTANT by both consumers, so an enlarged label is scaled up again and a shrunken one is left illegible | *The "keep labels readable" scale ignores a node's own label font size* |
+| OVL-03 | `useImageAspect` has no `onerror`, so a dead icon url leaves the ADR-0044 selection outline square forever and is re-fetched on every mount (the mirror of GPU-03) | *The selection outline has no icon-load failure path and re-fetches dead urls* |
+| OVL-06 | In present mode a node's name chip has no hit proxy — no link card, no notes hover — while a floating Label's does | *A node's name chip is inert in present mode while a floating Label's is not* |
+| OVL-10 | The placement ghost anchors at the bare tile and ignores the ADR-0023 residual, so with snap off it previews the wrong cell | *The placement ghost ignores the off-grid residual* |
+| OVL-12 | `NodeLabelHitLayer` does not apply the readable-labels counter-scale its sibling `LabelHitLayer` does — the chip grows, the grab box does not | *The node-name grab box does not follow the readable-labels counter-scale* |
+| OVL-13 | `NodeLabelHitLayer` filters `visibleIds` but never `lockedIds`, so a locked layer still exposes its nodes' label drag and inline rename | *A locked layer still exposes its nodes' label drag and rename handles* |
+| OVL-14 | `NUDGEABLE_TYPES` omits LABEL, so arrow keys pan instead of moving a selected Label — and a mixed node+Label selection comes apart | *Arrow keys cannot move a floating Label — they pan the canvas instead* |

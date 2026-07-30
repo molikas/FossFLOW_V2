@@ -3139,3 +3139,257 @@ only as a memo dependency. Both are one-line changes. The broader point belongs
 with the id-validation cluster: ids are treated as opaque strings everywhere
 except the handful of places that pack them into one. Repro:
 [`rnd-03-04-06-12-culling.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R4-renderer/rnd-03-04-06-12-culling.explore.spec.ts).
+
+## A locked layer still exposes its nodes' label drag and rename handles
+
+**Found by:** exploratory campaign OVL-13
+
+**Symptom:** Lock a layer and its nodes behave as locked — until you touch a
+node's NAME. The name chip still shows a grab cursor, still drags vertically to
+reposition the label, and still opens the inline rename on a double-click. The
+drag writes a real `labelHeight` to the model, so a locked layer is editable
+through the one affordance nobody thought to gate.
+
+Measured: with the layer HIDDEN the proxy is correctly removed (0 elements).
+With the same layer VISIBLE + LOCKED the proxy is still mounted with
+`cursor: grab`, and a real mouse drag on it changes `labelHeight` in the store.
+
+**Root cause:**
+[`NodeLabelHitLayer`](packages/axoview-lib/src/components/SceneLayers/Nodes/NodeLabelHitLayer.tsx)
+destructures only `{ visibleIds, layers }` from `useLayerContext` and filters on
+`layers.length > 0 && !visibleIds.has(node.id)`. Its sibling
+[`LabelHitLayer`](packages/axoview-lib/src/components/SceneLayers/Labels/LabelHitLayer.tsx)
+— the floating-Label proxy, same job, same file shape — destructures
+`{ visibleIds, lockedIds, layers }` and carries the extra line
+`if (editable && lockedIds.has(label.id)) return null;`, with a comment
+explaining that view-mode hover should still pass through. One layer got the
+lock gate and the other did not. This is the layer-state cluster again
+(PTR-11 arrow nudge, CONN-15 connector anchors, CTX-06 transform chrome): the
+rendering guidelines' §15 rule — every component that exposes an interactive
+affordance re-applies the layer filter itself — is stated but not enforced
+anywhere.
+
+**Workaround:** hide the layer instead of locking it, or move the nodes off it.
+
+**Status:** Open. Fix direction: copy `LabelHitLayer`'s gate into
+`NodeLabelHitLayer`. Worth doing structurally rather than by hand — a shared
+`useInteractableIds()` (or one `isItemInteractable` the affordance layers all
+call, the way `processMouseUpdate` already does for the gesture paths) would
+close this class instead of its fourth instance. Repro:
+[`ovl-01-12-13-15-hitproxy.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R5-overlays/ovl-01-12-13-15-hitproxy.explore.spec.ts).
+
+## The node-name grab box does not follow the readable-labels counter-scale
+
+**Found by:** exploratory campaign OVL-12
+
+**Symptom:** Turn "keep labels readable" (Aa) on and zoom out. Node name chips
+grow — that is the point of the setting — but the invisible box that lets you
+grab, drag or double-click them does not, so most of the enlarged chip is dead.
+The bigger the counter-scale, the worse the mismatch: at the `LABEL_MAX_COUNTER_SCALE`
+of 4 only a quarter of the chip's area responds.
+
+Measured at zoom 0.5: turning the toggle on takes `NodesCanvas`'
+`data-label-scale` above 1.2 while the proxy div's width and height are
+unchanged to within 0.1px.
+
+**Root cause:** the same sibling pair as OVL-13, drifting the other way.
+[`LabelHitLayer`](packages/axoview-lib/src/components/SceneLayers/Labels/LabelHitLayer.tsx)
+imports `computeLabelCounterScale` and publishes it onto a
+`display: contents` wrapper so its proxies scale with the chips;
+[`NodeLabelHitLayer`](packages/axoview-lib/src/components/SceneLayers/Nodes/NodeLabelHitLayer.tsx)
+never imports `labelScale` at all. Node names are therefore the only label kind
+whose hit box and paint disagree under the accessibility setting — which is the
+setting most likely to be on for a user who needs the bigger target.
+
+**Workaround:** zoom in until the counter-scale returns to 1.
+
+**Status:** Open. Fix direction: mirror `LabelHitLayer`'s wrapper in
+`NodeLabelHitLayer`. This is the third threshold problem in the label ladder
+(with GPU-04's 0.4 hit floor and GPU-05's `readableLabels` interaction) and they
+should be decided together — the underlying rule being "the box that grabs a
+label is the box that draws it, at every zoom and every setting". Repro:
+[`ovl-01-12-13-15-hitproxy.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R5-overlays/ovl-01-12-13-15-hitproxy.explore.spec.ts).
+
+## A node's name chip is inert in present mode while a floating Label's is not
+
+**Found by:** exploratory campaign OVL-06
+
+**Symptom:** In present / view mode (`EXPLORABLE_READONLY`) hovering a node's
+NAME does nothing — no link card for a node with a `headerLink`, no notes
+hover — and a click on it falls through to the empty tile the chip floats over.
+Hovering a floating Label's chip in the same diagram works. The node BODY is
+still clickable, so the inconsistency reads as "some labels are interactive and
+some are not" rather than as a mode rule.
+
+Measured: with a node and a Label on one view, both proxies are mounted in
+`EDITABLE`; switching to `EXPLORABLE_READONLY` leaves the Label's proxy mounted
+and takes the node-name proxy to 0.
+
+**Root cause:**
+[`LabelHitLayer`](packages/axoview-lib/src/components/SceneLayers/Labels/LabelHitLayer.tsx)
+was deliberately extended for view mode — `const active = (editable || viewMode) && zoomActive`,
+with hover-only proxies that publish `viewModeHoveredLabelId` so the
+`ViewModeInfoPopover` can show a Label's notes ("labels being outside the tile
+hit-test would otherwise make chips hover-inert" — its own comment).
+[`NodeLabelHitLayer`](packages/axoview-lib/src/components/SceneLayers/Nodes/NodeLabelHitLayer.tsx)
+still gates on `s.editorMode === 'EDITABLE' && s.zoom >= HIT_MIN_ZOOM` and never
+got the branch — even though it already implements the link-card hover
+(`onPointerEnter` → `EDIT_ELEMENT_LINK_EVENT`) that view mode is the natural
+audience for. Node names are outside the tile hit-test for exactly the same
+reason Labels are, so the argument that justified the Label branch applies
+unchanged.
+
+**Workaround:** hover the node's icon instead of its name.
+
+**Status:** Open. Fix direction: give `NodeLabelHitLayer` the same
+`editable || viewMode` gate with press handlers suppressed in view mode, so a
+linked node's name raises its card and a pan started over the chip still pans.
+Repro:
+[`ovl-04-05-06-08-surfaces.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R5-overlays/ovl-04-05-06-08-surfaces.explore.spec.ts).
+
+## The "keep labels readable" scale ignores a node's own label font size
+
+**Found by:** exploratory campaign OVL-02
+
+**Symptom:** The Aa toggle is supposed to hold labels at a legible on-screen
+size when you zoom out. It does that for a default-sized label and gets both
+other cases wrong: a label whose font was ENLARGED in the style strip is scaled
+up again even though it is already well above the floor (ending up several times
+larger than everything around it), and a label whose font was SHRUNK stays below
+the floor — the one label the setting exists for is the one it does not fix.
+
+Measured at a zoom where the base font sits at half the readable floor: a node
+with `labelFontSize` = 3x the base is already above the floor, yet receives the
+full counter-scale and lands at exactly 3x the floor; a node at 1/3 the base
+receives the SAME factor and is still below it.
+
+**Root cause:** `computeLabelCounterScale` takes `baseFontPx` as a parameter and
+is correct for whatever it is given — but both call sites pass the module
+constant `LABEL_BASE_FONT_PX` instead of the node's `labelFontSize`:
+[`ExpandableLabel`](packages/axoview-lib/src/components/Label/ExpandableLabel.tsx)
+(the `--axoview-label-scale` CSS var) and
+[`NodesCanvas`](packages/axoview-lib/src/components/SceneLayers/Nodes/NodesCanvas.tsx)
+(the `u_counterScale` uniform). The GL side has a structural reason — the scale
+is ONE uniform for the whole instanced draw, so it cannot be per-node without
+moving the factor into the instance buffer — which is presumably why the DOM
+side matches it. So the two renderers agree, and both are wrong in the same way:
+ADR 0015 is written in terms of "the label's on-screen font size", and per-node
+sizes (ADR 0032's style strip) arrived later without revisiting it.
+
+**Workaround:** leave label font sizes at the default if you rely on the Aa
+toggle.
+
+**Status:** Open. Fix direction: pack the per-node counter-scale into the sprite
+instance (it is a single float alongside the existing counter-scale flag) and
+pass `node.labelFontSize ?? LABEL_BASE_FONT_PX` on both paths. If that is judged
+too costly, the honest alternative is to document the setting as base-font-only
+and disable it for restyled labels rather than mis-scaling them. Repro:
+[`scale-nudge-ovl-02-14.explore.test.ts`](packages/axoview-lib/src/__explore__/R5/scale-nudge-ovl-02-14.explore.test.ts).
+
+## Arrow keys cannot move a floating Label — they pan the canvas instead
+
+**Found by:** exploratory campaign OVL-14
+
+**Symptom:** Select a floating Label and press an arrow key. The Label does not
+move; the whole canvas scrolls out from under it. Every other placed entity —
+node, rectangle, text box — nudges one tile per press. Worse, select a node AND
+a Label together and nudge: the node moves and the Label stays, so the group the
+user built silently comes apart, one arrow press at a time, with no undo entry
+covering the Label.
+
+Measured: a selected ITEM produces one batch update and no scroll; a selected
+TEXTBOX likewise; a selected LABEL produces zero updates, no drag transaction,
+and a scroll of `-KEYBOARD_PAN_SPEED`. A mixed node+Label selection updates only
+the node.
+
+**Root cause:**
+[`handleArrowKey`](packages/axoview-lib/src/interaction/handleArrowKey.ts)
+enumerates `NUDGEABLE_TYPES = { ITEM, RECTANGLE, TEXTBOX }`. The comment beside
+it explains the deliberate omissions — `CONNECTOR` and `CONNECTOR_ANCHOR`
+"aren't directly tile-nudge-able here, so a connectors-only selection falls back
+to pan" — and `LABEL` is simply absent from both the set and the reasoning:
+floating Labels (ADR 0031) are tile-anchored and are shipped after the B6 nudge
+work. The nudge helper's `NudgeScene` shape has no `labels` array either, so the
+omission is consistent all the way down. Same shape as PTR-11 / SEL-01: a
+keyboard consumer that enumerates entity types and misses the newest one.
+
+**Workaround:** drag the Label with the mouse.
+
+**Status:** Open. Fix direction: add `LABEL` to `NUDGEABLE_TYPES`, add
+`labels` to `NudgeScene`, and route the update through the same
+begin/commit bracket so one press stays one undo step — and, while there,
+decide whether a mixed selection containing a non-nudgeable type should move
+what it can (today) or nothing at all. Repro:
+[`scale-nudge-ovl-02-14.explore.test.ts`](packages/axoview-lib/src/__explore__/R5/scale-nudge-ovl-02-14.explore.test.ts).
+
+## The selection outline has no icon-load failure path and re-fetches dead urls
+
+**Found by:** exploratory campaign OVL-03
+
+**Symptom:** Two related effects around a node's selection ring and hover
+outline (ADR 0044, which sizes them to the icon's real aspect ratio):
+
+1. For the whole time an icon is loading — every first selection of a node whose
+   icon is not yet in the browser cache — the outline is drawn SQUARE around an
+   icon that is not, then snaps to the right shape when the image arrives.
+2. If the icon url never loads (a 404, a dead CDN, an offline moment) the
+   outline stays square forever AND a fresh `Image` is created on every mount of
+   every outline for that url, for the rest of the session.
+
+Measured: a successful load reports 2.5 for a 100x250 bitmap and the second
+mount is served from the module cache with no new `Image`. A failed load leaves
+the aspect at 1 — there is no `onerror` handler at all — and the next mount
+constructs another `Image` for the same dead url.
+
+**Root cause:**
+[`useImageAspect`](packages/axoview-lib/src/hooks/useImageAspect.ts) writes its
+module cache only from `img.onload`, and has no `onerror` branch. A miss is
+therefore never memoised, which is the mirror image of R3/GPU-03 (where
+`NodesCanvas`' icon cache memoises a transient failure as permanent and never
+retries). The two icon-loading paths in the app fail in exactly opposite ways,
+neither of them chosen. The hook also has no `decode()` gate, so unlike the GL
+path — which waits for `decode()` specifically to avoid a black atlas tile — it
+publishes its default 1 to the outline immediately.
+
+**Workaround:** none needed for correctness; the outline is cosmetic.
+
+**Status:** Open. Fix direction: cache a sentinel on `onerror` (so a known-bad
+url is asked for once) and seed the initial state from that sentinel, matching
+what `decodedRef` does on the GL side. If the two icon caches are unified while
+fixing GPU-01/GPU-03, this hook should be a reader of that cache rather than a
+third fetcher. Repro:
+[`aspect-ovl-03.explore.test.tsx`](packages/axoview-lib/src/__explore__/R5/aspect-ovl-03.explore.test.tsx).
+
+## The placement ghost ignores the off-grid residual
+
+**Found by:** exploratory campaign OVL-10
+
+**Symptom:** With snap-to-grid off, the faint preview shown by the Text / Label /
+Rectangle / Connector tools sits at the centre of the tile under the cursor while
+the element actually lands under the cursor itself. The ghost's whole job is to
+answer "where will this go", and off-grid it answers with the grid cell — up to
+half a tile (about 70 x 41 canvas px) away from the truth.
+
+Measured: hovering 40 x 18 px off-centre inside a tile with global snap off, the
+ghost renders at the bare cell centre while the committed Label carries
+`offset: { x: -9.21, y: -13.26 }` — a 16.1 canvas-px discrepancy for a small
+cursor excursion.
+
+**Root cause:** `PlacementGhostLayer` in
+[`UiOverlay.tsx`](packages/axoview-lib/src/components/UiOverlay/UiOverlay.tsx)
+positions itself with `getTilePosition({ tile, origin: 'CENTER' })` from
+`uiState.mouse.position.tile` — the integer tile, with no residual — while the
+LABEL and TEXTBOX modes commit through `resolvePlacement`, ADR 0023's single
+placement chokepoint, which KEEPS the sub-tile residual when the item is
+unsnapped. The ghost is a new consumer of item geometry that reads the tile and
+not the rendered position: the eighth member of the offset-omission cluster the
+ADR's own Consequences section warns about, and the first one on a preview
+rather than a committed entity.
+
+**Workaround:** none; the drop is correct, only the preview lies.
+
+**Status:** Open. Fix direction: resolve the ghost through the same
+`cursorTileResidual` + `isSnappedPlacement` pair the modes use (or, better,
+have the modes publish the resolved placement to uiState so the ghost renders
+exactly what will be committed rather than recomputing it). Repro:
+[`ovl-07-10-11-gestures.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R5-overlays/ovl-07-10-11-gestures.explore.spec.ts).
