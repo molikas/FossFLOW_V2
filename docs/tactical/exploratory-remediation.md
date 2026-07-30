@@ -38,7 +38,7 @@ Fix **every** bug the 2026-07 exploratory campaign filed (220 + whatever A4/A5 c
 |---|---|
 | 1 | **All 220 bugs are in scope** — risk-ordered waves, no triage-to-backlog. Bugs sharing a root cause are fixed as one cluster item. |
 | 2 | **A4/A5 finish first** (Wave 0) — same code Wave 1 touches; the record closes clean before fixing begins. |
-| 3 | Fix branches come **off `integration`** after Wave 0 lands `explore/campaign` — the campaign branch itself never takes product-code fixes. |
+| 3 | All remediation work happens on a dedicated **`remediation/exploratory-campaign`** branch **cut from `master`** — **never `integration`**, which holds an unrelated MCP POC (as of 2026-07-30). Wave 0 lands `explore/campaign` into it; wave fix branches come off it and merge back; promotion to `master` goes through the normal review gate when the owner calls it (per-wave or at program end). The campaign branch itself never takes product-code fixes. |
 | 4 | **Flip rule on every fix PR** (ADR 0047 §2): probe promoted to main suite, known_issues annotated `Fixed in <sha>`, testing.md updated when suite-shaped. |
 | 5 | Class gates land **in the wave that closes their class**, in the main suites (ADR 0047 §3) — never in the explore lane. |
 | 6 | Agent = **repo skill `.claude/skills/explore.md`**, run via Claude Code interactive or `claude -p` under subscription auth — **no paid-API execution path** (ADR 0047 §4). |
@@ -55,7 +55,7 @@ Per-wave working method: `grep "Found by:.*exploratory campaign" known_issues.md
 - [ ] A5: full wave, ≥10 counted (app chrome/boot/i18n/storage hygiene; overlap-dedupe against S1 per the area file note).
 - [ ] Owner triage of any new SUSPECTs (same industry-analysis format as the 2026-07-30 review).
 - [ ] LEDGER all-DONE; run the cross-area mop-up pass (APPROACH §8) — one hypothesis per uncrossed area pair that looks suspicious.
-- [ ] Land `explore/campaign` → `integration` (docs + quarantined probes + 3-line configs; verify quarantine with `--listTests` before merge).
+- [ ] Cut `remediation/exploratory-campaign` from `master`, then land `explore/campaign` into it (docs + quarantined probes + 3-line configs; verify quarantine with `--listTests` before merge). Do **not** touch `integration` — MCP POC in flight there.
 
 ### Wave 1 — Data integrity 🔴 (E1/E3/E4 + A1/A2 clusters, ~86 filed bugs)
 - [ ] **Autosave/save cluster (A1):** flush-not-cancel on unmount/disable/reset; failed saves count as unsaved work in both `beforeunload` guards; un-stale the Retry gate. (Thread A-b/A-c in the area files.)
@@ -104,6 +104,7 @@ When all sub-tasks are complete and `npm run test:regression` passes:
 
 ## Notes for Claude
 
+- **`integration` is off-limits for this program** (unrelated MCP POC in flight, 2026-07-30): never base, merge, or rebase remediation work there. The base is `remediation/exploratory-campaign` off `master`.
 - **The flip rule is per-PR, not per-wave** — never batch "promote probes later"; a fixed bug with its probe still in the lane is an incomplete fix.
 - Fix sessions should read the area file for the bug's ID prefix first: the campaign's rig notes (A1 harness `consumeLoadEcho`, A2 fetch doubles, jsdom canvas stub, `async ({page, app})` fixture trap) are recorded there and cost ~10 wrong verdicts to learn.
 - Cluster fixes cross packages (lib + app) — build after every section; e2e runs need `workers: 1` and a dev-build debug bridge.
