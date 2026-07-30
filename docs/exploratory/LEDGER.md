@@ -28,7 +28,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 | S1 | [Google identity & token lifecycle (GIS auth store, gates)](areas/S1-google-identity-auth.md) | DONE | 16 / 10 | 12 | 1 | 7/7/6 |
 | S2 | [Share backend: session snapshots, routes, Express/Worker parity](areas/S2-share-backend.md) | DONE | 15 / 10 | 12 | 1 | 9/6/9 |
 | S3 | [Drive-native sharing & readonly preview ladder](areas/S3-drive-sharing-preview.md) | DONE | 15 / 10 | 10 | 1 | 10/14/9 |
-| F1 | [Text, labels-as-text & rich-text editing (inline canvas edit, notes, sanitization)](areas/F1-text-richtext-editing.md) | IN PROGRESS | 4 / 10 | 3 | 0 | 0/9/12 |
+| F1 | [Text, labels-as-text & rich-text editing (inline canvas edit, notes, sanitization)](areas/F1-text-richtext-editing.md) | IN PROGRESS | 8 / 10 | 5 | 0 | 0/9/12 |
 | F2 | [View/preview/presenter modes & annotation overlay](areas/F2-view-modes-annotations.md) | OPEN | 0 / 10 | 0 | 0 | 0/14/16 |
 | F3 | [Styling system (docked strip, bulk styling, color picker, style round-trips)](areas/F3-styling-system.md) | OPEN | 0 / 10 | 0 | 0 | 0/6/9 |
 | F4 | [Layers panel & z-order (visibility, locking, assignment, ordering)](areas/F4-layers-zorder.md) | OPEN | 0 / 10 | 0 | 0 | 0/17/16 |

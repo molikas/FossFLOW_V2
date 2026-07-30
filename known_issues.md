@@ -4482,3 +4482,75 @@ escape the brackets by hand (`<p>&lt;T&gt; is a type parameter</p>`).
 `/^\s*<\/?[a-z][a-z0-9]*[\s/>]/i`) rather than a bare `<`, so a
 non-tag angle bracket takes the plain-text branch that already escapes it, and
 apply the same sniff at both consumers. Repro: [`measure-txt-01-02-11-14.explore.test.ts`](packages/axoview-lib/src/__explore__/F1/measure-txt-01-02-11-14.explore.test.ts).
+
+## Two strip presses flatten a text box's per-word formatting
+
+**Found by:** exploratory campaign TXT-13
+
+**Symptom:** A text box with one bolded word. Select the box (do NOT open the
+on-canvas editor), press the strip's **B** — the whole box goes bold, as
+expected — then press **B** again to undo that. The box comes back with NO bold
+at all: the word the user had bolded inside the editor is gone too. The same
+holds for italic, underline and strikethrough.
+
+**Root cause:** For a merely-selected box the strip formats stored HTML through
+`richTextTransform` (ADR 0034 §2 dual scope), and those two transforms are not
+inverses over partially-formatted content:
+
+- `getWholeContentFormats` reports `bold: false` unless EVERY leaf block is
+  fully covered, so a box with one bolded run reads as not-bold and
+  `toggleFormat` sends `on = true`.
+- `applyInlineFormat(…, true)` wraps each leaf's children in one `<strong>`,
+  which swallows the existing inner `<strong>`.
+- `applyInlineFormat(…, false)` then unwraps EVERY `STRONG`/`B` in the
+  document — it has no memory of which wrapper it added — so both the outer and
+  the pre-existing inner run disappear.
+
+`richTextTransform.test.ts` pins the round trip, but only from content that was
+unformatted to begin with, where apply→remove is genuinely the identity.
+
+**Workaround:** re-apply the per-word formatting from inside the on-canvas
+editor (double-click the box first) — the live-editing branch routes to Quill
+and is range-scoped, so it does not have this failure mode.
+
+**Status:** Open. Fix direction: either make the whole-content toggle three-state
+(mixed → apply, fully-on → remove, fully-off → apply) so a partly-formatted box
+never reaches the destructive "remove" branch from a single press, or have
+`applyInlineFormat(on)` record the wrappers it added so the matching `off`
+removes only those. Repro:
+[`transforms-txt-10-12-13.explore.test.ts`](packages/axoview-lib/src/__explore__/F1/transforms-txt-10-12-13.explore.test.ts).
+
+## An imported project's in-text diagram links point at the diagrams you imported FROM
+
+**Found by:** exploratory campaign TXT-09
+
+**Symptom:** Export a project as a ZIP, import it (into the same account or a
+fresh one), and open a text box that links to a sibling diagram (the
+"link to a diagram" suggestion in the on-canvas link card, Ctrl+K). The link
+dead-ends: it navigates to the ORIGINAL diagram's id, which does not exist in
+the imported copy. Node-level "linked diagram" links in the same import work.
+
+**Root cause:** ADR 0001 §1 requires the importer to rewrite every id and every
+cross-reference. `rewriteRefsInModel` (`services/project/projectZip.ts`) is a
+deep object walk that rewrites exactly ONE key:
+
+```js
+if (k === 'link' && typeof v === 'string' && idMap.has(v)) out[k] = idMap.get(v);
+```
+
+That covers `item.link`, the only cross-diagram reference that existed when it
+was written. Since ADR 0034's addendum (2026-07-04) a cross-diagram reference
+can also live inside a text box's Quill content as an
+`<a href="#diagram:&lt;id&gt;">` run authored by `TextBoxLinkCard` — a string
+inside an HTML blob, which the key-based walk cannot see. The old id survives
+verbatim, and `TextBox.onRestingClick` dispatches
+`axoview-navigate-to-diagram` with it.
+
+**Workaround:** re-author the link in the imported copy.
+
+**Status:** Open. Fix direction: extend `rewriteRefsInModel` with a content
+pass — for every string value, replace `#diagram:<oldId>` with
+`#diagram:<newId>` for each entry in `idMap` (the prefix is exported as
+`DIAGRAM_LINK_PREFIX`), so any current or future HTML surface carrying the
+sentinel is covered by construction. Repro:
+[`zip-txt-09-10.explore.test.ts`](packages/axoview-app/src/__explore__/F1/zip-txt-09-10.explore.test.ts).
