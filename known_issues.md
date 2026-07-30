@@ -5803,9 +5803,11 @@ reached this register — the file goes straight from A1/LIFE-15 to A3/ZIP-01.
 Found while landing wave 1 of the remediation
 ([exploratory-remediation.md](docs/tactical/exploratory-remediation.md)). The
 area file is the evidence of record for those findings; entries are filed here
-as each is fixed, starting with the two below. Same lesson as the campaign's own
-MOP-02: a frozen record and the register drift, and the correction belongs in
-the register.
+as each is fixed. **All 13 are now filed** — STOR-11 and STOR-12 with the
+single-source-of-truth cluster, the other eleven with the storage cluster
+(STOR-15 stays DEFERRED in the area file: it needs two live Google accounts).
+Same lesson as the campaign's own MOP-02: a frozen record and the register
+drift, and the correction belongs in the register.
 
 ## The active storage place is remembered in two places, and a route change splits them
 
@@ -5856,6 +5858,241 @@ answering); a transport failure falls back for that caller alone. `inflight`
 still dedupes concurrent boot callers, so ADR 0009 D2's single-probe fast path is
 unchanged. Promoted regression:
 [`useRuntimeConfig.test.ts`](packages/axoview-app/src/hooks/__tests__/useRuntimeConfig.test.ts).
+
+## The server deploy's first save of every diagram writes the whole icon catalog
+
+**Found by:** exploratory campaign A2/STOR-01
+
+**Symptom:** On a self-host/server deployment, the file a diagram is *created*
+with contains every icon in the catalog and records no `requiredPacks`. The very
+next save rewrites it lean, so the only trace is a fat first write and a diagram
+that, if it is never saved again, re-opens without its pack hint.
+
+**Root cause:** `serverCreateDiagram` POSTed `data` straight through.
+`leanIfModel` (ADR 0003 — strip bundled pack icons, record the packs the items
+need) is applied by the session create, by both save paths and by both Drive
+paths; the server create was the one sibling that skipped it.
+
+**Status:** Fixed in 2b0e5f41 (2026-07-30) — the server create applies
+`leanIfModel` like every other write path. Promoted regression:
+[`LocalStorageProvider.test.ts`](packages/axoview-app/src/services/storage/__tests__/LocalStorageProvider.test.ts).
+
+## `deleteFolder(id, recursive)` means three different things
+
+**Found by:** exploratory campaign A2/STOR-02
+
+**Symptom:** The same call with the same arguments does something different in
+each place. Deleting a folder "without its contents" on Google Drive threw the
+contents away; deleting one "with its contents" in the browser session kept them.
+
+**Root cause:** the server path forwarded `?recursive=`; the Drive path ignored
+the flag and always cascaded (Drive trashes descendants with their parent); the
+session path ignored it the other way and only ever removed the folder row. So
+`recursive: true` in the session place was *weaker* than `recursive: false` on
+Drive.
+
+**Status:** Fixed in 2b0e5f41 (2026-07-30) — all three honour the flag. Drive
+moves the children out to the deleted folder's parent before trashing it; the
+session place removes the contents on a recursive delete and re-parents them on a
+non-recursive one (see A2/STOR-03). Promoted regressions:
+[`GoogleDriveProvider.test.ts`](packages/axoview-app/src/services/storage/__tests__/GoogleDriveProvider.test.ts)
+and
+[`LocalStorageProvider.test.ts`](packages/axoview-app/src/services/storage/__tests__/LocalStorageProvider.test.ts).
+
+## Deleting a folder in the browser session orphans the diagrams inside it
+
+**Found by:** exploratory campaign A2/STOR-03
+
+**Symptom:** Delete a non-empty folder in the local place. The folder disappears
+and the diagrams that were in it disappear too — but they are not gone: they are
+still in `axoview_diagrams` with a `folderId` naming a folder that no longer
+exists, so no listing shows them, nothing can delete them, and they still count
+against the 5 MB session budget and against every `listDiagrams()` consumer
+(the storage gauge, icon-usage scans, export scope).
+
+**Root cause:** `localDeleteFolder` only ever rewrote the FOLDER list. The
+`recursive` flag widened the folder sweep and nothing else; the diagrams were
+never touched on either branch.
+
+**Status:** Fixed in 2b0e5f41 (2026-07-30) — a recursive delete removes the
+diagrams and their blobs; a non-recursive one moves them (and any child folders)
+up to the deleted folder's parent, so nothing is ever left pointing at a folder
+that is gone. Promoted regression:
+[`LocalStorageProvider.test.ts`](packages/axoview-app/src/services/storage/__tests__/LocalStorageProvider.test.ts).
+
+## A server outage silently replaces your workspace with an empty one
+
+**Found by:** exploratory campaign A2/STOR-04
+
+**Symptom:** On a server deployment, a backend blip empties the file tree: no
+error, no toast, no console line — it looks like an empty workspace. Saving from
+that state throws, because the write half still targets the server.
+
+**Root cause:** `listDiagrams`, `loadDiagram`, `listFolders` and
+`getTreeManifest` all catch every server error and return the per-tab
+sessionStorage answer instead. The read half and the write half disagreed about
+whether the backend exists, silently.
+
+**Status:** Fixed in 2b0e5f41 (2026-07-30) — the fallback stays (a transient blip
+must not empty the screen with an exception) but is no longer silent: it logs the
+failure and dispatches `axoview-server-unreachable` so the shell can surface it.
+Promoted regression:
+[`LocalStorageProvider.test.ts`](packages/axoview-app/src/services/storage/__tests__/LocalStorageProvider.test.ts).
+
+## One corrupt storage value bricks the whole file tree
+
+**Found by:** exploratory campaign A2/STOR-05
+
+**Symptom:** A single malformed `axoview_diagrams`, `axoview-folders` or
+`axoview-tree-manifest` value makes every listing throw `SyntaxError`, so the
+file explorer shows nothing and cannot recover — including on a server
+deployment, where the fallback was supposed to make listing failure-proof.
+
+**Root cause:** those three readers called `JSON.parse` unguarded, while the
+`renameDiagram` blob parse in the same file was guarded. In server mode the
+fallback sits *inside* the catch, so the fallback's own throw escaped the try.
+
+**Status:** Fixed in 2b0e5f41 (2026-07-30) — one guarded parse helper for all
+three: a corrupt value degrades to empty and is reported, never thrown. Promoted
+regression:
+[`LocalStorageProvider.test.ts`](packages/axoview-app/src/services/storage/__tests__/LocalStorageProvider.test.ts).
+
+## A quota failure mid-save leaves bytes nothing can reach
+
+**Found by:** exploratory campaign A2/STOR-06
+
+**Symptom:** With the session store near its 5 MB cap, a save that fails leaves
+the diagram's bytes behind: the save reports an error, no listing shows the
+diagram, nothing can delete it, and the space it takes is gone for the rest of
+the session.
+
+**Root cause:** `sessionSaveDiagram` wrote the blob first and the index second.
+A `QuotaExceededError` on the index write left the blob committed with nothing
+referencing it.
+
+**Status:** Fixed in 2b0e5f41 (2026-07-30) — the blob write is rolled back (or
+restored to its previous value) before the error propagates, so a failed save
+costs the save but not the budget. Promoted regression:
+[`LocalStorageProvider.test.ts`](packages/axoview-app/src/services/storage/__tests__/LocalStorageProvider.test.ts).
+
+## Renaming, restoring or moving a diagram does not update the storage gauge
+
+**Found by:** exploratory campaign A2/STOR-07
+
+**Symptom:** The session storage gauge and the "you have unexported work"
+export guard miss some mutations: rename a diagram, restore one from the trash or
+drag one into a folder and neither notices.
+
+**Root cause:** `axoview-session-changed` was dispatched by `sessionSaveDiagram`
+and `sessionDeleteDiagram` only. `renameDiagram`, `restoreDiagram` and the
+diagram branch of `moveItem` mutate `sessionStorage` and stayed quiet — the
+ritual-drift shape the campaign's thread S-a describes.
+
+**Status:** Fixed in 2b0e5f41 (2026-07-30) — one `notifySessionChanged()` helper,
+called by every path that mutates the session place. Promoted regression:
+[`LocalStorageProvider.test.ts`](packages/axoview-app/src/services/storage/__tests__/LocalStorageProvider.test.ts).
+
+## A Drive hiccup during "new diagram" can create the file twice
+
+**Found by:** exploratory campaign A2/STOR-08
+
+**Symptom:** Creating a diagram (or a folder) on Google Drive while Drive is
+flaky can leave two files. The call reports success and returns the second id, so
+the first is an orphan the app never mentions and no listing explains.
+
+**Root cause:** `GoogleDriveProvider.request()` retries 429/5xx/network errors by
+replaying the same request — including the non-idempotent multipart POST that
+creates a file. A 5xx returned *after* the write committed made the retry create
+a second one. The existing retry tests drive `loadDiagram`, a GET.
+
+**Status:** Fixed in 2b0e5f41 (2026-07-30) — POST is no longer replay-safe: it
+fails fast and the caller decides. Every other method still retries. (Drive's
+resumable uploads carry an upload id and would make the create genuinely
+retriable; that is a larger change, and failing fast beats silently duplicating
+the user's file.) Promoted regression:
+[`GoogleDriveProvider.test.ts`](packages/axoview-app/src/services/storage/__tests__/GoogleDriveProvider.test.ts).
+
+## "Move to Drive" can report failure for a diagram it successfully copied
+
+**Found by:** exploratory campaign A2/STOR-09
+
+**Symptom:** Moving diagrams to Drive reports one as failed. It is not: the Drive
+copy exists and is verified — only the removal of the session copy failed, so the
+diagram is now in both places. The report gives no way to tell, and moving the
+same selection again creates a *second* Drive copy.
+
+**Root cause:** `moveDiagramsToDrive` wraps create + verify + source-delete in one
+try/catch. A throw from the source delete produced `ok: false` with `driveId`
+dropped, which is indistinguishable from "the create failed".
+
+**Status:** Fixed in 2b0e5f41 (2026-07-30) — a failed source delete reports
+`ok: true` with the `driveId` it created and a `sourceRemained` flag;
+`MigrateSessionDialog` names the diagrams that now exist in both places, so a
+retry cannot mint a second copy. Promoted regression:
+[`driveTransfer.test.ts`](packages/axoview-app/src/services/storage/__tests__/driveTransfer.test.ts).
+
+## A Drive diagram moved out of the Axoview folder becomes invisible
+
+**Found by:** exploratory campaign A2/STOR-13
+
+**Symptom:** Move an Axoview diagram out of the Axoview folder using Drive's own
+UI. It vanishes from the file explorer — not into another folder, into nothing —
+while still being counted by everything that consumes the listing.
+
+**Root cause:** `GoogleDriveProvider.listDiagrams(undefined)` queries by the app
+marker with no root term (Drive has no recursive-parent query), so it matches the
+whole account. The file comes back with a `folderId` naming a folder
+`listFolders()` knows nothing about, and `buildTree` places diagrams by exact
+`folderId` match — so it appeared under no folder and at no root.
+
+**Status:** Fixed in 2b0e5f41 (2026-07-30) — `useFileTree` re-homes a diagram
+whose folder is not in the tree to root, where the user can see it and move it
+back. Done there rather than in the provider because that hook already holds both
+lists; the provider would pay an extra Drive listing per call. Promoted
+regression:
+[`useFileTree.orphans.test.ts`](packages/axoview-app/src/hooks/__tests__/useFileTree.orphans.test.ts).
+
+## Saving discards icons that exporting preserves
+
+**Found by:** exploratory campaign A2/STOR-14
+
+**Symptom:** An icon from a pack this build no longer ships survives an "Export
+as JSON" but is dropped by every save, and comes back as a tombstone on the next
+load.
+
+**Root cause:** the app's `leanIfModel` keeps `collection === 'imported'` only —
+a stricter rule than ADR 0003 and than the lib's `stripDefaultIcons`, which keeps
+anything a bundled fixture does not reproduce. Save and export disagreed about
+what counts as user data, and `mergeBundledFixtures` cannot restore what no pack
+supplies.
+
+**Status:** Fixed in 2b0e5f41 (2026-07-30) — an icon is kept unless a collection
+the load path can actually rehydrate (the bundled `isoflow` set or a shippable
+pack) supplies it. The remaining half of this entry — a user's *override* of a
+bundled icon, which ADR 0003 lists as an acceptance criterion — needs the bundled
+catalog to compare against, and the app's half of that catalog is itself empty:
+that is wave 4's F5/ICON-01/02. Promoted regression:
+[`leanModel.test.ts`](packages/axoview-app/src/services/storage/__tests__/leanModel.test.ts).
+
+## A failed folder-order save reports success and then silently reverts
+
+**Found by:** exploratory campaign A2/STOR-16
+
+**Symptom:** On a server deployment, reordering folders while the backend is
+unhappy appears to work. The next time the tree loads cleanly, the ordering is
+back to what it was, with no error at any point.
+
+**Root cause:** `saveTreeManifest` caught the server failure and wrote
+localStorage instead, then resolved — so the UI saw success. `getTreeManifest`
+prefers the server copy and only falls back to localStorage on error, so the
+stale server copy won the next healthy read. The read and write halves fell back
+to the same store with opposite authority.
+
+**Status:** Fixed in 2b0e5f41 (2026-07-30) — in server mode the server owns the
+manifest: a failed save rejects (so the caller can report it) and leaves no local
+copy to shadow it, and a later successful save clears any stale one. Promoted
+regression:
+[`LocalStorageProvider.test.ts`](packages/axoview-app/src/services/storage/__tests__/LocalStorageProvider.test.ts).
 
 ## A project ZIP whose folders form a loop freezes the app
 
