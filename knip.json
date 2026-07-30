@@ -2,7 +2,12 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "ignoreExportsUsedInFile": true,
   "ignoreBinaries": ["playwright", "wrangler", "jest"],
-  "ignore": ["packages/axoview-backend/src/adapters/types.ts", ".claude/**"],
+  "ignore": [
+    "packages/axoview-backend/src/adapters/types.ts",
+    ".claude/**",
+    "**/__explore__/**",
+    "**/tests-exploratory/**"
+  ],
   "ignoreDependencies": [
     "pathfinding",
     "@types/pathfinding",
