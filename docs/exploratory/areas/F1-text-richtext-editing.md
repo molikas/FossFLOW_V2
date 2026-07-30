@@ -85,6 +85,8 @@ which of the two it is on.
 |----|----------|----------------|
 | TXT-07 | Should a floating Label follow the text box's empty-entity lifecycle — placed-then-abandoned is discarded, emptied-then-committed is deleted — instead of keeping the literal placeholder word "Label"? | **Yes, partly.** As built, `Label` mode creates the chip with `LABEL_DEFAULTS.text = 'Label'` and drops into inline edit; Escape leaves that placeholder on the canvas, and clearing the text then committing silently restores it (`LabelInlineEditor.commit` reverts when `!text.trim()`). Both are deliberate in code, but they are the opposite of what the *same two gestures* do to a text box one tool over, and the revert gives no feedback — the user sees their deletion undone with no message. Recommendation: (a) discard a Label whose FIRST edit session ends without a commit (matching the text-box place-and-type contract exactly), and (b) keep the revert for an existing Label but say so, or delete it — either is defensible, silence is not. Note this interacts with TXT-06: the abandon path is easy to hit by accident, because reaching for the strip mid-rename also ends the session |
 
+> **CLOSED 2026-07-30 — owner decisions** ([DECISIONS.md](../DECISIONS.md)): TXT-07 — full text-box lifecycle parity: abandoned first edit discards the Label, empty commit deletes it (undoable); the silent revert goes.
+
 ## Residual risks noted while probing (not findings)
 
 - **`notes` is stored and round-tripped unsanitized** (TXT-03). The load path

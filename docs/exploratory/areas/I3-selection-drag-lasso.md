@@ -117,6 +117,8 @@
   be plumbed. Owner call: adopt the standard, or narrow the ADR's "on canvas"
   wording to clicks so the inconsistency is at least documented.
 
+> **CLOSED 2026-07-30 — owner decisions** ([DECISIONS.md](../DECISIONS.md)): SEL-15 — adopt the additive marquee under the same modifier the click path honours; ADR 0006 gesture matrix to be amended.
+
 ## Carry-forward notes
 
 - **The drag/selection engine is solid where it was designed for, and thin at the

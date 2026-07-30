@@ -91,4 +91,6 @@ remembered-looking account whose reconnect cannot succeed. Owner call because it
 changes what "remember me" means for an account whose userinfo response is
 incomplete.
 
+> **CLOSED 2026-07-30 — owner decisions** ([DECISIONS.md](../DECISIONS.md)): AUTH-13 — a hint is valid only with non-empty name AND email; otherwise drop it and show the never-signed-in control; stop persisting empty-email profiles.
+
 **Next:** area closed — nothing outstanding. Next in the S track: S2 (share backend).

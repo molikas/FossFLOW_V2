@@ -107,6 +107,8 @@
   fix alongside a bug that is already filed, which is the main argument for
   doing it rather than leaving it.
 
+> **CLOSED 2026-07-30 — owner decisions** ([DECISIONS.md](../DECISIONS.md)): TCH-06 — adopt: pointer cancel resets tap bookkeeping via the shared `endPointer` helper built with TCH-14.
+
 ## Carry-forward notes
 
 - **Touch is a second implementation of every interaction, and it drifts.** Four

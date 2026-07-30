@@ -90,4 +90,6 @@ Proposed 2026-07-29 (all 15 recorded before probing began, per APPROACH §1).
   reappears but the canvas does not change. The same gap makes an undone page
   *creation* leave `ui.view` dangling (see HIST-04's e2e evidence, filed).
 
+> **CLOSED 2026-07-30 — owner decisions** ([DECISIONS.md](../DECISIONS.md)): HIST-08 — delegate `useHistory().transaction` to the working `useSceneActions.transaction`; HIST-15 — keep the silent 50-entry cap, document it (industry norm), revisit only after patch granularity improves; HIST-10 — always navigate: stamp the active page on each history entry and switch to it when undo/redo targets a non-active page.
+
 **Next:** area closed 2026-07-29 — all 15 proposed hypotheses resolved (9 BUG incl. 1 known, 3 SUSPECT, 3 FALSIFIED), nothing DEFERRED. The strongest unexplored seam left behind for a later wave: the coarse patch granularity discovered while probing HIST-06 (every entry's inverse patch replaces the whole `views` array) — E3/E4 should ask what else that clobbers, e.g. an async write landing between an edit and its undo.

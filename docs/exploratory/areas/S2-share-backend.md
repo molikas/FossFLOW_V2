@@ -96,4 +96,6 @@ alongside it, so revocation is always reachable. If the owner prefers the strict
 reading, gate the read on `STORAGE_ENABLED` too and say so in `docs/deployment.md` —
 either way the pair should move together.
 
+> **CLOSED 2026-07-30 — owner decisions** ([DECISIONS.md](../DECISIONS.md)): SHARE-10 — keep the public read exempt AND exempt DELETE /api/diagrams/:id/share alongside it so revocation is always reachable; document the pair in deployment.md.
+
 **Next:** area closed — nothing outstanding.

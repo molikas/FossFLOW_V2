@@ -79,4 +79,6 @@ Proposed 2026-07-29 (all 15 recorded before probing began, per APPROACH §1).
   keep as-is and document it, warn when the layer being deleted is hidden and
   non-empty, or offer "delete layer and its contents" as the destructive variant.
 
+> **CLOSED 2026-07-30 — owner decisions** ([DECISIONS.md](../DECISIONS.md)): RED-13 — confirm on non-empty layer delete with both outcomes ("Keep contents" / "Delete contents too"), extra warning when the layer is hidden (Visio tag-layer pattern).
+
 **Next:** area closed 2026-07-29 — all 15 proposed hypotheses resolved (10 BUG, 1 SUSPECT, 4 FALSIFIED), nothing DEFERRED. Two threads worth carrying forward: (a) RED-02's poison-view mechanism is the *amplifier* behind RED-01, RED-07 and RED-14 — any area that can introduce a dangling ref inherits "the view stops accepting edits", so E3/E4 should look for more ref-producing paths (paste, import, cross-page move); (b) validation has no coverage of layer refs at all (RED-03), which is the same missing-check shape as the E2 seed seam predicted for any future entity type.

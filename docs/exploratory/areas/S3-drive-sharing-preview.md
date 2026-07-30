@@ -109,4 +109,6 @@ failure is the ACL that exists; and have `setAnyoneWithLink(false)` collect per-
 outcomes and report "still shared" rather than a bare throw when at least one delete
 survived. Owner call on whether the multi-entry case justifies more than the refresh.
 
+> **CLOSED 2026-07-30 — owner decisions** ([DECISIONS.md](../DECISIONS.md)): DRV-05 — refresh() in runAction's catch too; setAnyoneWithLink(false) collects per-permission outcomes and reports "link may still be active" on partial failure.
+
 **Next:** area closed — nothing outstanding. S track complete (S1, S2, S3).

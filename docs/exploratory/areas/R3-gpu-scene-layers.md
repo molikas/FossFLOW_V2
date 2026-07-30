@@ -95,3 +95,5 @@ Threads this area adds to the rendering block:
 | ID | Question | State |
 |----|----------|-------|
 | GPU-13 | Should a per-element `zIndex` be able to cross an entity type — e.g. lift a connector above a node? | **OPEN** — it cannot today and cannot be made to without restructuring the renderer: all four bulk canvases share one stacking context and cross-type order is fixed by mount order in `Renderer.tsx`, so `zIndex` sorts only within a canvas. The z-order controls are therefore silently inert across types (bring-to-front on a connector does nothing relative to nodes). Either the controls should say so, or cross-type order needs a real mechanism (a single canvas, or per-entity depth). |
+
+> **CLOSED 2026-07-30 — owner decisions** ([DECISIONS.md](../DECISIONS.md)): GPU-13 — build real cross-type depth (owner chose the full mechanism over scoping the controls; renderer restructure, ADR 0038 amendment + design pass first).
