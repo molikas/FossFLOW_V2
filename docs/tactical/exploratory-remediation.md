@@ -92,6 +92,16 @@ promoted regression and its `Fixed in <sha>` annotation — see "Wave 1 landed" 
   - [x] ZIP-01 non-terminating walk (`cef61900`) — the freeze, and the highest-severity item in the cluster. Rejected at parse time AND both walks made to terminate; `wipeWorkspace` needs the latter independently because its folders come from storage.
   - [ ] Everything else: A2/STOR-01..09, 13, 14, 16 (twelve, none of which has a known_issues entry yet — file as you fix) and A3/ZIP-02, 03, 05, 06, 07, 08, 10, 11, 13, 15, plus the ZIP-09 single-import-flow ruling. This is the largest remaining block in wave 1.
 
+**Regression gate (2026-07-30, run against the final state of the commits below):**
+`npm test` per package — lib **157 suites / 1753** (+1 skipped), app **30 / 300**,
+backend 7 / 102, worker 4 / 124 — and the full Playwright suite **178 passed
+(26.2 min)**. `tsc --noEmit` clean in both packages, docs lint OK. This is the
+e2e half wave 0 deferred to "the first product-code wave".
+
+*(`npm run test:e2e` does not work on Windows — the script's
+`node_modules/.bin/playwright` path is not resolvable by cmd.exe. Use
+`npx playwright test --config packages/axoview-e2e/playwright.config.ts`.)*
+
 #### Wave 1 landed (2026-07-30)
 
 | Commit | Closes | Promoted to |
