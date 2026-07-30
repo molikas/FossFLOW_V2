@@ -154,6 +154,62 @@ const rewriteFirstItemId = (page: Page, newId: string) =>
     return { oldId, newId: (after?.items ?? [])[0]?.id ?? null };
   }, newId);
 
+
+/** Absolute page point of a tile (the interactions box is not at the origin). */
+async function tileToPage(
+  page: Page,
+  canvas: CanvasPOM,
+  tile: { x: number; y: number }
+): Promise<CanvasPoint> {
+  const rel = await canvas.tileToScreen(tile);
+  const box = await canvas.interactionsLayer().boundingBox();
+  if (!box) throw new Error('interactions box has no bounding box');
+  return { x: box.x + rel.x, y: box.y + rel.y };
+}
+
+/** Close the Elements dock so it cannot swallow a real press over the canvas. */
+async function closeElementsDock(page: Page) {
+  const icon = page.locator('[data-axoview-id="canvas-icon-grid-item"]').first();
+  if (await icon.isVisible().catch(() => false)) {
+    await page.locator('[data-axoview-id="dock-elements-toggle"]').click();
+    await icon.waitFor({ state: 'hidden', timeout: 3_000 }).catch(() => undefined);
+  }
+}
+
+/** The single view item, straight from the model. */
+const firstViewItem = (page: Page) =>
+  page.evaluate(() => {
+    const bridge = (window as any).__axoview__;
+    const viewId = bridge.ui.getState().view;
+    const view = bridge.model.getState().views.find((v: any) => v.id === viewId);
+    return (view?.items ?? [])[0] ?? null;
+  });
+
+/**
+ * Place one node, close the dock, drop the selection, and return its id plus the
+ * ABSOLUTE page point of the tile it actually landed on (the drop tile is not
+ * necessarily the tile that was aimed at, and page.mouse needs page coords —
+ * both of which cost the first run of this probe its CONTROL).
+ */
+async function setupNode(page: Page, canvas: CanvasPOM) {
+  await placeIconViaMouse(page, await canvas.tileToScreen({ x: 0, y: 0 }));
+  await expect.poll(() => getViewItemCount(page), { timeout: 8_000 }).toBe(1);
+  await closeElementsDock(page);
+  await page.evaluate(() => {
+    const ui = (window as any).__axoview__.ui.getState();
+    ui.actions.setMode({ type: 'CURSOR', showCursor: true, mousedownItem: null });
+    ui.actions.setItemControls(null);
+    ui.actions.setSelectedIds([]);
+  });
+  await page.waitForTimeout(300);
+  const item = await firstViewItem(page);
+  expect(item, 'PRECONDITION: the node exists in the view').toBeTruthy();
+  return {
+    id: item.id as string,
+    point: await tileToPage(page, canvas, item.tile)
+  };
+}
+
 async function beginRealDrag(page: Page, from: CanvasPoint, dx: number, dy: number) {
   await page.mouse.move(from.x, from.y);
   await page.waitForTimeout(80);
@@ -180,19 +236,14 @@ test.describe('RND-04 — an id containing a comma breaks hybrid promotion', () 
     void app;
     test.setTimeout(180_000);
     const canvas = new CanvasPOM(page);
-    const at = await canvas.tileToScreen({ x: 0, y: 0 });
-    await placeIconViaMouse(page, at);
-    await expect.poll(() => getViewItemCount(page)).toBe(1);
-    await page.evaluate(() =>
-      (window as any).__axoview__.ui.getState().actions.setItemControls(null)
-    );
-    await page.waitForTimeout(400);
+    const node = await setupNode(page, canvas);
 
-    await beginRealDrag(page, at, 160, 60);
-    const ids = await dragSetIds(page);
-    expect(ids, 'PRECONDITION: the drag set holds the node').toHaveLength(1);
-    const id = ids![0].split(':')[1];
-    await expect(page.locator(`[data-drag-id="${id}"]`)).toHaveCount(1);
+    await beginRealDrag(page, node.point, 160, 60);
+    expect(
+      await dragSetIds(page),
+      'PRECONDITION: the drag set holds the node'
+    ).toEqual([`ITEM:${node.id}`]);
+    await expect(page.locator(`[data-drag-id="${node.id}"]`)).toHaveCount(1);
     expect(await drawCount(page), 'the bulk skips the promoted node').toBe(0);
     await page.mouse.up();
   });
@@ -204,19 +255,15 @@ test.describe('RND-04 — an id containing a comma breaks hybrid promotion', () 
     void app;
     test.setTimeout(180_000);
     const canvas = new CanvasPOM(page);
-    const at = await canvas.tileToScreen({ x: 0, y: 0 });
-    await placeIconViaMouse(page, at);
-    await expect.poll(() => getViewItemCount(page)).toBe(1);
+    const node = await setupNode(page, canvas);
     const rewritten = await rewriteFirstItemId(page, COMMA_ID);
+    expect(rewritten?.oldId).toBe(node.id);
     expect(rewritten?.newId, 'PRECONDITION: the id really carries a comma').toBe(
       COMMA_ID
     );
-    await page.evaluate(() =>
-      (window as any).__axoview__.ui.getState().actions.setItemControls(null)
-    );
     await page.waitForTimeout(600);
 
-    await beginRealDrag(page, at, 160, 60);
+    await beginRealDrag(page, node.point, 160, 60);
     const ids = await dragSetIds(page);
     expect(ids, 'PRECONDITION: the drag really started on THIS node').toEqual([
       `ITEM:${COMMA_ID}`
@@ -235,20 +282,15 @@ test.describe('RND-04 — an id containing a comma breaks hybrid promotion', () 
       void app;
       test.setTimeout(180_000);
       const canvas = new CanvasPOM(page);
-      const at = await canvas.tileToScreen({ x: 0, y: 0 });
-      await placeIconViaMouse(page, at);
-      await expect.poll(() => getViewItemCount(page)).toBe(1);
+      const node = await setupNode(page, canvas);
       const rewritten = await rewriteFirstItemId(page, COMMA_ID);
       expect(
         rewritten?.newId,
         'PRECONDITION: the id really carries a comma'
       ).toBe(COMMA_ID);
-      await page.evaluate(() =>
-        (window as any).__axoview__.ui.getState().actions.setItemControls(null)
-      );
       await page.waitForTimeout(600);
 
-      await beginRealDrag(page, at, 160, 60);
+      await beginRealDrag(page, node.point, 160, 60);
       expect(
         await dragSetIds(page),
         'PRECONDITION: the drag really started on THIS node'
@@ -276,25 +318,70 @@ test.describe('RND-06 — fit-to-view ignores the docks overlaying the canvas', 
     test.setTimeout(180_000);
     const canvas = new CanvasPOM(page);
 
-    // A wide spread so the fit is genuinely width-limited.
-    for (const t of [
-      { x: -4, y: 4 },
-      { x: 0, y: 0 },
-      { x: 4, y: -4 }
-    ]) {
-      const p = await canvas.tileToScreen(t);
-      await placeIconViaMouse(page, p);
+    // One real node, then a WIDE spread cloned from it. The outer tiles are
+    // off-screen at the boot zoom so they cannot be placed with the mouse, and
+    // the spread has to be wide enough that the fit is genuinely width-limited
+    // — a small diagram fits at MAX_ZOOM with slack to spare, which would hide
+    // the question being asked (that is what the first run of this probe did).
+    await placeIconViaMouse(page, await canvas.tileToScreen({ x: 0, y: 0 }));
+    await expect.poll(() => getViewItemCount(page)).toBe(1);
+    const spread = await page.evaluate(() => {
+      const bridge = (window as any).__axoview__;
+      const m = bridge.model.getState();
+      const viewId = bridge.ui.getState().view;
+      const view = m.views.find((v: any) => v.id === viewId);
+      const proto = view.items[0];
+      const protoModel = m.items.find((i: any) => i.id === proto.id);
+      const clones = [
+        { id: 'rnd06-left', tile: { x: -25, y: 25 } },
+        { id: 'rnd06-right', tile: { x: 25, y: -25 } }
+      ];
+      m.actions.set(
+        {
+          items: [
+            ...m.items,
+            ...clones.map((c) => ({ ...protoModel, id: c.id, name: c.id }))
+          ],
+          views: m.views.map((v: any) =>
+            v.id === viewId
+              ? {
+                  ...v,
+                  items: [
+                    ...v.items,
+                    ...clones.map((c) => ({ ...proto, id: c.id, tile: c.tile }))
+                  ]
+                }
+              : v
+          )
+        },
+        true
+      );
+      const after = bridge.model
+        .getState()
+        .views.find((v: any) => v.id === viewId);
+      return (after?.items ?? []).length;
+    });
+    expect(spread, 'PRECONDITION: three nodes span 50 tiles').toBe(3);
+
+    // The left dock must be OPEN — it is the surface the hypothesis is about.
+    const dockIcon = page
+      .locator('[data-axoview-id="canvas-icon-grid-item"]')
+      .first();
+    if (!(await dockIcon.isVisible().catch(() => false))) {
+      await page.locator('[data-axoview-id="dock-elements-toggle"]').click();
+      await dockIcon.waitFor({ state: 'visible', timeout: 5_000 });
     }
-    await expect.poll(() => getViewItemCount(page)).toBe(3);
+    const dockBox = (await dockIcon.boundingBox())!;
+    expect(dockBox.width, 'PRECONDITION: the dock is on screen').toBeGreaterThan(0);
+
     await page.evaluate(() =>
       (window as any).__axoview__.ui.getState().actions.setItemControls(null)
     );
-
     await page.locator('[data-axoview-id="canvas-zoom-fit"]').click();
     await page.waitForTimeout(900);
 
     // Leftmost node's screen point AFTER the fit.
-    const left = await canvas.tileToScreen({ x: -4, y: 4 });
+    const left = await canvas.tileToScreen({ x: -25, y: 25 });
     const box = (await canvas.interactionsLayer().boundingBox())!;
     const abs = { x: box.x + left.x, y: box.y + left.y };
     expect(abs.x, 'PRECONDITION: the point is inside the window').toBeGreaterThan(0);
@@ -304,6 +391,18 @@ test.describe('RND-06 — fit-to-view ignores the docks overlaying the canvas', 
         const el = document.elementFromPoint(x, y) as HTMLElement | null;
         return {
           id: el?.getAttribute('data-axoview-id') ?? null,
+          tag: el?.tagName ?? null,
+          chain: (() => {
+            const out: string[] = [];
+            let cur: HTMLElement | null = el;
+            for (let i = 0; cur && i < 6; i += 1) {
+              out.push(
+                `${cur.tagName}${cur.getAttribute('data-axoview-id') ? '#' + cur.getAttribute('data-axoview-id') : ''}.${(cur.className || '').toString().split(' ').slice(0, 2).join('.')}`
+              );
+              cur = cur.parentElement;
+            }
+            return out.join(' < ');
+          })(),
           inDock: Boolean(
             el?.closest(
               '[data-axoview-id="left-dock"], [data-axoview-id="elements-panel"], .MuiDrawer-root'
@@ -316,11 +415,19 @@ test.describe('RND-06 — fit-to-view ignores the docks overlaying the canvas', 
       },
       abs
     );
-    // Characterization: record where the node actually landed.
-    expect(hit.overCanvas || hit.inDock).toBe(true);
-    expect(hit).toBeTruthy();
+    // Characterization: record where the node actually landed relative to the
+    // dock, so a FALSIFIED verdict carries the margin rather than a bare pass.
+    const landed = {
+      overCanvas: hit.overCanvas,
+      inDock: hit.inDock,
+      nodeX: Math.round(abs.x),
+      dockRight: Math.round(dockBox.x + dockBox.width)
+    };
+    expect(landed.nodeX).toBeGreaterThan(0);
+    // eslint-disable-next-line no-console
+    console.log('[RND-06] landed:', JSON.stringify({ ...landed, chain: hit.chain }));
     // The finding: it is NOT on the free canvas.
-    expect(hit.overCanvas).toBe(false);
+    expect(landed.overCanvas, JSON.stringify(landed)).toBe(false);
   });
 });
 

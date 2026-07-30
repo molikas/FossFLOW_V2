@@ -2414,7 +2414,7 @@ withholds the one read-only interaction it should offer. Repro:
 
 ## The project bounding box mis-frames the diagram: text boxes extend the wrong way, labels are not counted
 
-**Found by:** exploratory campaign PROJ-01 / PROJ-02 / PROJ-04
+**Found by:** exploratory campaign PROJ-01 / PROJ-02 / PROJ-04 (item 4: RND-09)
 
 **Symptom:** `getProjectBounds` is the frame both **fit-to-view**
 (`canvas-zoom-fit` -> `useDiagramUtils.fitToView` -> `getFitToViewParams`) and the
@@ -2444,6 +2444,16 @@ occupies. It is wrong in three independent ways:
    here because it is the same unit-mix `getFitToViewParams` already fixed for
    the *centre* ("getBoundingBoxSize adds +1 (inclusive tile COUNT)") and left
    in place for the *size*.
+
+4. **Node name chips are not counted either** (added by exploratory campaign
+   RND-09). `getProjectBounds` takes each item's `tile` and nothing else, but a
+   node's name chip is drawn up to +280 canvas px above it — `clampLabelOffset`
+   caps the drag range at `LABEL_OFFSET_MAX = 280`, and the 3-tile
+   `PROJECT_BOUNDING_BOX_PADDING` is worth only ~245 px of screen Y. Measured on
+   a height-limited fit: the bounds are byte-identical with and without a
+   raised label, the node lands inside the viewport and its chip anchor lands at
+   NEGATIVE screen y. Same shape as (2) — the function enumerates entities, not
+   the geometry they actually occupy.
 
 **Root cause:** `getProjectBounds` / `getUnprojectedBounds` in
 [`utils/renderer.ts`](packages/axoview-lib/src/utils/renderer.ts) are the only
@@ -2853,3 +2863,199 @@ direction: either round the bulk corners for real (an analytic rounded-rect
 analytic line and disc modes), or drop the DOM rect's `cornerRadius` to 0 so both
 paths draw the square the bulk already draws. Repro:
 [`gpu-14-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R3-gpu-layers/gpu-14-15.explore.spec.ts).
+
+## Fit-to-view can zoom below the floor every other zoom path enforces
+
+**Found by:** exploratory campaign RND-01
+
+**Symptom:** Click `canvas-zoom-fit` on a large diagram and the viewport lands
+at a zoom the app will not otherwise let you reach. On a 1280x720 viewport a
+diagram roughly 85 tiles across already fits below `MIN_ZOOM`; at 100 tiles the
+fit zoom is **0.083** against a documented floor of **0.1**. The state is a
+one-way trip on touch: the pinch handler clamps to `[MIN_ZOOM, MAX_ZOOM]`, so
+the first two-finger contact after the fit snaps the diagram bigger and the
+fitted framing cannot be recovered by pinching. The zoom readout also shows a
+percentage the +/- controls will never produce.
+
+**Root cause:**
+[`getFitToViewParams`](packages/axoview-lib/src/utils/renderer.ts) clamps with
+`clamp(..., 0, MAX_ZOOM)` — the UPPER bound only. Every other zoom writer
+enforces both: `incrementZoom`/`decrementZoom` (buttons + wheel) go through
+`clamp(z +/- ZOOM_INCREMENT, MIN_ZOOM, MAX_ZOOM)`, and the pinch path in
+`useInteractionManager` does `Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, ...))`.
+The util is the shared engine behind BOTH fit paths — the `canvas-zoom-fit`
+button (`useDiagramUtils.fitToView`) and the deferred open-time fit the
+Renderer applies in a `useLayoutEffect` — so a diagram whose model carries
+`fitToView` opens below the floor too, before the user touches anything.
+`getFitToViewParams` has no production test at all; `viewport.spec.ts` asserts
+only that a fit CHANGES the zoom.
+
+**Workaround:** press the zoom-out or zoom-in button once after fitting — that
+re-clamps into range (and loses the fitted framing).
+
+**Status:** Open. Fix direction: clamp to `[MIN_ZOOM, MAX_ZOOM]` in
+`getFitToViewParams`. That leaves a real product question the clamp alone does
+not answer — a diagram too large to fit at `MIN_ZOOM` will be framed with
+content off-screen — so the fix should either accept that (and say so) or make
+`MIN_ZOOM` content-dependent for the fit path specifically. Repro:
+[`fit-rnd-01-09-10.explore.test.ts`](packages/axoview-lib/src/__explore__/R4/fit-rnd-01-09-10.explore.test.ts).
+
+## Hiding a layer leaves its connectors' label chips on the canvas
+
+**Found by:** exploratory campaign RND-02
+
+**Symptom:** Hide a layer that holds a labelled connector. The connector's body
+disappears — correctly, on both the WebGL bulk and the DOM hybrid — but its
+label chip stays painted on the canvas, floating over empty space where the wire
+used to be. It is still selectable, still draggable along the (now invisible)
+path, and still double-click-editable. Showing the layer again puts the body
+back under it.
+
+Measured: with the layer visible, `axoview-connectors-canvas` paints and the
+chip is in the DOM. With the same layer hidden, the canvas paints **0** pixels
+and the chip count is **unchanged**.
+
+**Root cause:**
+[`ConnectorLabels`](packages/axoview-lib/src/components/SceneLayers/ConnectorLabels/ConnectorLabels.tsx)
+and its child `ConnectorLabel` are the only scene layers that never import
+`useLayerContext`. Every sibling the Renderer feeds does gate on it — `Nodes`,
+`Connectors`, `Rectangles`, `TextBoxes`, `NodeLabelHitLayer`, and all four
+bulk canvases each filter with the same
+`layers.length === 0 || visibleIds.has(id)` idiom. `ConnectorLabels` filters
+only on whether the connector HAS a label (plus the zoom LOD), so the Renderer's
+`visibleConnectors` — which is a viewport cull, not a visibility gate — is the
+only thing standing between a hidden layer and a painted chip. This is the same
+class as PTR-11 / CONN-15 / CTX-06: layer state is honoured by the gesture paths
+and by whichever consumers happened to remember it.
+
+**Workaround:** none from the UI — delete the label or move the connector off
+the layer.
+
+**Status:** Open. Fix direction: add the standard
+`layers.length === 0 || visibleIds.has(connector.id)` filter to
+`ConnectorLabels`. Worth pairing with a shared helper (or a single
+`useVisibleEntities` hook) so the next layer added to the Renderer cannot skip
+the gate by omission. Repro:
+[`rnd-02-07-overlay-gates.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R4-renderer/rnd-02-07-overlay-gates.explore.spec.ts).
+
+## A link inside a text box cannot be clicked
+
+**Found by:** exploratory campaign RND-07
+
+**Symptom:** Put a link in a text box — either an internal diagram link (the
+`#diagram:` href the Ctrl+K link card writes) or an ordinary external one — and
+it is inert everywhere outside the edit session. Plain click, Ctrl/Cmd+click,
+edit mode, view mode: nothing happens, no navigation, no cursor change. The link
+is styled as a link and behaves as plain text. It works only while the box's
+inline editor is open, which is exactly when the user is editing rather than
+following it.
+
+Measured: `document.elementFromPoint` at the centre of a resting text box's
+`<a href="#diagram:...">` returns the element with
+`data-axoview-id="canvas-interactions"`, not the anchor; a click there fires
+zero `axoview-navigate-to-diagram` events, and so does the documented
+Ctrl+click.
+
+**Root cause:** mount order in
+[`Renderer.tsx`](packages/axoview-lib/src/components/Renderer/Renderer.tsx).
+The resting `<TextBoxes>` SceneLayer is mounted BEFORE the full-viewport
+`canvas-interactions` box, so the interactions box paints — and hit-tests —
+above it. `TextBox.onRestingClick`, added by the ADR 0034 addendum specifically
+to route `#diagram:` links ("in view/explore modes a click navigates ... in EDIT
+mode Ctrl/Cmd+click navigates"), can therefore never receive a click; the
+handler is unreachable code. The Renderer already knows about this hazard — the
+INLINE-EDITED text box is promoted into a second SceneLayer mounted after the
+interactions box for exactly this reason ("below it the box ate every press") —
+but the promotion covers the editing box only.
+
+**Workaround:** open the box for editing and use the link chip in the inline
+editor, or reach the target diagram from the file explorer.
+
+**Status:** Open. Fix direction: either give the resting text-box layer a
+targeted hit path above the interactions box (mount a link-only proxy the way
+`NodeLabelHitLayer` proxies node names, which is the established pattern for
+"canvas-drawn thing that needs a DOM gesture"), or route link activation through
+the interaction pipeline — resolve an `<a>` under the pointer in the click
+handler that already owns the press. A test asserting a link is followable from
+a resting box belongs with it; the whole ADR 0034 link feature currently has no
+end-to-end coverage of the resting state. Repro:
+[`rnd-02-07-overlay-gates.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R4-renderer/rnd-02-07-overlay-gates.explore.spec.ts).
+
+## Selecting an element restacks it above the rest of the diagram
+
+**Found by:** exploratory campaign RND-13 / RND-15
+
+**Symptom:** Click a node that is drawn behind another node (or behind a
+floating Label) and it jumps in front for as long as it stays selected; click
+away and it drops back. The same happens the moment a node or rectangle is
+grabbed for a drag. Nothing about the diagram changed — no z-order command was
+issued, the model is untouched — but the picture visibly restacks on selection,
+which reads as an accidental "bring to front" and makes it impossible to inspect
+an occluded element in place.
+
+Measured with `document.elementsFromPoint` (paint order, asked of the browser,
+with a control pair whose order is fixed by mount order): at rest the stack is
+rectangles canvas < nodes canvas < labels canvas. Selecting a node puts its DOM
+overlay copy ABOVE both the nodes canvas and the labels canvas — so it outranks
+every canvas-drawn node whatever its `zIndex` or layer order, and it inverts
+ADR 0031's "a floating Label paints ABOVE nodes".
+
+**Root cause:** the hybrid promotion in
+[`Renderer.tsx`](packages/axoview-lib/src/components/Renderer/Renderer.tsx)
+moves the selected / dragged / label-dragged / icon-resized node out of the
+`NodesCanvas` bulk and into a DOM `<Nodes>` overlay — but that overlay is a
+separate `<SceneLayer>` mounted much later in the Renderer's child list, and all
+of them share one stacking context at `z-index: 0`, so DOM order decides. The
+promotion is correct about WHICH renderer draws the node and silent about WHERE
+in the stack it lands. The dragged-rectangle promotion has the same shape
+(`<Rectangles>` is mounted after `RectanglesCanvas`). This is the DOM-versus-bulk
+face of the cross-layer ordering already recorded as the GPU-13 product question:
+there, per-element `zIndex` cannot cross an entity type; here, promotion silently
+crosses every type at once.
+
+**Workaround:** none — deselect to see the true stacking.
+
+**Status:** Open. Fix direction: give the promoted overlay the same stacking
+position its bulk canvas has rather than a later one — e.g. mount the DOM
+`<Nodes>` overlay immediately after `NodesCanvas` (before `LabelsCanvas`) and
+set the SceneLayer `order` from the promoted node's resolved render order, so a
+selected node keeps its place among its peers. Note the constraint that put the
+overlay where it is: the F2 inline-rename and label-drag affordances need to sit
+ABOVE the `canvas-interactions` box, so the fix has to separate "where the node
+paints" from "where its interactive chrome lives" — the same split
+`NodeLabelHitLayer` already makes. Repro:
+[`rnd-05-13-14-15-promotion.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R4-renderer/rnd-05-13-14-15-promotion.explore.spec.ts).
+
+## Below the label LOD zoom the selected node still shows its name
+
+**Found by:** exploratory campaign RND-05
+
+**Symptom:** Zoom out past 25% and every node name disappears — by design, that
+is the label LOD band. Select any node and its name comes back, alone: one
+labelled node on an otherwise nameless diagram, at a zoom where the chip is
+declared unreadable. The chip also disappears again the instant you deselect, so
+it reads as a rendering glitch rather than a selection affordance.
+
+Measured at `zoom = 0.2` with `readableLabels` off: `NodesCanvas` reports
+`data-labels-drawn = 0` (the bulk drew no chips) while the selected node's DOM
+name chip is present in the renderer subtree.
+
+**Root cause:** the LOD band lives in the bulk renderer only.
+[`NodesCanvas`](packages/axoview-lib/src/components/SceneLayers/Nodes/NodesCanvas.tsx)
+gates chips on `readableLabels || zoom >= LABEL_LOD_ZOOM`, but the node lifted
+into the DOM overlay by the Renderer's hybrid promotion is drawn by
+`<Node>`/`Label`, which has no zoom gate at all. Promotion therefore changes
+what a node LOOKS like, not just which renderer draws it — the same class as the
+restacking recorded under RND-13/RND-15, and a third threshold alongside the
+none/0.25/0.4 set already documented under GPU-04/GPU-05 ("nothing may be painted
+at a zoom where it cannot be hit" — here, nothing should be painted at a zoom
+where its siblings are not).
+
+**Workaround:** none needed to keep working; zoom past 25% for consistent labels.
+
+**Status:** Open. Fix direction: apply the same
+`readableLabels || zoom >= LABEL_LOD_ZOOM` gate to the DOM `<Node>` label, or
+hoist the decision into a shared `useLabelLod()` so bulk and overlay cannot
+disagree. Worth deciding once, with GPU-04/GPU-05, what the whole label-threshold
+ladder should be. Repro:
+[`rnd-05-13-14-15-promotion.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R4-renderer/rnd-05-13-14-15-promotion.explore.spec.ts).
