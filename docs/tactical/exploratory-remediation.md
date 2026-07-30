@@ -83,6 +83,25 @@ STOR-11 (cache success only), ZIP-09 (one import flow), HIST-08 (delegate), plus
 the **repair-don't-reject** ruling for identity/range violations already present
 in users' files.
 
+**Regression gate (final state):** `npm test` per package — lib **159 suites /
+1780** (+1 skipped), app **34 / 356**, backend 7 / 102, worker 4 / 124 — and the
+full Playwright suite **178 passed (23.8 min), exit 0**. `tsc --noEmit`,
+`npx knip`, `check-cycles` (47, at baseline) and `lint:docs` all clean, and the
+quarantine re-verified in both directions: zero `__explore__` /
+`tests-exploratory` files discovered by any default config, and the lane itself
+still runs (app 25 probe files, lib 34). This is the e2e half wave 0 deferred to
+"the first product-code wave".
+
+> **Two tooling traps this wave hit — read before running the gate.**
+> `npm run test:e2e` does not work on this machine: the script's
+> `node_modules/.bin/playwright` path is not resolvable by cmd.exe. Use
+> `npx playwright test --config packages/axoview-e2e/playwright.config.ts`.
+> And **do not pipe it through `tail`** — the pipeline's exit code is `tail`'s,
+> not Playwright's, so a run with failures reads as exit 0. Three readings in
+> this wave were wrong for exactly that reason: the ZIP-09 ruling had broken 13
+> e2e journeys that piped runs reported as green. Run it unpiped and read the
+> summary line, or use `--reporter=dot` and check the exit code.
+
 - [x] **Autosave/save cluster (A1)** — `2b629c6e`. LIFE-01..09: flush-not-cancel
   on unmount / disable / reset, failed saves count as unsaved work in one
   `beforeunload` owner, the Retry gate reads the flush's own outcome, writes
@@ -148,6 +167,7 @@ never reach:
 | `1b916b01` | E1/HIST-02, 05, 06, 07, 08 (ruling); E3/SCN-08 |
 | `2b0e5f41` | A2/STOR-01..09, 13, 14, 16 |
 | `087f3a8c` | A3/ZIP-06, ZIP-09 (ruling) · the knip gate |
+| `88394fa9`, `fb7ca596` | the 13 e2e journeys the ZIP-09 ruling changed, onto `helpers/import.ts` |
 
 **Record correction carried out of wave 1:** area A2's thirteen confirmed bugs
 each ended `known_issues: A2/STOR-nn` in the area file, but not one had reached
