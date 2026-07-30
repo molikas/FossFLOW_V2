@@ -58,7 +58,7 @@ export function ExportProjectZipDialog({
     setBusy(true);
     setError(null);
     try {
-      const { blob, filename } = await exportProject(
+      const { blob, filename, skipped } = await exportProject(
         { storage, exporterTag },
         { scope, folderId }
       );
@@ -66,6 +66,17 @@ export function ExportProjectZipDialog({
       // Only a PROJECT-scope zip covers all session work — a folder export
       // must not clear the caller's sessionWorkUnexported guard.
       if (scope === 'project') onProjectZipExported?.();
+      if (skipped.length > 0) {
+        // A3/ZIP-11: the archive is real and complete without them, so this is
+        // a warning about what is NOT in the file the user just downloaded —
+        // not a failure. Keeping the dialog open is what makes it readable.
+        setError(
+          `Exported, but ${skipped.length} diagram${skipped.length === 1 ? '' : 's'} could not be read and ${skipped.length === 1 ? 'is' : 'are'} missing from the archive: ${skipped
+            .map((d) => d.name || d.id)
+            .join(', ')}`
+        );
+        return;
+      }
       onClose();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Export failed';

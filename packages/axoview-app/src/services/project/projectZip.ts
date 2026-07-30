@@ -115,11 +115,20 @@ const collectFolderSubtree = (
 export const exportProject = async (
   ctx: ExportContext,
   opts: ExportProjectOpts
-): Promise<{ blob: Blob; filename: string }> => {
+): Promise<{
+  blob: Blob;
+  filename: string;
+  /** Diagrams whose blob could not be read; the archive is complete without them (A3/ZIP-11). */
+  skipped: Array<{ id: string; name: string }>;
+}> => {
   const { storage, exporterTag } = ctx;
 
   const allFolders = await storage.listFolders();
-  const allDiagrams = await storage.listDiagrams();
+  // A3/ZIP-07: `listDiagrams()` includes soft-deleted rows, so a project export
+  // carried the trash — and the import has no `deletedAt` branch, so every
+  // trashed diagram came back LIVE. Export and import now agree: the trash is
+  // not part of a project export.
+  const allDiagrams = (await storage.listDiagrams()).filter((d) => !d.deletedAt);
 
   let folders: FolderMeta[];
   let diagrams: DiagramMeta[];
@@ -148,8 +157,18 @@ export const exportProject = async (
   if (!diagramsDir) throw new ProjectZipError('Failed to create diagrams folder', 'ZIP_ERROR');
 
   const manifestDiagrams: Array<DiagramMeta & { file: string }> = [];
+  // A3/ZIP-11: one unreadable diagram used to abort the whole export — the user
+  // asked to back up 42 diagrams and got a stack trace and no file. Skip what
+  // cannot be read and report it, so 41 of 42 still reach disk.
+  const skipped: Array<{ id: string; name: string }> = [];
   for (const meta of diagrams) {
-    const model = await storage.loadDiagram(meta.id);
+    let model: unknown;
+    try {
+      model = await storage.loadDiagram(meta.id);
+    } catch {
+      skipped.push({ id: meta.id, name: meta.name });
+      continue;
+    }
     const file = `diagrams/${meta.id}.json`;
     diagramsDir.file(`${meta.id}.json`, JSON.stringify(model));
     manifestDiagrams.push({ ...meta, file });
@@ -176,7 +195,11 @@ export const exportProject = async (
   }
 
   const blob = await zip.generateAsync({ type: 'blob' });
-  return { blob, filename: projectZipFilename(opts.scope, scopeLabel) };
+  return {
+    blob,
+    filename: projectZipFilename(opts.scope, scopeLabel),
+    skipped
+  };
 };
 
 // ----------------------------------------------------------------------------
@@ -269,6 +292,16 @@ const loadDiagrams = async (
     } catch (e) {
       if (e instanceof ProjectZipError) throw e;
       throw new ProjectZipError(`Diagram ${meta.id} is not valid JSON`, 'BAD_DIAGRAM');
+    }
+    // A3/ZIP-15: `null`, a number or an array all parse as valid JSON and used
+    // to be imported as a BLANK diagram that counted as a success. Only an
+    // object can be a model — take the BAD_DIAGRAM path the other two
+    // corruption cases already take.
+    if (model === null || typeof model !== 'object' || Array.isArray(model)) {
+      throw new ProjectZipError(
+        `Diagram ${meta.id} is not a diagram document`,
+        'BAD_DIAGRAM'
+      );
     }
     diagrams.set(meta.id, model);
   }
@@ -490,7 +523,13 @@ export const importProject = async (
     const folderId = d.folderId
       ? folderRemap.get(d.folderId) ?? d.folderId
       : rootOverride;
-    await storage.createDiagram(model, folderId);
+    // A3/ZIP-13: providers name a created diagram from the blob itself
+    // (`blob.name || blob.title`), but the manifest carries the name the
+    // workspace actually showed — a rename after the last save leaves the two
+    // disagreeing, and the import used to resurrect the stale one. What the
+    // export recorded wins, and both fields are set because either can name it.
+    const named = d.name ? { ...model, name: d.name, title: d.name } : model;
+    await storage.createDiagram(named, folderId);
     diagramCount++;
   }
 

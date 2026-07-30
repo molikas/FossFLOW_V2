@@ -33,6 +33,7 @@ import { AppToolbar } from './components/AppToolbar';
 import { EmptyStateScreen } from './components/EmptyStateScreen';
 import { NotFound } from './components/NotFound';
 import { dismissBootScreens } from './utils/bootScreen';
+import { buildZipImportSummary } from './utils/importSummary';
 import { APP_BASENAME } from './appBase';
 import { DiagnosticsOverlay } from './components/DiagnosticsOverlay';
 import { DiagnosticsToggleButton } from './components/DiagnosticsToggleButton';
@@ -56,19 +57,6 @@ import './App.css';
 const basename = APP_BASENAME;
 
 const EXPORTER_TAG = `axoview-app@${process.env.REACT_APP_VERSION ?? 'dev'}`;
-
-// Success message for a top-level project-zip import: "Imported N diagrams
-// across M folders at the top level" (folder clause omitted when none).
-function buildZipImportSummary(
-  diagramCount: number,
-  folderCount: number
-): string {
-  const parts = [`${diagramCount} diagram${diagramCount !== 1 ? 's' : ''}`];
-  if (folderCount > 0) {
-    parts.push(`${folderCount} folder${folderCount !== 1 ? 's' : ''}`);
-  }
-  return `Imported ${parts.join(' across ')} at the top level`;
-}
 
 function parseJsonOrThrow(text: string): unknown {
   try {
@@ -271,14 +259,19 @@ function EditorShell() {
       const isZip = /\.zip$/i.test(file.name);
       if (isZip) {
         const parsed = await parseProject(file);
-        await importProject({ storage }, parsed, { destination: { kind: 'root' } });
+        const imported = await importProject({ storage }, parsed, {
+          destination: { kind: 'root' }
+        });
         refreshFileTree();
         setFileExplorerOpen(true);
         notificationStore.push({
-          severity: 'success',
+          severity: imported.diagramCount < parsed.manifest.diagrams.length
+            ? 'warning'
+            : 'success',
           message: buildZipImportSummary(
-            parsed.manifest.diagrams.length,
-            parsed.manifest.folders.length
+            imported.diagramCount,
+            imported.folderCount,
+            parsed.manifest.diagrams.length
           )
         });
       } else {

@@ -304,96 +304,17 @@ describe('ZIP-04 — the per-entry zip-bomb cap reads a private JSZip field', ()
 
 // ---------------------------------------------------------------------------
 // ZIP-05 / ZIP-15 — what happens to bad diagram entries, and what gets counted.
-// ---------------------------------------------------------------------------
-describe('ZIP-05 / ZIP-15 — three kinds of bad diagram entry, three fates, no warning', () => {
-  const BAD = () =>
-    parsedOf({
-      diagrams: [meta('nul', 'Null one'), meta('num', 'Number one'), meta('ok', 'Good one')],
-      models: { nul: null, num: 42, ok: model('Good one') }
-    });
-
-  it('characterization: null is skipped, a non-object becomes a BLANK diagram, only the good one is real', async () => {
-    const s = new FakeStorage();
-    const result = await importProject({ storage: s }, BAD(), { destination: { kind: 'root' } });
-
-    // PRECONDITION: the import ran over all three manifest entries.
-    expect(BAD().manifest.diagrams).toHaveLength(3);
-
-    // `null` → `continue`, so it is not created and not counted.
-    // `42` → `{ id: undefined }` → spread to `{}` → an empty diagram, counted.
-    expect(result.diagramCount).toBe(2);
-    expect(s.diagrams.size).toBe(2);
-    const names = Array.from(s.diagrams.values()).map((d) => d.meta.name).sort();
-    expect(names).toEqual(['Good one', 'Untitled Diagram']);
-    const blank = Array.from(s.diagrams.values()).find((d) => d.meta.name === 'Untitled Diagram')!;
-    expect(blank.data).toEqual({});
-  });
-
-  it('ZIP-05: the toast would report 3 while the import managed 2', async () => {
-    const s = new FakeStorage();
-    const parsed = BAD();
-    const result = await importProject({ storage: s }, parsed, { destination: { kind: 'root' } });
-    // App.tsx builds its success message from `parsed.manifest.diagrams.length`
-    // and discards `result` — so these two numbers are what the user is told
-    // versus what happened.
-    expect(parsed.manifest.diagrams.length).toBe(3);
-    expect(result.diagramCount).toBe(2);
-  });
-
-  it.failing('ZIP-15: a diagram entry that is not an object is rejected', async () => {
-    const s = new FakeStorage();
-    const parsed = parsedOf({ diagrams: [meta('num', 'Number one')], models: { num: 42 } });
-    await importProject({ storage: s }, parsed, { destination: { kind: 'root' } });
-    // Expected: the same treatment unparseable JSON gets (BAD_DIAGRAM).
-    // Actual: it imports as a blank diagram and is counted as a success.
-    expect(s.diagrams.size).toBe(0);
-  });
-});
+// ZIP-05 (the import toast counted what the manifest CLAIMED) and ZIP-15 (a
+// non-object diagram entry imported as a blank diagram and counted as a
+// success) were both fixed, and their probes promoted to
+// `src/utils/__tests__/importSummary.test.ts` and
+// `src/services/project/__tests__/projectZip.test.ts`.
 
 // ---------------------------------------------------------------------------
 // ZIP-07 — trashed diagrams round-trip back to life.
-// ---------------------------------------------------------------------------
-describe('ZIP-07 — export→import resurrects soft-deleted diagrams', () => {
-  it('characterization: a trashed diagram is exported, and imports as a live one', async () => {
-    const src = new FakeStorage();
-    const live = await src.createDiagram(model('Keeper'), null);
-    const gone = await src.createDiagram(model('Deleted on purpose'), null);
-    await src.deleteDiagram(gone, true); // soft delete = what the UI performs
-    // PRECONDITION: it really is soft-deleted, and still loadable.
-    expect(src.diagrams.get(gone)!.meta.deletedAt).toBeTruthy();
-    expect(await src.loadDiagram(gone)).toBeTruthy();
-    void live;
-
-    const { blob } = await exportProject({ storage: src, exporterTag: 'probe' }, { scope: 'project' });
-    const parsed = await parseProject(blob);
-    // The trashed diagram is in the archive…
-    expect(parsed.manifest.diagrams.map((d) => d.name).sort()).toEqual([
-      'Deleted on purpose', 'Keeper'
-    ]);
-
-    const dest = new FakeStorage();
-    await importProject({ storage: dest }, parsed, { destination: { kind: 'root' } });
-    // …and lands with no deletedAt at all: back from the trash, in the tree.
-    const restored = Array.from(dest.diagrams.values()).find(
-      (d) => (d.data as { title: string }).title === 'Deleted on purpose'
-    );
-    expect(restored).toBeDefined();
-    expect(restored!.meta.deletedAt).toBeUndefined();
-  });
-
-  it.failing('ZIP-07: a soft-deleted diagram is not exported', async () => {
-    const src = new FakeStorage();
-    await src.createDiagram(model('Keeper'), null);
-    const gone = await src.createDiagram(model('Deleted on purpose'), null);
-    await src.deleteDiagram(gone, true);
-    expect(src.diagrams.get(gone)!.meta.deletedAt).toBeTruthy(); // precondition
-    const { blob } = await exportProject({ storage: src, exporterTag: 'probe' }, { scope: 'project' });
-    const parsed = await parseProject(blob);
-    // Expected: the trash is not part of the project. Actual: `listDiagrams()`
-    // returns it and `exportProject` never filters `deletedAt`.
-    expect(parsed.manifest.diagrams.map((d) => d.name)).toEqual(['Keeper']);
-  });
-});
+// ZIP-07 (a project export carried the trash, and the import brought it back
+// live) was fixed — the export filters `deletedAt` rows — and its probes
+// promoted to `src/services/project/__tests__/projectZip.test.ts`.
 
 // ---------------------------------------------------------------------------
 // ZIP-08 — every import failure renders the same sentence.
@@ -516,43 +437,9 @@ describe('ZIP-10 — folder ordering never survives a round trip', () => {
 
 // ---------------------------------------------------------------------------
 // ZIP-11 — one unreadable diagram kills the whole export.
-// ---------------------------------------------------------------------------
-describe('ZIP-11 — an export aborts entirely on one unreadable diagram', () => {
-  it('characterization: the tree-manifest read is best-effort, the per-diagram read is not', async () => {
-    const s = new FakeStorage();
-    await s.createDiagram(model('One'), null);
-    await s.createDiagram(model('Two'), null);
-    await s.createDiagram(model('Three'), null);
-    s.calls = {};
-
-    // A single unreadable diagram (a 404 in the middle of a Drive listing, a
-    // corrupt session blob) takes the whole archive with it.
-    s.failOn = { method: 'loadDiagram', nth: 2 };
-    await expect(
-      exportProject({ storage: s, exporterTag: 'probe' }, { scope: 'project' })
-    ).rejects.toThrow(/injected/);
-
-    // Contrast, same function: getTreeManifest failing produces a zip anyway.
-    const s2 = new FakeStorage();
-    await s2.createDiagram(model('One'), null);
-    s2.getTreeManifest = async () => { throw new Error('manifest unavailable'); };
-    const out = await exportProject({ storage: s2, exporterTag: 'probe' }, { scope: 'project' });
-    expect(out.blob.size).toBeGreaterThan(0);
-  });
-
-  it.failing('ZIP-11: an export skips (and reports) the diagrams it could not read', async () => {
-    const s = new FakeStorage();
-    await s.createDiagram(model('One'), null);
-    await s.createDiagram(model('Two'), null);
-    s.calls = {};
-    s.failOn = { method: 'loadDiagram', nth: 1 };
-    // Expected: the user gets an archive of what could be read, plus a warning
-    // — losing everything because of one bad row is the worst outcome for a
-    // backup gesture. Actual: the throw propagates out of exportProject.
-    const out = await exportProject({ storage: s, exporterTag: 'probe' }, { scope: 'project' });
-    expect(out.blob.size).toBeGreaterThan(0);
-  });
-});
+// ZIP-11 (one unreadable diagram aborted the whole export) was fixed — the
+// export skips and reports them — and its probes promoted to
+// `src/services/project/__tests__/projectZip.test.ts`.
 
 // ---------------------------------------------------------------------------
 // ZIP-12 — same-tick id minting.
@@ -575,42 +462,9 @@ describe('ZIP-12 — newId() collisions inside one import', () => {
 
 // ---------------------------------------------------------------------------
 // ZIP-13 — the manifest name is discarded on import.
-// ---------------------------------------------------------------------------
-describe('ZIP-13 — the import renames a diagram whose blob title disagrees with its listing name', () => {
-  it('characterization: the listing name in the manifest is ignored; the blob title wins', async () => {
-    // Exactly the A1/LIFE-12 state, and the normal state of every Drive diagram
-    // (the Drive file name is the listing name; the blob carries its own title).
-    const src = new FakeStorage();
-    const id = await src.createDiagram(model('Old Title'), null);
-    await src.renameDiagram(id, 'Name The User Sees');
-    // PRECONDITION: listing name and blob title really do disagree.
-    expect(src.diagrams.get(id)!.meta.name).toBe('Name The User Sees');
-    expect((src.diagrams.get(id)!.data as { title: string }).title).toBe('Old Title');
-
-    const { blob } = await exportProject({ storage: src, exporterTag: 'probe' }, { scope: 'project' });
-    const parsed = await parseProject(blob);
-    // The manifest carries the right name…
-    expect(parsed.manifest.diagrams[0].name).toBe('Name The User Sees');
-
-    const dest = new FakeStorage();
-    await importProject({ storage: dest }, parsed, { destination: { kind: 'root' } });
-    // …and the import throws it away: `createDiagram(model, folderId)` passes
-    // no name, so the provider falls back to the blob.
-    expect(Array.from(dest.diagrams.values())[0].meta.name).toBe('Old Title');
-  });
-
-  it.failing('ZIP-13: the imported diagram keeps the name the manifest recorded', async () => {
-    const src = new FakeStorage();
-    const id = await src.createDiagram(model('Old Title'), null);
-    await src.renameDiagram(id, 'Name The User Sees');
-    const { blob } = await exportProject({ storage: src, exporterTag: 'probe' }, { scope: 'project' });
-    const parsed = await parseProject(blob);
-    expect(parsed.manifest.diagrams[0].name).toBe('Name The User Sees'); // precondition
-    const dest = new FakeStorage();
-    await importProject({ storage: dest }, parsed, { destination: { kind: 'root' } });
-    expect(Array.from(dest.diagrams.values())[0].meta.name).toBe('Name The User Sees');
-  });
-});
+// ZIP-13 (the import resurrected the blob's stale title over the name the
+// manifest recorded) was fixed and its probes promoted to
+// `src/services/project/__tests__/projectZip.test.ts`.
 
 // ---------------------------------------------------------------------------
 // ZIP-14 — is the import id gate wider than the ids the providers mint?

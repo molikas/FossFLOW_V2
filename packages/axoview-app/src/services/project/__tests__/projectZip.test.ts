@@ -102,6 +102,11 @@ class FakeStorage implements StorageProvider {
   async saveTreeManifest(m: TreeManifest) { this.manifest = m; }
 }
 
+const readManifestFrom = async (blob: Blob) => {
+  const zip = await JSZip.loadAsync(blob);
+  return JSON.parse(await zip.file('manifest.json')!.async('string'));
+};
+
 const sampleModel = (name: string) => ({
   title: name,
   name,
@@ -364,6 +369,101 @@ describe('parseProject — errors', () => {
 //
 // Promoted from the probe lane (`__explore__/A3/zip-01-to-15`).
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// A3/ZIP-07, ZIP-11, ZIP-13, ZIP-15 — export/import fidelity.
+// Promoted from the probe lane (`__explore__/A3/zip-*`).
+// ---------------------------------------------------------------------------
+describe('exportProject — what does and does not go in the archive', () => {
+  it('leaves soft-deleted diagrams out (ZIP-07)', async () => {
+    const storage = new FakeStorage();
+    const live = await storage.createDiagram(sampleModel('Live'), null);
+    const trashed = await storage.createDiagram(sampleModel('Trashed'), null);
+    const t = storage.diagrams.get(trashed)!;
+    t.meta = { ...t.meta, deletedAt: new Date().toISOString() };
+
+    const { blob } = await exportProject(
+      { storage, exporterTag: 'test' },
+      { scope: 'project' }
+    );
+    const manifest = await readManifestFrom(blob);
+
+    // Without this the trash rides along AND comes back live: the import has no
+    // `deletedAt` branch at all.
+    expect(manifest.diagrams.map((d: DiagramMeta) => d.id)).toEqual([live]);
+  });
+
+  it('skips a diagram it cannot read and reports it, instead of aborting (ZIP-11)', async () => {
+    const storage = new FakeStorage();
+    await storage.createDiagram(sampleModel('Good one'), null);
+    const bad = await storage.createDiagram(sampleModel('Broken'), null);
+    const realLoad = storage.loadDiagram.bind(storage);
+    storage.loadDiagram = async (id: string) => {
+      if (id === bad) throw new Error('blob is gone');
+      return realLoad(id);
+    };
+
+    const { blob, skipped } = await exportProject(
+      { storage, exporterTag: 'test' },
+      { scope: 'project' }
+    );
+
+    expect(skipped).toEqual([{ id: bad, name: 'Broken' }]);
+    const manifest = await readManifestFrom(blob);
+    expect(manifest.diagrams).toHaveLength(1);
+    expect(manifest.diagrams[0].name).toBe('Good one');
+  });
+});
+
+describe('parseProject / importProject — diagram fidelity', () => {
+  it('rejects a diagram entry that is not an object (ZIP-15)', async () => {
+    for (const body of ['null', '42', '["a"]']) {
+      const zip = new JSZip();
+      zip.file(
+        'manifest.json',
+        JSON.stringify({
+          format: PROJECT_FORMAT,
+          version: PROJECT_FORMAT_VERSION,
+          exportedAt: new Date().toISOString(),
+          exportedBy: 'test',
+          scope: 'project',
+          folders: [],
+          diagrams: [
+            { id: 'd1', name: 'D1', folderId: null, file: 'diagrams/d1.json' }
+          ]
+        })
+      );
+      zip.file('diagrams/d1.json', body);
+      const blob = await zip.generateAsync({ type: 'blob' });
+      // Each used to import as a BLANK diagram and count as a success.
+      await expect(parseProject(blob)).rejects.toMatchObject({
+        code: 'BAD_DIAGRAM'
+      });
+    }
+  });
+
+  it('keeps the name the export recorded, not the blob’s stale title (ZIP-13)', async () => {
+    const source = new FakeStorage();
+    const id = await source.createDiagram(sampleModel('Old title'), null);
+    // A rename after the last save: the workspace shows the new name, the blob
+    // still carries the old one.
+    await source.renameDiagram(id, 'Renamed in the explorer');
+
+    const { blob } = await exportProject(
+      { storage: source, exporterTag: 'test' },
+      { scope: 'project' }
+    );
+    const parsed = await parseProject(blob);
+
+    const target = new FakeStorage();
+    await importProject({ storage: target }, parsed, {
+      destination: { kind: 'root' }
+    });
+
+    const names = (await target.listDiagrams()).map((d) => d.name);
+    expect(names).toEqual(['Renamed in the explorer']);
+  });
+});
+
 describe('parseProject — cyclic folder graphs', () => {
   const zipWithFolders = async (folders: unknown[]) => {
     const zip = new JSZip();
