@@ -6,12 +6,12 @@
 | Workspace | Passing | Suites |
 |---|---|---|
 | `axoview-lib` | 1753 (+1 skipped) | 157 |
-| `axoview-app` | 300 | 30 |
+| `axoview-app` | 323 | 31 |
 | `axoview-backend` | 102 | 7 |
 | `axoview-worker` | 124 | 4 |
-| **Total** | **2279 (+1 skipped)** | **198** |
+| **Total** | **2302 (+1 skipped)** | **199** |
 
-*(lib `+16` / `+2` suites and app `+32` / `+4` suites on 2026-07-30 — wave 1 of the
+*(lib `+16` / `+2` suites and app `+55` / `+5` suites on 2026-07-30 — wave 1 of the
 exploratory-campaign remediation, all of it probes promoted out of the
 quarantined lane under the ADR 0047 §2 flip rule, plus the model identity/range
 class gate. See the additions below.)*
@@ -47,10 +47,18 @@ provider or store — none of them mock the thing under test.
 
 - **[`modelIdentity.contract.test.ts`](../../packages/axoview-lib/src/schemas/__tests__/modelIdentity.contract.test.ts)** · 11 tests · **CLASS GATE** (ADR 0047 §3) for the campaign's biggest cross-area finding: the model has reference-integrity checks but no identity or range checks. It scans for the *class*, not the individual bugs — the range half derives the bounded fields from `viewItemSchema` through `safeParse`, so adding a schema bound without a write-site clamp fails it, and it asserts the discovery found something so it cannot become a vacuous green. Verified red by removing the `iconScale` clamp. The identity half pins `layer.order` as a permutation of 0..n-1 across every layer mutation, the refusal of a layer id that names no layer, and that a default page name is never one already on screen. E2/RED-03/04/05, E3/SCN-13, E4/CLIP-13.
 
-`useRuntimeConfig.test.ts` also gained two cases for the STOR-11 ruling (a
-transport failure is never cached; a received response still is), and
-`projectZip.test.ts` five for A3/ZIP-01 (a cyclic folder graph is rejected at
-parse time, and both folder walks terminate on their own).
+Three existing suites absorbed the rest rather than growing new files:
+`useRuntimeConfig.test.ts` (+2, the STOR-11 ruling — a transport failure is never
+cached, a received response still is), `ImportErrorDialog.test.tsx` (+6, A3/ZIP-08
+— each failure class gets copy that is true for it, with both fall-through
+controls), and **`projectZip.test.ts` (+16)**, which now covers the whole A3
+project-ZIP block: the cyclic folder graph (ZIP-01), what the archive does and
+does not contain (ZIP-07, ZIP-11, ZIP-13, ZIP-15), replaceAll's
+create-before-delete ordering (ZIP-03), folder ordering across a round trip
+(ZIP-10) and cross-diagram links (ZIP-02). New:
+[`importSummary.test.ts`](../../packages/axoview-app/src/utils/__tests__/importSummary.test.ts)
+· 6 tests · the import toast reports what actually landed, and names both kinds
+of shortfall (A3/ZIP-05, ZIP-02).
 
 **The lane stays out of CI.** Wave 1 also excluded `src/__explore__` from both
 packages' `tsconfig.json`: `npm run lint` is `tsc --noEmit` and was sweeping the

@@ -5916,9 +5916,14 @@ references go. The hole is scope, not coverage.
 **Workaround:** export whole projects rather than subtrees when links cross
 folders; re-point the links by hand after a partial import.
 
-**Status:** Open. Fix direction: drop an unresolvable `link` (a dead link is
-worse than none) and return the count so the importer can say so.
-Repro: [`zip-01-to-15.explore.test.ts`](packages/axoview-app/src/__explore__/A3/zip-01-to-15.explore.test.ts).
+**Status:** Fixed in d195c032 (2026-07-30) — a `link` whose target is not in
+the archive is dropped rather than carried through to resolve against the
+importer's own storage, and the count is reported in the import summary (which
+drops from success to warning when anything was lost). URL-shaped values are
+left alone. Promoted regressions:
+[`projectZip.test.ts`](packages/axoview-app/src/services/project/__tests__/projectZip.test.ts)
+and
+[`importSummary.test.ts`](packages/axoview-app/src/utils/__tests__/importSummary.test.ts).
 
 ## A failed "replace everything" import destroys part of the workspace and imports nothing
 

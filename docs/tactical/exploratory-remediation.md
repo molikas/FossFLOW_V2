@@ -72,7 +72,8 @@ for the first product-code wave.*
 
 **Progress 2026-07-30:** clusters 1 and 2 complete; cluster 3 partially done
 (seq-pinning half); cluster 4 partially done (class gate + everything closable at
-a write site); cluster 5 started (ZIP-01, the freeze). Every landed item carries its
+a write site); cluster 5 half done (the whole A3 project-ZIP block bar ZIP-06/09; the twelve A2
+entries remain). Every landed item carries its
 promoted regression and its `Fixed in <sha>` annotation — see "Wave 1 landed" below.
 
 - [x] **Autosave/save cluster (A1):** flush-not-cancel on unmount/disable/reset; failed saves count as unsaved work in both `beforeunload` guards; un-stale the Retry gate. (Thread A-b/A-c in the area files.) — `2b629c6e`, LIFE-01..09.
@@ -89,8 +90,9 @@ promoted regression and its `Fixed in <sha>` annotation — see "Wave 1 landed" 
   - [x] RED-04/RED-05 (layer `order` permutation), SCN-13 (page names), CLIP-13 (`iconScale` clamp), RED-03 write-site half.
   - [ ] **Owner call needed before the rest: reject or repair?** CLIP-01 (duplicate ids), CLIP-15 (unbounded tiles) and RED-03's import/paste half all concern violations that are *already in users' saved files* — that is the bug. Adding the check to `validateModel` makes `modelSchema.safeParse` fail, i.e. those files stop opening, which is exactly the harm E4/CLIP-02 is filed for. The alternatives are (a) repair-on-load (dedupe/drop/clamp silently, notify), (b) repair + a one-time report, (c) hard reject. Wave 1 fixed only what could be closed at the write site, where refusing is free. CLIP-14's icon-ref half additionally conflicts with the deliberate "icons may come from packs not in `model.icons`" decision in `validateModelItem` and needs the `requiredPacks` derivation its entry names.
 - [~] **Storage provider cluster (A2/A3):** remaining STOR/ZIP entries incl. ZIP-09 single-import-flow ruling and the ZIP-01 non-terminating walk. **Also files the missing A2 known_issues entries** — see the record correction below.
-  - [x] ZIP-01 non-terminating walk (`cef61900`) — the freeze, and the highest-severity item in the cluster. Rejected at parse time AND both walks made to terminate; `wipeWorkspace` needs the latter independently because its folders come from storage.
-  - [ ] Everything else: A2/STOR-01..09, 13, 14, 16 (twelve, none of which has a known_issues entry yet — file as you fix) and A3/ZIP-02, 03, 05, 06, 07, 08, 10, 11, 13, 15, plus the ZIP-09 single-import-flow ruling. This is the largest remaining block in wave 1.
+  - [x] **The whole A3 project-ZIP block except ZIP-06/ZIP-09**: ZIP-01 (`cef61900`), ZIP-05/07/11/13/15 (`11cae8e7`), ZIP-03/10 (`e894a593`), ZIP-08 (`96a8bff8`), ZIP-02 (`d195c032`). The lane file is down to the three FALSIFIED rows (`zip-04-12-14.explore.test.ts`).
+  - [ ] **ZIP-06 + the ZIP-09 single-import-flow ruling** — one item, not two. ZIP-06 (a single-JSON import can file itself into a folder that does not exist) is a field-whitelist fix on the JSON path, and the ruling reshapes that path anyway: every entry point opens `ImportDialog`, the empty tree preselects root instead of skipping the dialog, and the resolved destination place is named on screen and passed explicitly. Do them together.
+  - [ ] **A2/STOR-01..09, 13, 14, 16** — twelve entries, **none of which has a known_issues entry yet** (see the record correction). File each as you fix it. This is now the largest remaining block in wave 1.
 
 **Regression gate (2026-07-30, run against the final state of the commits below):**
 `npm test` per package — lib **157 suites / 1753** (+1 skipped), app **30 / 300**,
@@ -111,6 +113,10 @@ e2e half wave 0 deferred to "the first product-code wave".
 | `07c7fa78` | E1/HIST-01 | `hooks/__tests__/useLayerActions.history.test.tsx` |
 | `5d6a969b` | E2/RED-03 (write site), RED-04, RED-05; E3/SCN-13; E4/CLIP-13 | `schemas/__tests__/modelIdentity.contract.test.ts` (the class gate) |
 | `cef61900` | A3/ZIP-01 | `services/project/__tests__/projectZip.test.ts` |
+| `11cae8e7` | A3/ZIP-05, 07, 11, 13, 15 | same, + `utils/__tests__/importSummary.test.ts` |
+| `e894a593` | A3/ZIP-03, 10 | `services/project/__tests__/projectZip.test.ts` |
+| `96a8bff8` | A3/ZIP-08 | `components/__tests__/ImportErrorDialog.test.tsx` |
+| `d195c032` | A3/ZIP-02 | `services/project/__tests__/projectZip.test.ts` |
 
 Two things found while landing it, both recorded where they belong:
 
