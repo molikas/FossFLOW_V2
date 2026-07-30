@@ -31,7 +31,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 | F1 | [Text, labels-as-text & rich-text editing (inline canvas edit, notes, sanitization)](areas/F1-text-richtext-editing.md) | DONE | 16 / 10 | 10 | 1 | 0/9/12 |
 | F2 | [View/preview/presenter modes & annotation overlay](areas/F2-view-modes-annotations.md) | DONE | 13 / 10 | 9 | 2 | 0/14/16 |
 | F3 | [Styling system (docked strip, bulk styling, color picker, style round-trips)](areas/F3-styling-system.md) | DONE | 10 / 10 | 3 | 3 | 0/6/9 |
-| F4 | [Layers panel & z-order (visibility, locking, assignment, ordering)](areas/F4-layers-zorder.md) | OPEN | 0 / 10 | 0 | 0 | 0/17/16 |
+| F4 | [Layers panel & z-order (visibility, locking, assignment, ordering)](areas/F4-layers-zorder.md) | DONE | 10 / 10 | 4 | 0 | 0/17/16 |
 | F5 | [Icons & catalog (packs, custom icons, merge-on-load, icon resize)](areas/F5-icons-catalog.md) | OPEN | 0 / 10 | 0 | 0 | 0/7/11 |
 
 ## Wave order (suggested)
@@ -267,3 +267,7 @@ After all areas are DONE: completeness-critic pass per APPROACH §8 — list the
 | VIEW-11 | `ItemControlsManager` forwards `readOnly` to the node branch only — connector/text box/label/rectangle panels are fully editable in view mode | *Every element panel except the node's is fully editable in view mode* |
 | STYL-01/06 | Bolding a multi-selection wipes its italic/underline/strike — the label branches fan out the representative's whole format quartet, and the text-box branch takes its direction from the representative too | *Bolding a multi-selection wipes its italic and underline* |
 | STYL-05 | The text-box border OPACITY slider does not seed a default `borderColor` the way its style/width siblings do, so it renders nothing and leaves an orphan value | *The text-box border opacity slider does nothing on a box with no border* |
+| LAY-01 | `layer.order` reaches the paint key for NODES only — reordering layers moves nodes and leaves labels/rectangles where they were | *Reordering layers moves the nodes and nothing else* |
+| LAY-03 | There is no active-layer concept: every newly placed element lands unassigned, whatever the Layers panel shows as selected | *New elements never join a layer* |
+| LAY-05 | Deleting a hidden layer unassigns its members, and an unassigned entity is unconditionally visible — so the delete reveals everything the layer was hiding | *Deleting a hidden layer reveals everything it was hiding* |
+| LAY-11 | `assignLayerToItems` filters by bare id across all five entity collections, so an id shared by two entities moves both (CLIP-01's newest consumer) | *Assigning a layer moves every entity that shares the id* |

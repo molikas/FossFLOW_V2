@@ -5044,3 +5044,132 @@ is absent, so an opacity-only write can never render.
 **Status:** Open. Fix direction: give the opacity writer the same seed as its
 two siblings — or hoist the seed into one `ensureBorderColor()` helper the
 whole popover calls, so a fourth control cannot miss it. Repro: [`bulk-styl-08-10-12.explore.test.ts`](packages/axoview-lib/src/__explore__/F3/bulk-styl-08-10-12.explore.test.ts).
+
+## Reordering layers moves the nodes and nothing else
+
+**Found by:** exploratory campaign LAY-01
+
+**Symptom:** Drag a layer above another in the Layers panel. The nodes on it
+come to the front, as expected. Floating Labels and rectangles on the same
+layers do not move at all — their stacking is unchanged. So a layer is a
+z-order concept for one entity type and a visibility/lock group for the rest.
+
+**Root cause:** `layer.order` reaches the shared paint key
+(`resolveRenderOrder(layerOrder, zIndex, -x - y)`) in exactly two files, both
+of them the node layers — `SceneLayers/Nodes/Nodes.tsx` (DOM) and
+`SceneLayers/Nodes/NodesCanvas.tsx` (bulk). Every other layer takes the
+context's `layers` only to FILTER visibility:
+
+```js
+// LabelsCanvas.tsx — layers is used for the filter, never for the sort
+const filtered = allLabels.filter((l) => layersNow.length === 0 || visible.has(l.id));
+sorted = [...filtered].reverse().sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
+```
+
+Verified both ways: for nodes the layer order dominates a `zIndex` of 99 and
+the tile position, and swapping two layers' `order` swaps them; for Labels,
+reassigning two chips to the opposite layers leaves the sort byte-identical.
+
+This compounds the already-filed layer-`order` collision (RED-04/05) — the
+collision is not theoretical precisely because `order` does drive node paint
+order.
+
+**Workaround:** use per-element z-order (bring to front / send to back) for
+labels and rectangles.
+
+**Status:** Open. Fix direction: give `LabelsCanvas` / `RectanglesCanvas`
+(and the connector + text-box layers) the same `resolveRenderOrder` key the
+node layers use — the helper and the layer lookup are already shared. Note this
+does not cross entity TYPES, which is a separate open question (GPU-13). Repro:
+[`layers-lay-01-05-07-11.explore.test.ts`](packages/axoview-lib/src/__explore__/F4/layers-lay-01-05-07-11.explore.test.ts).
+
+## New elements never join a layer
+
+**Found by:** exploratory campaign LAY-03
+
+**Symptom:** Create a layer, move some elements onto it, select that layer's row
+in the Layers panel, then drop a new element on the canvas. It lands unassigned.
+There is no way to place anything directly onto a layer — every new element goes
+into the "unassigned" bucket and has to be dragged across afterwards. On a
+diagram that is organised into layers this pile grows with every edit.
+
+**Root cause:** There is no active-layer concept anywhere in the store. The
+placement modes write a fixed shape:
+
+```js
+scene.placeIcon({ modelItem: { id, name: 'Untitled', icon },
+                  viewItem: { ...VIEW_ITEM_DEFAULTS, id, tile, offset } });
+```
+
+`VIEW_ITEM_DEFAULTS` carries no `layerId`, and the same is true of
+`modes/TextBox.ts`, `modes/Label.ts` and the rectangle draw. Selecting a
+layer row sets the panel's own highlight and nothing the placement path reads.
+
+**Workaround:** place first, then drag the row onto the layer in the panel.
+
+**Status:** Open. Fix direction: add an `activeLayerId` to uiState (set by the
+panel's row selection, cleared when the layer is deleted) and have the one
+`resolvePlacement` chokepoint stamp it onto every created entity. Repro: [`layers.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F4-layers/layers.explore.spec.ts).
+
+## Deleting a hidden layer reveals everything it was hiding
+
+**Found by:** exploratory campaign LAY-05
+
+**Symptom:** Hide a layer, then delete it. The elements it contained do not
+disappear with it and do not stay hidden — they reappear on the canvas. The only
+way to keep them out of sight is to remember to move them to another hidden
+layer before deleting.
+
+**Root cause:** `deleteLayer` removes the layer row and unassigns its members:
+
+```js
+view.value.layers = view.value.layers.filter((l) => l.id !== layerId);
+const unassign = (entity) => { if (entity.layerId === layerId) delete entity.layerId; };
+```
+
+and visibility is derived as `baseVisible = !layer || layer.visible`
+(`useLayerContext`), so an entity with no layer is unconditionally visible.
+The delete therefore inverts the visibility of everything it touches. Verified
+with a CONTROL: the same rule reports the entity hidden before the delete and
+visible after.
+
+**Workaround:** move the elements to another hidden layer, or delete them, before
+deleting the layer.
+
+**Status:** Open — the fix needs a product call on what "delete layer" means.
+Three defensible answers: delete the contents with it (Photoshop), keep them and
+warn that they will become visible, or offer the choice in a confirm dialog. What
+is not defensible is doing the third thing silently. Repro: [`layers-lay-01-05-07-11.explore.test.ts`](packages/axoview-lib/src/__explore__/F4/layers-lay-01-05-07-11.explore.test.ts).
+
+## Assigning a layer moves every entity that shares the id
+
+**Found by:** exploratory campaign LAY-11
+
+**Symptom:** Assign a node to a layer (panel drag, or the context menu) and a
+rectangle that happens to share the node's id moves onto that layer too.
+
+**Root cause:** `assignLayerToItems` takes bare ids and applies one id-set
+filter across all five entity collections:
+
+```js
+const idSet = new Set(itemIds);
+const assign = (entity) => { if (!idSet.has(entity.id)) return; … };
+(view.items ?? []).forEach(assign);
+(view.connectors ?? []).forEach(assign);
+(view.rectangles ?? []).forEach(assign);
+(view.textBoxes ?? []).forEach(assign);
+(view.labels ?? []).forEach(assign);
+```
+
+The caller has typed `ItemReference`s and drops the type on the way in. Cross-
+collection id collisions are not prevented anywhere — *Nothing enforces id
+uniqueness* (CLIP-01) is the filed root — so this is that bug's newest consumer.
+The same reducer also accepts a `layerId` that names no layer, which is RED-03
+through a second door.
+
+**Workaround:** none; the collision is invisible until something moves.
+
+**Status:** Open. Fix direction: take `ItemReference[]` (type + id) instead of
+`string[]` and dispatch per collection — the callers already have the typed
+form. Validating `layerId` against the view's layers in the same reducer closes
+the RED-03 door for free. Repro: [`layers-lay-01-05-07-11.explore.test.ts`](packages/axoview-lib/src/__explore__/F4/layers-lay-01-05-07-11.explore.test.ts).

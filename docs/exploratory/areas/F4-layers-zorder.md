@@ -1,6 +1,6 @@
 # F4 — Layers panel & z-order (visibility, locking, assignment, ordering)
 
-**Status:** OPEN · **Counted hypotheses:** 0 / 10 · **Bugs:** 0 · **Hypothesis ID prefix:** `LAY-`
+**Status:** DONE · **Counted hypotheses:** 10 / 10 · **Bugs:** 4 (one known) · **Suspects:** 0 · **Hypothesis ID prefix:** `LAY-`
 
 **Scope:** LayersPanel UI, layer CRUD + reorder reducers, per-entity layerId assignment across all 5 entity types, visibility/locking enforcement in every interaction path (select, drag, delete, context menu, export), z-order within and across layers, preview-layer override interplay.
 
@@ -53,8 +53,38 @@
 
 ## Hypotheses
 
+Probe files:
+- `L` = `packages/axoview-lib/src/__explore__/F4/layers-lay-01-05-07-11.explore.test.ts`
+- `E` = `packages/axoview-e2e/tests-exploratory/F4-layers/layers.explore.spec.ts`
+
 | ID | Hypothesis | Source | Nearest existing tests | Probe | Verdict | Evidence |
 |----|-----------|--------|------------------------|-------|---------|----------|
+| LAY-01 | `layer.order` reaches the paint-order key for NODES only — floating Labels sort by `zIndex` alone and rectangles are not layer-sorted either, so reordering layers in the panel moves nodes and leaves every other entity type where it was | bug-class: sibling drift (thread A) | `renderOrder.test.ts` (the shared key), `layers.spec.ts` (visibility) | `L` | **BUG** | CONTROLs first: for nodes `resolveRenderOrder(layer.order, zIndex, -x-y)` makes the layer order dominate zIndex 99 and tile position, and swapping two layers' `order` swaps the nodes. `LabelsCanvas`' comparator is `(a.zIndex ?? 0) - (b.zIndex ?? 0)` with `layers` used only to FILTER — reassigning two Labels to the opposite layers leaves the sort identical |
+| LAY-02 | A hidden layer's entities still appear in the exported image — the export mounts a second `Axoview`, and the layer context is derived per instance | ADR 0025 export parity | none — listed baseline gap | `E` | FALSIFIED | With the only node on a hidden layer, opening the Export-Image dialog leaves ZERO node shells in the document — the hidden export `Axoview` mounts its own `LayerContextProvider` over the same model, so the hidden layer is hidden there too |
+| LAY-03 | There is no active-layer concept: every newly placed entity lands unassigned regardless of which layer is selected, so a diagram organised into layers grows a permanent "unassigned" pile | parity / product contract | none — listed baseline gap | `E` | **BUG** | With a layer created, a node dragged onto it (precondition asserted by id, never by array index) and that layer's row clicked, a newly placed node comes out with `layerId === undefined`. `PlaceIcon` writes `{...VIEW_ITEM_DEFAULTS, id, tile, offset}` and no layer — there is no active-layer concept at all |
+| LAY-04 | Layer `visible` / `locked` do not survive a save→load round trip | persistence sweep (§5.6) | none — listed baseline gap | `E` | FALSIFIED | `visible: false` + `locked: true` set through the real panel, serialised out and fed back through the model store, come back unchanged. The flags are plain schema fields with no default-stripping |
+| LAY-05 | Deleting a HIDDEN layer unassigns its entities, and an unassigned entity is unconditionally visible — so "delete layer" reveals everything the layer was hiding instead of removing or keeping it hidden | boundary / cascade | `view.test.ts` (unassign only) | `L` | **BUG** | CONTROL: before the delete, `!layer \|\| layer.visible` reports the node hidden. `deleteLayer` unassigns it, and an unassigned entity has no layer to consult — so the same rule now reports it visible. Deleting a hidden layer reveals its contents |
+| LAY-06 | Ctrl+A selects entities on a LOCKED layer (the keyboard path re-derives interactability and omits `lockedIds`, thread A) | thread A | `layers.spec.ts` (pointer path) | `E` | FALSIFIED | Ctrl+A on a locked layer's node selects nothing (`selectedTheLockedNode: false`) and the following Delete leaves it (`survivedDelete: true`). CONTROL: a real click on the same node also fails to select it, so the lock IS enforced and the probe can tell enforcement from a dead rig. Thread A does not extend to Ctrl+A |
+| LAY-07 | An entity with a dangling `layerId` (RED-03) vanishes from the Layers panel — bucketed under a layer that does not exist — while staying on canvas | bug-class recurrence (RED-03) | none | `L` | FALSIFIED | `useLayerContext` buckets an unresolvable `layerId` under `__unassigned__` rather than a phantom key, so the entity still appears in the panel and can be reassigned. It IS unconditionally visible (`!layer \|\| layer.visible` with no layer resolving), which is the sane fallback |
+| LAY-08 | Delete then removes those locked entities, so a locked layer protects against the mouse and not the keyboard | thread A | none — listed baseline gap | `E` | FALSIFIED | Covered by the same probe as LAY-06 — Delete after a Ctrl+A leaves the locked node in place. Counted with LAY-06 as one verdict |
+| LAY-11 | `assignLayerToItems` matches by bare id across all five entity collections, so it ignores the entity TYPE the caller selected | bug-class recurrence (CLIP-01) | `view.test.ts` | `L` | **BUG** | `assignLayerToItems` runs one id-set filter over all five entity collections, so with a node and a rectangle sharing an id (which CLIP-01 shows nothing prevents) assigning "the node" moves both. It also accepts a `layerId` naming no layer — RED-03 through a second door |
+| LAY-12 | `createLayer` after a `deleteLayer` collides orders (RED-04/05) — re-confirmed here because the Layers panel is that reducer's only real caller | bug-class recurrence (RED-04/05) | `view.test.ts` | `L` | BUG (known — RED-04/05) | `createLayer` after `deleteLayer` yields orders `[1, 1]`. Re-confirmed here because the Layers panel is that reducer pair's only real caller, and LAY-01 shows `order` really does drive node paint order — so the collision is not theoretical. No duplicate entry filed |
+
+**Next:** area closed (10 counted, 4 bugs — one of them a re-confirmation of RED-04/05). Nothing outstanding.
+
+## Standing thread this area adds
+
+**F-d. Layer state is enforced well on the paths that were built for it and
+absent on the ones that grew later.** The good news first, because it narrows
+thread A: locking IS honoured by Ctrl+A and by Delete (LAY-06/08 falsified), a
+hidden layer IS hidden in the image export (LAY-02 falsified), and a dangling
+`layerId` degrades to "unassigned" rather than vanishing (LAY-07 falsified).
+What is missing is everything about a layer that is not visibility or locking:
+`layer.order` reaches the paint key for nodes and no other entity type
+(LAY-01), nothing decides which layer a new entity joins (LAY-03), and the
+delete cascade unassigns rather than preserving the hidden state (LAY-05). The
+pattern is that the BOOLEAN flags were wired through and the STRUCTURAL parts
+of a layer were not.
 
 ## Product questions (SUSPECT verdicts)
 
