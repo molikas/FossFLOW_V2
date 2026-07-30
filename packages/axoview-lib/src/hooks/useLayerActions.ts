@@ -7,6 +7,7 @@ import { useUiStateStore } from 'src/stores/uiStateStore';
 import { useModelStoreApi } from 'src/stores/modelStore';
 import { useSceneStoreApi } from 'src/stores/sceneStore';
 import { view as viewReducer } from 'src/stores/reducers/view';
+import { allocateHistorySequence } from 'src/stores/historySequence';
 import type { State, ViewReducerParams } from 'src/stores/reducers/types';
 
 const useLayerActions = () => {
@@ -33,7 +34,22 @@ const useLayerActions = () => {
 
   const commit = useCallback(
     (newState: State) => {
+      // A layer op is one logical action across BOTH stores, so it allocates a
+      // shared sequence and arms both snapshots — the same ritual
+      // `useSceneActions.saveToHistoryBeforeChange` performs (D-7).
+      //
+      // E1/HIST-01: without the allocation the model entry was stamped with the
+      // PREVIOUS action's seq, and `useHistory.undo` steps every stack whose top
+      // entry carries the highest seq — so one Ctrl+Z popped this entry AND the
+      // older scene entry belonging to a different action, stranding a text
+      // box's scene size or orphaning a scene connector. Without the scene arm,
+      // a layer op that does move scene state recorded nothing on the scene
+      // stack at all. (A layer op that leaves the scene untouched still records
+      // no scene entry — `set()` drops a zero-patch write — which the seq
+      // coordination is built to handle.)
+      allocateHistorySequence();
       modelStoreApi.getState().actions.saveToHistory();
+      sceneStoreApi.getState().actions.saveToHistory();
       modelStoreApi.getState().actions.set(newState.model, true);
       sceneStoreApi.getState().actions.set(newState.scene, true);
     },
