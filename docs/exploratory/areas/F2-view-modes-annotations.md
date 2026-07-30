@@ -1,6 +1,6 @@
 # F2 — View/preview/presenter modes & annotation overlay
 
-**Status:** OPEN · **Counted hypotheses:** 0 / 10 · **Bugs:** 0 · **Hypothesis ID prefix:** `VIEW-`
+**Status:** DONE · **Counted hypotheses:** 13 / 10 · **Bugs:** 9 · **Suspects:** 2 · **Hypothesis ID prefix:** `VIEW-`
 
 **Scope:** The editor-mode ladder (EDITABLE / EXPLORABLE_READONLY / view-only), preview layer switcher (ADR 0013), view-mode info popover (ADR 0012), ephemeral annotation overlay (ADR 0014), preview canvas-mode toggle, hide-view-controls. Every mutation path must be inert in readonly modes.
 
@@ -51,9 +51,42 @@
 
 ## Hypotheses
 
+Probe files:
+- `A` = `packages/axoview-lib/src/__explore__/F2/annotations-view-01-02-04-07-10.explore.test.ts`
+- `H` = `packages/axoview-lib/src/__explore__/F2/href-view-06.explore.test.ts`
+- `E` = `packages/axoview-e2e/tests-exploratory/F2-view/view-modes.explore.spec.ts`
+
 | ID | Hypothesis | Source | Nearest existing tests | Probe | Verdict | Evidence |
 |----|-----------|--------|------------------------|-------|---------|----------|
+| VIEW-01 | Annotation strokes survive a DIAGRAM switch — `resetUiState` (the only reset the load path calls) never touches `annotation`, so opening another diagram keeps the previous one's ink on screen | ADR 0014 ephemerality | `annotationPersistence.test.ts` (save/export exclusion) | `A` | **BUG** | `resetUiState()` demonstrably fired (it cleared `selectedIds` and `itemControls` in the same probe) and the stroke is still there. `useInitialDataManager` calls exactly this on every load |
+| VIEW-02 | Annotation strokes survive a PAGE switch — `setView` clears `previewLayerOverrides` and nothing else | ADR 0014 ephemerality | `annotationOpenReset.contract.test.ts` | `A` | **BUG** | Same shape: `setView('view-2')` cleared the solo override it does own, and left the ink. Filed with VIEW-01 as one entry |
+| VIEW-03 | Strokes are stored in scene-canvas coordinates and the overlay `<g>` transform carries only scroll/zoom, so an iso↔2D toggle re-projects the diagram out from under the ink | rendering guidelines §8 | none — listed baseline gap | `E` | **BUG** | The probe's node moved >20 px on screen across the switch (precondition) while the stroke's bounding box did not follow it. The overlay is a projected layer that omits `projectionName` from the one thing it rebuilds on |
+| VIEW-04 | A pencil/highlighter CLICK with no drag commits a 1-point stroke that draws nothing but is stored, counted and undoable — the degenerate case the shape/segment branch explicitly rejects | boundary / degenerate input (thread E) | none | `A` | **BUG** | `endStroke`'s gate is `points.length >= 1` for freehand and a real extent check for shape/segment (CONTROL: all four of those correctly drop a zero-extent click). `polylinePathD([p])` is `'M 5 5'` — a moveto with no geometry, so the committed stroke is invisible and each stray click costs one Undo press |
+| VIEW-05 | `INFO_TYPES` omits `'LABEL'`, so a floating Label can never pin the ADR 0012 popover — while `deriveItemInfo` has a full LABEL branch and the hover path has a dedicated `viewModeHoveredLabelId` | bug-class: sibling drift | `view-mode-info-popover.spec.ts` (four types) | `E` | **BUG** | CONTROL: a node with the same content (headerLink, no notes) pins the popover and renders its link. The Label with the identical shape pins nothing — `itemControls.type === 'LABEL'` is confirmed set, and the popover count is 0. Hover is notes-gated, so a link-only Label has no route at all |
+| VIEW-06 | `toHref` prefixes anything that isn't `http(s)://`, so a `mailto:`/`tel:` `headerLink` — which the strip's own `normalizeWebLinkUrl` explicitly allows — renders as `https://mailto:…` | bug-class: sibling drift | `ViewModeInfoPopover.helpers.test.ts` | `H` | **BUG** | `toHref('mailto:ops@example.com')` → `'https://mailto:ops@example.com'`; same for `tel:` and `#`. The sibling normaliser passes all three through, and the strip writes element `headerLink`s RAW, so the two ends of one field disagree. The `javascript:` neutralisation the prefixing gives is real and any fix must keep it (allowlist, not a colon check) |
+| VIEW-07 | The eraser deletes outside the annotation undo history AND clears the redo stack, so pressing Undo after an erase destroys a different (still-wanted) stroke instead of restoring the erased one | parity oracle (§4.5) | none — "Eraser tool" is a listed baseline gap | `A` | **BUG** | Draw a/b/c, erase the middle one, press Undo → `c` disappears and `b` never comes back (CONTROL: draw-undo-redo round-trips exactly). `eraseAnnotationStroke` also sets `redoStack: []`, so an undo→erase→redo sequence silently loses the undone stroke for good |
+| VIEW-08 | `canvasMode` lives in the one shared `axoview_user_settings` key, so a viewer's projection choice on `/display` changes the projection the editor opens in for the same browser | features.md viewer-controlled projection | `canvas-mode-*.spec.ts` (non-dirty only) | source read | SUSPECT | Confirmed by construction — `persistedSettings.ts` has ONE `axoview_user_settings` key with a single `canvasMode`, and `useCanvasModeToggle` is shared verbatim by the editor `ToolMenu` and the present-mode `PreviewCanvasModeToggle`. Not filed: projection is a genuine user preference and sharing it is a defensible reading of "viewer-local". Product question below |
+| VIEW-09 | `hideViewControls` hides the annotation palette while a draw tool stays armed, leaving the overlay capturing at z-index 25 with its only exit affordance gone | interleaving: chrome toggle × armed tool | none | `E` | **BUG** | Two findings. (a) `setHideViewControls` has **no caller anywhere in the repo** — the documented "clean screenshot" affordance is unreachable (DRV-15 class). (b) Driven through the store it does strand the user: palette count 0, layer still `pointer-events: auto`, tool still `pencil` — `<AnnotationLayer />` is unconditional while the palette is behind the flag |
+| VIEW-10 | Image export bakes annotation strokes into the "clean" export — the capture root includes the overlay | ADR 0014 persistence exclusion | `projectZip.test.ts` (zip bytes only) | `E` | FALSIFIED | With one stroke on screen, opening the Export-Image dialog leaves exactly ONE annotation layer and ONE stroke path in the document. The hidden export `Axoview` gets its own `UiStateProvider`, so its `annotation` slice starts empty — the exclusion is structural, not a whitelist that could rot |
+| VIEW-11 | `EDITOR_MODE_MAPPING` grants `ITEM_CONTROLS` to `EXPLORABLE_READONLY`, so the editing Properties dock and its mutating controls are reachable in view mode (thread C) | ADR 0012 / thread C | none — listed baseline gap | `E` | **BUG** | `ItemControlsManager` forwards `readOnly` to the `'ITEM'` branch ONLY; the CONNECTOR / TEXTBOX / LABEL / RECTANGLE branches take no such prop. CONTROL: the node panel's notes editor really is non-editable in the same mode. The Label panel's is editable and the typing lands in `label.notes` while `editorMode === 'EXPLORABLE_READONLY'` |
+| VIEW-12 | The preview layer override survives a viewer following an in-diagram link (`axoview-navigate-to-diagram`), so a solo'd layer id leaks into the next diagram | ADR 0013 exit paths | `preview-layer-switcher.spec.ts` (toggle + non-dirty) | `E` | FALSIFIED | The solo id is set (precondition asserted), the navigation event is dispatched, and the override comes back `null` — the app's navigation handler routes through one of the two clearing actions. The predicted leak does not exist |
+| VIEW-13 | `clearAnnotations` (the palette's bin) wipes every stroke with no undo — `redoStack` is emptied in the same write | boundary: destructive-without-undo | none | `A` | SUSPECT | Confirmed: after `clearAnnotations`, Undo and Redo both no-op and the strokes are unrecoverable. The palette renders the bin next to its own Undo/Redo pair, which sets the expectation that it is undoable. Product question below |
+
+**Next:** area closed (13 counted, 9 bugs, 2 suspects). Nothing outstanding.
+
+## Standing thread this area adds
+
+**F-b. `EXPLORABLE_READONLY` is a per-surface opt-in, not a mode.** Continuing
+thread C: the mode is honoured by `RightSidebar` (which derives `readOnly`
+correctly) and by `NodePanel`, and ignored by the other four element panels
+(VIEW-11), by the keydown dispatcher (PTR-01/02/03) and by the click path
+(CTX-15). Nothing enumerates the surfaces, so each new panel starts editable.
+Any area that adds a surface should ask what it does in view mode — and the
+answer today is "whatever it did in edit mode".
 
 ## Product questions (SUSPECT verdicts)
 
-*none yet*
+| ID | Question | Recommendation |
+|----|----------|----------------|
+| VIEW-08 | Should `canvasMode` be one shared preference, or scoped per surface (editor vs `/display` viewer)? | **Leave shared, but say so.** One `axoview_user_settings.canvasMode` is read by the editor's `ToolMenu` and the viewer's `PreviewCanvasModeToggle` through the same `useCanvasModeToggle` hook, so a viewer's choice on `/display` is the projection the editor then opens in for that browser (and vice versa). features.md calls it "viewer-local UI state persisted only to that viewer's localStorage", which is true and yet reads as "scoped to the viewer surface". Projection is a real preference and one setting is the simpler product; the doc wording is what should change. If per-surface scoping is wanted, the key needs a suffix — this is a one-line change now and a migration later |
+| VIEW-13 | Should the annotation palette's Clear be undoable? | **Yes.** `clearAnnotations` drops every stroke AND the redo stack in one write, so nothing can bring them back — and the bin sits directly beside the palette's own Undo/Redo pair, which sets the opposite expectation. Cheapest coherent fix is the operation-log restructure VIEW-07 already needs; a `clear` entry then makes both undoable for free |

@@ -4729,3 +4729,242 @@ apply them on commit (so Escape discards everything), or state explicitly that
 element-level styling is immediate and un-cancellable and stop routing the
 range-scoped writes through the draft. The current per-control split is not
 predictable from the UI. Repro: [`strip-txt-06-07-08-16.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F1-text/strip-txt-06-07-08-16.explore.spec.ts).
+
+## Annotation ink follows you to the next diagram, and to the next page
+
+**Found by:** exploratory campaign VIEW-01 / VIEW-02
+
+**Symptom:** Draw over a diagram with the annotation pen, then open a different
+diagram (or switch to another page of the same one). The strokes are still on
+screen, sitting at canvas coordinates that mean nothing in the new content.
+Nothing in the UI explains where they came from, and the pen palette is closed
+(so the Clear button is not even visible until the pen is re-opened).
+
+**Root cause:** ADR 0014 calls the overlay ephemeral, and the strokes live in
+`uiState.annotation.strokes` — but none of the resets that fire on those two
+transitions owns that slice:
+
+- `resetUiState()` — the only reset `useInitialDataManager` calls on load —
+  sets `mode`, `scroll`, `itemControls`, `selectedIds` and `zoom`, and
+  nothing else.
+- `setView(viewId)` (a page switch) clears `previewLayerOverrides` and
+  nothing else.
+
+`setEditorMode` deliberately keeps the strokes (documented: "session-scoped;
+only the open flag is reset"), which is the right call for an
+edit↔present toggle on the SAME diagram — but that decision was never revisited
+for the two transitions that change what is on the canvas underneath.
+
+**Workaround:** open the pen and press Clear before switching.
+
+**Status:** Open. Fix direction: clear `annotation.strokes` + `redoStack` in
+`resetUiState` (diagram load) and in `setView` (page switch), keeping the
+existing `setEditorMode` behaviour. Repro: [`annotations-view-01-02-04-07-13.explore.test.tsx`](packages/axoview-lib/src/__explore__/F2/annotations-view-01-02-04-07-13.explore.test.tsx).
+
+## Switching projection leaves the annotation ink behind
+
+**Found by:** exploratory campaign VIEW-03
+
+**Symptom:** Circle a node with the annotation pen, then toggle iso↔2D. The
+diagram re-projects; the ink does not. The circle now sits over empty canvas or
+over a different element.
+
+**Root cause:** Strokes are stored in scene-canvas pixels and drawn inside a
+`<g>` whose transform is rebuilt from `scroll` / `zoom` /
+`rendererSize` only (`AnnotationLayer`'s store subscription). A projection
+switch changes where a TILE lands in canvas space — that is the whole point of
+`getCanvasModeSwitchScroll` — so everything anchored to a tile moves and
+everything anchored to raw canvas px stays. Measured: the probe's node moved
+>20 px on screen while the stroke's bounding box did not follow it.
+
+The rendering guidelines (§8) already require every projected layer to list
+`strategy.projectionName` in its rebuild deps; the annotation overlay is a
+projected layer that does not.
+
+**Workaround:** pick a projection before annotating.
+
+**Status:** Open — the honest fix needs a product call. Either (a) store strokes
+in TILE space so they re-project with the content, (b) clear the strokes on a
+projection switch the way a page switch should clear them (VIEW-01), or (c)
+state that ink is screen furniture and freeze it to the viewport instead of the
+scene. (a) matches what users expect when they circle a node. Repro: [`view-modes.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F2-view/view-modes.explore.spec.ts).
+
+## Erasing an annotation stroke cannot be undone — and Undo then deletes a different one
+
+**Found by:** exploratory campaign VIEW-07
+
+**Symptom:** Draw three strokes, erase the middle one, then press the palette's
+Undo. The erased stroke does not come back; instead the LAST stroke you drew
+disappears. Press Undo again and the one before that goes too. There is no way
+to recover an erased stroke.
+
+A second shape of the same bug: undo a stroke (so it is sitting on the redo
+stack), then erase anything — the redo stack is silently emptied and the undone
+stroke is gone for good.
+
+**Root cause:** `eraseAnnotationStroke` filters the stroke out of
+`annotation.strokes` and sets `redoStack: []`. It pushes nothing onto any
+history: the annotation history is a pair of plain stacks
+(`undoAnnotationStroke` pops the LAST element of `strokes`,
+`redoAnnotationStroke` pushes it back), so it can only model
+"draw / un-draw" at the tail. An erase is a delete at an arbitrary index and has
+no representation in that model, so the next Undo simply eats the tail.
+
+**Workaround:** none.
+
+**Status:** Open. Fix direction: give the annotation slice a real operation log
+(`{kind:'add'|'erase'|'clear', strokes, index}`) instead of two stroke stacks,
+so erase and clear are undoable at their own position. Repro: [`annotations-view-01-02-04-07-13.explore.test.tsx`](packages/axoview-lib/src/__explore__/F2/annotations-view-01-02-04-07-13.explore.test.tsx).
+
+## A click with the annotation pen leaves an invisible stroke
+
+**Found by:** exploratory campaign VIEW-04
+
+**Symptom:** Click once with the pencil or highlighter without dragging. Nothing
+is drawn — but a stroke was committed. It costs an Undo press to remove, it
+counts toward what Clear removes, and enough of them accumulate silently over a
+presentation.
+
+**Root cause:** `AnnotationLayer.endStroke` gates the commit on `hasExtent`,
+and that gate has two branches:
+
+```js
+const hasExtent = isShapeOrSeg
+  ? cur.points[0].x !== cur.points[1].x || cur.points[0].y !== cur.points[1].y
+  : cur.points.length >= 1;
+```
+
+The shape/segment branch correctly rejects a zero-extent click (verified for
+rectangle, ellipse, line and arrow). The freehand branch reduces to "always
+true": a click with no move produces exactly one point, and
+`polylinePathD([p])` is `'M 5 5'` — a moveto with no geometry, which draws
+nothing at any stroke width.
+
+**Workaround:** none; press Undo after a stray click.
+
+**Status:** Open. Fix direction: require `points.length >= 2` for freehand too
+— or, if a deliberate dot is wanted, emit `M x y L x y` so the round linecap
+renders it. Repro: [`annotations-view-01-02-04-07-13.explore.test.tsx`](packages/axoview-lib/src/__explore__/F2/annotations-view-01-02-04-07-13.explore.test.tsx).
+
+## A floating Label's link and notes are unreachable in present mode
+
+**Found by:** exploratory campaign VIEW-05
+
+**Symptom:** Give a floating Label a link (Ctrl+K on the label, or the strip's
+Link control) and switch to view/present mode. The ADR 0012 info popover never
+appears for it — not on hover unless the Label also has notes, and not at all
+when it is selected. The same content on a node opens the popover with a
+clickable link.
+
+**Root cause:** `ViewModeInfoPopover` resolves its source from two places and
+only one of them knows about labels:
+
+- the hover path has a dedicated `viewModeHoveredLabelId` branch that builds
+  `{ type: 'LABEL', id }`, and
+- `deriveItemInfo` has a full `case 'LABEL'` returning name / notes /
+  headerLink / anchor,
+
+but the selection path is gated on
+`const INFO_TYPES = new Set(['ITEM', 'CONNECTOR', 'RECTANGLE', 'TEXTBOX'])`,
+which has no `'LABEL'`. So a selected Label is filtered out before
+`deriveItemInfo` is ever called. The hover branch that does exist is
+notes-gated (hover shows only for items with notes), so a link-only Label has no
+route at all. Verified with a node carrying the same content as the CONTROL: the
+node pins the popover and renders its link; the Label pins nothing.
+
+**Workaround:** give the Label notes as well, and hover rather than click.
+
+**Status:** Open. Fix direction: add `'LABEL'` to `INFO_TYPES` — the
+per-type derivation it feeds already handles the type completely. Repro: [`view-modes.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F2-view/view-modes.explore.spec.ts).
+
+## The view-mode popover mangles a mailto: or tel: link
+
+**Found by:** exploratory campaign VIEW-06
+
+**Symptom:** Set an element's link to `mailto:ops@example.com` (the strip's
+Link control accepts it verbatim) and open the item's info popover in view mode.
+The rendered link is `https://mailto:ops@example.com` — a dead URL. Same for
+`tel:` and for a bare fragment.
+
+**Root cause:** Two URL normalisers written for the same job at different times.
+`normalizeWebLinkUrl` (`utils/quillLinkShortcut.ts`), used by the text-box
+link card and the strip, passes `https?:` / `mailto:` / `tel:` / `#`
+through and prefixes everything else. `toHref`
+(`ViewModeInfoPopover.helpers.ts`), used to render an element's
+`headerLink`, is `/^https?:\/\//i.test(link) ? link : `https://${link}``
+— an http(s)-only allowlist. Element-level `headerLink`s are written RAW
+(`TopBarStyleControls.onLinkChange`: "element headerLinks keep their raw
+semantics"), so whatever the user typed is what the popover has to render.
+
+Note the prefixing is also what neutralises a `javascript:` payload, and both
+normalisers do that — a fix must keep an allowlist, not swap in a
+"does it have a scheme" check.
+
+**Workaround:** none from the UI.
+
+**Status:** Open. Fix direction: have `toHref` reuse `normalizeWebLinkUrl`
+so there is one normaliser, and add a test asserting the two agree on the whole
+scheme matrix. Repro: [`href-view-06.explore.test.ts`](packages/axoview-lib/src/__explore__/F2/href-view-06.explore.test.ts).
+
+## Every element panel except the node's is fully editable in view mode
+
+**Found by:** exploratory campaign VIEW-11
+
+**Symptom:** In view/present mode (`EXPLORABLE_READONLY` — the `/display`
+viewer route), select a floating Label, a text box, a rectangle or a connector
+and open the right-hand panel. It renders its full editing surface, and the
+edits stick: typing in the Notes editor writes `label.notes` on a diagram the
+viewer is only supposed to be reading. A node's panel, on the same screen in the
+same mode, is correctly read-only.
+
+**Root cause:** `RightSidebar` derives `readOnly` correctly
+(`editorMode === EXPLORABLE_READONLY`) and passes it to
+`ItemControlsManager` — which forwards it to exactly one of its six branches:
+
+```jsx
+case 'ITEM':      return <NodePanelWrapper id={…} readOnly={readOnly} />;
+case 'CONNECTOR': return <ConnectorControls key={…} id={…} />;
+case 'TEXTBOX':   return <TextBoxControls   key={…} id={…} />;
+case 'LABEL':     return <LabelControls     key={…} id={…} />;
+case 'RECTANGLE': return <RectangleControls key={…} id={…} />;
+```
+
+The other four components take no `readOnly` prop at all, so they render their
+editable Notes editor (and their other controls) regardless of mode. This is the
+same class as the already-filed *Read-only mode is keyboard-editable*
+(PTR-01/02/03): `EXPLORABLE_READONLY` is enforced at some surfaces and not
+others.
+
+**Workaround:** none.
+
+**Status:** Open. Fix direction: thread `readOnly` through all five element
+panels (each already composes `NotesSection`, so one prop on that shared
+component covers most of it), and add a parity test that renders every branch in
+both modes. Repro: [`view-modes.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F2-view/view-modes.explore.spec.ts).
+
+## "Hide view controls" has no writer, and would trap an armed annotation tool if it did
+
+**Found by:** exploratory campaign VIEW-09
+
+**Symptom (a):** The documented present-mode affordance for hiding the on-canvas
+chrome for a clean screenshot does not exist. `uiState.hideViewControls` is
+declared, defaulted, cleared on mode switch, and read by three components
+(`UiOverlay`'s present chrome, its annotation palette, `Axoview`'s bottom
+dock) — but `setHideViewControls` has **no caller anywhere in the repo**. No
+button, no shortcut, no URL parameter.
+
+**Symptom (b), latent:** If it is wired up as-is, turning it on while an
+annotation draw tool is armed leaves the user stranded. `<AnnotationLayer />`
+is mounted unconditionally, while the palette is behind
+`{!hideViewControls && <AnnotationPalette />}` — so the overlay keeps
+`pointer-events: auto` at z-index 25 over the whole canvas with its pen and
+tool row gone. Verified: after the flag is set the palette is absent, the layer
+still reports `pointer-events: auto` and the tool is still `pencil`. The
+only way out is the undocumented Escape/V key.
+
+**Workaround:** n/a (a); press Escape (b).
+
+**Status:** Open. Fix direction: either delete the flag and its three consumers,
+or finish the feature — and when finishing it, reset
+`annotation.tool` to `'select'` (or keep the palette mounted) whenever the
+chrome is hidden. Repro: [`view-modes.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F2-view/view-modes.explore.spec.ts).
