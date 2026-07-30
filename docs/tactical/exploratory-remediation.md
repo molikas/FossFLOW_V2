@@ -71,7 +71,8 @@ for the first product-code wave.*
 ### Wave 1 — Data integrity 🔴 (E1/E3/E4 + A1/A2 clusters, ~86 filed bugs)
 
 **Progress 2026-07-30:** clusters 1 and 2 complete; cluster 3 partially done
-(seq-pinning half). Clusters 4 and 5 not started. Every landed item carries its
+(seq-pinning half); cluster 4 partially done (class gate + everything closable at
+a write site). Cluster 5 not started. Every landed item carries its
 promoted regression and its `Fixed in <sha>` annotation — see "Wave 1 landed" below.
 
 - [x] **Autosave/save cluster (A1):** flush-not-cancel on unmount/disable/reset; failed saves count as unsaved work in both `beforeunload` guards; un-stale the Retry gate. (Thread A-b/A-c in the area files.) — `2b629c6e`, LIFE-01..09.
@@ -83,7 +84,10 @@ promoted regression and its `Fixed in <sha>` annotation — see "Wave 1 landed" 
   - [ ] No-op-set snapshot swallow (HIST-02): the fix is cross-store — a new logical action must invalidate the redo future on BOTH stacks. Note the tension with the MQA #5 comment in `sceneStore.set()` (a transient no-op write must NOT clobber `future`); the discriminator is "new logical action" vs "coordinated write", not "zero patches".
   - [ ] Trim asymmetry (HIST-03) and per-view scene (D-9/SCN-15/SCN-08) both point at the same restructure: one shared history stack, and scene history keyed by view. Size this with HIST-10 (wave 5) rather than patching around it.
   - [ ] **HIST-04 is deliberately deferred to wave 5**: making `createView` undoable while `ui.view` still points at the created page leaves a dangling active view (E3/SCN-09's shape). It needs HIST-10's "always navigate" ruling.
-- [ ] **`validateModel` identity/range gate (E2/E4):** duplicate ids, dangling layer refs, unbounded tiles, colliding layer order, duplicate page names — one validation pass closes ~7 entries; ships as a **class gate** (main-suite contract test).
+- [~] **`validateModel` identity/range gate (E2/E4):** duplicate ids, dangling layer refs, unbounded tiles, colliding layer order, duplicate page names — one validation pass closes ~7 entries; ships as a **class gate** (main-suite contract test). — `5d6a969b`, partial.
+  - [x] Class gate landed: `schemas/__tests__/modelIdentity.contract.test.ts`. It *scans* for the class — the range half derives the bounded fields from `viewItemSchema` via `safeParse`, so a new schema bound without a write-site clamp fails it. Verified it can go red. It found one unfiled instance (`zIndex` declared `int()`, fractional writes accepted); also clamped.
+  - [x] RED-04/RED-05 (layer `order` permutation), SCN-13 (page names), CLIP-13 (`iconScale` clamp), RED-03 write-site half.
+  - [ ] **Owner call needed before the rest: reject or repair?** CLIP-01 (duplicate ids), CLIP-15 (unbounded tiles) and RED-03's import/paste half all concern violations that are *already in users' saved files* — that is the bug. Adding the check to `validateModel` makes `modelSchema.safeParse` fail, i.e. those files stop opening, which is exactly the harm E4/CLIP-02 is filed for. The alternatives are (a) repair-on-load (dedupe/drop/clamp silently, notify), (b) repair + a one-time report, (c) hard reject. Wave 1 fixed only what could be closed at the write site, where refusing is free. CLIP-14's icon-ref half additionally conflicts with the deliberate "icons may come from packs not in `model.icons`" decision in `validateModelItem` and needs the `requiredPacks` derivation its entry names.
 - [ ] **Storage provider cluster (A2/A3):** remaining STOR/ZIP entries incl. ZIP-09 single-import-flow ruling and the ZIP-01 non-terminating walk. **Also files the missing A2 known_issues entries** — see the record correction below.
 
 #### Wave 1 landed (2026-07-30)
@@ -93,6 +97,7 @@ promoted regression and its `Fixed in <sha>` annotation — see "Wave 1 landed" 
 | `2b629c6e` | A1/LIFE-01, 02, 03, 04, 05, 06, 07, 08, 09 | `hooks/__tests__/useAutoSave.test.ts`, `providers/__tests__/DiagramLifecycleProvider.save.test.tsx` |
 | `3af90693` | A2/STOR-10, 11 (ruling), 12; A1/LIFE-12 | `providers/__tests__/AppStorageContext.place.test.tsx`, `services/storage/__tests__/StorageManager.test.ts`, `hooks/__tests__/useRuntimeConfig.test.ts`, the provider save suite |
 | `07c7fa78` | E1/HIST-01 | `hooks/__tests__/useLayerActions.history.test.tsx` |
+| `5d6a969b` | E2/RED-03 (write site), RED-04, RED-05; E3/SCN-13; E4/CLIP-13 | `schemas/__tests__/modelIdentity.contract.test.ts` (the class gate) |
 
 Two things found while landing it, both recorded where they belong:
 

@@ -952,10 +952,14 @@ that persist.
 
 **Workaround:** re-assign the entity to a real layer, or to "no layer".
 
-**Status:** Open. Fix direction: add a `INVALID_LAYER_REF` check to `validateView`
-(cheap — one `Set` of layer ids per view, the same shape the existing checks use)
-and reject unknown ids in `assignLayerToItems`. Repro:
-[`red-03-05.explore.test.ts`](packages/axoview-lib/src/__explore__/E2/red-03-05.explore.test.ts).
+**Status:** Partially fixed in 5d6a969b (2026-07-30) — the write site is closed:
+`ASSIGN_LAYER_TO_ITEMS` refuses a layer id that names no layer in the view, and
+the class gate pins it. **Still open:** a dangling ref arriving through paste or
+import is accepted by `modelSchema` + `validateView` as before. Closing that half
+needs the reject-vs-repair call for files that already carry one — a strict load
+gate would refuse to open them, which is the harm E4/CLIP-02 is filed for. Class
+gate: [`modelIdentity.contract.test.ts`](packages/axoview-lib/src/schemas/__tests__/modelIdentity.contract.test.ts). Remaining repro:
+[`red-03.explore.test.ts`](packages/axoview-lib/src/__explore__/E2/red-03.explore.test.ts).
 
 ## Layer `order` values collide — after a delete, or after a partial reorder
 
@@ -980,11 +984,13 @@ each maintain it independently and none of them re-normalises the set.
 
 **Workaround:** drag any layer in the panel to force a full renumber.
 
-**Status:** Open. Fix direction: normalise after every mutation — sort by the
-current `order` and rewrite `0..n-1` at the end of `createLayer`, `deleteLayer`
-and `reorderLayers`, so the invariant "orders are a permutation of `0..n-1`"
-cannot be broken by any single call. Repro:
-[`red-03-05.explore.test.ts`](packages/axoview-lib/src/__explore__/E2/red-03-05.explore.test.ts).
+**Status:** Fixed in 5d6a969b (2026-07-30) — `layer.order` is normalised to a
+permutation of `0..n-1` after every mutation, so no single call can break the
+invariant: `createLayer` cannot reuse the hole a `deleteLayer` left, and a
+PARTIAL `reorderLayers` list rebuilds the whole sequence (named layers take the
+leading slots, the rest follow in their current relative order) instead of
+renumbering only the ids it names. Promoted regression + class gate:
+[`modelIdentity.contract.test.ts`](packages/axoview-lib/src/schemas/__tests__/modelIdentity.contract.test.ts).
 
 ## No-op edits dirty the diagram and burn an undo step (every action stamps `lastUpdated`)
 
@@ -1338,10 +1344,10 @@ are now two tabs called "Page 3". The same shape as the layer `order` collision
 
 **Workaround:** rename the page.
 
-**Status:** Open. Fix direction: derive the number from the highest existing
-"Page N" suffix (or keep a monotonic counter) rather than from the array length.
-Repro:
-[`scn-09-13.explore.test.tsx`](packages/axoview-lib/src/__explore__/E3/scn-09-13.explore.test.tsx).
+**Status:** Fixed in 5d6a969b (2026-07-30) — the default page name comes from the
+highest existing suffix (`nextPageName`, which builds its scan from the localised
+template so it works in every locale), never from `views.length`. Promoted
+regression + class gate: [`modelIdentity.contract.test.ts`](packages/axoview-lib/src/schemas/__tests__/modelIdentity.contract.test.ts).
 
 ## Pasting onto another page carries the source page's layer assignment
 
@@ -1550,11 +1556,10 @@ taught.
 
 **Root cause:** the range lives only in the schema; no write site enforces it.
 
-**Status:** Open. Fix direction: clamp at the write site (`updateViewItem`, and
-the group-resize factor computation), accepting that a clamped member breaks
-strict ratio preservation — or cap the *factor* so no member can exceed the range,
-which preserves ratios and stays legal. Repro:
-[`clip-08-15.explore.test.tsx`](packages/axoview-lib/src/__explore__/E4/clip-08-15.explore.test.tsx).
+**Status:** Fixed in 5d6a969b (2026-07-30) — `updateViewItem` clamps `iconScale`
+to the schema's `[0.1, 3]`, so every writer is covered, including the exported
+action and the group-resize factor whose own `[0.3, 2.5]` clamp sits a layer up.
+Promoted regression + class gate: [`modelIdentity.contract.test.ts`](packages/axoview-lib/src/schemas/__tests__/modelIdentity.contract.test.ts).
 
 ## Icon references and tile coordinates are unvalidated
 
