@@ -19,7 +19,7 @@ import {
 import { PastePayload } from 'src/clipboard/clipboard';
 import { useUiStateStore } from 'src/stores/uiStateStore';
 import { useModelStoreApi } from 'src/stores/modelStore';
-import { useSceneStoreApi } from 'src/stores/sceneStore';
+import { useSceneStoreApi, type EditSession } from 'src/stores/sceneStore';
 import * as reducers from 'src/stores/reducers';
 import type { State } from 'src/stores/reducers/types';
 import { validateView } from 'src/schemas/validation';
@@ -39,23 +39,37 @@ export const useSceneActions = () => {
   // it's generated here, at the creation surface, rather than at display.
   const { t } = useTranslation('page');
 
-  const transactionInProgress = useRef(false);
-  const pendingStateRef = useRef<State | null>(null);
-  // Live-drag transaction: state writes pass through to stores in real time, but
-  // history records only one entry (begin → commit). See beginDragTransaction.
-  const dragInProgress = useRef(false);
-
   const modelStoreApi = useModelStoreApi();
   const sceneStoreApi = useSceneStoreApi();
+
+  // E1/HIST-07, E1/HIST-08: "is a transaction open?", "is a drag open?" and the
+  // batched pending state are properties of the EDITING SESSION, not of one
+  // hook instance. They used to be `useRef`s here, so a second `useSceneActions`
+  // under the same providers — another component's, or `useHistory`'s — could
+  // not see either bracket: a foreign mid-drag write re-armed the pre-snapshot
+  // (undo landed mid-drag), and scene CRUD wrapped in `useHistory.transaction`
+  // pushed one history entry each instead of one in total. The scene store is
+  // created once per provider, so its `editSession` has exactly the right scope.
+  //
+  // The `?? fallback` keeps the mocked-store unit tests working (they hand the
+  // hook a partial store with no `actions`), the same accommodation
+  // `useHistory` makes for `peekUndoSeq`. Under real providers the store always
+  // supplies it, which is the only configuration the brackets have to span.
+  const fallbackSession = useRef<EditSession>({
+    transactionInProgress: false,
+    dragInProgress: false,
+    pendingState: null
+  });
+  const session =
+    sceneStoreApi.getState()?.actions?.editSession ?? fallbackSession.current;
 
   // -------------------------------------------------------------------------
   // Internal transaction utilities
   // -------------------------------------------------------------------------
 
   const getState = useCallback((): State => {
-    if (transactionInProgress.current && pendingStateRef.current) {
-      return pendingStateRef.current;
-    }
+    const pending = session.pendingState as State | null;
+    if (session.transactionInProgress && pending) return pending;
     const model = modelStoreApi.getState();
     const scene = sceneStoreApi.getState();
     return {
@@ -74,8 +88,8 @@ export const useSceneActions = () => {
 
   const setState = useCallback(
     (newState: State) => {
-      if (transactionInProgress.current) {
-        pendingStateRef.current = newState;
+      if (session.transactionInProgress) {
+        session.pendingState = newState;
         return;
       }
       modelStoreApi.getState().actions.set(newState.model, true);
@@ -85,16 +99,43 @@ export const useSceneActions = () => {
   );
 
   const saveToHistoryBeforeChange = useCallback(() => {
-    if (transactionInProgress.current) return;
+    if (session.transactionInProgress) return;
     // While a live drag is open, the pre-snapshot was captured at begin; per-tick
     // saves would overwrite it and lose the original starting state.
-    if (dragInProgress.current) return;
+    if (session.dragInProgress) return;
     // One logical action across both stores — allocate a single shared seq so
     // its model+scene entries stamp the same value (D-7).
     allocateHistorySequence();
+    // E1/HIST-02: a new action branches history, so BOTH futures are stale. The
+    // store whose patch set for this action turns out to be empty never pushes
+    // an entry, and so never cleared its own — leaving `canRedo` true and a
+    // stale patch to re-apply (an orphan `scene.connectors[id]`).
+    modelStoreApi.getState().actions.clearFuture();
+    sceneStoreApi.getState().actions.clearFuture();
     modelStoreApi.getState().actions.saveToHistory();
     sceneStoreApi.getState().actions.saveToHistory();
-  }, [modelStoreApi, sceneStoreApi]);
+  }, [session, modelStoreApi, sceneStoreApi]);
+
+  /**
+   * Arm the undo snapshot for one logical action and run its reducer. If the
+   * reducer throws, the armed snapshot is DISCARDED: leaving it armed let the
+   * next `skipHistory` write from elsewhere (a page switch's SYNC_SCENE)
+   * consume it and push a bogus entry stamped with this action's seq, so a
+   * later Ctrl+Z reverted a diff the user never made (E1/HIST-05).
+   */
+  const withHistory = useCallback(
+    <T,>(run: () => T): T => {
+      saveToHistoryBeforeChange();
+      try {
+        return run();
+      } catch (e) {
+        modelStoreApi.getState().actions.discardPendingPre();
+        sceneStoreApi.getState().actions.discardPendingPre();
+        throw e;
+      }
+    },
+    [saveToHistoryBeforeChange, modelStoreApi, sceneStoreApi]
+  );
 
   // -------------------------------------------------------------------------
   // Live drag transactions — for interactions where intermediate updates must
@@ -103,11 +144,13 @@ export const useSceneActions = () => {
   // -------------------------------------------------------------------------
 
   const beginDragTransaction = useCallback(() => {
-    if (dragInProgress.current) return;
-    dragInProgress.current = true;
+    if (session.dragInProgress) return;
+    session.dragInProgress = true;
     // The whole drag is one logical action — allocate a single shared seq so the
     // model+scene commit entries stamp the same value (D-7).
     allocateHistorySequence();
+    modelStoreApi.getState().actions.clearFuture(); // E1/HIST-02
+    sceneStoreApi.getState().actions.clearFuture();
     modelStoreApi.getState().actions.saveToHistory();
     sceneStoreApi.getState().actions.saveToHistory();
     modelStoreApi.getState().actions.freezePendingPre();
@@ -115,15 +158,15 @@ export const useSceneActions = () => {
   }, [modelStoreApi, sceneStoreApi]);
 
   const commitDragTransaction = useCallback(() => {
-    if (!dragInProgress.current) return;
-    dragInProgress.current = false;
+    if (!session.dragInProgress) return;
+    session.dragInProgress = false;
     modelStoreApi.getState().actions.unfreezePendingPre();
     sceneStoreApi.getState().actions.unfreezePendingPre();
     // Empty-update set() consumes pendingPre and pushes one entry covering all
     // intermediate writes since beginDragTransaction.
     modelStoreApi.getState().actions.set({}, true);
     sceneStoreApi.getState().actions.set({}, true);
-  }, [modelStoreApi, sceneStoreApi]);
+  }, [session, modelStoreApi, sceneStoreApi]);
 
   // -------------------------------------------------------------------------
   // MQA #7 Path 4 — batched, immer-free tile updater for the drag hot path.
@@ -423,43 +466,31 @@ export const useSceneActions = () => {
 
   const transaction = useCallback(
     (operations: () => void) => {
-      if (transactionInProgress.current) {
+      if (session.transactionInProgress) {
         operations();
         return;
       }
 
       saveToHistoryBeforeChange();
-      pendingStateRef.current = (() => {
-        const model = modelStoreApi.getState();
-        const scene = sceneStoreApi.getState();
-        return {
-          model: {
-            version: model.version,
-            title: model.title,
-            description: model.description,
-            colors: model.colors,
-            icons: model.icons,
-            items: model.items,
-            views: model.views
-          },
-          scene: { connectors: scene.connectors, textBoxes: scene.textBoxes }
-        };
-      })();
-      transactionInProgress.current = true;
+      // Start EMPTY rather than with a snapshot of the stores. `getState()`
+      // falls through to the live stores while this is null, so a caller that
+      // writes to a store directly inside the bracket — which
+      // `useHistory.transaction` has always allowed, and which its delegation
+      // to this implementation must keep allowing (E1/HIST-08) — is seen by the
+      // next op and is not clobbered by the flush below.
+      session.pendingState = null;
+      session.transactionInProgress = true;
 
       try {
         operations();
-        if (pendingStateRef.current) {
-          modelStoreApi
-            .getState()
-            .actions.set(pendingStateRef.current.model, true);
-          sceneStoreApi
-            .getState()
-            .actions.set(pendingStateRef.current.scene, true);
+        const pending = session.pendingState as State | null;
+        if (pending) {
+          modelStoreApi.getState().actions.set(pending.model, true);
+          sceneStoreApi.getState().actions.set(pending.scene, true);
         }
       } finally {
-        pendingStateRef.current = null;
-        transactionInProgress.current = false;
+        session.pendingState = null;
+        session.transactionInProgress = false;
       }
     },
     [saveToHistoryBeforeChange, modelStoreApi, sceneStoreApi]
@@ -471,28 +502,31 @@ export const useSceneActions = () => {
 
   const createModelItem = useCallback(
     (newModelItem: ModelItem) => {
-      if (!transactionInProgress.current) saveToHistoryBeforeChange();
-      const newState = reducers.createModelItem(newModelItem, getState());
-      setState(newState);
-      return newState;
+      return withHistory(() => {
+        const newState = reducers.createModelItem(newModelItem, getState());
+        setState(newState);
+        return newState;
+      });
     },
     [getState, setState, saveToHistoryBeforeChange]
   );
 
   const updateModelItem = useCallback(
     (id: string, updates: Partial<ModelItem>) => {
-      saveToHistoryBeforeChange();
-      const newState = reducers.updateModelItem(id, updates, getState());
-      setState(newState);
+      return withHistory(() => {
+        const newState = reducers.updateModelItem(id, updates, getState());
+        setState(newState);
+      });
     },
     [getState, setState, saveToHistoryBeforeChange]
   );
 
   const deleteModelItem = useCallback(
     (id: string) => {
-      saveToHistoryBeforeChange();
-      const newState = reducers.deleteModelItem(id, getState());
-      setState(newState);
+      return withHistory(() => {
+        const newState = reducers.deleteModelItem(id, getState());
+        setState(newState);
+      });
     },
     [getState, setState, saveToHistoryBeforeChange]
   );
@@ -504,14 +538,15 @@ export const useSceneActions = () => {
   const createViewItem = useCallback(
     (newViewItem: ViewItem) => {
       if (!currentViewId) return;
-      if (!transactionInProgress.current) saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'CREATE_VIEWITEM',
-        payload: newViewItem,
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'CREATE_VIEWITEM',
+          payload: newViewItem,
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
+        return newState;
       });
-      setState(newState);
-      return newState;
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -519,14 +554,15 @@ export const useSceneActions = () => {
   const updateViewItem = useCallback(
     (id: string, updates: Partial<ViewItem>) => {
       if (!currentViewId) return getState();
-      if (!transactionInProgress.current) saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'UPDATE_VIEWITEM',
-        payload: { id, ...updates },
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'UPDATE_VIEWITEM',
+          payload: { id, ...updates },
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
+        return newState;
       });
-      setState(newState);
-      return newState;
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -534,13 +570,14 @@ export const useSceneActions = () => {
   const deleteViewItem = useCallback(
     (id: string) => {
       if (!currentViewId) return;
-      saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'DELETE_VIEWITEM',
-        payload: id,
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'DELETE_VIEWITEM',
+          payload: id,
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
       });
-      setState(newState);
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -552,13 +589,14 @@ export const useSceneActions = () => {
   const createConnector = useCallback(
     (newConnector: Connector) => {
       if (!currentViewId) return;
-      saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'CREATE_CONNECTOR',
-        payload: newConnector,
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'CREATE_CONNECTOR',
+          payload: newConnector,
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
       });
-      setState(newState);
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -566,13 +604,14 @@ export const useSceneActions = () => {
   const updateConnector = useCallback(
     (id: string, updates: Partial<Connector>) => {
       if (!currentViewId) return;
-      saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'UPDATE_CONNECTOR',
-        payload: { id, ...updates },
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'UPDATE_CONNECTOR',
+          payload: { id, ...updates },
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
       });
-      setState(newState);
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -580,13 +619,14 @@ export const useSceneActions = () => {
   const deleteConnector = useCallback(
     (id: string) => {
       if (!currentViewId) return;
-      saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'DELETE_CONNECTOR',
-        payload: id,
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'DELETE_CONNECTOR',
+          payload: id,
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
       });
-      setState(newState);
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -598,13 +638,14 @@ export const useSceneActions = () => {
   const createTextBox = useCallback(
     (newTextBox: TextBox) => {
       if (!currentViewId) return;
-      saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'CREATE_TEXTBOX',
-        payload: newTextBox,
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'CREATE_TEXTBOX',
+          payload: newTextBox,
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
       });
-      setState(newState);
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -612,14 +653,15 @@ export const useSceneActions = () => {
   const updateTextBox = useCallback(
     (id: string, updates: Partial<TextBox>) => {
       if (!currentViewId) return getState();
-      if (!transactionInProgress.current) saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'UPDATE_TEXTBOX',
-        payload: { id, ...updates },
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'UPDATE_TEXTBOX',
+          payload: { id, ...updates },
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
+        return newState;
       });
-      setState(newState);
-      return newState;
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -627,13 +669,14 @@ export const useSceneActions = () => {
   const deleteTextBox = useCallback(
     (id: string) => {
       if (!currentViewId) return;
-      saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'DELETE_TEXTBOX',
-        payload: id,
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'DELETE_TEXTBOX',
+          payload: id,
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
       });
-      setState(newState);
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -646,13 +689,14 @@ export const useSceneActions = () => {
   const createLabel = useCallback(
     (newLabel: Label) => {
       if (!currentViewId) return;
-      saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'CREATE_LABEL',
-        payload: newLabel,
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'CREATE_LABEL',
+          payload: newLabel,
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
       });
-      setState(newState);
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -660,14 +704,15 @@ export const useSceneActions = () => {
   const updateLabel = useCallback(
     (id: string, updates: Partial<Label>) => {
       if (!currentViewId) return getState();
-      if (!transactionInProgress.current) saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'UPDATE_LABEL',
-        payload: { id, ...updates },
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'UPDATE_LABEL',
+          payload: { id, ...updates },
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
+        return newState;
       });
-      setState(newState);
-      return newState;
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -675,13 +720,14 @@ export const useSceneActions = () => {
   const deleteLabel = useCallback(
     (id: string) => {
       if (!currentViewId) return;
-      saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'DELETE_LABEL',
-        payload: id,
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'DELETE_LABEL',
+          payload: id,
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
       });
-      setState(newState);
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -693,13 +739,14 @@ export const useSceneActions = () => {
   const createRectangle = useCallback(
     (newRectangle: Rectangle) => {
       if (!currentViewId) return;
-      saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'CREATE_RECTANGLE',
-        payload: newRectangle,
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'CREATE_RECTANGLE',
+          payload: newRectangle,
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
       });
-      setState(newState);
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -707,14 +754,15 @@ export const useSceneActions = () => {
   const updateRectangle = useCallback(
     (id: string, updates: Partial<Rectangle>) => {
       if (!currentViewId) return getState();
-      if (!transactionInProgress.current) saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'UPDATE_RECTANGLE',
-        payload: { id, ...updates },
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'UPDATE_RECTANGLE',
+          payload: { id, ...updates },
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
+        return newState;
       });
-      setState(newState);
-      return newState;
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -722,13 +770,14 @@ export const useSceneActions = () => {
   const deleteRectangle = useCallback(
     (id: string) => {
       if (!currentViewId) return;
-      saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'DELETE_RECTANGLE',
-        payload: id,
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'DELETE_RECTANGLE',
+          payload: id,
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
       });
-      setState(newState);
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -797,20 +846,21 @@ export const useSceneActions = () => {
       const activViewId = currentViewId;
       if (views.length <= 1) return;
 
-      saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'DELETE_VIEW',
-        payload: undefined,
-        ctx: { viewId, state: getState() }
-      });
-      setState(newState);
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'DELETE_VIEW',
+          payload: undefined,
+          ctx: { viewId, state: getState() }
+        });
+        setState(newState);
 
-      if (viewId === activViewId) {
-        const remainingViews = newState.model.views;
-        if (remainingViews.length > 0) {
-          changeView(remainingViews[0].id, newState.model);
+        if (viewId === activViewId) {
+          const remainingViews = newState.model.views;
+          if (remainingViews.length > 0) {
+            changeView(remainingViews[0].id, newState.model);
+          }
         }
-      }
+      });
     },
     [
       currentViewId,
@@ -824,13 +874,14 @@ export const useSceneActions = () => {
 
   const updateView = useCallback(
     (viewId: string, updates: Partial<Pick<View, 'name'>>) => {
-      saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'UPDATE_VIEW',
-        payload: updates,
-        ctx: { viewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'UPDATE_VIEW',
+          payload: updates,
+          ctx: { viewId, state: getState() }
+        });
+        setState(newState);
       });
-      setState(newState);
     },
     [getState, setState, saveToHistoryBeforeChange]
   );

@@ -24,52 +24,9 @@ installCanvasStub();
 
 // ---------------------------------------------------------------------------
 // HIST-02 — redo-stack invalidation is per-store, not per-logical-action
-// ---------------------------------------------------------------------------
-describe('HIST-02 — a new model-only action leaves the scene redo stack armed', () => {
-  it('characterization: the scene future survives a model-only action', () => {
-    const result = setup();
-
-    drawConnector(result); // both stores
-    act(() => {
-      result.current.history.undo();
-    });
-    expect(historyDepths(result)).toMatchObject({
-      modelFuture: 1,
-      sceneFuture: 1
-    });
-
-    placeIcon(result); // model-only: scene set() yields 0 patches → early return
-
-    const after = historyDepths(result);
-    expect(after.modelFuture).toBe(0); // model store cleared its own future
-    expect(after.sceneFuture).toBe(1); // scene store did NOT
-  });
-
-  it.failing(
-    'BUG: redo stays available after a new action and resurrects the undone connector’s scene path',
-    () => {
-      const result = setup();
-
-      drawConnector(result);
-      act(() => {
-        result.current.history.undo();
-      });
-      expect(modelView(result).connectors ?? []).toHaveLength(0);
-
-      placeIcon(result); // a NEW action — redo must be dead from here on
-
-      // Correct: nothing to redo.
-      expect(result.current.history.canRedo).toBe(false);
-
-      act(() => {
-        result.current.history.redo();
-      });
-
-      // Correct: no scene path may exist for a connector the model does not have.
-      expect(orphanSceneConnectors(result)).toEqual([]);
-    }
-  );
-});
+// HIST-02 (a new action after an undo left the OTHER store's redo stack armed,
+// so Redo re-applied a stale patch) was fixed — a new logical action clears both
+// futures. Promoted to `src/hooks/__tests__/historyBrackets.test.tsx`.
 
 // ---------------------------------------------------------------------------
 // HIST-03 — independent MAX_HISTORY_SIZE trimming

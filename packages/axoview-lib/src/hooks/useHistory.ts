@@ -1,14 +1,35 @@
 import { useCallback, useRef } from 'react';
 import { useModelStore } from 'src/stores/modelStore';
-import { useSceneStore } from 'src/stores/sceneStore';
+import {
+  useSceneStore,
+  useSceneStoreApi,
+  type EditSession
+} from 'src/stores/sceneStore';
 import { useUiStateStore } from 'src/stores/uiStateStore';
+import { useSceneActions } from 'src/hooks/useSceneActions';
 import * as reducers from 'src/stores/reducers';
 import { INITIAL_SCENE_STATE } from 'src/config';
 import { allocateHistorySequence } from 'src/stores/historySequence';
 
 export const useHistory = () => {
-  // Track if we're in a transaction to prevent nested history saves
-  const transactionInProgress = useRef(false);
+  // E1/HIST-08 (owner ruling 2026-07-30: delegate, don't duplicate). This hook
+  // kept its OWN `transactionInProgress` ref, so N scene CRUD ops wrapped in
+  // `useHistory.transaction` pushed N history entries instead of 1 and one
+  // Ctrl+Z undid only the last — `useSceneActions` never saw the bracket. Both
+  // now read the same provider-scoped edit session, so there is one grouping
+  // primitive with one piece of state behind it, whichever hook opens it.
+  //
+  // The `?? fallback` keeps the mocked-store unit tests working, matching the
+  // `peekUndoSeq?.() ?? 0` accommodation below.
+  const sceneStoreApi = useSceneStoreApi();
+  const { transaction: sceneTransaction } = useSceneActions();
+  const fallbackSession = useRef<EditSession>({
+    transactionInProgress: false,
+    dragInProgress: false,
+    pendingState: null
+  });
+  const session =
+    sceneStoreApi.getState()?.actions?.editSession ?? fallbackSession.current;
 
   // Get store actions
   const modelActions = useModelStore((state) => {
@@ -38,39 +59,19 @@ export const useHistory = () => {
   const canRedo = modelCanRedo || sceneCanRedo;
 
   // Transaction wrapper - groups multiple operations into single history entry
-  const transaction = useCallback(
-    (operations: () => void) => {
-      if (!modelActions || !sceneActions) return;
-
-      // Prevent nested transactions
-      if (transactionInProgress.current) {
-        operations();
-        return;
-      }
-
-      // One logical action across both stores — allocate a single shared seq
-      // so its entries stamp the same value (D-7).
-      allocateHistorySequence();
-
-      // Save current state before transaction
-      modelActions.saveToHistory();
-      sceneActions.saveToHistory();
-
-      // Mark transaction as in progress
-      transactionInProgress.current = true;
-
-      try {
-        // Execute all operations without saving intermediate history
-        operations();
-      } finally {
-        // Always reset transaction state
-        transactionInProgress.current = false;
-      }
-
-      // Note: We don't save after transaction - the final state is already current
-    },
-    [modelActions, sceneActions]
-  );
+  /**
+   * E1/HIST-08 (owner ruling 2026-07-30: **delegate**, don't duplicate).
+   *
+   * This used to be a second, subtly different implementation of grouping: it
+   * armed the snapshots and set its OWN `transactionInProgress` ref, which
+   * `useSceneActions` could not see. N scene CRUD ops inside it therefore
+   * pushed N history entries instead of 1, and one Ctrl+Z undid only the last.
+   * It is now a pass-through to the one implementation that batches the writes
+   * as well as the history — the bracket state they share lives on the scene
+   * store's provider-scoped `editSession`, so a caller's own
+   * `useSceneActions()` instance sees this bracket too.
+   */
+  const transaction = sceneTransaction;
 
   // D4-2 / D-8: connector paths are derived from the model but cached in the
   // scene store + its history. Paste records PROVISIONAL empty connector paths in
@@ -198,7 +199,7 @@ export const useHistory = () => {
 
   const saveToHistory = useCallback(() => {
     // Don't save during transactions
-    if (transactionInProgress.current) {
+    if (session.transactionInProgress) {
       return;
     }
 
@@ -206,9 +207,11 @@ export const useHistory = () => {
 
     // One logical action across both stores — shared seq (D-7).
     allocateHistorySequence();
+    modelActions.clearFuture?.(); // E1/HIST-02
+    sceneActions.clearFuture?.();
     modelActions.saveToHistory();
     sceneActions.saveToHistory();
-  }, [modelActions, sceneActions]);
+  }, [session, modelActions, sceneActions]);
 
   const clearHistory = useCallback(() => {
     if (!modelActions || !sceneActions) return;
@@ -226,7 +229,7 @@ export const useHistory = () => {
     clearHistory,
     transaction,
     isInTransaction: () => {
-      return transactionInProgress.current;
+      return session.transactionInProgress;
     }
   };
 };

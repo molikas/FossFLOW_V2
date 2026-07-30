@@ -34,6 +34,22 @@ export interface SceneStoreWithHistory extends Omit<SceneStore, 'actions'> {
     clearHistory: () => void;
     freezePendingPre: () => void;
     unfreezePendingPre: () => void;
+    /** Drop an armed pre-snapshot without recording anything (E1/HIST-05). */
+    discardPendingPre: () => void;
+    /** Invalidate the redo stack when a new logical action branches history (E1/HIST-02). */
+    clearFuture: () => void;
+    /**
+     * Provider-scoped edit-session state. `useSceneActions` used to keep
+     * `transactionInProgress` / `dragInProgress` / the pending state in per-HOOK
+     * refs, so a second instance of the hook under the same providers — another
+     * component, or `useHistory`'s own — could not see an open transaction or an
+     * open drag. That is E1/HIST-07 (a foreign mid-drag write re-armed the
+     * snapshot, so undo landed mid-drag) and E1/HIST-08 (scene CRUD wrapped in
+     * `useHistory.transaction` pushed one entry each instead of one in total).
+     * The store is created once per provider, so this object is shared by every
+     * hook instance under it — which is the scope the state always meant.
+     */
+    editSession: EditSession;
     // D-7 coordination: the logical-action seq of the top undo/redo entry, or
     // null when the respective stack is empty.
     peekUndoSeq: () => number | null;
@@ -42,6 +58,13 @@ export interface SceneStoreWithHistory extends Omit<SceneStore, 'actions'> {
 }
 
 const MAX_HISTORY_SIZE = 50;
+
+export interface EditSession {
+  transactionInProgress: boolean;
+  dragInProgress: boolean;
+  /** The reducers' `State` while a transaction batches writes; typed loosely so the store stays reducer-agnostic. */
+  pendingState: unknown;
+}
 
 const createSceneHistoryState = (): SceneHistoryState => ({
   past: [],
@@ -144,6 +167,21 @@ const initialState = () => {
       set((state) => ({ ...state, history: createSceneHistoryState() }));
     };
 
+    const discardPendingPre = () => {
+      if (pendingPreFrozen) return; // a live drag owns it
+      pendingPre = null;
+    };
+
+    const clearFuture = () => {
+      set((state) => ({ ...state, history: { ...state.history, future: [] } }));
+    };
+
+    const editSession: EditSession = {
+      transactionInProgress: false,
+      dragInProgress: false,
+      pendingState: null
+    };
+
     const freezePendingPre = () => {
       pendingPreFrozen = true;
     };
@@ -212,6 +250,9 @@ const initialState = () => {
         canRedo,
         saveToHistory,
         clearHistory,
+        discardPendingPre,
+        clearFuture,
+        editSession,
         freezePendingPre,
         unfreezePendingPre,
         peekUndoSeq,

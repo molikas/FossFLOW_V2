@@ -192,71 +192,8 @@ describe('SCN-07 — batchUpdateViewItemTiles outside a drag bracket', () => {
 
 // ---------------------------------------------------------------------------
 // SCN-08 — previewConnectorPaths vs an open transaction
-// ---------------------------------------------------------------------------
-describe('SCN-08 — previewConnectorPaths inside a transaction', () => {
-  it.failing(
-    'BUG: preview paths written during a transaction are erased by the commit',
-    () => {
-      const result = setup();
-
-      act(() => {
-        result.current.scene.createConnector({
-          id: 'conn-1',
-          color: 'c1',
-          anchors: [
-            { id: 'a1', ref: { item: 'node-A' } },
-            { id: 'a2', ref: { item: 'node-B' } }
-          ]
-        });
-      });
-      const original = result.current.sceneApi
-        .getState()
-        .connectors['conn-1'].path.tiles.slice();
-
-      act(() => {
-        result.current.scene.transaction(() => {
-          result.current.scene.previewConnectorPaths(
-            new Map([['node-A', { x: 12, y: 12 }]])
-          );
-        });
-      });
-
-      // The preview wrote straight to the store; the commit then wrote the
-      // transaction's pending scene (captured before the preview) over it.
-      expect(
-        result.current.sceneApi.getState().connectors['conn-1'].path.tiles
-      ).not.toEqual(original);
-    }
-  );
-
-  it('characterization: the preview write survives OUTSIDE a transaction', () => {
-    const result = setup();
-
-    act(() => {
-      result.current.scene.createConnector({
-        id: 'conn-1',
-        color: 'c1',
-        anchors: [
-          { id: 'a1', ref: { item: 'node-A' } },
-          { id: 'a2', ref: { item: 'node-B' } }
-        ]
-      });
-    });
-    const original = result.current.sceneApi
-      .getState()
-      .connectors['conn-1'].path.tiles.slice();
-
-    act(() => {
-      result.current.scene.previewConnectorPaths(
-        new Map([['node-A', { x: 12, y: 12 }]])
-      );
-    });
-
-    expect(
-      result.current.sceneApi.getState().connectors['conn-1'].path.tiles
-    ).not.toEqual(original);
-  });
-});
-
-void flushAnimationFrames;
-void VIEW_ID;
+// SCN-08 (a preview issued inside a transaction was erased by the commit) was
+// fixed as part of the E1/HIST-08 delegation: the transaction bracket no longer
+// snapshots the stores at open and write it back at close, so a write made
+// inside the bracket by any other route survives. Promoted to
+// `src/hooks/__tests__/historyBrackets.test.tsx`.

@@ -37,6 +37,19 @@ export interface ModelStoreWithHistory extends Omit<ModelStore, 'actions'> {
     clearHistory: () => void;
     freezePendingPre: () => void;
     unfreezePendingPre: () => void;
+    /**
+     * Drop an armed pre-snapshot without recording anything (E1/HIST-05). A
+     * reducer that throws between `saveToHistory()` and `set()` used to leave it
+     * armed for the next `skipHistory` writer — a page switch's SYNC_SCENE —
+     * which then pushed a bogus entry stamped with the failed action's seq.
+     */
+    discardPendingPre: () => void;
+    /**
+     * Invalidate the redo stack (E1/HIST-02). A new logical action branches
+     * history, so BOTH stores' futures are stale — but a store whose patch set
+     * for that action is empty never pushes, and so never cleared its own.
+     */
+    clearFuture: () => void;
     // D-7 coordination: the logical-action seq of the top undo/redo entry, or
     // null when the respective stack is empty.
     peekUndoSeq: () => number | null;
@@ -148,6 +161,15 @@ const initialState = () => {
       set((state) => ({ ...state, history: createHistoryState() }));
     };
 
+    const discardPendingPre = () => {
+      if (pendingPreFrozen) return; // a live drag owns it
+      pendingPre = null;
+    };
+
+    const clearFuture = () => {
+      set((state) => ({ ...state, history: { ...state.history, future: [] } }));
+    };
+
     const freezePendingPre = () => {
       pendingPreFrozen = true;
     };
@@ -222,6 +244,8 @@ const initialState = () => {
         canRedo,
         saveToHistory,
         clearHistory,
+        discardPendingPre,
+        clearFuture,
         freezePendingPre,
         unfreezePendingPre,
         peekUndoSeq,

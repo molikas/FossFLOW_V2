@@ -581,6 +581,16 @@ export const useInteractionManager = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const uiState = uiStateApi.getState();
 
+      // E1/HIST-06: a drag bracket is closed by the mouseup, and the mode's exit
+      // runs lazily on the NEXT mouse event — so a lost mouseup (release outside
+      // the window, alt-tab, the browser context menu stealing the event)
+      // followed by a keyboard-only action leaves the bracket open. Every later
+      // edit then applies with NO history entry while `canUndo()` still returns
+      // true, and the next Ctrl+Z reverts the pre-drag action, destroying them.
+      // Committing here is the same "no-op when no drag is open" call
+      // `usePanHandlers` and `handleEscapeKey` already make.
+      deps.sceneRef.current.commitDragTransaction();
+
       if (handleEscapeKey(e, uiState, deps)) return;
       if (handleDeleteOrBackspace(e, uiState, deps)) return;
       if (isEditableTarget(e.target as HTMLElement)) return;

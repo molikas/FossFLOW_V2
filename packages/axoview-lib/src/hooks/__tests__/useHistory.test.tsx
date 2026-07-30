@@ -11,6 +11,13 @@ const mockModelStore = {
   clearHistory: jest.fn()
 };
 
+// Stable across renders, as the real provider-scoped session is.
+const mockEditSession = {
+  transactionInProgress: false,
+  dragInProgress: false,
+  pendingState: null as unknown
+};
+
 const mockSceneStore = {
   canUndo: jest.fn(),
   canRedo: jest.fn(),
@@ -30,13 +37,37 @@ jest.mock('../../stores/modelStore', () => ({
   })
 }));
 
+// E1/HIST-08 (owner ruling 2026-07-30): `useHistory.transaction` delegates to
+// `useSceneActions.transaction` — one grouping primitive. This suite is about
+// the undo/redo COORDINATION, so the delegate is stubbed here and the grouping
+// behaviour itself is covered by `hooks/__tests__/historyBrackets.test.tsx`
+// against the real stores.
+const mockSceneTransaction = jest.fn((ops: () => void) => {
+  mockEditSession.transactionInProgress = true;
+  try {
+    ops();
+  } finally {
+    mockEditSession.transactionInProgress = false;
+  }
+});
+jest.mock('../../hooks/useSceneActions', () => ({
+  useSceneActions: () => ({ transaction: mockSceneTransaction })
+}));
+
 jest.mock('../../stores/sceneStore', () => ({
   useSceneStore: jest.fn((selector) => {
     const state = {
       actions: mockSceneStore
     };
     return selector ? selector(state) : state;
-  })
+  }),
+  // E1/HIST-08: the transaction bracket lives on the scene store's
+  // provider-scoped `editSession`, shared with `useSceneActions`. This mocked
+  // store carries one so the hook exercises the real path rather than its
+  // no-provider fallback.
+  useSceneStoreApi: jest.fn(() => ({
+    getState: () => ({ actions: { editSession: mockEditSession } })
+  }))
 }));
 
 // useHistory subscribes to the uiState store for the post-undo/redo scene
@@ -152,22 +183,19 @@ describe('useHistory', () => {
   });
 
   describe('transaction functionality', () => {
-    it('should save history before transaction and not during', () => {
+    it('delegates to the one grouping primitive rather than reimplementing it', () => {
       const { result } = renderHook(() => useHistory());
+      const ops = jest.fn();
 
       act(() => {
-        result.current.transaction(() => {
-          // This should not trigger saveToHistory due to transaction
-          result.current.saveToHistory();
-        });
+        result.current.transaction(ops);
       });
 
-      // Should save once before transaction starts
-      expect(mockModelStore.saveToHistory).toHaveBeenCalledTimes(1);
-      expect(mockSceneStore.saveToHistory).toHaveBeenCalledTimes(1);
+      expect(mockSceneTransaction).toHaveBeenCalledTimes(1);
+      expect(ops).toHaveBeenCalledTimes(1);
     });
 
-    it('should track transaction state correctly', () => {
+    it('reports the shared bracket through isInTransaction()', () => {
       const { result } = renderHook(() => useHistory());
 
       expect(result.current.isInTransaction()).toBe(false);
@@ -181,27 +209,22 @@ describe('useHistory', () => {
       expect(result.current.isInTransaction()).toBe(false);
     });
 
-    it('should prevent nested transactions', () => {
+    it('does not save history while the shared bracket is open', () => {
       const { result } = renderHook(() => useHistory());
 
       act(() => {
         result.current.transaction(() => {
-          // First transaction saves history
-          expect(mockModelStore.saveToHistory).toHaveBeenCalledTimes(1);
-
-          // Nested transaction should not save again
-          result.current.transaction(() => {
-            // Still in transaction
-            expect(result.current.isInTransaction()).toBe(true);
-          });
-
-          // Should still be 1 save
-          expect(mockModelStore.saveToHistory).toHaveBeenCalledTimes(1);
+          result.current.saveToHistory();
         });
       });
+
+      // The delegate owns the pre-snapshot; `saveToHistory` inside the bracket
+      // must add nothing on top of it.
+      expect(mockModelStore.saveToHistory).not.toHaveBeenCalled();
+      expect(mockSceneStore.saveToHistory).not.toHaveBeenCalled();
     });
 
-    it('should handle transaction errors gracefully', () => {
+    it('leaves the bracket closed when the operations throw', () => {
       const { result } = renderHook(() => useHistory());
 
       expect(() => {
@@ -212,7 +235,6 @@ describe('useHistory', () => {
         });
       }).toThrow('Test error');
 
-      // Transaction should be cleaned up
       expect(result.current.isInTransaction()).toBe(false);
     });
   });
