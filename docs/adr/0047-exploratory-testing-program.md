@@ -64,6 +64,31 @@ When remediation begins (campaign closed — all 27 areas DONE), the campaign's 
 - Headless entry: `claude -p "/explore" --permission-mode acceptEdits` from the repo root; Task Scheduler examples belong in the skill, not here.
 - Archive move is `git mv` so history follows the files.
 
+## Addendum — 2026-07-30, campaign close-out
+
+This ADR was written while two areas were still open (A4 at 7/10, A5 at 0/10).
+Wave 0 of [the remediation tactical](../tactical/exploratory-remediation.md)
+closed both and ran the mop-up wave, so the Context's figures are superseded by:
+**385 counted hypotheses across 27 areas + 1 cross-area mop-up wave, 240
+confirmed bugs, 22 product questions, 190 filed known_issues entries.** The
+decisions themselves are unchanged — the close-out reinforced two of them:
+
+- **§3 (bug-class contract gates).** A5/CHR-11 found the app/lib
+  dual-implementation class at *five* copies of one download helper, and
+  A5/CHR-09/10 found a class with no gate at all (locale catalogues drifting from
+  `en-US` in both directions, with no key-set check anywhere). Both belong to the
+  seed class list.
+- **§5 (records freeze, method lives on).** The mop-up wave's second finding
+  (MOP-02) was a *contradiction between two filed entries* — S2/SHARE-06 assumed
+  a UI delete path that A4/FEX-02 later proved has no caller. Frozen records go
+  stale against the code; the correction is recorded in the entry itself, and the
+  skill's delta mode (which re-derives the coverage baseline each run) is what
+  keeps this from accumulating.
+
+One new product question (A5/CHR-08 — which origin a share link should be
+anchored to) is recorded in the A5 area file with an industry-practice analysis
+and a recommendation, awaiting an owner ruling like the other 21.
+
 ## Acceptance criteria
 
 - **Contract:** default `npm test` per package and the main Playwright config discover zero files from `__explore__/` / `tests-exploratory/` (quarantine holds — re-verify with `--listTests` after any config change).

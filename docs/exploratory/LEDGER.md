@@ -34,6 +34,15 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 | F4 | [Layers panel & z-order (visibility, locking, assignment, ordering)](areas/F4-layers-zorder.md) | DONE | 10 / 10 | 4 | 0 | 0/17/16 |
 | F5 | [Icons & catalog (packs, custom icons, merge-on-load, icon resize)](areas/F5-icons-catalog.md) | DONE | 10 / 10 | 6 | 0 | 0/7/11 |
 
+## Campaign totals — CLOSED 2026-07-30
+
+All 27 areas DONE, plus the cross-area mop-up wave. **385 counted hypotheses**
+(383 area rows + 2 mop-up), **240 confirmed bugs**, **22 product questions**
+(21 ruled on 2026-07-30 in [DECISIONS.md](DECISIONS.md); A5/CHR-08 raised at
+close-out and pending), **190 known_issues entries** tagged
+`Found by: exploratory campaign <ID>`, every one carrying a committed
+`test.fail()` / `it.failing` repro in the quarantined lane.
+
 ## Wave order (suggested)
 
 Engine (E1–E4) and interaction (I1–I5) first — highest seam density and everything downstream depends on them; then rendering (R1–R5), app shell (A1–A5), share/backend (S1–S3), feature cuts (F1–F5). Any order is fine as long as LEDGER stays current; areas are independent by design.
@@ -101,9 +110,35 @@ S-f. **Two harvested "invariants" were stale.** The worker's resourceKey allowli
 all (DRV-15). Verify a harvested invariant against the source before building a probe
 on it.
 
-## Cross-area mop-up (final wave)
+## Cross-area mop-up (final wave) — DONE 2026-07-30
 
-After all areas are DONE: completeness-critic pass per APPROACH §8 — list the area *pairs* no hypothesis crossed, propose one hypothesis per suspicious pair.
+Completeness-critic pass per APPROACH §8, run once all 27 areas were DONE. The
+question asked of each pair: *which seam between two closed areas did no
+hypothesis cross?* Probe:
+`packages/axoview-app/src/__explore__/MOP/copy-paths-share-identity.explore.test.tsx`.
+
+| ID | Pair | Hypothesis | Verdict |
+|----|------|-----------|---------|
+| MOP-01 | A4 (explorer copy paths) × A3 (project ZIP import) × S2 (share backend) | Only `id` is treated as identity when a document is copied, so `shareUuid` rides along and two documents claim one public snapshot | **BUG** — the duplicate's blob carries the original's `shareUuid` and `sharedAt` (only `id` is stripped); both import paths do the same; `shareDiagram` reuses an existing uuid and both delete paths remove `public/<uuid>` unconditionally. known_issues: MOP-01. |
+| MOP-02 | A4/FEX-02 × S2/SHARE-06 | Two filed entries cannot both be true about which delete the file explorer performs | **RECORD CORRECTION** — the explorer hard-deletes (`hardDeleteDiagram` → `DELETE`), which *does* cascade to the snapshot; nothing calls the soft path (FEX-02). SHARE-06's route-level gap is real but unreachable from the UI today; its entry now carries the correction and the two fixes are cross-linked. |
+
+Pairs examined and found already crossed (no new hypothesis proposed):
+
+- **F4 × I1/I3/I4/F1** — hidden/locked layers against selection, keyboard nudge,
+  connector hit-testing and label affordances are covered by RED-15, PTR-11,
+  CONN-15 and OVL-13.
+- **R1 × A3** — the projection bounding box feeds both fit-to-view and Export
+  Image; PROJ-01/02/04 and RND-09 already enumerate all four omissions on both
+  consumers.
+- **E1 × F2** — annotation ink against history is VIEW-07 (erase not undoable,
+  and the next undo destroys another stroke).
+- **A2 × S2** — soft delete vs the public snapshot is SHARE-06 (see MOP-02).
+- **E4 × F5** — unresolvable icon references passing validation is CLIP-14;
+  cross-diagram paste is the same defect with a different trigger.
+- **A1 × A5** — the quota path: A5/CHR-01..04 close the escape hatch itself, and
+  the writer that opens it (`persistLastOpened`) is A1 territory.
+- **A4 × A5** — A5/CHR-03 is deliberately filed as the cross: the storage clear
+  reproduces A4/FEX-01's orphan shape.
 
 ## Product questions (owner triage) — CLOSED
 
@@ -278,3 +313,4 @@ All 21 questions were reviewed with the owner on **2026-07-30** and closed; ever
 | CHR-07 | `apiBaseUrl()` sniffs the environment by port, which the Docker deployment shares — every API call bypasses the nginx proxy and is blocked by the app's own CSP | *The Docker deployment sends every API call cross-origin, where the app's own CSP blocks it* |
 | CHR-09/10 | Every shipped locale is missing strings (34–66) and carries keys en-US dropped; the known_issues entry names nine of them as fully covered | *Every shipped locale is missing strings — including the nine documented as fully covered* |
 | CHR-11 | One download helper written five times, every copy revoking the object URL in the same tick as the click | *One file-download helper is written five times…* |
+| MOP-01 | Duplicate/import copies `shareUuid`, so two documents claim one public snapshot — sharing the copy republishes over the original's link, deleting the copy kills it | *Duplicating (or importing) a shared diagram copies its share link…* |

@@ -3926,14 +3926,27 @@ too. This is direct sibling drift with the worker's Drive read proxy, which fetc
 `fields=trashed,size` first specifically so that "a trashed file must stop resolving
 here — matching Drive's own web-share semantics" and answers 410.
 
-**Workaround:** unshare before deleting, or empty the trash (the permanent delete does
-cascade).
+**Correction (cross-area mop-up, 2026-07-30 — MOP-02).** The *symptom* above is not
+reachable from the file explorer as-built: its delete is `tree.hardDeleteDiagram` →
+`deleteDiagram(id, false)` → HTTP `DELETE`, which *does* cascade to
+`public/<uuid>`. Nothing in the UI calls the soft path at all — that is A4/FEX-02
+("the whole soft-delete / trash machine is unreachable"), filed after this entry.
+The route-level gap this entry describes is real and stays Open (a `PATCH
+{ deletedAt }` preserves `shareUuid` and the snapshot keeps serving), but today it
+can only be reached by an API client, not by trashing from the explorer. Whichever
+fix lands first must keep the two consistent: wiring the trash UI up (FEX-02) makes
+this symptom reachable exactly as described.
+
+**Workaround:** not needed from the UI today (the explorer's delete cascades); for
+API clients, unshare before soft-deleting.
 
 **Status:** Open. Fix direction: cascade on the soft delete too — either unshare as
 part of the trash transition, or have `getPublicSnapshot` resolve `sourceId` and 410
 when the source is trashed (mirroring the Drive proxy, and restoring the link if the
 diagram is restored). Repro:
-[`share-06-11.explore.spec.js`](packages/axoview-backend/src/__explore__/S2/share-06-11.explore.spec.js).
+[`share-06-11.explore.spec.js`](packages/axoview-backend/src/__explore__/S2/share-06-11.explore.spec.js)
+and [`copy-paths-share-identity.explore.test.tsx`](packages/axoview-app/src/__explore__/MOP/copy-paths-share-identity.explore.test.tsx)
+(the delete-path reconciliation).
 
 ## The anonymous Drive proxy's 10 MB cap is skipped when Drive reports no file size
 
@@ -6615,3 +6628,39 @@ that appends the anchor, clicks, and revokes on a later tick; delete the four
 copies. Ships naturally with the dual-implementation class gate (ADR 0047 §3).
 Repro:
 [`i18n-download-chr-09-to-11.explore.test.ts`](packages/axoview-app/src/__explore__/A5/i18n-download-chr-09-to-11.explore.test.ts).
+
+## Duplicating (or importing) a shared diagram copies its share link, so two documents claim one public snapshot
+
+**Found by:** exploratory campaign MOP-01 (cross-area mop-up: A4 × A3 × S2)
+
+**Symptom:** Duplicate a diagram that has been shared. The copy is created
+carrying the original's `shareUuid`, so both documents point at the same public
+snapshot. From there: pressing Share on the copy republishes *the copy's
+content* over the original's live link (the uuid is reused, not minted), and
+deleting or unsharing the copy deletes `public/<uuid>` — the original's
+snapshot — leaving the original marked shared with a dead link. The same
+happens on both import paths.
+
+**Root cause:** every copy path treats `id` as the only identity-bearing field.
+`FileExplorer.handleDuplicate` does `const { id: _id, ...dataWithoutId } = data`
+and re-creates from the rest; `projectZip`'s import does
+`const { id: _strippedId, ...model } = rawModel`; the single-JSON import spreads
+`{ ...(data as object), name, title }`. `shareUuid` and `sharedAt` are ordinary
+document fields (the backend stores them on the diagram document — that is what
+SHARE-01 and SHARE-15 are about), so they ride along. Nothing downstream
+detects two documents holding one uuid: `shareDiagram` reuses an existing valid
+`shareUuid` rather than minting, and both `deleteDiagram` and `unshareDiagram`
+delete `public/<uuid>` unconditionally.
+
+Measured: duplicating a diagram whose blob carries
+`shareUuid: '1111…'` creates a copy whose blob carries the same `shareUuid` and
+`sharedAt`, with only `id` stripped.
+
+**Workaround:** unshare before duplicating, or unshare the copy immediately —
+noting that unsharing the copy is what takes the original's link down.
+
+**Status:** Open. Fix direction: strip the identity/publication fields
+(`id`, `shareUuid`, `sharedAt`) in one shared helper used by all three copy
+paths, and make `shareDiagram` refuse to adopt a `shareUuid` that another
+document already claims. Repro:
+[`copy-paths-share-identity.explore.test.tsx`](packages/axoview-app/src/__explore__/MOP/copy-paths-share-identity.explore.test.tsx).
