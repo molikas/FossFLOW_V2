@@ -4554,3 +4554,178 @@ pass — for every string value, replace `#diagram:<oldId>` with
 `DIAGRAM_LINK_PREFIX`), so any current or future HTML surface carrying the
 sentinel is covered by construction. Repro:
 [`zip-txt-09-10.explore.test.ts`](packages/axoview-app/src/__explore__/F1/zip-txt-09-10.explore.test.ts).
+
+## Undo after abandoning a new text box brings back an invisible ghost box
+
+**Found by:** exploratory campaign TXT-04
+
+**Symptom:** Place a text box, then abandon it without typing (Escape, or click
+away) — the ADR 0034 empty-box lifecycle correctly deletes it. Press Ctrl+Z
+once. The box comes back with no content: nothing is drawn, but it is a real
+entity at a 1×1-tile footprint. It can be clicked, lassoed, dragged, it is
+included by Ctrl+A and by the project bounding box, and it is written to every
+save and export. This is exactly the "invisible zero-width ghost" the
+empty-box lifecycle exists to prevent.
+
+**Root cause:** The lifecycle is a DELETE, not a rollback. Placement records one
+history entry (`createTextBox`) and `discardEmpty` records a second
+(`deleteTextBox` → `saveToHistoryBeforeChange`), so undo simply reverses the
+second and lands on the state between them: an existing, empty text box. Nothing
+re-applies the empty check after an undo, and `getTextBoxDimensions` floors an
+empty box at `{width: 1, height: 1}` (the "graspable footprint while editing"
+floor), so the resurrected entity is invisible rather than zero-sized.
+
+**Workaround:** press Ctrl+Z a second time, or select the ghost (Ctrl+A shows
+its selection outline) and Delete.
+
+**Status:** Open. Fix direction: make placement + discard ONE logical history
+action — either place with `skipHistory` until the first commit (so an
+abandoned box never enters history at all, the way a cancelled connector draw
+does not), or give the discard the placement's history seq so a single Ctrl+Z
+crosses both. Repro: [`text-txt-03-04-05-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F1-text/text-txt-03-04-05-15.explore.spec.ts).
+
+## Discarding an empty text box leaves it selected — `setItemControls(null)` is a half-deselect
+
+**Found by:** exploratory campaign TXT-15
+
+**Symptom:** Place a text box and abandon it without typing. The box is deleted
+(ADR 0034 empty-box lifecycle) and the Properties dock target is cleared, but
+`uiState.selectedIds` still holds `{ type: 'TEXTBOX', id: <deleted id> }`.
+The canvas is left with a selection pointing at nothing until the next click:
+Delete, arrow-nudge, the strip's writers and every other `selectedIds`
+consumer act on an id that no longer resolves.
+
+**Root cause:** `discardEmpty` (`SceneLayers/TextBoxes/TextBox.tsx`) clears the
+selection with `uiActions.setItemControls(null)`, but that action's null branch
+sets only `itemControls` and `selectedConnectorLabel`:
+
+```js
+} else {
+  const autoOpened = get().rightSidebarAutoOpened;
+  set({ itemControls, selectedConnectorLabel: null, ...(autoOpened && {…}) });
+}
+```
+
+It deliberately does not touch `selectedIds` — a multi-selection legitimately
+has `itemControls === null` (see `setSelectedIds`' ADR-0006 derivation), so
+clearing it there would drop a live multi-select. The consequence is that
+`setItemControls(null)` cannot be used as "deselect", and `discardEmpty` uses
+it as exactly that. `setSelectedIds([])` is the real deselect.
+
+This is the same end state as the already-filed *Deleting a selected item
+leaves it selected* (HIST-13), but a different cause: there nothing tries to
+deselect; here the code calls a deselect API that does not deselect.
+
+**Workaround:** click empty canvas after abandoning a text box.
+
+**Status:** Open. Fix direction: call `setSelectedIds([])` in `discardEmpty`
+(it derives `itemControls` itself), and audit the other
+`setItemControls(null)` callers that mean "deselect". Longer term, INV-2 wants
+enforcing centrally — every entity delete should sweep `selectedIds`. Repro:
+[`text-txt-03-04-05-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F1-text/text-txt-03-04-05-15.explore.spec.ts).
+
+## Renaming a node in Layers moves its canvas text — but only until the diagram is reloaded
+
+**Found by:** exploratory campaign TXT-05
+
+**Symptom:** Drop a node on the canvas, then rename it in the Layers panel. The
+on-canvas text changes with it. Save, reload, rename the same node again — this
+time the canvas text does not move. The same gesture on the same node has two
+different outcomes depending on whether the diagram has been through a load.
+The first outcome is the exact cross-persona confusion the ADR 0032 amendment
+was written to remove ("renaming identity name in Layers must never move canvas
+text").
+
+**Root cause:** The decouple has two halves and only one of them runs at
+creation time:
+
+- The renderer draws `label ?? name` (`Node.tsx`, mirrored in `NodesCanvas`),
+  so the identity `name` is still the fallback whenever `label` is absent.
+- `seedNodeLabel` gives every node an explicit `label = name` so the fallback
+  is never reached — but it is a LOAD-path normaliser, mapped over
+  `rawData.items` in `useInitialDataManager`. Nothing seeds a node created
+  during the session: `PlaceIcon` writes `{ id, name: 'Untitled', icon }`
+  with no `label`.
+
+So a never-reloaded node has no `label`, the fallback is live, and
+`LayersPanel.handleItemRename`'s `updateModelItem(id, { name })` moves the
+canvas text. `node-label-decouple.spec.ts` covers loaded nodes only.
+
+**Workaround:** rename on the canvas (F2 / double-click) instead — that writes
+`label`, which pins the node out of the fallback for good.
+
+**Status:** Open. Fix direction: seed at creation as well as at load — have the
+node-creating paths (`PlaceIcon`, quick-add, paste) write `label: name`, or
+run `seedNodeLabel` inside the `createModelItem` reducer so there is one
+chokepoint instead of two. Repro: [`text-txt-03-04-05-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F1-text/text-txt-03-04-05-15.explore.spec.ts).
+
+## Pressing any strip control while renaming a label ends the rename
+
+**Found by:** exploratory campaign TXT-06
+
+**Symptom:** Double-click a floating Label (or a node name, or a connector
+label) to rename it, then reach for the top strip to change its colour or size.
+The press on the strip closes the rename session before the control does
+anything. Doing the same during a TEXT BOX edit session works fine — the
+session stays open and the control formats the live selection.
+
+**Root cause:** Two implementations of the same click-away contract, and only
+one learned about the strip. `TextBoxInlineEditor` allow-lists it explicitly:
+
+```js
+if (target.closest?.('[data-axoview-strip]') ||
+    target.closest?.('.MuiPopover-root, .MuiPopper-root, .MuiModal-root')) return;
+```
+
+`useInlineRename` — the shared hook behind the Label, node-name and
+connector-label editors — has no such branch: any capture-phase `pointerdown`
+outside the editor element blurs it, which commits and unmounts. (It also binds
+`pointerdown` only, where its sibling binds `pointerdown` and `mousedown`.)
+
+Confirmed with real mouse input against the same control
+(`strip-text-size`) in both sessions: text box survives, Label rename does not.
+
+**Workaround:** commit the rename first (Enter), then use the strip on the
+selected element — the element stays selected, so the controls still target it.
+
+**Status:** Open. Fix direction: lift the allow-list out of
+`TextBoxInlineEditor` into a shared `isSessionPreservingTarget(target)` helper
+and use it in `useInlineRename` too, so the two editors cannot drift again.
+Repro: [`strip-txt-06-07-08-16.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F1-text/strip-txt-06-07-08-16.explore.spec.ts).
+
+## Escape after a mid-edit style change keeps half of it
+
+**Found by:** exploratory campaign TXT-08
+
+**Symptom:** With a text box open in the on-canvas editor, open the strip's
+alignment control and set BOTH axes — horizontal centre and vertical middle —
+then press Escape to cancel the edit. The horizontal alignment is gone, as a
+cancel implies. The vertical alignment stayed. One control, one gesture, two
+opposite cancel semantics.
+
+The same split applies to every other strip write made during a session: range
+colour, B/I/U/S, lists and links are discarded by Escape, while font size,
+line spacing, manual width/height, border and fill are kept.
+
+**Root cause:** ADR 0034 §2's dual scope decides where a strip write goes, and
+Escape only knows about one of the two destinations. Writes routed through the
+`textBoxEditorBridge` land in the mounted Quill instance and are thrown away
+with the draft when `finish('cancel')` runs; writes made straight to the model
+(`applyTextBox` / `updateTextBox`) are already committed by the time Escape
+arrives, and the cancel path does not roll anything back — it only clears
+`editingTextBoxId`.
+
+`TopBarStyleControls.applyVerticalAlign` makes the split visible inside a
+single control: the horizontal half calls `handle.quill.formatLine(...)`, the
+vertical half calls `applyTextBox(textBox.id, patch)` even while
+`liveEditing` is true.
+
+**Workaround:** undo (Ctrl+Z) after the cancel to reverse the element-level
+writes — each is its own history entry.
+
+**Status:** Open. Fix direction: pick one contract and apply it to the whole
+strip. Either buffer element-level writes for the duration of a session and
+apply them on commit (so Escape discards everything), or state explicitly that
+element-level styling is immediate and un-cancellable and stop routing the
+range-scoped writes through the draft. The current per-control split is not
+predictable from the UI. Repro: [`strip-txt-06-07-08-16.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F1-text/strip-txt-06-07-08-16.explore.spec.ts).
