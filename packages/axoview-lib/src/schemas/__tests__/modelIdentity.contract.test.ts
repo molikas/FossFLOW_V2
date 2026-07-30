@@ -19,6 +19,10 @@
  *      `layer.order` is a permutation of 0..n-1, an entity cannot reference a
  *      layer that does not exist, and the default page name is never one that
  *      is already on screen.
+ *   3. REPAIR — the same violations arriving from a FILE, which the write-site
+ *      guards cannot stop. Owner ruling 2026-07-30: repair, never reject, since
+ *      rejecting means those files stop opening (E4/CLIP-02's harm). Every case
+ *      asserts both that the violation is gone and that the model still parses.
  *
  * Related campaign entries: E2/RED-03, E2/RED-04/05, E3/SCN-13, E4/CLIP-13.
  */
@@ -31,6 +35,8 @@ import {
   assignLayerToItems
 } from 'src/stores/reducers/view';
 import { nextPageName } from 'src/utils/pageName';
+import { repairModelIdentity } from 'src/utils/repairModel';
+import { modelSchema } from '../model';
 import type { State, ViewReducerContext } from 'src/stores/reducers/types';
 import type { Layer, View } from 'src/types';
 
@@ -211,5 +217,82 @@ describe('class gate — a default page name is never one already on screen', ()
 
   it('degrades safely when a locale drops the {count} token', () => {
     expect(nextPageName('Seite', ['Seite'])).toBe('Seite');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 3. REPAIR — the load path is the other half of the class. A write-site guard
+// cannot help a file that already carries the violation.
+// ---------------------------------------------------------------------------
+
+describe('class gate — a model carrying the class is repaired, not rejected', () => {
+  const fileWith = (viewOverrides: Record<string, unknown>) => ({
+    version: '1.0',
+    title: 'Gate',
+    icons: [{ id: 'block', name: 'Block', url: 'x', isIsometric: true }],
+    colors: [],
+    items: [{ id: 'node-A', name: 'A', icon: 'block' }],
+    views: [
+      {
+        id: VIEW_ID,
+        name: 'Page 1',
+        items: [{ id: 'node-A', tile: { x: 0, y: 0 } }],
+        connectors: [],
+        rectangles: [],
+        textBoxes: [],
+        ...viewOverrides
+      }
+    ]
+  });
+
+  const CASES: Array<{ name: string; view: Record<string, unknown> }> = [
+    {
+      name: 'a duplicate view-item id',
+      view: {
+        items: [
+          { id: 'node-A', tile: { x: 0, y: 0 } },
+          { id: 'node-A', tile: { x: 4, y: 4 } }
+        ]
+      }
+    },
+    {
+      name: 'a layerId naming no layer',
+      view: { items: [{ id: 'node-A', tile: { x: 0, y: 0 }, layerId: 'ghost' }], layers: [] }
+    },
+    {
+      name: 'an absurd tile coordinate',
+      view: { items: [{ id: 'node-A', tile: { x: 9e9, y: 0 } }] }
+    },
+    {
+      name: 'a non-finite tile coordinate',
+      view: { items: [{ id: 'node-A', tile: { x: Number.NaN, y: 0 } }] }
+    }
+  ];
+
+  it.each(CASES)('$name is repaired and the diagram still opens', ({ view }) => {
+    const raw = fileWith(view);
+    const { data, report } = repairModelIdentity(raw as never);
+
+    // The repair fired…
+    expect(
+      report.duplicateIds + report.danglingLayerRefs + report.outOfRangeCoords
+    ).toBeGreaterThan(0);
+    // …and the result is loadable, which is the whole point of repairing rather
+    // than rejecting.
+    const parsed = modelSchema.safeParse(data);
+    expect(
+      parsed.success ? null : JSON.stringify(parsed.error?.issues)
+    ).toBeNull();
+  });
+
+  it('leaves a clean file byte-identical (the repair cannot fire spuriously)', () => {
+    const raw = fileWith({});
+    const { data, report } = repairModelIdentity(raw as never);
+    expect(report).toEqual({
+      duplicateIds: 0,
+      danglingLayerRefs: 0,
+      outOfRangeCoords: 0
+    });
+    expect(data).toEqual(raw);
   });
 });

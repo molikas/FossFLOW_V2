@@ -24,6 +24,11 @@ import { seedNodeLabel } from 'src/utils/seedNodeLabel';
 import { seedConnectorLabel } from 'src/utils/seedConnectorLabel';
 import { foldTextBoxStyleFlags } from 'src/utils/foldTextBoxStyleFlags';
 import { normalizeQuillHtmlSpaces } from 'src/utils/richTextTransform';
+import {
+  repairModelIdentity,
+  isCleanRepair,
+  describeRepair
+} from 'src/utils/repairModel';
 
 // Must match the threshold in IconCollection.tsx so newly-loaded large packs
 // (e.g. Material Icons) are not auto-expanded (which would freeze the browser).
@@ -147,6 +152,25 @@ export const useInitialDataManager = () => {
         rawData.items = asArray(rawData.items)
           .map(foldNodeDescription)
           .map(seedNodeLabel);
+
+        // Identity & range repair (owner ruling 2026-07-30: repair, don't
+        // reject). Duplicate ids, dangling layer refs and non-finite/absurd
+        // coordinates all pass the schema today, so files carrying them exist;
+        // making them schema errors here would stop those files opening, which
+        // is the E4/CLIP-02 harm. Repair, then tell the user what changed — a
+        // silent rewrite of their document is its own failure (ADR 0011).
+        const repaired = repairModelIdentity(rawData);
+        Object.assign(rawData, repaired.data);
+        if (!isCleanRepair(repaired.report)) {
+          console.warn(
+            '[useInitialDataManager] repaired the loaded model:',
+            repaired.report
+          );
+          uiStateActions.setNotification({
+            severity: 'warning',
+            message: `Repaired this diagram on load — ${describeRepair(repaired.report)}. Save to keep the repair.`
+          });
+        }
 
         // Re-type after normalisation — Zod will validate the structure next
         const initialData = rawData as unknown as typeof _initialData;

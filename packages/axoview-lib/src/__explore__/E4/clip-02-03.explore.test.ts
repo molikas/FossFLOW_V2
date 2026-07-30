@@ -40,41 +40,15 @@ const baseModel = (overrides: Record<string, unknown> = {}) => ({
 
 // ---------------------------------------------------------------------------
 // CLIP-01 — duplicate ids
-// ---------------------------------------------------------------------------
-describe('CLIP-01 — duplicate ids load clean', () => {
-  it.failing('BUG: two model items sharing an id pass modelSchema', () => {
-    const model = baseModel({
-      items: [
-        { id: 'node-A', name: 'First', icon: 'block' },
-        { id: 'node-A', name: 'Second — same id', icon: 'block' },
-        { id: 'node-B', name: 'B', icon: 'block' }
-      ]
-    });
-
-    expect(modelSchema.safeParse(model).success).toBe(false);
-  });
-
-  it('characterization: the second item is unreachable — every lookup returns the first', () => {
-    const model = baseModel({
-      items: [
-        { id: 'node-A', name: 'First', icon: 'block' },
-        { id: 'node-A', name: 'Second — same id', icon: 'block' },
-        { id: 'node-B', name: 'B', icon: 'block' }
-      ]
-    });
-
-    expect(modelSchema.safeParse(model).success).toBe(true);
-    expect(getItemByIdOrThrow(model.items, 'node-A').value.name).toBe('First');
-    // No lookup in the codebase can ever address the second one.
-  });
-
-  it.failing('BUG: two VIEWS sharing an id pass modelSchema', () => {
-    const model = baseModel();
-    model.views = [model.views[0], { ...model.views[0], name: 'Clone' }];
-
-    expect(modelSchema.safeParse(model).success).toBe(false);
-  });
-});
+// CLIP-01 (duplicate item / view ids pass every validation layer) was closed by
+// the owner's 2026-07-30 **repair, don't reject** ruling, which the probes below
+// pre-date: they assert that `modelSchema` REJECTS a duplicate id, and it
+// deliberately still does not — making it a schema error would stop the files
+// this bug has already produced from opening at all, which is exactly what
+// CLIP-02 (immediately below, still open) is filed for. Instead the write sites
+// are guarded and the load path repairs: `utils/repairModel.ts` drops the
+// shadowed twin and tells the user. Promoted to
+// `src/utils/__tests__/repairModel.test.ts` and the identity/range class gate.
 
 // ---------------------------------------------------------------------------
 // CLIP-02 — anchor-to-anchor ref into a dropped connector
