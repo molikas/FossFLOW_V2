@@ -5556,3 +5556,197 @@ read-modify-write) applied to the client.
 **Status:** Open. Fix direction: sequence the writes (chain on the in-flight
 promise) or version them and ignore a completion that is not the latest. Repro:
 [`autosave-life-01-05-06-07-08.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/autosave-life-01-05-06-07-08.explore.test.tsx).
+
+## "New diagram" throws away the last two seconds of the diagram you were in
+
+**Found by:** exploratory campaign A1/LIFE-09
+
+**Symptom:** Edit a diagram, then create a new one (empty-state card, file-tree
+"new diagram") within the two-second auto-save debounce. The new diagram opens
+normally and the status bar goes clean — but the edit you had just made to the
+previous diagram was never written.
+
+**Root cause:** `handleCreateBlankDiagram` puts its flush inside the
+place-change branch:
+
+    const targetPlace = placeId ?? defaultPlaceId;
+    if (storageManager && storageManager.activeProviderId !== targetPlace) {
+      await autoSave.saveNow();
+      autoSave.resetStatus();
+      setActiveProviderId(targetPlace);
+    }
+
+Creating in the place you are already in — the normal case — skips it. The path
+then calls `handleDiagramManagerLoad`, which unconditionally runs
+`autoSave.resetStatus()`, and `resetStatus` sets `pendingRef.current = null`. So
+the queued model is dropped, and because it also sets the status to `'idle'`
+nothing on screen suggests anything was lost. The two sibling entry points do
+this correctly: `handleNewDiagram` and `openDiagramById` both `await
+autoSave.saveNow()` before anything else. Third instance of the S1 thread S-a
+shape — one ritual written several times, each forgetting a different part.
+
+**Workaround:** pause two seconds after your last edit before creating a new
+diagram.
+
+**Status:** Open. Fix direction: hoist `await autoSave.saveNow()` out of the
+place-change branch so it runs on every create, matching the other two paths.
+Repro: [`open-delete-life-09-13.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/open-delete-life-09-13.explore.test.tsx).
+
+## A corrupt session list makes the app unbootable
+
+**Found by:** exploratory campaign A1/LIFE-10
+
+**Symptom:** If `axoview-diagrams` in localStorage is not valid JSON (an
+interrupted write, a quota failure mid-write, a manual edit), `/app` shows the
+"⚠️ Something went wrong!" crash screen instead of the editor. Refreshing —
+the obvious thing to try — reproduces it exactly, because nothing clears the bad
+value. The user has no in-app route back.
+
+**Root cause:** the mount effect in `DiagramLifecycleProvider` parses the same
+string twice and guards only the second one:
+
+    const savedDiagrams = localStorage.getItem('axoview-diagrams');
+    if (savedDiagrams) {
+      setDiagrams(JSON.parse(savedDiagrams));      // <- unguarded
+      setIsDiagramsInitialized(true);
+    }
+    const lastOpenedId = localStorage.getItem('axoview-last-opened');
+    if (lastOpenedId && savedDiagrams) {
+      try { const all = JSON.parse(savedDiagrams); ... }
+      catch (e) { console.error('Failed to restore last diagram metadata:', e); }
+    }
+
+The throw escapes the effect and the root `ErrorBoundary` in `index.tsx` swaps
+the whole app for the fallback UI. The neighbouring `axoview-last-opened-data`
+reader shows what the recovery should look like — it validates the shape,
+`localStorage.removeItem`s the bad value and warns. Measured with a
+well-formed-value control that boots clean, so the crash is the corrupt value and
+not the harness: `Uncaught SyntaxError: Unexpected end of JSON input` at
+`DiagramLifecycleProvider.tsx:747`.
+
+**Workaround:** clear site data (or delete the `axoview-diagrams` key in
+DevTools).
+
+**Status:** Open. Fix direction: wrap the first parse the way the last-opened
+reader is wrapped — warn, `removeItem`, boot with an empty list. Closes the
+catalogued coverage gap "boot with a corrupted localStorage session (recovery
+path)". Repro: [`boot-life-10.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/A1-lifecycle/boot-life-10.explore.spec.ts).
+
+## Ctrl+S on a read-only /display page saves — and says it saved
+
+**Found by:** exploratory campaign A1/LIFE-11
+
+**Symptom:** On the owner read-only route (`/display/<id>`, where the "Back to
+editing" preview lands) pressing Ctrl+S writes the diagram through the storage
+provider and shows a `"<name>" saved` toast. A page the app presents as
+non-editable performs a write on a keystroke.
+
+**Root cause:** the read-only contract is enforced on the edit path and not on
+the save path. `handleModelUpdated` has `if (isReadonlyUrl) return;` — verified
+inert, a model update on this route dirties nothing. `handleSaveClick` has no
+such guard: with `currentDiagram` populated by the readonly loader it goes
+straight to `saveDiagram()` → `executeSave` → `storage.saveDiagram`, and the
+window-level Ctrl+S listener is registered by the same provider on every route.
+On the public-share route (`/display/p/<uuid>`, server mode) the same call targets
+the share uuid as if it were a diagram id, which is a `PUT /api/diagrams/<uuid>`
+against a nonexistent id. This is thread C from the interaction block —
+`EXPLORABLE_READONLY` exposing a mutating path it should block — reproduced on
+an app-shell surface.
+
+**Workaround:** don't press Ctrl+S on a `/display` URL.
+
+**Status:** Open. Fix direction: return early from `handleSaveClick` when
+`isReadonlyUrl` (and, for symmetry, from the Ctrl+O branch of the same listener).
+Repro: [`readonly-rename-life-11-12-15.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/readonly-rename-life-11-12-15.explore.test.tsx).
+
+## Renaming from the toolbar reverts the name inside the file
+
+**Found by:** exploratory campaign A1/LIFE-12
+
+**Symptom:** Rename the open diagram through the toolbar. The breadcrumb and the
+file listing show the new name, but the name stored *inside* the diagram stays
+the old one — so an "Export as JSON" writes the old title, and the next save
+writes it back into the blob. Renaming the same diagram from the file explorer
+does not have this problem.
+
+**Root cause:** two rename paths, one of which updates the model and one of which
+does not. `notifyDiagramRenamedFromTree` writes through:
+
+    const updatedModel = { ...currentModelRef.current, title: trimmed };
+    setCurrentModel(updatedModel);
+    axoviewRef.current.load(updatedModel, { preserveViewport: true });
+
+`handleRenameCurrentDiagram` sets `diagramName` and `currentDiagram.name` and
+calls `storage.renameDiagram`, and stops there. Every payload builder prefers the
+model: `buildSaveData` is `title: currentModel?.title || diagramName || 'Untitled
+Diagram'`, so with a model title present the freshly-typed `diagramName` is never
+reached. Measured: after a toolbar rename the next save's payload carries the old
+title. Same one-geometry-two-derivations shape as the rendering block's thread
+R-a.
+
+**Workaround:** rename from the file explorer (F2) rather than the toolbar.
+
+**Status:** Open. Fix direction: have `handleRenameCurrentDiagram` reuse
+`notifyDiagramRenamedFromTree`'s model write (or call it) so both paths run one
+ritual. Repro: [`readonly-rename-life-11-12-15.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/readonly-rename-life-11-12-15.explore.test.tsx).
+
+## Deleting a diagram from the Load dialog does not delete it
+
+**Found by:** exploratory campaign A1/LIFE-13
+
+**Symptom:** In the Open/Load dialog, deleting a diagram removes the row and the
+confirmation looks complete — but the stored diagram is still there. Nothing is
+reclaimed from the session-storage budget, and `axoview-last-opened` keeps
+pointing at the row the user just deleted.
+
+**Root cause:** `deleteDiagram` (the dialog's `onDelete`) is only a state filter:
+
+    setPendingConfirm({ message: t('alert.confirmDelete'), onConfirm: () => {
+      setDiagrams(diagrams.filter((d) => d.id !== id));
+      if (currentDiagram?.id === id) { setCurrentDiagram(null); setDiagramName(''); }
+    }});
+
+There is no `storage.deleteDiagram(id)` call and no cleanup of the persistence
+triple (`axoview-diagrams` / `axoview-last-opened` /
+`axoview-last-opened-data`) beyond the list itself. Measured through the rendered
+dialog pair: the list empties, `deleteDiagram` on the provider is never called,
+and both last-opened keys still name the deleted diagram. The file-explorer delete
+path does call the provider, so this is again two rituals for one operation
+(thread S-a).
+
+**Workaround:** delete from the file explorer instead.
+
+**Status:** Open. Fix direction: route the dialog's delete through the same
+provider call the explorer uses, and clear the last-opened pointer when it names
+the deleted id. Repro: [`open-delete-life-09-13.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/open-delete-life-09-13.explore.test.tsx).
+
+## Diagrams opened from the Load dialog lose their imported icons
+
+**Found by:** exploratory campaign A1/LIFE-15
+
+**Symptom:** In session mode, reload the browser and open a diagram through the
+Open/Load dialog: every icon the user imported into it renders as a missing
+tombstone. Opening the *same* diagram from the file explorer shows the icons
+normally.
+
+**Root cause:** the session persist effect deliberately strips icons out of the
+diagram list to stay inside the localStorage budget —
+
+    const diagramsToStore = diagrams.map((d) => ({ ...d, data: { ...d.data, icons: [] } }));
+    localStorage.setItem('axoview-diagrams', JSON.stringify(diagramsToStore));
+
+— and `executeLoad`, the Load dialog's handler, loads `diagram.data` **straight
+from that restored list**, never asking the storage provider, which still holds
+the complete blob. Measured with the list seeded exactly as the app writes it
+(`icons: []`) while the provider returns the imported icon: the explorer path
+(`openDiagramById` → `storage.loadDiagram`) calls the provider once and gets the
+icon; the dialog path calls it zero times and commits a model with `icons: []` to
+the canvas. Only the last-opened diagram escapes, because
+`axoview-last-opened-data` is a separate unstripped copy.
+
+**Workaround:** open diagrams from the file explorer.
+
+**Status:** Open. Fix direction: have `executeLoad` fetch the blob from the
+storage provider (as `openDiagramById` does) and use the list entry only for the
+name/timestamps. Repro:
+[`readonly-rename-life-11-12-15.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/readonly-rename-life-11-12-15.explore.test.tsx).

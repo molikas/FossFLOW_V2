@@ -20,7 +20,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 | R3 | [Bulk GPU scene layers (build/invalidation, style parity, LOD)](areas/R3-gpu-scene-layers.md) | DONE | 15 / 10 | 7 | 1 | 10/6/11 |
 | R4 | [Renderer orchestration (culling, hybrid promotion, fit-to-view)](areas/R4-renderer-orchestration.md) | DONE | 15 / 10 | 9 | 1 | 10/0/11 |
 | R5 | [DOM overlays & presentation parity (labels, hit proxies, grid, compositor)](areas/R5-dom-overlays-parity.md) | DONE | 13 / 10 | 7 | 0 | 9/23/14 |
-| A1 | [Diagram lifecycle: open/save/dirty/autosave state machine](areas/A1-diagram-lifecycle.md) | IN PROGRESS | 9 / 10 | 8 | 0 | 10/20/14 |
+| A1 | [Diagram lifecycle: open/save/dirty/autosave state machine](areas/A1-diagram-lifecycle.md) | DONE | 15 / 10 | 14 | 0 | 10/20/14 |
 | A2 | [Storage providers & places model (local/session/Drive, move-to-Drive)](areas/A2-storage-places.md) | OPEN | 0 / 10 | 0 | 0 | 17/7/8 |
 | A3 | [Project ZIP & import/export (JSON, ZIP, image)](areas/A3-zip-import-export.md) | OPEN | 0 / 10 | 0 | 0 | 9/9/6 |
 | A4 | [File explorer, folders & multi-diagram management](areas/A4-file-explorer-multidiagram.md) | OPEN | 0 / 10 | 0 | 0 | 9/3/14 |
