@@ -5338,3 +5338,221 @@ also has to answer what happens when two enlarged icons overlap), or make the
 selectable region visible so the user is not misled about what is clickable.
 Repro:
 [`iconscale.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F5-icons/iconscale.explore.spec.ts).
+
+## A failed auto-save throws the unsaved edit away
+
+**Found by:** exploratory campaign A1/LIFE-01
+
+**Symptom:** An auto-save that fails (backend down, Drive 5xx, quota) leaves the
+status bar on "Save failed" — and the edit it was carrying is already gone from
+the app's memory of what needs saving. Nothing retries it. Pressing Retry, or
+Ctrl+S, or opening another diagram, all flush *nothing*; the only thing that puts
+the work back in the queue is making another edit.
+
+**Root cause:** `useAutoSave.executeSave` clears the queue before it attempts the
+write:
+
+    const pending = pendingRef.current;
+    if (!pending || !storageRef.current) return;
+    pendingRef.current = null;      // <- before the await
+    setSaveStatus('saving');
+    try { await storageRef.current.saveDiagram(pending.diagramId, pending.model); }
+    catch (e) { setSaveStatus('error'); onErrorRef.current?.(...); }
+
+The catch reports the failure but never restores `pendingRef`, so `saveNow()`
+(which returns early on `!pendingRef.current`) has nothing left to send. Combined
+with A1/LIFE-03 (the Retry affordance is gated shut) and A1/LIFE-02 (the unload
+warning does not fire on `error`), a single failed auto-save is silent data loss
+for everything typed since the previous successful save.
+
+**Workaround:** after "Save failed", touch the diagram again (move any element)
+to re-queue the model, then wait for the status to clear.
+
+**Status:** Open. Fix direction: on the catch path put `pending` back into
+`pendingRef` unless a newer one arrived (`pendingRef.current ??= pending`), which
+also makes `saveNow()` and Retry work as written. Repro:
+[`autosave-life-01-05-06-07-08.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/autosave-life-01-05-06-07-08.explore.test.tsx).
+
+## After a failed auto-save the tab closes without warning
+
+**Found by:** exploratory campaign A1/LIFE-02
+
+**Symptom:** In remote mode (self-host server backend, or Google Drive) make an
+edit and let the auto-save fail. While it was still saving, closing the tab
+prompted "leave site?". Once the save has *failed* the prompt stops appearing —
+the situation got worse and the guard got quieter. The unsaved edit leaves with
+the tab.
+
+**Root cause:** two `beforeunload` listeners guard the app and neither knows about
+`saveStatus === 'error'`. The first
+(`DiagramLifecycleProvider.tsx` ~line 339) triggers on
+`hasUnsavedChangesRef.current || (!serverStorageAvailable && sessionWorkUnexportedRef.current)`,
+and `hasUnsavedChanges` is hard-coded `false` whenever `remoteStorageActive`
+("toolbar uses saveStatus directly in server mode"). The second (~line 795)
+triggers on `remoteStorageActive ? autoSave.saveStatus === 'saving' : dirtyDiagramIds.size > 0`
+— it enumerates `'saving'` and stops there. So in remote mode `'error'` is
+indistinguishable from `'idle'`: the one state that definitely has unpersisted
+work is the one state nothing objects to. Same enum-coverage shape as the S3
+finding S-e ("enum coverage stops at the values the happy path produces").
+
+**Workaround:** watch the status cluster — do not close the tab while it reads
+"Save failed".
+
+**Status:** Open. Fix direction: treat `'error'` as pending in the second guard
+(`saveStatus !== 'idle'`), which also covers the A1/LIFE-01 re-queue. Repro:
+[`save-life-02-03-04-14.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/save-life-02-03-04-14.explore.test.tsx).
+
+## The "Retry" button after a failed auto-save does nothing
+
+**Found by:** exploratory campaign A1/LIFE-03
+
+**Symptom:** When an auto-save fails, the toolbar status cluster renders
+"Save failed" with a Retry button next to it. Clicking Retry — even after the
+outage is over — performs no write, shows no toast, opens no dialog and leaves
+the status on "Save failed". Ctrl+S does the same nothing. The affordance offers
+recovery and delivers none.
+
+**Root cause:** `StatusCluster`'s Retry is wired to `handleSaveClick`, whose
+remote branch is
+
+    await autoSave.saveNow();
+    if (autoSave.saveStatus === 'idle') { ...saveDiagram + success toast... }
+
+`autoSave.saveStatus` is read from the render-time closure, so on the render that
+*shows* the Retry button it is `'error'` and the explicit-save branch is skipped
+outright. `saveNow()` is the other half of the failure: A1/LIFE-01 already
+cleared `pendingRef`, so it returns immediately. Neither half of the function
+does anything. This is the caller-side pattern S3 recorded as thread S-d — the
+service classifies a failure correctly and the consumer drops it.
+
+**Workaround:** make another edit to the diagram; the next debounced auto-save
+re-queues and (once the backend is healthy) succeeds.
+
+**Status:** Open. Fix direction: read the status from a ref (or return it from
+`saveNow()`) rather than the closure, and treat `'error'` as a state a manual
+save must attempt rather than one it must skip. Repro:
+[`save-life-02-03-04-14.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/save-life-02-03-04-14.explore.test.tsx).
+
+## Ctrl+S right after an edit saves but never says so
+
+**Found by:** exploratory campaign A1/LIFE-04
+
+**Symptom:** In remote mode, pressing Ctrl+S (or the toolbar Save) from an idle
+diagram shows a `"<name>" saved` toast. Pressing it within two seconds of an
+edit — the normal reflex — writes the diagram but shows nothing at all: no
+toast, no other confirmation. The same keystroke gives feedback or not depending
+on how recently the user typed.
+
+**Root cause:** the same closure read as A1/LIFE-03. `handleSaveClick` awaits
+`autoSave.saveNow()` (which does flush the debounced write, so no data is lost)
+and then gates the *confirmation* on `autoSave.saveStatus === 'idle'` — a value
+captured before the flush, still `'saving'` because `scheduleSave` sets it
+immediately for the status bar. So the branch holding both the explicit
+`saveDiagram` call and the success toast is skipped precisely when the user has
+just edited something.
+
+**Workaround:** none needed for durability — the work is saved; the missing toast
+is the whole symptom. Wait for the status cluster to stop saying "Saving…" if you
+want confirmation.
+
+**Status:** Open. Fix direction: same as A1/LIFE-03 (read the post-flush status),
+after which this branch reports normally. Repro:
+[`save-life-02-03-04-14.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/save-life-02-03-04-14.explore.test.tsx).
+
+## An armed auto-save is cancelled, never flushed — nothing ever drains the debounce
+
+**Found by:** exploratory campaign A1/LIFE-05 (and A1/LIFE-07)
+
+**Symptom:** Edit a diagram and navigate within the app inside the two-second
+debounce window (for example to a `/display/...` view). The queued auto-save is
+discarded: no write is ever issued, and the status bar the user last saw said
+"Saving…".
+
+**Root cause:** `useAutoSave` has exactly one exit for an armed timer and it is
+always a cancel, never a flush. The unmount cleanup is
+
+    useEffect(() => () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    }, []);
+
+with no `executeSave()`. `App.tsx` renders `<EditorPage />` as the element of
+every route, so an in-app route change tears down `AppStorageProvider` →
+`AuthProvider` → `DiagramLifecycleProvider` and the hook with them. The one
+in-app navigation onto a readonly route (`handlePreviewClick`) does call
+`saveNow()` first; anything else — a link, browser back/forward, an
+`ErrorBoundary` reset — does not.
+
+The same missing cancellation shows up from the other direction (A1/LIFE-07):
+`enabled` is checked only inside `scheduleSave`, so a timer armed while enabled
+still fires after `enabled` goes false. A new schedule in that state is correctly
+ignored, which confirms the flag itself took effect — only the already-armed
+timeout escapes. That leg is latent today (the sole disabling transition flushes
+first), but it is the same defect and the same fix.
+
+**Workaround:** pause for two seconds after your last edit before navigating.
+
+**Status:** Open. Fix direction: flush rather than cancel on unmount, and clear
+the armed timer when `enabled` goes false. Repro:
+[`autosave-life-01-05-06-07-08.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/autosave-life-01-05-06-07-08.explore.test.tsx).
+
+## `saveNow()` reports "flushed" while the write is still in flight
+
+**Found by:** exploratory campaign A1/LIFE-06
+
+**Symptom:** Signing out of Google within a couple of seconds of an edit can lose
+that edit: the app believes it flushed the pending Drive write before revoking
+the token, then revokes it out from under the in-flight request. The same race
+sits on the open-another-diagram path, where the flush is supposed to land in the
+*old* place before the active provider moves.
+
+**Root cause:** `useAutoSave.saveNow()` decides whether there is anything to wait
+for by looking at the queue, not at the work:
+
+    if (debounceTimerRef.current) { clearTimeout(...); }
+    if (!pendingRef.current) return;      // <- a live write already nulled this
+    await executeSave();
+
+`executeSave` nulls `pendingRef` before awaiting the write, so from the moment the
+debounce timer fires until the response lands, `saveNow()` sees an empty queue and
+resolves immediately. Measured: with a write outstanding, `saveNow()` returns
+while `onSaved` has not fired and `saveStatus` is still `'saving'`. Both callers
+treat that resolution as durable —
+`handleGoogleSignedOut` ("flush any pending debounced autosave to Drive while the
+token is still valid — this must run BEFORE the caller revokes it") and
+`openDiagramById` ("flush pending writes to the CURRENT place before anything
+moves"). ADR 0037 §2 requires that ordering.
+
+**Workaround:** pause for a few seconds after your last edit before signing out
+or switching diagrams.
+
+**Status:** Open. Fix direction: keep the in-flight promise in a ref and have
+`saveNow()` await it as well as any queued model. Repro:
+[`autosave-life-01-05-06-07-08.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/autosave-life-01-05-06-07-08.explore.test.tsx).
+
+## Overlapping auto-saves report "saved" while the newer write is still outstanding
+
+**Found by:** exploratory campaign A1/LIFE-08
+
+**Symptom:** On a slow connection, where one auto-save is still in flight when the
+next one starts, the status bar can settle to "Saved at HH:MM" while the most
+recent edit has not reached storage. Every guard that reads that state — the
+unload warning, the Ctrl+S gate — is then reading a lie.
+
+**Root cause:** `useAutoSave` tracks no generation and no in-flight set: each
+`executeSave` call unconditionally writes the shared status on completion.
+
+    await storageRef.current.saveDiagram(pending.diagramId, pending.model);
+    setLastSaved(new Date()); setSaveStatus('idle');
+
+Nothing serialises the writes either, so with two outstanding the *first* one to
+resolve — which the network does not guarantee is the older one — stamps
+`lastSaved` and `'idle'`. Measured: two writes in flight, resolve the older, and
+the hook reports idle + a fresh `lastSaved` with the newer write still pending.
+Same shape as the share-backend thread S-b (nothing serialises a
+read-modify-write) applied to the client.
+
+**Workaround:** none. Treat "Saved at" as advisory on a slow link.
+
+**Status:** Open. Fix direction: sequence the writes (chain on the in-flight
+promise) or version them and ignore a completion that is not the latest. Repro:
+[`autosave-life-01-05-06-07-08.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/autosave-life-01-05-06-07-08.explore.test.tsx).
