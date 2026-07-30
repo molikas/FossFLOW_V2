@@ -117,10 +117,12 @@ test.describe('F5 / an enlarged icon vs the hit test', () => {
     const after = await paintedBox();
 
     // PRECONDITION: the icon really did grow — otherwise everything below is
-    // vacuous.
+    // vacuous. The painted box also contains the node's NAME CHIP (same
+    // canvas), which does not scale, so the box grows by less than the 2.5×
+    // factor; the WIDTH is the axis the chip constrains least.
     expect(before).not.toBeNull();
     expect(after).not.toBeNull();
-    expect(after!.height).toBeGreaterThan(before!.height * 1.6);
+    expect(after!.width).toBeGreaterThan(before!.width * 1.2);
 
     // Clear any selection the placement left behind.
     await page.evaluate(() =>
@@ -140,16 +142,19 @@ test.describe('F5 / an enlarged icon vs the hit test', () => {
       (window as any).__axoview__.ui.getState().actions.setSelectedIds([])
     );
 
-    // Now press a point that is inside the DRAWN icon (near its top edge) but
-    // outside the node's one-tile footprint.
-    const topOfIcon = {
-      x: after!.left + after!.width / 2,
-      y: after!.top + 8
+    // Now press a point that is inside the DRAWN icon but outside the node's
+    // one-tile footprint. Probe on the X axis at the tile's own vertical band:
+    // the name chip is centred and narrow, so a point near the painted box's
+    // LEFT edge at the node's y is icon pixels, not chip pixels.
+    const sideOfIcon = {
+      x: after!.left + 6,
+      y: layerBox!.y + centre.y
     };
-    // PRECONDITION: that point really is above the tile the node occupies.
-    expect(topOfIcon.y).toBeLessThan(layerBox!.y + centre.y - 20);
+    // PRECONDITION: that point really is outside the 1× footprint the hit test
+    // still uses — it is left of where the un-scaled icon ended.
+    expect(sideOfIcon.x).toBeLessThan(before!.left);
 
-    await page.mouse.move(topOfIcon.x, topOfIcon.y);
+    await page.mouse.move(sideOfIcon.x, sideOfIcon.y);
     await page.mouse.down();
     await page.mouse.up();
     await page.waitForTimeout(250);

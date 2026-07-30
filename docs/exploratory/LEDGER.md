@@ -32,7 +32,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 | F2 | [View/preview/presenter modes & annotation overlay](areas/F2-view-modes-annotations.md) | DONE | 13 / 10 | 9 | 2 | 0/14/16 |
 | F3 | [Styling system (docked strip, bulk styling, color picker, style round-trips)](areas/F3-styling-system.md) | DONE | 10 / 10 | 3 | 3 | 0/6/9 |
 | F4 | [Layers panel & z-order (visibility, locking, assignment, ordering)](areas/F4-layers-zorder.md) | DONE | 10 / 10 | 4 | 0 | 0/17/16 |
-| F5 | [Icons & catalog (packs, custom icons, merge-on-load, icon resize)](areas/F5-icons-catalog.md) | OPEN | 0 / 10 | 0 | 0 | 0/7/11 |
+| F5 | [Icons & catalog (packs, custom icons, merge-on-load, icon resize)](areas/F5-icons-catalog.md) | DONE | 10 / 10 | 6 | 0 | 0/7/11 |
 
 ## Wave order (suggested)
 
@@ -271,3 +271,8 @@ After all areas are DONE: completeness-critic pass per APPROACH §8 — list the
 | LAY-03 | There is no active-layer concept: every newly placed element lands unassigned, whatever the Layers panel shows as selected | *New elements never join a layer* |
 | LAY-05 | Deleting a hidden layer unassigns its members, and an unassigned entity is unconditionally visible — so the delete reveals everything the layer was hiding | *Deleting a hidden layer reveals everything it was hiding* |
 | LAY-11 | `assignLayerToItems` filters by bare id across all five entity collections, so an id shared by two entities moves both (CLIP-01's newest consumer) | *Assigning a layer moves every entity that shares the id* |
+| ICON-01/02 | ADR 0003 lean-save exists twice and the export half is inert (the lib's bundled-fixture list is empty), so "Export as JSON" writes the whole icon catalog | *"Export as JSON" writes the entire icon catalog into the file* |
+| ICON-04 | `loadEnabledPacks` guards the JSON parse but not the shape, so a corrupt preference reaches `loadIconPack` and throws `Unknown icon pack` on every boot | *A corrupt icon-pack preference breaks icon loading instead of falling back* |
+| ICON-05 | `iconPackManager`'s localStorage readers are unguarded, unlike the lib's `persistedSettings`, so a blocked store crashes them | *The icon-pack manager crashes when localStorage is unavailable* |
+| ICON-06 | `scanIconUsage` skips soft-deleted diagrams, so the icon-delete gate reports "unused" for an icon a trashed diagram still references | *Deleting an icon says it is unused when only a trashed diagram uses it* |
+| ICON-08 | On a resized node the drawn icon extends outside its one-tile footprint and that visible area is inert — ADR 0044's visual-only resize vs the tile-sized hit test | *A resized icon is only clickable on its original tile* |

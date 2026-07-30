@@ -5173,3 +5173,168 @@ through a second door.
 `string[]` and dispatch per collection — the callers already have the typed
 form. Validating `layerId` against the view's layers in the same reducer closes
 the RED-03 door for free. Repro: [`layers-lay-01-05-07-11.explore.test.ts`](packages/axoview-lib/src/__explore__/F4/layers-lay-01-05-07-11.explore.test.ts).
+
+## "Export as JSON" writes the entire icon catalog into the file
+
+**Found by:** exploratory campaign ICON-01 / ICON-02
+
+**Symptom:** Saving a diagram writes a handful of icons. Exporting the SAME
+diagram to JSON (or to a project ZIP) writes every icon the session has loaded —
+the whole AWS / GCP / Azure / Kubernetes / Material catalog, SVG payloads and
+all — producing a file many times larger than the stored document.
+
+**Root cause:** ADR 0003's lean-save exists twice, with different rules, and the
+export half does nothing:
+
+- `leanIfModel` (`axoview-app/src/services/storage/leanModel.ts`) — used by
+  every StorageProvider. Keeps `collection === 'imported'` icons and records
+  `requiredPacks` so the load path can re-fetch the packs.
+- `stripDefaultIcons` (`axoview-lib/src/utils/leanSave.ts`) — used by
+  `exportAsJSON` and the project-ZIP export. Drops an icon only when it is a
+  byte-for-byte duplicate of a **bundled fixture** — and
+  `axoview-lib/src/fixtures/icons.ts` exports `[]`.
+
+With an empty fixture list nothing can ever match, so `stripDefaultIcons` is
+the identity function. Its load-side twin `mergeBundledFixtures` is inert for
+the same reason, which means ADR 0002's "the side dock always has the full
+catalog regardless of what was saved" is delivered by the app's pack manager
+alone — the lib merge contributes nothing.
+
+Measured on a realistic loaded model (one AWS icon in use, plus GCP, core and
+one imported icon): the storage path emits one icon and `requiredPacks: ['aws']`;
+the export path emits four, and the serialised result is more than twice the size.
+
+Not a data-integrity problem — re-importing the fat file and saving it strips
+the pack icons again — but the file is what users mail around.
+
+**Workaround:** none.
+
+**Status:** Open. Fix direction: have `exportAsJSON` and the project-ZIP
+export call the same `leanIfModel` the storage providers use, and delete
+`stripDefaultIcons` / `mergeBundledFixtures` (or the empty fixtures module)
+so there is one lean-save. Repro: [`leansave-icon-01-02-03.explore.test.ts`](packages/axoview-app/src/__explore__/F5/leansave-icon-01-02-03.explore.test.ts).
+
+## A corrupt icon-pack preference breaks icon loading instead of falling back
+
+**Found by:** exploratory campaign ICON-04
+
+**Symptom:** If `localStorage['axoview-enabled-icon-packs']` holds well-formed
+JSON of the wrong shape — a bare string, `null`, or a list containing a name
+that is not a pack — the pack loader rejects with `Unknown icon pack: …`
+instead of falling back to the default set. The value survives across sessions,
+so the failure repeats on every boot until the key is cleared by hand.
+
+**Root cause:** `loadEnabledPacks` guards the PARSE and not the SHAPE:
+
+```js
+if (!stored) return ALL;
+try { return JSON.parse(stored) as IconPackName[]; } catch { return ALL; }
+```
+
+The `as IconPackName[]` is an assertion, not a check, so anything that parses
+is returned. `loadIconPack` then hits its `default: throw new Error(...)`.
+Verified: `'"aws"'` returns the string `'aws'`, `'null'` returns `null`,
+and `'["aws","AWS","not-a-pack"]'` returns all three verbatim.
+
+**Workaround:** clear `axoview-enabled-icon-packs` from localStorage.
+
+**Status:** Open. Fix direction: filter the parsed value against
+`ALL_ICON_PACK_NAMES` (which already exists in the same module) and fall back
+to the default set when nothing survives — and have `loadIconPack` skip an
+unknown name rather than throwing. Repro: [`packs-icon-04-05-06.explore.test.ts`](packages/axoview-app/src/__explore__/F5/packs-icon-04-05-06.explore.test.ts).
+
+## The icon-pack manager crashes when localStorage is unavailable
+
+**Found by:** exploratory campaign ICON-05
+
+**Symptom:** In a browser that throws on `localStorage` access — Safari private
+browsing, or an iframe with third-party storage blocked — the icon pack manager's
+preference readers throw a `SecurityError` instead of falling back to defaults.
+
+**Root cause:** `iconPackManager` touches storage bare:
+
+```js
+export const loadLazyLoadingPreference = () => {
+  const stored = localStorage.getItem(LAZY_LOADING_KEY);   // no guard
+  …
+};
+export const loadEnabledPacks = (): IconPackName[] => {
+  const stored = localStorage.getItem(ENABLED_PACKS_KEY);  // no guard
+  …
+};
+```
+
+Its sibling `axoview-lib/src/config/persistedSettings.ts` wraps every access
+("Errors are silently swallowed so a corrupt/missing entry never crashes the
+editor") — the same lesson, learned on one side of the boundary only. Verified
+with a throwing `localStorage` getter: both pack-manager readers propagate,
+while the guarded shape returns `null`.
+
+**Workaround:** none from the UI.
+
+**Status:** Open. Fix direction: reuse the guarded read/write helpers from
+`persistedSettings` (or lift them into a shared `safeStorage` module) for the
+two pack-manager keys and the writers beside them. Repro: [`packs-icon-04-05-06.explore.test.ts`](packages/axoview-app/src/__explore__/F5/packs-icon-04-05-06.explore.test.ts).
+
+## Deleting an icon says it is unused when only a trashed diagram uses it
+
+**Found by:** exploratory campaign ICON-06
+
+**Symptom:** Delete an imported icon. The confirm dialog reports it is used by no
+diagram, so the delete goes through. A diagram in the trash was using it — restore
+that diagram and its nodes have an icon reference that resolves to nothing.
+
+**Root cause:** `scanIconUsage` deliberately skips soft-deleted diagrams:
+
+```js
+const visible = metas.filter((m) => !m.deletedAt && m.id !== currentDiagramId);
+```
+
+The comment explains the reasoning — "surfacing their counts would only confuse
+the warning" — which is right for a usage REPORT and wrong for a DELETE gate: the
+trashed diagram is restorable, so its reference is live. Verified: the same
+diagram is reported when live and invisible once it carries a `deletedAt`.
+Nothing downstream catches the result — an unknown icon reference passes both the
+schema and `validateView` (CLIP-14).
+
+This is the same shape as the already-filed *Trashing a shared diagram leaves its
+public link live* (SHARE-06): the soft delete hides a row from one query and the
+row keeps mattering somewhere else.
+
+**Workaround:** empty the trash before deleting icons.
+
+**Status:** Open. Fix direction: scan soft-deleted diagrams too and label their
+rows ("in Trash") in the confirm dialog, so the count is honest and the copy stays
+clear. Repro: [`packs-icon-04-05-06.explore.test.ts`](packages/axoview-app/src/__explore__/F5/packs-icon-04-05-06.explore.test.ts).
+
+## A resized icon is only clickable on its original tile
+
+**Found by:** exploratory campaign ICON-08
+
+**Symptom:** Enlarge a node with the on-canvas resize handles (ADR 0044). The
+icon draws bigger, but only the part sitting over its original single tile
+responds to a click — pressing the visibly-drawn area outside that tile selects
+nothing. On a 2.5x node most of what the user sees is inert.
+
+**Root cause:** ADR 0044 section 6 states the resize is deliberately visual: the
+node keeps a single-tile footprint for collision, hit-testing and anchoring, and
+`getItemAtTile` resolves a press to a tile. The rendering side does honour the
+scale — every reader resolves `viewItem.iconScale ?? icon.scale ?? 1` and they
+all agree (verified across all five readers) — so the drawn extent and the
+interactive extent are correct on their own terms and simply describe different
+shapes.
+
+Measured with the read-back pixel oracle on the nodes canvas: after scaling to
+2.5x the painted bounding box extends well left of where the 1x icon ended, and a
+real press there at the node's own vertical band selects nothing, while a press
+on the node's tile still selects it.
+
+**Workaround:** click the node's original tile (roughly the centre-bottom of the
+drawn icon).
+
+**Status:** Open. This is a documented trade-off rather than an oversight, so the
+fix is a product call: either extend the hit test to the scaled extent (which
+also has to answer what happens when two enlarged icons overlap), or make the
+selectable region visible so the user is not misled about what is clickable.
+Repro:
+[`iconscale.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F5-icons/iconscale.explore.spec.ts).
