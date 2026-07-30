@@ -153,3 +153,55 @@ describe('moveDiagramsToDrive', () => {
     expect('id' in drive.created[0].data).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Wave 1 — A2/STOR-09. Promoted from the 2026-07 exploratory campaign's probe
+// lane (`__explore__/A2/drive-stor-*`).
+//
+// A move is create → verify → delete-source. When the SOURCE delete failed, the
+// whole item was reported `ok: false` with `driveId` DROPPED — so the caller was
+// told the move failed and given no way to reconcile the Drive copy it now
+// owned, and a retry with the same selection minted a second one.
+// ---------------------------------------------------------------------------
+describe('A2/STOR-09 — a failed source delete is not a failed move', () => {
+  test('reports the Drive copy it created, and flags the leftover source', async () => {
+    const source = makeSource({ a: { title: 'Alpha' } });
+    (source.provider.deleteDiagram as jest.Mock).mockImplementation(async () => {
+      throw new Error('session delete failed');
+    });
+    const drive = makeDrive();
+
+    const [result] = await moveDiagramsToDrive({
+      source: source.provider,
+      drive: drive.provider,
+      diagrams: [meta('a', 'Alpha')],
+      sourceFolders: []
+    });
+
+    // The copy is real and verified: saying "failed" and hiding its id is what
+    // made a retry mint a second one.
+    expect(result.ok).toBe(true);
+    expect(result.driveId).toBeDefined();
+    expect(result.sourceRemained).toBe(true);
+    expect(result.error).toMatch(/session delete failed/);
+    expect(drive.created).toHaveLength(1);
+  });
+
+  test('a create failure is still a failed move, with no driveId', async () => {
+    const source = makeSource({ a: { title: 'Alpha' } });
+    const drive = makeDrive({ failCreateFor: ['Alpha'] });
+
+    const [result] = await moveDiagramsToDrive({
+      source: source.provider,
+      drive: drive.provider,
+      diagrams: [meta('a', 'Alpha')],
+      sourceFolders: []
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.driveId).toBeUndefined();
+    expect(result.sourceRemained).toBeUndefined();
+    // And the source copy is untouched — the one guarantee the move owes.
+    expect(source.deleted).toEqual([]);
+  });
+});

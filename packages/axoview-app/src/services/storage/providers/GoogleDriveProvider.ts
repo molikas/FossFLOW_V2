@@ -68,6 +68,22 @@ export class GoogleDriveProvider implements StorageProvider {
   // Low-level request: auth (via getValidToken ONLY), retry/backoff, 401 → expire
   // ---------------------------------------------------------------------------
 
+  /**
+   * A2/STOR-08: a retry replays the request VERBATIM, which is only safe when
+   * the request is idempotent. A `POST` that creates a Drive file is not: a 5xx
+   * or a dropped connection returned AFTER the file was committed made the
+   * retry mint a second one — the call then SUCCEEDED, returned the second id,
+   * and left an untracked orphan with no signal at all. GET/PATCH/PUT/DELETE
+   * are safe to replay; POST is not, so it fails fast and the caller decides.
+   *
+   * (Drive's resumable uploads carry an upload id, which would make the create
+   * genuinely retriable. That is a larger change than wave 1; failing fast is
+   * strictly better than silently duplicating the user's file.)
+   */
+  private static isReplaySafe(init: RequestInit): boolean {
+    return (init.method ?? 'GET').toUpperCase() !== 'POST';
+  }
+
   private async request(
     url: string,
     init: RequestInit = {},
@@ -75,6 +91,7 @@ export class GoogleDriveProvider implements StorageProvider {
   ): Promise<Response> {
     const token = await authStore.getValidToken();
     if (!token) throw new DriveError('Not signed in to Google', 401);
+    const replaySafe = GoogleDriveProvider.isReplaySafe(init);
 
     let res: Response;
     try {
@@ -83,8 +100,8 @@ export class GoogleDriveProvider implements StorageProvider {
         headers: { ...(init.headers || {}), Authorization: `Bearer ${token}` }
       });
     } catch {
-      // Network error — treat as transient.
-      if (attempt < this.retryDelays.length) {
+      // Network error — transient, unless replaying could duplicate a create.
+      if (replaySafe && attempt < this.retryDelays.length) {
         await sleep(this.retryDelays[attempt]);
         return this.request(url, init, attempt + 1);
       }
@@ -125,7 +142,9 @@ export class GoogleDriveProvider implements StorageProvider {
       res.status === 429 ||
       (res.status === 403 && /rateLimitExceeded/i.test(reason));
     const transient = isRateLimit || res.status >= 500;
-    if (transient && attempt < this.retryDelays.length) {
+    // A2/STOR-08: never replay a non-idempotent create — a 5xx returned after
+    // the write committed would mint a second file.
+    if (transient && replaySafe && attempt < this.retryDelays.length) {
       if (isRateLimit) {
         notificationStore.push({
           severity: 'warning',
@@ -434,9 +453,27 @@ export class GoogleDriveProvider implements StorageProvider {
     return json.id;
   }
 
-  async deleteFolder(id: string): Promise<void> {
-    // Trashing a folder trashes its descendants — Drive semantics cover the
-    // `recursive` intent, so the flag is not forwarded.
+  async deleteFolder(id: string, recursive = true): Promise<void> {
+    // A2/STOR-02: `deleteFolder(id, recursive)` meant three different things
+    // across the three providers — the server forwarded the flag, Drive ignored
+    // it and always cascaded, and the session place ignored it the other way,
+    // so `recursive: true` in the session place was WEAKER than `false` on
+    // Drive. Trashing a Drive folder trashes its descendants, so honouring
+    // `recursive: false` means moving the children out first.
+    if (!recursive) {
+      const root = await this.ensureRoot();
+      const meta = (await (
+        await this.request(`${DRIVE_API}/files/${id}?fields=parents`)
+      ).json()) as DriveFile;
+      const target = meta.parents?.[0] ?? root;
+      const children = await this.listFiles(
+        `'${id}' in parents and trashed=false and ${APP_MARKER_Q}`,
+        'files(id,name,parents)'
+      );
+      for (const child of children) {
+        await this.moveItem(child.id, 'folder', target === root ? null : target);
+      }
+    }
     await this.patchJson(id, { trashed: true });
   }
 

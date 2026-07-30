@@ -16,6 +16,13 @@ export interface MoveToDriveResult {
   driveId?: string;
   /** The name it landed under (may carry a copy-suffix on collision). */
   driveName?: string;
+  /**
+   * A2/STOR-09: the Drive copy is verified but the SOURCE could not be deleted,
+   * so the diagram now exists in both places. `ok` stays true — the copy is
+   * real and `driveId` names it — and this flags the cleanup the caller still
+   * owes, so a retry does not mint a second Drive copy.
+   */
+  sourceRemained?: boolean;
 }
 
 /** Folder-name chain (root→leaf) for a diagram, from the flat folder list. */
@@ -116,7 +123,27 @@ export async function moveDiagramsToDrive(
       });
 
       // Verified on Drive — NOW the source copy may go (move, not copy).
-      await opts.source.deleteDiagram(meta.id, false);
+      try {
+        await opts.source.deleteDiagram(meta.id, false);
+      } catch (e) {
+        // A2/STOR-09: this used to fall into the outer catch, which reports
+        // `ok: false` and DROPS `driveId` — so the caller was told the move
+        // failed and given no way to reconcile the Drive copy it now owns, and
+        // a retry with the same selection minted a second one. The copy exists
+        // and is verified; only the source cleanup failed. Report exactly that.
+        results.push({
+          id: meta.id,
+          name: meta.name,
+          ok: true,
+          driveId,
+          driveName: targetName,
+          sourceRemained: true,
+          error: e instanceof Error ? e.message : String(e)
+        });
+        done += 1;
+        opts.onProgress?.(done, opts.diagrams.length, meta);
+        continue;
+      }
       results.push({ id: meta.id, name: meta.name, ok: true, driveId, driveName: targetName });
     } catch (e) {
       results.push({

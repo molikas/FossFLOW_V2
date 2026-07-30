@@ -218,3 +218,97 @@ describe('GoogleDriveProvider', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Wave 1 — A2/STOR-02, STOR-08. Promoted from the 2026-07 exploratory
+// campaign's probe lane (`__explore__/A2/drive-stor-*`).
+// ---------------------------------------------------------------------------
+
+describe('A2/STOR-08 — a create is never replayed', () => {
+  test('fails fast on a 5xx instead of minting a second file', async () => {
+    const posts: string[] = [];
+    // The shape that matters: the write COMMITS, then the response is lost.
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (method === 'POST') {
+        posts.push(String(url));
+        return mockResponse({ error: { message: 'backend hiccup' } }, 503);
+      }
+      return mockResponse({ files: [] });
+    });
+
+    await expect(
+      makeProvider().createDiagram(
+        { title: 'X', name: 'X', icons: [], items: [], views: [] },
+        null
+      )
+    ).rejects.toThrow();
+
+    // It used to POST four times (the retry ladder), succeed on a later one,
+    // return that id, and leave orphans no listing could explain.
+    expect(posts).toHaveLength(1);
+  });
+
+  test('still retries a replay-safe request', async () => {
+    let gets = 0;
+    fetchMock.mockImplementation(async (_url: string, init?: RequestInit) => {
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (method === 'GET') {
+        gets += 1;
+        if (gets === 1) return mockResponse({ error: { message: 'hiccup' } }, 503);
+        return mockResponse({ ok: true });
+      }
+      return mockResponse({});
+    });
+
+    await expect(makeProvider().loadDiagram('file-1')).resolves.toEqual({ ok: true });
+    expect(gets).toBe(2);
+  });
+});
+
+describe('A2/STOR-02 — recursive:false does not orphan the contents', () => {
+  test('moves the children out before trashing the folder', async () => {
+    const patched: Array<{ url: string; body: unknown }> = [];
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (method === 'PATCH') {
+        patched.push({
+          url: String(url),
+          body: init?.body ? JSON.parse(String(init.body)) : null
+        });
+        return mockResponse({ id: 'ok' });
+      }
+      if (String(url).includes('fields=parents')) {
+        return mockResponse({ parents: ['parentFolder'] });
+      }
+      return mockResponse({ files: [{ id: 'childDoc', name: 'Doc', parents: ['victim'] }] });
+    });
+
+    await makeProvider().deleteFolder('victim', false);
+
+    // Drive trashes descendants with the parent, so honouring recursive:false
+    // means the child leaves first. It used to cascade either way — making
+    // `recursive: true` in the session place WEAKER than `false` here.
+    const moved = patched.find((p) => p.url.includes('childDoc'));
+    expect(moved).toBeDefined();
+    expect(moved!.url).toContain('addParents=parentFolder');
+    const trashed = patched.find((p) => p.url.includes('victim'));
+    expect(trashed!.body).toEqual({ trashed: true });
+  });
+
+  test('recursive:true still relies on Drive cascading', async () => {
+    const patched: string[] = [];
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if ((init?.method ?? 'GET').toUpperCase() === 'PATCH') {
+        patched.push(String(url));
+        return mockResponse({ id: 'ok' });
+      }
+      return mockResponse({ files: [] });
+    });
+
+    await makeProvider().deleteFolder('victim', true);
+
+    expect(patched).toHaveLength(1);
+    expect(patched[0]).toContain('victim');
+  });
+});

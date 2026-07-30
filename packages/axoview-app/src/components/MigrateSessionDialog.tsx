@@ -194,6 +194,11 @@ export function MigrateSessionDialog() {
       });
       const moved = results.filter((r) => r.ok);
       const failed = results.filter((r) => !r.ok);
+      // A2/STOR-09: copied to Drive and verified, but the session copy could
+      // not be removed — the diagram is now in BOTH places. Not a failure (the
+      // Drive copy is real and open-able), but the user has to know, or they
+      // will "move" it again and mint a second copy.
+      const duplicated = results.filter((r) => r.ok && r.sourceRemained);
 
       // The open diagram moved: cancel its session autosave/scratch and
       // reopen it from its new Drive home.
@@ -203,7 +208,19 @@ export function MigrateSessionDialog() {
         await openDiagramById(openMoved.driveId!, openMoved.driveName ?? openMoved.name, 'google-drive');
       }
 
-      if (failed.length === 0) {
+      if (failed.length === 0 && duplicated.length > 0) {
+        notificationStore.push({
+          severity: 'warning',
+          persistent: true,
+          message: t('migrate.duplicatedToast', {
+            defaultValue:
+              'Moved {{n}} to Google Drive, but {{dup}} could not be removed from this session — they now exist in both places: {{names}}',
+            n: moved.length,
+            dup: duplicated.length,
+            names: duplicated.map((r) => r.name).join(', ')
+          })
+        });
+      } else if (failed.length === 0) {
         notificationStore.push({
           severity: 'success',
           // Interpolates {{n}}, not {{count}} — `count` would trigger

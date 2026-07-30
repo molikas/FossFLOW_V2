@@ -79,7 +79,7 @@ export const loadIconPack = async (
   }
 };
 
-const ALL_ICON_PACK_NAMES: IconPackName[] = [
+export const ALL_ICON_PACK_NAMES: IconPackName[] = [
   'aws',
   'gcp',
   'azure',
