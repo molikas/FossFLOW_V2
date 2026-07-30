@@ -27,7 +27,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 | A5 | [App chrome: boot, dialogs, settings, i18n, theming, storage hygiene](areas/A5-app-chrome-boot-i18n.md) | OPEN | 0 / 10 | 0 | 0 | 10/6/14 |
 | S1 | [Google identity & token lifecycle (GIS auth store, gates)](areas/S1-google-identity-auth.md) | DONE | 16 / 10 | 12 | 1 | 7/7/6 |
 | S2 | [Share backend: session snapshots, routes, Express/Worker parity](areas/S2-share-backend.md) | DONE | 15 / 10 | 12 | 1 | 9/6/9 |
-| S3 | [Drive-native sharing & readonly preview ladder](areas/S3-drive-sharing-preview.md) | OPEN | 0 / 10 | 0 | 0 | 10/14/9 |
+| S3 | [Drive-native sharing & readonly preview ladder](areas/S3-drive-sharing-preview.md) | DONE | 15 / 10 | 10 | 1 | 10/14/9 |
 | F1 | [Text, labels-as-text & rich-text editing (inline canvas edit, notes, sanitization)](areas/F1-text-richtext-editing.md) | OPEN | 0 / 10 | 0 | 0 | 0/9/12 |
 | F2 | [View/preview/presenter modes & annotation overlay](areas/F2-view-modes-annotations.md) | OPEN | 0 / 10 | 0 | 0 | 0/14/16 |
 | F3 | [Styling system (docked strip, bulk styling, color picker, style round-trips)](areas/F3-styling-system.md) | OPEN | 0 / 10 | 0 | 0 | 0/6/9 |
@@ -56,6 +56,49 @@ Engine (E1–E4) and interaction (I1–I5) first — highest seam density and ev
 
 **Oracles available to probes** (`fixtures/explore.fixture.ts`): `exploreTest` (blank-diagram boot) / `exploreAppTest` (raw `/app` boot), both auto-asserting the console/pageerror oracle in teardown; `expectStoreInvariants(page)` (INV-1…INV-12), `expectSchemaClean(page)`, `expectModelHealthy(page)` = both. **INV-11 added by I1/PTR-11** (no `selectedIds` entry may sit on a hidden or locked layer); **INV-12 added by R4/RND-12** (every connector on the active view has a scene entry — without one it renders on neither side of the DOM/GPU hybrid while staying hit-testable). **Grow INV-* as areas confirm cross-store bugs.**
 
+## Standing threads from the share/backend block (S1-S3)
+
+Recorded 2026-07-30. A new area should ask whether its surface reproduces these
+rather than re-deriving them.
+
+S-a. **The exit ramps are one function written several times, and each forgets a
+different part of the ritual.** `signOut` / `markExpired` / `markDriveScopeMissing` /
+`_onToken`'s scope-less hard stop all park the auth session, and between them they
+drop waiter draining, timeout clearing, `_absorbStaleError` and the profile hint in
+different combinations (nine of S1's twelve bugs). Same shape at the route layer:
+`deleteDiagram` cascades to the public snapshot, the soft delete the UI actually
+performs does not (SHARE-06). Whenever an area has several ways to reach one state,
+diff the rituals.
+
+S-b. **Nothing serialises a read-modify-write.** `folders.json` (SHARE-03) and
+`shareDiagram` (SHARE-04) both read, mutate and write with no lock or version; the
+adapter's tmp+rename gives file atomicity, which is the wrong granularity. The
+existing suites are all sequential, so `Promise.all` of two identical calls is a
+one-line probe that no area has run yet.
+
+S-c. **The wiring around a well-tested handler is where the handler's contract
+dies.** `routes.js` has 111 tests and returns `{error}` JSON throughout; the Express
+app has no error middleware, so body-parser failures return HTML with a stack trace
+(SHARE-08), and CORS withholds the response without blocking the request (SHARE-09).
+Test the middleware stack, not just the handler.
+
+S-d. **A typed failure is only as good as what the caller does with it.** Every S3
+bug but one is caller-side: the ladder classifies four terminal causes and the gate
+renders one message (DRV-02), the Picker distinguishes wrong-file from cancel and the
+gate does not (DRV-03), `afterGrant` decides recoverable-vs-terminal and nothing ever
+clears it (DRV-01). The service-level suites all stop at the return value.
+
+S-e. **Enum coverage stops at the values the happy path produces.** `type:'domain'`
+is declared and unhandled (DRV-04); `meta.size` absent reads as zero (SHARE-07); a
+proxy 400 is unclassified (DRV-12). For any union an area touches, enumerate the
+declared values and check each has a branch.
+
+S-f. **Two harvested "invariants" were stale.** The worker's resourceKey allowlist is
+`{1,120}`, not the `{10,120}` [coverage-baseline.md](coverage-baseline.md) records
+(DRV-11), and `getFileShareMeta` — the only reader of `resourceKey` — has no caller at
+all (DRV-15). Verify a harvested invariant against the source before building a probe
+on it.
+
 ## Cross-area mop-up (final wave)
 
 After all areas are DONE: completeness-critic pass per APPROACH §8 — list the area *pairs* no hypothesis crossed, propose one hypothesis per suspicious pair.
@@ -71,6 +114,7 @@ After all areas are DONE: completeness-critic pass per APPROACH §8 — list the
 | RND-14 | What should a keyboard command (F2 rename, the label-drag handle, the element link card) do when its target is selected but scrolled out of view? Today it silently does nothing — the promoted DOM copy those affordances live on is filtered through the viewport cull | **OPEN** — recommendation (scroll into view, or exempt promoted ids from the cull) in the area file |
 | GPU-13 | Should a per-element `zIndex` be able to cross an entity type (lift a connector above a node)? | **OPEN** — it cannot: all four bulk canvases share one stacking context and cross-type order is fixed by mount order, so the z-order controls are silently inert across types |
 | AUTH-13 | Should a profile hint with no usable `email` arm the boot reconnect at all? | **OPEN** — `loadProfileHint()` validates `name`'s type only, and `fetchUserInfo` persists `email: data.email &#124;&#124; ''`, so an email-less hint arms the very hint-less `prompt:''` the `login_hint` exists to avoid; recommendation in the area file |
+| DRV-05 | How should a partially-failed link revocation be reported? | **OPEN** — `setAnyoneWithLink(false)` deletes anyone-permissions serially with no rollback and the dialog skips its refresh on a throw, so a mid-loop failure leaves the file link-readable with a pre-delete list on screen; damaging only when a file carries >1 `anyone` entry, which Drive rarely produces. Recommendation (a `catch`-side refresh either way) in the area file |
 | SHARE-10 | Should `ENABLE_SERVER_STORAGE=false` revoke already-published share links? | **OPEN** — as-built the public snapshot read is exempt (`requireStorage:false`) so links keep serving while every other route 503s, and `DELETE …/share` 503s too, leaving no route to revoke. Either reading is defensible; the asymmetry is not. Recommendation in the area file |
 | SEL-12 | Should the marquee auto-scroll at the viewport edge? | **CLOSED 2026-07-29 — by design.** Lassoing off-screen items is not a requirement; the probe now pins the no-auto-scroll behaviour as intended |
 
@@ -163,6 +207,16 @@ After all areas are DONE: completeness-critic pass per APPROACH §8 — list the
 | OVL-10 | The placement ghost anchors at the bare tile and ignores the ADR-0023 residual, so with snap off it previews the wrong cell | *The placement ghost ignores the off-grid residual* |
 | OVL-12 | `NodeLabelHitLayer` does not apply the readable-labels counter-scale its sibling `LabelHitLayer` does — the chip grows, the grab box does not | *The node-name grab box does not follow the readable-labels counter-scale* |
 | OVL-13 | `NodeLabelHitLayer` filters `visibleIds` but never `lockedIds`, so a locked layer still exposes its nodes' label drag and inline rename | *A locked layer still exposes its nodes' label drag and rename handles* |
+| DRV-01 | `driveAfterGrantRef` is cleared only when the route unmounts, so after one Picker pick a not-yet-propagated Drive grant maps 403/404 to terminal `not-found` — and the terminal state's only action navigates away from the link | *A slow Drive grant turns the Picker rung into a dead end* |
+| DRV-02 | Trashed, too-large, post-grant 403 and post-grant 404 all collapse into `not-found`, so four causes — two of them not what it says, one of them fixed by waiting — render one generic message | *Four different reasons a shared Drive diagram will not open render one message* |
+| DRV-03 | A Picker pick of the wrong file resolves `'cancelled'`, the same value as a deliberate cancel, and the gate has no branch for it — the viewer gets the same wall with no message | *Picking the wrong file in the Drive Picker does nothing and says nothing* |
+| DRV-04 | `getAccessOverview` reasons about `anyone`/`user`/`group` but not `type:'domain'`, so a diagram the whole Workspace domain can open reports as restricted with nobody on it | *A domain-shared Drive diagram is reported as "restricted"* |
+| DRV-06 | The toolbar's quick-copy shows the SUCCESS toast when the ACL read FAILED (`shared &#124;&#124; !driveOverview`) while the Manage dialog warns on the same unknown — two copy paths, opposite truthfulness | *Copying a Drive link reports success when the app could not read the access list* |
+| DRV-07 | The anonymous read proxy's 200 carries `Cache-Control: public, max-age=60`, so un-sharing a diagram leaves it readable from a viewer's browser for a minute — and `public` authorises shared caches too | *Revoking a Drive share link leaves the diagram readable from cache* |
+| DRV-08 | `runAction` swallows the throw, so `handleAdd`'s tail always runs: a failed add clears the typed email and writes it into the autocomplete history, indistinguishable from success | *A failed "add person" clears the email field and remembers the address anyway* |
+| DRV-09 | An in-diagram link on a shared route navigates to `/display/<id>` with the OWNER's id, resolved against the recipient's own storage — a dead link with generic failure copy | *A link inside a shared diagram dead-ends for the recipient* |
+| DRV-12 | A proxy `400 bad-file-id` is unclassified and falls through, so a truncated Drive link walks the viewer through sign-in and then a Picker grant for an id Drive rejects as malformed | *A malformed Drive link asks the viewer to sign in and then to grant access* |
+| DRV-14 | `LocalStorageProvider.shareDiagram` throws a bare `Share failed: <status>` and the toolbar renders `err.message` verbatim, so a diagram deleted between open and share shows the user `Share failed: 404` | *A failed share shows the raw string "Share failed: 404"* |
 | SHARE-01 | A full PUT save replaces the whole document, so the first autosave after sharing strips `shareUuid` — the live snapshot is orphaned and the next Share mints a second uuid neither unshare nor delete can reach | *The first autosave after sharing orphans the public snapshot* |
 | SHARE-02 | `assertId` accepts the reserved keys the fs adapter flattens into, so `PUT /api/diagrams/folders` overwrites the entire folder tree with a diagram document — and `listDiagramMeta` hides the diagram that did it | *A diagram id can overwrite the folder tree — reserved storage keys are not reserved* |
 | SHARE-03 | Every folder route read-modify-writes the whole `folders.json` with no lock, so two concurrent requests both report success and one is silently discarded | *Concurrent folder writes silently lose one another (folders.json has no locking)* |

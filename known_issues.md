@@ -4127,3 +4127,282 @@ this needs a direct API call (or another client) to trigger.
 the PATCH body the way `id` already is, and have the cascades verify
 `snapshot.sourceId === id` before deleting or overwriting. Repro:
 [`share-01-04-15.explore.spec.js`](packages/axoview-backend/src/__explore__/S2/share-01-04-15.explore.spec.js).
+
+## A slow Drive grant turns the Picker rung into a dead end
+
+**Found by:** exploratory campaign DRV-01
+
+**Symptom:** A recipient opens a `/display/drive/<fileId>` link, clicks "Open with
+Google Drive access", picks the right file — and lands on "Could not open this
+diagram." Its only button is "Back to editor", which navigates away from the link.
+Reloading the page works, because the grant has propagated by then, but nothing on
+screen suggests that.
+
+**Root cause:** `driveAfterGrantRef` in
+[`DiagramLifecycleProvider.tsx`](packages/axoview-app/src/providers/DiagramLifecycleProvider.tsx)
+is set by `retryDriveDisplayRead(afterGrant)` and cleared in exactly one other place:
+the effect that fires when `driveFileId` goes falsy, i.e. when the route unmounts. So
+once the Picker has been used, every subsequent read on that route is an `afterGrant`
+read — and `afterGrant` is precisely what turns a recoverable answer into a terminal
+one. Measured through the real ladder: the same Drive 404 maps to `needs-grant` with
+`afterGrant:false` and to `not-found` with `afterGrant:true`. Drive grants take a
+moment to register (the ladder's own doc comment says drive.file "hides files until
+the Picker grant registers"), so the post-Picker retry routinely sees the pre-Picker
+answer. `not-found` is the only reason mapped to `failed`, and the rendered `failed`
+state has one button whose action is `navigate('/', { replace: true })` — no Retry,
+and no route back to the gate's Picker rung.
+
+**Workaround:** reload the page.
+
+**Status:** Open. Fix direction: two independent fixes, either of which closes it —
+(a) clear `driveAfterGrantRef` after the read it was set for completes, so a second
+attempt is a normal read again; (b) give the terminal state a Retry (and, for the
+post-grant case specifically, a short auto-retry, since propagation is the expected
+cause). Repro:
+[`drv-01-02-03.explore.test.tsx`](packages/axoview-app/src/__explore__/S3/drv-01-02-03.explore.test.tsx).
+
+## Four different reasons a shared Drive diagram will not open render one message
+
+**Found by:** exploratory campaign DRV-02
+
+**Symptom:** "Could not open this diagram. The diagram may have been deleted, or you
+may not have access to it." is shown when the owner trashed the file, when the file is
+over the 10 MB proxy cap, when access was revoked after a Picker grant, and when a
+Picker grant simply has not registered yet. Two of those four are not what the message
+says, and the one that a viewer could fix by waiting a moment is indistinguishable
+from the one that is permanent.
+
+**Root cause:** `readDriveDisplayFile` in
+[`drivePublicRead.ts`](packages/axoview-app/src/services/drive/drivePublicRead.ts)
+collapses four distinct upstream answers — proxy 410 (trashed), proxy 413 (too large),
+post-grant 403, post-grant 404 — into the single `not-found` reason, which
+`DiagramLifecycleProvider` maps to `failed`, which `DriveDisplayGate` renders as
+`ReadonlyLoadErrorDialog`. Measured: all four produce
+`{ok:false, reason:'not-found'}`. The gate demonstrably CAN differentiate when it is
+given something to differentiate on — `transient`, `needs-signin` and `needs-grant`
+each get their own copy and their own action — so the information is lost at the
+ladder, not at the UI.
+
+**Workaround:** none; the viewer has to ask the owner what happened.
+
+**Status:** Open. Fix direction: widen `DriveDisplayReadFailure` with the causes that
+already exist upstream (`gone`, `too-large`, `grant-not-registered`) and give each its
+own gate copy. The worker already returns distinct statuses for all of them, so no new
+upstream work is needed. Repro:
+[`drv-01-02-03.explore.test.tsx`](packages/axoview-app/src/__explore__/S3/drv-01-02-03.explore.test.tsx).
+
+## Picking the wrong file in the Drive Picker does nothing and says nothing
+
+**Found by:** exploratory campaign DRV-03
+
+**Symptom:** On the Drive display gate, clicking "Open with Google Drive access" and
+then selecting the wrong file in the Picker returns the user to exactly the same wall
+with no message. It is indistinguishable from having closed the Picker deliberately,
+so the natural next action is to click the button and pick the same wrong file again.
+
+**Root cause:** `launchDrivePicker` resolves `'cancelled'` for two different
+outcomes — a real CANCEL, and a PICKED whose `docs` array does not contain the target
+file (the documented wrong-grant trap, since a pick only registers a `drive.file`
+grant for the file actually picked). `DriveDisplayGate.handleGrant` acts only on
+`'picked'`; its two `setPickerError` sites are the reset-to-null at the top and the
+`catch`, and a resolved `'cancelled'` reaches neither. Measured against the real
+picker fake: the target file resolves `'picked'`, another file resolves `'cancelled'`.
+The gate's own comment — "'cancelled' keeps the gate up — the user can pick again" —
+is correct for a deliberate cancel and wrong for a wrong-file pick, because both
+arrive as the same value.
+
+**Workaround:** pick the file named in the link.
+
+**Status:** Open. Fix direction: give `launchDrivePicker` a third outcome
+(`'wrong-file'`) — it already computes the distinction — and have the gate surface
+"that isn't the diagram this link points to" inline, next to the existing
+`pickerError` treatment. Repro:
+[`drv-01-02-03.explore.test.tsx`](packages/axoview-app/src/__explore__/S3/drv-01-02-03.explore.test.tsx).
+
+## A domain-shared Drive diagram is reported as "restricted"
+
+**Found by:** exploratory campaign DRV-04
+
+**Symptom:** A diagram shared with an entire Google Workspace domain — anyone at the
+company can open the link — shows as **Restricted** with nobody listed, and copying
+the link warns "only people with access can open it". The owner is told the opposite
+of the truth about who can read their diagram.
+
+**Root cause:** `getAccessOverview` in
+[`driveSharing.ts`](packages/axoview-app/src/services/drive/driveSharing.ts) derives
+`summary` from `perms.some((p) => p.type === 'anyone')` and `peopleCount` from
+`p.type === 'user' || p.type === 'group'`. `type:'domain'` — one of the four values
+the module's own `DrivePermission` interface declares — matches neither, so a
+domain-wide grant is invisible to both. Measured: `[owner, {type:'domain'}]` yields
+`{summary:'restricted', peopleCount:0}`, and both copy predicates (toolbar and Manage
+dialog), replayed over the same list, agree it is not shared. A `group` grant IS
+counted and an `anyone` grant IS detected, so the omission is specific to `domain`.
+
+**Workaround:** check the file's sharing state in Drive's own UI.
+
+**Status:** Open. Fix direction: treat `type:'domain'` as shared in `summary` (it is
+link-readable for everyone in the domain) and surface it as its own row in the Manage
+dialog rather than folding it into `peopleCount`. `type:'anyone'` with
+`allowFileDiscovery` is worth checking at the same time. Repro:
+[`drv-04-05.explore.test.ts`](packages/axoview-app/src/__explore__/S3/drv-04-05.explore.test.ts).
+
+## Copying a Drive link reports success when the app could not read the access list
+
+**Found by:** exploratory campaign DRV-06
+
+**Symptom:** Copying a Drive diagram's preview link from the toolbar's caret menu
+confirms "Preview link copied to clipboard" even when the diagram is restricted and the
+link will not open for anyone. It happens exactly when the ACL read failed — the one
+case where the app does not know whether the link works. The Manage-access dialog's
+Copy button warns in the same situation.
+
+**Root cause:** `AppToolbar.handleQuickCopyLink` chooses its toast with
+`shared || !driveOverview` — the `!driveOverview` disjunct is a deliberate
+"don't cry wolf" clause for a failed `getAccessOverview`, but it makes an *unknown*
+ACL report as a *good* one. `DriveShareManageDialog.handleCopy` computes the same
+question as `isPublic || hasPeople` over a `permissions` array that is null/empty when
+its own load failed, so it warns. Measured by replaying both shipped predicates over
+the same "ACL unknown" state: toolbar `true`, dialog `false`. On a known-restricted ACL
+both agree and warn, so the divergence is precisely the unknown case.
+
+**Workaround:** open the Manage-access dialog to see the real state.
+
+**Status:** Open. Fix direction: make the unknown case its own message in both paths —
+"Link copied. We couldn't check who has access." — rather than picking one of the two
+confident answers. Repro:
+[`drv-06-08-09-10-13-14.explore.test.tsx`](packages/axoview-app/src/__explore__/S3/drv-06-08-09-10-13-14.explore.test.tsx).
+
+## Revoking a Drive share link leaves the diagram readable from cache
+
+**Found by:** exploratory campaign DRV-07
+
+**Symptom:** Setting a Drive diagram's access back to Restricted does not take effect
+immediately for anyone who has already opened its link — their browser keeps serving
+the diagram for up to a minute. Because the response is marked cacheable by *any*
+cache, a shared/proxy cache may also hold it and hand it to other requesters.
+
+**Root cause:** the anonymous read proxy in
+[`app.ts`](packages/axoview-worker/src/app.ts) returns
+`Cache-Control: public, max-age=60` on the 200 path. The in-code rationale is
+browser-side dedupe of repeat opens, which `private` would serve just as well;
+`public` additionally authorises shared caches, and there is no `must-revalidate` or
+`no-store`. Measured: the 200 carries that header while the 404 and 410 paths carry no
+cache header at all — so only the readable body lingers. The trashed path (410)
+revokes immediately, which confirms the window is specific to an ACL change rather
+than to deletion.
+
+**Workaround:** trash the diagram instead of un-sharing it if the revocation is
+urgent (the trashed gate is immediate), then restore it.
+
+**Status:** Open. Fix direction: `private, max-age=60` at minimum — same dedupe, no
+shared-cache exposure. If prompt revocation matters, drop to `no-store` and accept the
+extra upstream reads, or move the cache window down to a few seconds. Repro:
+[`drv-07.explore.spec.ts`](packages/axoview-worker/src/__explore__/S3/drv-07.explore.spec.ts).
+
+## A failed "add person" clears the email field and remembers the address anyway
+
+**Found by:** exploratory campaign DRV-08
+
+**Symptom:** In Manage access, adding a person whose address Google rejects ("The user
+… could not be found") shows the error — and clears the address out of the input, so
+the user has to retype it to fix a typo. The mistyped address is also added to the
+Add-people autocomplete, where it will be suggested as if it had been granted access.
+
+**Root cause:** `runAction` in
+[`DriveShareManageDialog.tsx`](packages/axoview-app/src/components/DriveShareManageDialog.tsx)
+catches the failure into `actionError`, so `await runAction(...)` resolves on both
+outcomes and the three statements after it in `handleAdd` —
+`addRecentShareEmail(email)`, `setRecentEmails(...)`, `setAddEmail('')` — always run,
+with no outcome check between them. Measured by rendering the dialog with a rejecting
+`addPersonPermission`: the error appears, the field is empty, and the address is in the
+local history. The success CONTROL produces the identical end state, so the two
+outcomes are indistinguishable in the UI.
+
+**Workaround:** retype the address.
+
+**Status:** Open. Fix direction: have `runAction` return (or rethrow) an outcome and
+guard `handleAdd`'s tail on it — keep the field populated and the history untouched on
+failure.
+
+Rig note for future probes: mocking `driveSharing` without re-exporting the real
+`DriveShareError` makes `shareErrorCopy`'s `err instanceof DriveShareError` throw
+"Right-hand side of 'instanceof' is not an object" — a setup crash that looks exactly
+like the failure path under test. Repro:
+[`drv-06-08-09-10-13-14.explore.test.tsx`](packages/axoview-app/src/__explore__/S3/drv-06-08-09-10-13-14.explore.test.tsx).
+
+## A link inside a shared diagram dead-ends for the recipient
+
+**Found by:** exploratory campaign DRV-09
+
+**Symptom:** A diagram shared by link (Drive preview or snapshot) that contains a link
+to another diagram gives the recipient a dead affordance: following it shows "Could not
+open this diagram", with nothing explaining that the target lives in the sender's
+workspace and was never shared.
+
+**Root cause:** the `axoview-navigate-to-diagram` handler in
+[`App.tsx`](packages/axoview-app/src/App.tsx) does
+``navigate(`/display/${id}`)`` with the raw embedded id and no branch on the current
+route — nothing maps the sharing context onto the target, and there is no
+`display/drive` or share-uuid form of the hop. `/display/<id>` is the owner-readonly
+loader, which resolves the id against the *recipient's* own storage; measured,
+`LocalStorageProvider.loadDiagram('owners-diagram-id')` rejects, which is what raises
+the generic readonly-load failure. This is the coverage gap the baseline already lists
+as "sharing a diagram that links to other diagrams (link behavior in shared view)".
+
+**Workaround:** ask the sender to share the linked diagram too, and to send its own
+link.
+
+**Status:** Open. Fix direction: decide the product answer first — either suppress
+diagram-link affordances on a shared route (they cannot resolve), or carry the sharing
+context so the hop becomes another `/display/drive/<fileId>` (Drive) link. Either is
+better than a dead link with generic copy. Repro:
+[`drv-06-08-09-10-13-14.explore.test.tsx`](packages/axoview-app/src/__explore__/S3/drv-06-08-09-10-13-14.explore.test.tsx).
+
+## A malformed Drive link asks the viewer to sign in and then to grant access
+
+**Found by:** exploratory campaign DRV-12
+
+**Symptom:** A `/display/drive/<id>` link whose file id is truncated or mistyped (a
+copy-paste that lost characters) sends the viewer through the whole authorization
+ladder — "Sign in with Google so Axoview can check whether this diagram has been
+shared with you", then "Open with Google Drive access" — for an id Drive itself
+rejects as malformed. Neither step can ever work.
+
+**Root cause:** the proxy answers `400 bad-file-id` for an id outside its allowlist,
+and rung 1 of `readDriveDisplayFile` classifies only 410/413 (→ terminal) and
+429/5xx (→ transient); every other non-OK status falls through to the token rung.
+Measured: signed out the ladder returns `needs-signin` after one request; signed in it
+returns `needs-grant` after two.
+
+**Workaround:** get an intact link.
+
+**Status:** Open. Fix direction: treat a proxy 400 as its own terminal reason
+("this link is not valid") — the client can also apply the same
+`/^[A-Za-z0-9_-]{10,120}$/` check the worker uses before making any request at all.
+Repro:
+[`drv-11-12-15.explore.test.ts`](packages/axoview-app/src/__explore__/S3/drv-11-12-15.explore.test.ts).
+
+## A failed share shows the raw string "Share failed: 404"
+
+**Found by:** exploratory campaign DRV-14
+
+**Symptom:** If a session-place diagram is deleted (in another tab, or from the file
+tree) between being opened and being shared, the share popover displays the literal
+text `Share failed: 404`. Nothing tells the user the diagram no longer exists or what
+to do.
+
+**Root cause:** `LocalStorageProvider.shareDiagram` throws
+``new Error(`Share failed: ${response.status}`)``, discarding the backend's own
+`{ error: 'Diagram not found' }` body, and `AppToolbar.handleShareClick` surfaces
+`err.message` verbatim into the popover. Measured against the real provider with a 404
+response: the message is exactly `Share failed: 404` and contains none of the
+backend's text. ADR 0011 §1 requires a failure-of-intent to surface copy the user can
+act on.
+
+**Workaround:** none; refresh and try again.
+
+**Status:** Open. Fix direction: carry the status (and the backend's `error` string)
+on a typed error the way `DriveShareError` already does, and map 404 → "This diagram
+no longer exists" / 5xx → the retryable treatment `share-error.spec.ts` already covers.
+Repro:
+[`drv-06-08-09-10-13-14.explore.test.tsx`](packages/axoview-app/src/__explore__/S3/drv-06-08-09-10-13-14.explore.test.tsx).
