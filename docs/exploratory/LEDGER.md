@@ -23,7 +23,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 | A1 | [Diagram lifecycle: open/save/dirty/autosave state machine](areas/A1-diagram-lifecycle.md) | DONE | 15 / 10 | 14 | 0 | 10/20/14 |
 | A2 | [Storage providers & places model (local/session/Drive, move-to-Drive)](areas/A2-storage-places.md) | DONE | 15 / 10 | 13 | 1 | 17/7/8 |
 | A3 | [Project ZIP & import/export (JSON, ZIP, image)](areas/A3-zip-import-export.md) | DONE | 15 / 10 | 11 | 1 | 9/9/6 |
-| A4 | [File explorer, folders & multi-diagram management](areas/A4-file-explorer-multidiagram.md) | OPEN | 0 / 10 | 0 | 0 | 9/3/14 |
+| A4 | [File explorer, folders & multi-diagram management](areas/A4-file-explorer-multidiagram.md) | IN PROGRESS | 7 / 10 | 6 | 0 | 9/3/14 |
 | A5 | [App chrome: boot, dialogs, settings, i18n, theming, storage hygiene](areas/A5-app-chrome-boot-i18n.md) | OPEN | 0 / 10 | 0 | 0 | 10/6/14 |
 | S1 | [Google identity & token lifecycle (GIS auth store, gates)](areas/S1-google-identity-auth.md) | DONE | 16 / 10 | 12 | 1 | 7/7/6 |
 | S2 | [Share backend: session snapshots, routes, Express/Worker parity](areas/S2-share-backend.md) | DONE | 15 / 10 | 12 | 1 | 9/6/9 |
