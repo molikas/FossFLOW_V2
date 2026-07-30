@@ -3752,3 +3752,378 @@ within a session either ("Deleting the Drive root folder mid-session is not
 detected" above); a single "invalidate + re-probe" entry point would close both.
 Repro:
 [`auth-12-13-15-16.explore.test.ts`](packages/axoview-app/src/__explore__/S1/auth-12-13-15-16.explore.test.ts).
+
+## The first autosave after sharing orphans the public snapshot
+
+**Found by:** exploratory campaign SHARE-01
+
+**Symptom:** Copy a share link, keep editing, and the link keeps working while the
+app forgets it exists. Pressing Share again produces a *different* link, so the one
+already sent to colleagues is now a frozen copy nobody can revoke: Unshare and
+Delete both clean up only the newest uuid.
+
+**Root cause:** `saveDiagram` in
+[`routes.js`](packages/axoview-backend/src/routes.js) implements PUT as a whole-document
+replace (`{ ...body, id, lastModified }`), and the app's autosave body is
+`leanIfModel(model)` where `model` comes from the lib model store — a `modelSchema`
+document (title/items/views/icons/colors) with no `shareUuid`, because `shareUuid` is
+a backend-only field. So the first autosave after sharing deletes it while
+`public/<uuid>` stays on disk. `shareDiagram` then sees no `shareUuid`, mints a new
+one, and `unshareDiagram`/`deleteDiagram` — which both cascade off
+`diagram.shareUuid` — can never reach the previous snapshot again. Measured: after
+one autosave the snapshot still answers 200 and the diagram's `shareUuid` is
+`undefined`; after a second Share there are two live snapshots and unshare removes
+one. `patchDiagram` (rename / trash) preserves the field, so the loss is specific to
+the full replace.
+
+**Workaround:** none for an already-orphaned snapshot short of deleting the file
+under `<STORAGE_PATH>/public/`. Sharing again immediately before sending the link
+minimises the window.
+
+**Status:** Open. Fix direction: make `saveDiagram` preserve server-owned fields —
+read the existing document and carry `shareUuid` (and `created`) across, the way
+`patchDiagram` already does — or move `shareUuid` out of the diagram document into a
+side index keyed by id. Repro:
+[`share-01-04-15.explore.spec.js`](packages/axoview-backend/src/__explore__/S2/share-01-04-15.explore.spec.js).
+
+## A diagram id can overwrite the folder tree — reserved storage keys are not reserved
+
+**Found by:** exploratory campaign SHARE-02
+
+**Symptom:** A diagram whose id is `folders` destroys the whole folder tree. Every
+folder disappears from the file explorer, and the next folder the user creates
+"heals" `folders.json` by finishing the deletion. The diagram that caused it is
+invisible in the listing, so nothing in the UI points at the cause. `tree-manifest`,
+`metadata` and `diagrams-index` behave the same way.
+
+**Root cause:** two layers each assume the other validates. `assertId`'s
+`ID_PATTERN` (`/^[a-zA-Z0-9_-]{1,64}$/`) accepts all four reserved names, and the fs
+adapter's `keyToPath` deliberately flattens `diagrams/<id>` to
+`<STORAGE_PATH>/<id>.json` to preserve the pre-5A layout — the same file the
+`folders` key resolves to. `saveDiagram` has no existence check at all, so
+`PUT /api/diagrams/folders` returns 200 and replaces the tree. `createDiagram` looks
+accidentally safe (its existence probe reads `folders.json` and 409s) but only when
+a `folders.json` already exists; on a fresh workspace the POST succeeds and creates
+`folders.json` as a diagram, which the user's first folder then wipes. The
+read side already knows these names are special — `listDiagramMeta` skips them,
+which is why the offending diagram is invisible.
+
+Note for future probes: the in-memory adapter used by the regression suite keeps
+`diagrams/folders` and `folders` in separate map slots **and** carries its own
+`RESERVED_DIAGRAM_KEYS` filter, so the collision is invisible against the double.
+Only the fs adapter reproduces it.
+
+**Workaround:** don't import or create a diagram with one of those four ids. There is
+no recovery for the lost folder tree beyond re-creating the folders.
+
+**Status:** Open. Fix direction: reject the reserved names in `assertId` (the write
+side already has the list — `listDiagramMeta` and the memory adapter both hard-code
+it), or give the fs adapter a real `diagrams/` subdirectory so the namespaces cannot
+collide. Repro:
+[`share-02-13.explore.spec.js`](packages/axoview-backend/src/__explore__/S2/share-02-13.explore.spec.js).
+
+## Concurrent folder writes silently lose one another (folders.json has no locking)
+
+**Found by:** exploratory campaign SHARE-03
+
+**Symptom:** Two folder operations that overlap in time both report success and one
+is silently discarded. Most visible during a project import, which dispatches folder
+creates in a burst, or when an import overlaps a user's rename.
+
+**Root cause:** every folder route in
+[`routes.js`](packages/axoview-backend/src/routes.js) — `createFolder`,
+`renameFolder`, `moveFolder`, `deleteFolder` — reads the entire `folders.json` array,
+mutates a copy and writes the whole array back, with no lock, no version and no
+compare-and-swap. Two requests that read before either writes each produce a
+complete array missing the other's change; the later `put` wins. The adapter's
+tmp-file + rename gives *file* atomicity (ADR 0010 Decision 3) but that is the wrong
+granularity — it guarantees no torn file, not no lost update. Measured: two
+concurrent `createFolder` calls return 201 with distinct ids and leave one folder;
+a concurrent rename + create returns 200 for both and drops the rename. The same two
+calls made sequentially both land, so the ids-are-distinct fix from MQA #21 does not
+help here.
+
+**Workaround:** avoid concurrent folder edits; re-check the tree after a project
+import.
+
+**Status:** Open. Fix direction: serialise folder mutations behind a per-key async
+mutex in the route layer (cheapest, single-process), or move to per-folder documents
+so two folders are never in one write. The same read-modify-write shape applies to
+`tree-manifest`. Repro:
+[`share-03-05.explore.spec.js`](packages/axoview-backend/src/__explore__/S2/share-03-05.explore.spec.js).
+
+## Two simultaneous shares publish two snapshots and record one
+
+**Found by:** exploratory campaign SHARE-04
+
+**Symptom:** Two Share requests that overlap on a never-shared diagram publish two
+independent public snapshots. Only one is recorded on the diagram, so Unshare takes
+down one link and leaves the other serving the diagram's content indefinitely, with
+nothing in the app aware of it.
+
+**Root cause:** `shareDiagram` is read-then-write with no reservation: both calls
+read the `shareUuid`-less document, both take the "no uuid → generate one" branch,
+both write their own `public/<uuid>` snapshot, and the second diagram write wins the
+record. Measured with `Promise.all`: two distinct uuids, two entries under `public/`,
+one recorded; `unshare` removes the recorded one and the survivor still answers 200.
+Sequential shares are correctly idempotent, so the whole exposure is the concurrency
+window. Same class as SHARE-03 (unserialised read-modify-write) but with a worse
+consequence — the lost write is a *published* artifact rather than a dropped edit.
+
+**Workaround:** don't double-click Share. An orphaned snapshot can only be removed
+from `<STORAGE_PATH>/public/` by hand.
+
+**Status:** Open. Fix direction: serialise per diagram id (same mutex as SHARE-03), or
+derive the uuid deterministically from the diagram id + a stored salt so two
+concurrent shares converge on one snapshot. Repro:
+[`share-01-04-15.explore.spec.js`](packages/axoview-backend/src/__explore__/S2/share-01-04-15.explore.spec.js).
+
+## A non-recursive folder delete orphans its whole subtree
+
+**Found by:** exploratory campaign SHARE-05
+
+**Symptom:** Deleting a folder without the recursive flag removes only that folder.
+Its child folders stay in `folders.json` pointing at a `parentId` that no longer
+exists, so they are unreachable from the root — invisible in the tree but still
+present in storage — and the diagrams inside them survive too. A shared diagram
+stranded that way keeps its public link live while being unreachable in the UI.
+
+**Root cause:** `deleteFolder`'s non-recursive branch splices exactly one row out of
+the array and sets `toDelete = new Set([id])`; `sweepOrphanedDiagrams` then only
+sweeps diagrams whose `folderId` is in that one-element set. The recursive branch
+does the right thing via `collectDescendantFolderIds`, so the two branches disagree
+about what "delete this folder" means. Reachable from the product:
+`useFileTree` calls `deleteFolder(id, recursive)` and
+`LocalStorageProvider.serverDeleteFolder` forwards it as `?recursive=<bool>`.
+Measured: deleting `parent` non-recursively leaves `child` (dangling parentId) and
+`grandchild` in the array, and the diagram inside `child` unswept with its
+`folderId` intact.
+
+**Workaround:** always delete folders recursively.
+
+**Status:** Open. Fix direction: either reject a non-recursive delete of a folder that
+has children (a 409 the UI can turn into "this folder isn't empty"), or re-parent the
+orphans to the deleted folder's parent. Repro:
+[`share-03-05.explore.spec.js`](packages/axoview-backend/src/__explore__/S2/share-03-05.explore.spec.js).
+
+## Trashing a shared diagram leaves its public link live, and unreachable
+
+**Found by:** exploratory campaign SHARE-06
+
+**Symptom:** Delete a shared diagram from the file explorer and its share link keeps
+serving the full diagram. Because the diagram is now in the trash it cannot be
+opened, and Unshare lives on the open diagram's toolbar — so the owner has deleted
+the diagram and has no way left to take the link down.
+
+**Root cause:** the file explorer's delete is a *soft* delete —
+`LocalStorageProvider.serverDeleteDiagram(id, soft=true)` sends
+`PATCH { deletedAt }`, and `patchDiagram` merges it, preserving `shareUuid`. Only the
+permanent delete (`deleteDiagram`) cascades to `public/<uuid>`. `getPublicSnapshot`
+reads the snapshot with no reference back to the diagram, so it has no `deletedAt` to
+consult — and the snapshot document does not carry one either, so a viewer-side gate
+cannot be written against it. Sharing a diagram that is *already* trashed is accepted
+too. This is direct sibling drift with the worker's Drive read proxy, which fetches
+`fields=trashed,size` first specifically so that "a trashed file must stop resolving
+here — matching Drive's own web-share semantics" and answers 410.
+
+**Workaround:** unshare before deleting, or empty the trash (the permanent delete does
+cascade).
+
+**Status:** Open. Fix direction: cascade on the soft delete too — either unshare as
+part of the trash transition, or have `getPublicSnapshot` resolve `sourceId` and 410
+when the source is trashed (mirroring the Drive proxy, and restoring the link if the
+diagram is restored). Repro:
+[`share-06-11.explore.spec.js`](packages/axoview-backend/src/__explore__/S2/share-06-11.explore.spec.js).
+
+## The anonymous Drive proxy's 10 MB cap is skipped when Drive reports no file size
+
+**Found by:** exploratory campaign SHARE-07
+
+**Symptom:** The worker's anonymous read proxy will stream a file of any size when
+Drive's metadata response omits `size` — the 10 MB guard evaluates as 0 and passes.
+An unbounded body then flows through the Worker to the viewer.
+
+**Root cause:** the gate is `Number(meta.size ?? '0') > 10 * 1024 * 1024` in
+[`app.ts`](packages/axoview-worker/src/app.ts). Drive reports `size` only for files
+with binary content stored in Drive; when it is absent the `?? '0'` default reads as
+a zero-byte file. A non-numeric value is just as bad — `Number('unknown')` is `NaN`
+and `NaN > cap` is `false`. Measured: metadata `{trashed:false}` with a 30 MB body
+returns 200 with all 31 457 280 bytes and both Drive reads fire. The neighbouring
+`trashed` gate on the same metadata read fails *closed* on a missing field (absent =
+not trashed is the safe reading), so the size cap is the outlier — a missing size
+should mean "unknown", not "zero".
+
+**Workaround:** none server-side. Axoview's own diagrams always report a size, so
+this needs a hand-crafted or unusual Drive file to hit.
+
+**Status:** Open. Fix direction: fail closed — treat an absent or unparseable `size`
+as over the cap (or stream with a hard byte budget and abort past it, which also
+covers a `size` Drive under-reports). Repro:
+[`share-07.explore.spec.ts`](packages/axoview-worker/src/__explore__/S2/share-07.explore.spec.ts).
+
+## A malformed or oversized request body returns an HTML error page with a stack trace
+
+**Found by:** exploratory campaign SHARE-08
+
+**Symptom:** Saving a diagram larger than 10 MB, or any request whose JSON body is
+truncated in flight, fails with an unparseable response: the client's
+`response.json()` throws, so instead of the ADR 0011 failure dialog naming the cause
+the user gets a generic error or nothing at all. The response body is Express's
+default HTML error page and contains a Node stack trace.
+
+**Root cause:** [`server.js`](packages/axoview-backend/server.js) mounts no
+error-handling middleware, so a `body-parser` rejection never reaches the `adapt()`
+wrapper that produces `{ error }` JSON — it falls through to Express's built-in
+handler. Measured against the real server: a truncated JSON body returns
+**400 `text/html`** containing `SyntaxError`, and an 11 MB body returns
+**413 `text/html`** containing `entity too large` and `at ` stack frames. A
+handler-raised error on the same route is correctly `application/json`
+`{"error":"Diagram not found"}`, so the contract exists — body-parser failures escape
+it. The worker is the correct sibling here: its `bodyLimit` returns
+`{ error: 'Payload too large' }` as JSON with 413, and its `onError` deliberately logs
+the stack while keeping it out of the response.
+
+**Workaround:** none; keep diagrams under 10 MB.
+
+**Status:** Open. Fix direction: add a terminal error middleware to `server.js` that
+maps `err.type === 'entity.too.large'` → 413 and `entity.parse.failed` → 400, both as
+`{ error }` JSON with no stack, matching the worker. Then wire the 413 into the
+save-failure dialog copy. Repro:
+[`share-08-09-10-14.explore.spec.js`](packages/axoview-backend/src/__explore__/S2/share-08-09-10-14.explore.spec.js).
+
+## The CORS allowlist does not stop cross-origin writes — a web page can publish your diagrams
+
+**Found by:** exploratory campaign SHARE-09
+
+**Symptom:** On the default self-host configuration (`AUTH_MODE=none`), any web page
+the operator visits while the backend is reachable can silently publish their
+diagrams to public snapshot links, and create documents in their workspace. The
+attacking page cannot read the responses, but the writes land.
+
+**Root cause:** CORS is a *response*-side control. The allowlist added in the
+2026-07-05 security review makes the browser withhold the response from an unknown
+origin, but the request has already executed on the server. Any request the browser
+classes as CORS-safelisted skips the preflight entirely — including
+`POST` with `Content-Type: text/plain` — and `POST /api/diagrams/:id/share` needs no
+body at all. Measured against the real server: a cross-origin
+`POST /api/diagrams/<id>/share` with `Origin: https://evil.example` and
+`Content-Type: text/plain` returns 200 with **no** `access-control-allow-origin`
+header, and the diagram is genuinely published (`shareUuid` set,
+`GET /api/public/diagrams/<uuid>` → 200). The same shape also creates a document
+(the unparsed body yields an empty diagram). `PUT`/`PATCH`/`DELETE` *are* protected,
+because they force a preflight the allowlist correctly refuses — confirmed in the
+same probe, along with `http://localhost:3000`'s preflight being allowed. So the
+exposure is exactly the safelisted-request subset, and the ACAO check the security
+review relied on cannot see it.
+
+Escalation is limited: the attacker cannot read the minted uuid cross-origin, so this
+is an integrity/availability issue (unwanted publication, workspace pollution, and an
+orphan snapshot per SHARE-04) rather than a direct exfiltration.
+
+**Workaround:** set `AUTH_MODE=shared-token` + `AUTH_SHARED_SECRET` — a Bearer header
+is not CORS-safelisted, so it forces a preflight on every route and closes this. The
+existing startup `[SECURITY]` warning already recommends this for a different reason.
+
+**Status:** Open. Fix direction: reject the request rather than just the response —
+have the CORS `origin` callback pass an error (or a middleware 403) when an `Origin`
+header is present and not allowlisted, so a disallowed origin never reaches a handler.
+Optionally require `Content-Type: application/json` on state-changing routes, which
+denies the safelisted-request shape outright. Repro:
+[`share-08-09-10-14.explore.spec.js`](packages/axoview-backend/src/__explore__/S2/share-08-09-10-14.explore.spec.js).
+
+## A shared diagram loses its icon packs and its description
+
+**Found by:** exploratory campaign SHARE-11
+
+**Symptom:** A diagram built with any icon pack (AWS, Azure, Material…) opens through
+its share link with its icons unresolved — the shape and layout are right, the icons
+are not. The diagram's description is missing from the shared view too.
+
+**Root cause:** the snapshot `shareDiagram` writes is a hand-written field whitelist —
+`title, name, icons, colors, items, views, fitToScreen, sharedAt, sourceId` — so every
+other top-level field is dropped, including `description` and `version` (both
+`modelSchema` fields) and `requiredPacks`. `requiredPacks` is the damaging one: under
+ADR 0003 lean-save the stored diagram has its pack icons stripped from `icons` and
+records the packs it needs in `requiredPacks`, and
+`iconPackManager.loadPacksForDiagram` resolves what to fetch from that field first,
+falling back to an items × icons cross-reference. On a lean snapshot with
+`requiredPacks` gone, the fallback cannot work either — mapping `item.icon` to a
+collection needs the icons array to contain that icon, which lean-save removed — so it
+resolves to zero collections. Lazy pack loading defaults to **on**, so nothing else
+loads them. Measured: `leanIfModel` on a one-AWS-icon model yields
+`requiredPacks: ['aws']` with `aws-ec2` absent from `icons` and still referenced by
+the item; through the snapshot whitelist the resolver's cross-reference returns `[]`.
+The owner's own load path keeps `requiredPacks` and works, and a non-lean payload
+resolves through the fallback — so the resolver is sound and the snapshot is the only
+place the signal is lost.
+
+**Workaround:** the recipient can turn off lazy icon-pack loading (Settings) so all
+packs load eagerly.
+
+**Status:** Open. Fix direction: carry `requiredPacks` (and `description`/`version`)
+into the snapshot. Better, make the whitelist derive from the model schema rather than
+being hand-maintained, so the next schema field is not silently dropped as well.
+Repro:
+[`share-06-11.explore.spec.js`](packages/axoview-backend/src/__explore__/S2/share-06-11.explore.spec.js)
+and
+[`share-11-consumer.explore.test.ts`](packages/axoview-app/src/__explore__/S2/share-11-consumer.explore.test.ts).
+
+## A share link opened on the wrong deployment tells the recipient to deploy a server
+
+**Found by:** exploratory campaign SHARE-12
+
+**Symptom:** Opening a `/display/p/<uuid>` snapshot link on any deployment without
+server storage — which includes **axoview.app**, the Cloudflare production site, and
+any `npm run dev` without the Express backend — shows a dialog reading "This share
+link needs a session backend. Share links can only be opened from an Axoview instance
+running with server storage. Deploy via Docker or Cloudflare to view shared
+diagrams.", with OK as the only action. The person reading it is normally the
+recipient of someone else's link, who owns no deployment. The advice is also wrong:
+the Cloudflare worker hardcodes `serverStorage: false` and has no
+`/api/public/diagrams` handler at all, so "deploy via Cloudflare" can never make the
+link work.
+
+**Root cause:** `App.tsx` raises the dialog on
+`showLocalModeShareError = isPublicShareUrl && !serverStorageAvailable`, where
+`isPublicShareUrl = !!shareUuid` — the route shape alone. Nothing in the condition
+distinguishes a recipient from a mis-deployed operator, so both get operator-facing
+copy. The sibling dead-end gets this right: `DriveDisplayGate`'s unreachable-file
+branch tells its viewer to switch accounts or "ask the owner to share the file with
+you", and never mentions deploying.
+
+**Workaround:** open the link against the Docker/self-host origin that minted it.
+
+**Status:** Open. Fix direction: rewrite the copy for the reader who actually sees it
+— "this link was created by a different Axoview deployment; ask the sender for a link
+from that site" — and drop the Cloudflare claim, which is false. Longer-term this is
+the ADR 0010 D6 public-namespace cutout showing through: a snapshot store on the
+worker would remove the class. Repro:
+[`share-12.explore.test.tsx`](packages/axoview-app/src/__explore__/S2/share-12.explore.test.tsx).
+
+## A PATCH can point one diagram at another's share link, or publish over it
+
+**Found by:** exploratory campaign SHARE-15
+
+**Symptom:** `PATCH /api/diagrams/<a>` with `{"shareUuid": "<b's uuid>"}` is accepted.
+Unsharing or deleting diagram A then takes down diagram B's live link while B's
+document still records it as published, and re-sharing A **republishes B's link with
+A's content** — anyone holding B's link now sees A.
+
+**Root cause:** `patchDiagram` merges the request body over the stored document with
+no key filter, re-asserting only `id` and `lastModified`. `shareUuid` is a
+server-owned field with no protection, and every cascade
+(`unshareDiagram`, `deleteDiagram`, `deletePublicSnapshot`) trusts it as the
+authoritative pointer to a snapshot without checking that the snapshot's own
+`sourceId` matches. Measured: the impostor's unshare 404s the victim's uuid while the
+victim's `shareUuid` is unchanged, and a subsequent share rewrites the snapshot's
+`title` and `sourceId`. The same PATCH cannot change `id`, so the merge is
+selectively — not accidentally — unguarded. Same class as the engine block's finding
+that reference integrity is checked and *identity* integrity is not (CLIP-01).
+
+**Workaround:** none at the API level; the app never sends `shareUuid` in a PATCH, so
+this needs a direct API call (or another client) to trigger.
+
+**Status:** Open. Fix direction: strip server-owned keys (`shareUuid`, `created`) from
+the PATCH body the way `id` already is, and have the cascades verify
+`snapshot.sourceId === id` before deleting or overwriting. Repro:
+[`share-01-04-15.explore.spec.js`](packages/axoview-backend/src/__explore__/S2/share-01-04-15.explore.spec.js).
