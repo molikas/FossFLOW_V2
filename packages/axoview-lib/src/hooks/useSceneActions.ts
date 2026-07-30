@@ -24,6 +24,8 @@ import * as reducers from 'src/stores/reducers';
 import type { State } from 'src/stores/reducers/types';
 import { validateView } from 'src/schemas/validation';
 import { generateId, getConnectorPath } from 'src/utils';
+// Deep import (not the barrel) so this stays out of the utils cycle graph.
+import { nextPageName } from 'src/utils/pageName';
 import { useView } from 'src/hooks/useView';
 import { VIEW_DEFAULTS } from 'src/config';
 import { allocateHistorySequence } from 'src/stores/historySequence';
@@ -770,10 +772,16 @@ export const useSceneActions = () => {
         payload: {
           ...VIEW_DEFAULTS,
           ...newViewPartial,
-          // D13 — interpolate {count} via i18n, never concatenate.
+          // D13 — interpolate {count} via i18n, never concatenate. The number
+          // comes from the highest existing suffix, not from `views.length`:
+          // deleting a page in the middle used to make the next one duplicate a
+          // name already on screen (E3/SCN-13).
           name:
             newViewPartial?.name ??
-            t('pageName').replace('{count}', String(views.length + 1))
+            nextPageName(
+              t('pageName'),
+              views.map((v) => v.name)
+            )
         },
         ctx: { viewId: newViewId, state: getState() }
       });

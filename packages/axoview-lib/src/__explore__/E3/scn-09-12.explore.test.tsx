@@ -262,34 +262,7 @@ describe('SCN-12 — silent paste abort', () => {
 
 // ---------------------------------------------------------------------------
 // SCN-13 — page names derived from views.length
-// ---------------------------------------------------------------------------
-describe('SCN-13 — duplicate page names after a delete', () => {
-  it.failing(
-    'BUG: create 3 pages, delete the middle one, create another → two pages share a name',
-    () => {
-      const result = setup();
 
-      act(() => {
-        result.current.scene.createView();
-      });
-      act(() => {
-        result.current.scene.createView();
-      });
-      const names1 = result.current.modelApi
-        .getState()
-        .views.map((v) => v.name);
-      expect(new Set(names1).size).toBe(names1.length);
-
-      const middle = result.current.modelApi.getState().views[1].id;
-      act(() => {
-        result.current.scene.deleteView(middle);
-      });
-      act(() => {
-        result.current.scene.createView();
-      });
-
-      const names = result.current.modelApi.getState().views.map((v) => v.name);
-      expect(new Set(names).size).toBe(names.length);
-    }
-  );
-});
+// SCN-13 (new pages named from `views.length`) was fixed — the default name is
+// derived from the highest existing suffix — and its probe promoted to
+// `src/schemas/__tests__/modelIdentity.contract.test.ts`.

@@ -5,6 +5,15 @@ import { validateView } from 'src/schemas/validation';
 import { State, ViewReducerContext } from './types';
 import * as reducers from './view';
 
+// The schema's hard bounds for `iconScale` (views.ts). ADR 0034 §4's no-dead-
+// writes rule: a value outside them is schema-illegal at rest, so a diagram
+// carrying one fails `safeParse` on the NEXT load — the write succeeds and the
+// file is bricked (E4/CLIP-13). Clamping here covers every writer, including the
+// exported action and the group-resize factor, whose own [0.3, 2.5] clamp sits
+// one layer up and is easy to bypass or to widen.
+const ICON_SCALE_MIN = 0.1;
+const ICON_SCALE_MAX = 3;
+
 export const updateViewItem = (
   { id, ...updates }: { id: string } & Partial<ViewItem>,
   { viewId, state }: ViewReducerContext
@@ -17,6 +26,18 @@ export const updateViewItem = (
 
     const viewItem = getItemByIdOrThrow(items, id);
     const newItem = { ...viewItem.value, ...updates };
+    if (typeof newItem.iconScale === 'number') {
+      newItem.iconScale = Math.min(
+        ICON_SCALE_MAX,
+        Math.max(ICON_SCALE_MIN, newItem.iconScale)
+      );
+    }
+    // Same class: the schema declares `zIndex` an integer, so a fractional one
+    // is a dead write that fails safeParse on the next load. (Found by the
+    // identity/range contract gate, not by a campaign probe.)
+    if (typeof newItem.zIndex === 'number') {
+      newItem.zIndex = Math.round(newItem.zIndex);
+    }
     items[viewItem.index] = newItem;
 
     if (updates.tile) {

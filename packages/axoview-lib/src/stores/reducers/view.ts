@@ -87,6 +87,28 @@ export const updateView = (
 // Layer reducers
 // ---------------------------------------------------------------------------
 
+/**
+ * `layer.order` values must be a permutation of `0..n-1` — the stacking order of
+ * two layers sharing an `order` is undefined (E2/RED-04, E2/RED-05: a create
+ * after a delete reused a live value, and a partial `reorderLayers` list
+ * renumbered only the ids it named). Normalising after every mutation makes the
+ * invariant unbreakable by any single call rather than by each call being
+ * careful. Stable: equal orders keep their current array position.
+ */
+const normaliseLayerOrder = (layers: Layer[]): void => {
+  layers
+    .map((layer, index) => ({ layer, index }))
+    .sort((a, b) =>
+      a.layer.order === b.layer.order
+        ? a.index - b.index
+        : a.layer.order - b.layer.order
+    )
+    .forEach(({ layer }, order) => {
+      layer.order = order;
+    });
+  layers.sort((a, b) => a.order - b.order);
+};
+
 export const createLayer = (
   layer: Partial<Layer> & { name: string },
   ctx: ViewReducerContext
@@ -102,6 +124,7 @@ export const createLayer = (
       order: newOrder,
       ...layer
     });
+    normaliseLayerOrder(view.value.layers);
   });
 };
 
@@ -139,6 +162,10 @@ export const deleteLayer = (
     (view.value.rectangles ?? []).forEach(unassign);
     (view.value.textBoxes ?? []).forEach(unassign);
     (view.value.labels ?? []).forEach(unassign);
+
+    // The delete leaves a hole in the order sequence, which the next
+    // `createLayer` would then reuse (E2/RED-04).
+    normaliseLayerOrder(view.value.layers);
   });
 };
 
@@ -149,11 +176,24 @@ export const reorderLayers = (
   return produce(ctx.state, (draft) => {
     const view = getItemByIdOrThrow(draft.model.views, ctx.viewId);
     if (!view.value.layers) return;
-    orderedIds.forEach((id, index) => {
-      const layer = view.value.layers!.find((l) => l.id === id);
-      if (layer) layer.order = index;
+    // A PARTIAL list used to renumber only the ids it named, leaving every
+    // unnamed layer holding an order the loop had just handed to someone else
+    // (E2/RED-05). Rebuild the whole sequence instead: named layers take the
+    // leading slots in the order given, the rest follow in their current
+    // relative order.
+    const layers = view.value.layers;
+    const named = orderedIds
+      .map((id) => layers.find((l) => l.id === id))
+      .filter((l): l is Layer => !!l);
+    const namedIds = new Set(named.map((l) => l.id));
+    const rest = layers
+      .slice()
+      .sort((a, b) => a.order - b.order)
+      .filter((l) => !namedIds.has(l.id));
+    [...named, ...rest].forEach((layer, order) => {
+      layer.order = order;
     });
-    view.value.layers.sort((a, b) => a.order - b.order);
+    layers.sort((a, b) => a.order - b.order);
   });
 };
 
@@ -164,6 +204,22 @@ export const assignLayerToItems = (
   const idSet = new Set(itemIds);
   return produce(ctx.state, (draft) => {
     const view = getItemByIdOrThrow(draft.model.views, ctx.viewId);
+
+    // E2/RED-03: nothing validated layer references, so an id naming no layer
+    // was accepted here, passed `validateView` AND `modelSchema`, and saved and
+    // reloaded intact — an entity permanently assigned to a layer that does not
+    // exist. Reject at the one write site that can create one, rather than
+    // letting the load path find it later (a strict load gate would refuse to
+    // open the files this bug has already produced — the E4/CLIP-02 harm).
+    if (layerId !== undefined) {
+      const exists = (view.value.layers ?? []).some((l) => l.id === layerId);
+      if (!exists) {
+        throw new Error(
+          `Cannot assign items to layer "${layerId}": no such layer in view "${ctx.viewId}".`
+        );
+      }
+    }
+
     const assign = (
       entity: ViewItem | Connector | Rectangle | TextBox | Label
     ) => {

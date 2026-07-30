@@ -177,38 +177,9 @@ describe('CLIP-12 — iconScale across copy/paste', () => {
 
 // ---------------------------------------------------------------------------
 // CLIP-13 — group resize vs the schema cap
-// ---------------------------------------------------------------------------
-describe('CLIP-13 — iconScale outside the schema cap bricks the reload', () => {
-  it('characterization: the schema hard-caps iconScale at 3', () => {
-    const model = seed({ iconScale: 3.25 });
-    const result = modelSchema.safeParse(model);
-    expect(result.success).toBe(false);
-  });
-
-  it.failing(
-    'BUG: writing an out-of-range scale through the normal action is refused',
-    () => {
-      const result = setupClipboard({ iconScale: 2.5 });
-
-      // What a group resize does to each member: startScale * factor.
-      act(() => {
-        result.current.scene.updateViewItem('node-A', { iconScale: 2.5 * 1.3 });
-      });
-
-      const model = result.current.modelApi.getState();
-      expect(
-        modelSchema.safeParse({
-          version: model.version,
-          title: model.title,
-          colors: model.colors,
-          icons: model.icons,
-          items: model.items,
-          views: model.views
-        }).success
-      ).toBe(true);
-    }
-  );
-});
+// CLIP-13 (an out-of-range `iconScale` write bricks the next load) was fixed —
+// `updateViewItem` clamps to the schema's bounds — and its probe promoted to
+// `src/schemas/__tests__/modelIdentity.contract.test.ts`.
 
 // ---------------------------------------------------------------------------
 // CLIP-14 — a node whose icon the model does not have
