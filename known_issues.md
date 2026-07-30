@@ -6098,3 +6098,278 @@ overcount). Measured with all three in one manifest: two diagrams created, named
 `parseProject` and reject with `BAD_DIAGRAM`, so all three cases take the one
 path that already exists. Repro:
 [`zip-01-to-15.explore.test.ts`](packages/axoview-app/src/__explore__/A3/zip-01-to-15.explore.test.ts).
+
+## Deleting the open diagram blanks the canvas before the storage delete, so a failed delete hides work that is still there
+
+**Found by:** exploratory campaign A4/FEX-08
+
+**Symptom:** Delete the diagram that is currently open. If the storage delete
+fails — offline, a Drive 403, a server 500 — the toast says "Delete failed", but
+the canvas has already been reset to blank and the diagram's autosave cancelled.
+The work is still in storage, and nothing on screen says so; re-opening it from
+the tree is the only way back.
+
+**Root cause:** `confirmDelete` in `FileExplorer.tsx` calls
+`notifyDiagramDeletedFromTree(target.id)` (canvas reset + autosave cancel)
+*before* `await tree.hardDeleteDiagram(target.id)`, and the `catch` that shows
+"Delete failed" does not undo it. The comment above the call explains the
+ordering as protecting against an in-flight autosave recreating the diagram
+after the delete — a real concern, but it makes the failure path lose the
+canvas. The folder branch immediately above needs no reset at all, so the two
+branches already disagree about when the UI may be torn down.
+
+Measured: with `deleteDiagram` rejecting, the ordered trace is
+`['canvas-reset(d1)', 'storage-delete']`, the error toast is shown, and the
+diagram is still in the provider's listing.
+
+**Workaround:** re-open the diagram from the file explorer after a failed
+delete.
+
+**Status:** Open. Fix direction: cancel the autosave (not the whole canvas)
+before the delete, and reset the canvas only after storage confirms — or restore
+the diagram into the canvas in the `catch`. Repro:
+[`fileexplorer-fex-08-to-12.explore.test.tsx`](packages/axoview-app/src/__explore__/A4/fileexplorer-fex-08-to-12.explore.test.tsx).
+
+## The name-collision dialog offers "Replace" and only moves — leaving two identically-named siblings
+
+**Found by:** exploratory campaign A4/FEX-09
+
+**Symptom:** Drag a diagram into a folder that already holds one with the same
+name. The dialog asks "already exists in this folder. Replace it?" and offers
+Cancel / Replace. Press Replace and both end up side by side with the same name
+— the folder now has two rows the user cannot tell apart, and the one they meant
+to replace is still there.
+
+**Root cause:** `confirmMove` calls `treeFor(placeId).moveItem(...)` and nothing
+else. There is no delete of the colliding sibling, and no rename-with-suffix
+either, so "Replace" is exactly the same operation the non-colliding path
+performs. `detectCollision` (`utils/fileOperations`) only decides whether to
+raise the dialog.
+
+Measured: after Replace, the provider log holds one `moveItem` and no delete,
+and the destination folder holds two rows named `Report`.
+
+**Workaround:** rename one of the two afterwards.
+
+**Status:** Open. Fix direction: either implement replace (delete the colliding
+sibling inside the same confirmation, which needs the delete's own confirmation
+semantics thought through for a folder), or change the dialog to the honest
+choice — "Keep both" (copy-suffix, `copySuffix` already exists) vs Cancel.
+Repro:
+[`fileexplorer-fex-08-to-12.explore.test.tsx`](packages/axoview-app/src/__explore__/A4/fileexplorer-fex-08-to-12.explore.test.tsx).
+
+## A multi-select drag is abandoned at the first item that is skipped or collides
+
+**Found by:** exploratory campaign A4/FEX-10
+
+**Symptom:** Select several diagrams and drag them into a folder. If any one of
+them is already in that folder, or its name collides with something already
+there, the *rest of the selection never moves* — silently: no error, no toast,
+nothing in the tree to say the gesture was half-applied. With a collision the
+dialog appears for one item and the others are dropped from the operation
+entirely.
+
+**Root cause:** `handleMove` iterates `dragIds`, but two branches inside the loop
+`return` instead of `continue`: the same-parent reorder guard
+(`if (currentParentId === target.folderId) return;`) and the collision guard,
+which parks one `dragId` in `collisionDialog` and returns. `collisionDialog`
+holds a single id, so even confirming Replace cannot resume the remaining items.
+
+Measured: dragging `[already-in-f1, mover]` into `f1` produces zero `moveItem`
+calls and leaves `mover` at the root, with an empty notification queue.
+
+**Workaround:** drag items one at a time.
+
+**Status:** Open. Fix direction: `continue` in both branches, and queue
+collisions (dialog per item, or one "apply to all" decision) so the rest of the
+drag completes. Repro:
+[`fileexplorer-fex-08-to-12.explore.test.tsx`](packages/axoview-app/src/__explore__/A4/fileexplorer-fex-08-to-12.explore.test.tsx).
+
+## A rename resolves the entity type from a second, independently refreshed list — so it can rename the wrong kind of thing, silently
+
+**Found by:** exploratory campaign A4/FEX-11
+
+**Symptom:** Start renaming a folder (F2 / double-click), and while the input is
+open the tree refreshes without that folder — another tab deleted it, a Drive
+listing dropped it, a refresh landed mid-edit. Submitting the rename calls the
+*diagram* rename API with the folder's id. Nothing happens, and nothing says so:
+the row shows the new name until the next refresh, and no error is raised.
+
+**Root cause:** `handleRenameSubmit` decides which API to call from a lookup
+against possibly-stale hook state rather than from the node arborist handed it:
+`const isFolder = tree.folders.some((f) => f.id === id);`. `onRename` receives
+the node (with its `type`), and the composed row carries `type` too; neither is
+consulted. A miss falls through to `renameDiagram`, and a provider that no-ops
+on an unknown id (rather than throwing) never reaches the `catch` that would
+show "Rename failed" and refresh the row back.
+
+Measured: after the folder is dropped from the listing, the submit produces
+`renameDiagram(f1,Renamed)`, no `renameFolder`, and an empty notification queue.
+
+**Workaround:** refresh the tree and rename again.
+
+**Status:** Open. Fix direction: take the type from the node `onRename` provides
+(fall back to the composed row), and treat an unresolvable id as an error rather
+than a diagram. Repro:
+[`fileexplorer-fex-08-to-12.explore.test.tsx`](packages/axoview-app/src/__explore__/A4/fileexplorer-fex-08-to-12.explore.test.tsx).
+
+## A tree operation whose place cannot be resolved is executed against the session place
+
+**Found by:** exploratory campaign A4/FEX-12
+
+**Symptom:** Two shapes, one cause. (a) Rename a Google Drive diagram while the
+token lapses (`AUTHENTICATED` to `RECONNECTING`): the Drive rows are cleared,
+and the submit is sent to the *session* provider instead — a Drive operation
+executed against local storage, silently doing nothing. (b) If one id ever
+exists in both places, every id-routed operation resolves to Drive, including
+one started from the session row.
+
+**Root cause:** `placeOfId` is a `Map<string, PlaceId>` built by writing session
+ids first and Drive ids second, so a shared id resolves to Drive (last
+`Map.set` wins), and consumers read it with a default:
+`const placeId = placeOfId.get(id) ?? 'local';`. An id that is *unknown* —
+because its place's tree was cleared by the `enabled` gate mid-operation — is
+therefore assumed to be session work. `placeOf(node)` (which prefers the node's
+own stamped `placeId`) exists and is used elsewhere, but `handleRenameSubmit`
+has only an id.
+
+Measured: with the Drive tree gated off mid-rename, the session provider logs
+`renameDiagram(gd1,Renamed)` and the Drive provider logs nothing; with one id
+in both places, the Drive copy is renamed and the session copy is untouched.
+
+**Workaround:** wait for the tree to finish reconnecting before renaming.
+
+**Status:** Open. Fix direction: pass the node (or its `placeId`) through the
+rename/delete/move paths instead of re-deriving from an id, and treat an
+unresolvable id as an error rather than defaulting to a place. Duplicate ids
+across places should be detected during composition (the model-side sibling is
+CLIP-01). Repro:
+[`fileexplorer-fex-08-to-12.explore.test.tsx`](packages/axoview-app/src/__explore__/A4/fileexplorer-fex-08-to-12.explore.test.tsx).
+
+## A failed rename is rolled back in the tree only — the open diagram keeps the name that was never saved
+
+**Found by:** exploratory campaign A4/FEX-16
+
+**Symptom:** Rename the diagram that is currently open and let the rename fail
+(offline, Drive 403). The toast says "Rename failed" and the tree row reverts to
+the stored name — but the app title and the in-memory model keep the new name.
+The diagram is now titled one thing on the canvas and another in storage, and
+the next save writes the name the user was told did not stick.
+
+**Root cause:** `handleRenameSubmit` performs two optimistic updates before the
+await — `tree.optimisticRename(id, trimmed)` and
+`notifyDiagramRenamedFromTree(id, trimmed)` — and the `catch` undoes only the
+first (`tree.refresh()`). `notifyDiagramRenamedFromTree` is not a display-only
+update: it calls `setDiagramName`, `setCurrentDiagram`, and reloads the model
+with `title: trimmed` (`DiagramLifecycleProvider.tsx`), so the failed name is
+now in the model that the next autosave persists.
+
+Measured: with `renameDiagram` rejecting, the tree row is back to `Original`,
+the error toast is present, and the only lifecycle notification is
+`notifyDiagramRenamedFromTree(d1,New name)` — never re-notified with the stored
+name.
+
+**Workaround:** reload the diagram after a failed rename.
+
+**Status:** Open. Fix direction: notify the lifecycle after the storage call
+succeeds, or re-notify with the stored name in the `catch` (the same
+single-owner-per-value problem as the A1 title cluster). Repro:
+[`fileexplorer-fex-08-to-12.explore.test.tsx`](packages/axoview-app/src/__explore__/A4/fileexplorer-fex-08-to-12.explore.test.tsx).
+
+## Moving a diagram to Drive copies the last SAVED blob, so edits made while it moves are deleted with the source
+
+**Found by:** exploratory campaign A4/FEX-13
+
+**Symptom:** Drag the open diagram onto the Google Drive section (or use "Move
+to Google Drive"). The move flushes first, so edits made before it are safe —
+but anything typed *while* the move runs is lost without a word. The move ends
+with a success toast and the diagram reopened from Drive, missing the last few
+seconds of work. The session copy that held it has been deleted.
+
+**Root cause:** `handleMoveToDrive` awaits `saveAllDirty()` and then calls
+`moveDiagramsToDrive`, which reads `opts.source.loadDiagram(meta.id)` — the
+*persisted* blob — creates the Drive file from it, and then
+`opts.source.deleteDiagram(meta.id, false)`. Between the flush and the read sit
+at least two Drive listings and, on the first item, root resolution; the delete
+is later still. Nothing re-checks dirtiness before the source is removed, and
+the in-memory model is not consulted at all.
+
+Measured: with an edit landing during the Drive listing, the Drive copy holds
+the pre-move flush, the later edit is still only in memory, and the source row
+is gone (`notifyDiagramDeletedFromTree` then `openDiagramById` on the Drive id).
+
+**Workaround:** stop editing until the move finishes.
+
+**Status:** Open. Fix direction: re-flush (or refuse) immediately before the
+source delete, and prefer the in-memory model over the persisted blob for the
+diagram that is currently open. The bulk path (`MigrateSessionDialog`) has the
+same shape for every item after the first. Repro:
+[`movetodrive-fex-13-14.explore.test.tsx`](packages/axoview-app/src/__explore__/A4/movetodrive-fex-13-14.explore.test.tsx).
+
+## The Drive section can keep showing "Finish Google Drive setup…" after the root is configured
+
+**Found by:** exploratory campaign A4/FEX-14
+
+**Symptom:** The Drive section shows the "Finish Google Drive setup…" row over a
+place that is actually ready — its diagrams are not listed, and dragging into
+Drive stays blocked — until something unrelated re-renders the explorer.
+Reachable whenever the root becomes ready by a route other than the first-connect
+dialog's Confirm: another tab configuring it, or `ensureRoot()` creating it
+during a write.
+
+**Root cause:** `driveRootMissing` in `FileExplorer.tsx` is derived during render
+from `(driveProvider as GoogleDriveProvider)?.getCachedRootId?.()` — a
+synchronous read of a value owned by an async probe, with no subscription. The
+explorer does not listen for `axoview-drive-root-ready` (only
+`MigrateSessionDialog` does), so the row clears only when a re-render happens
+for another reason. `DriveSetupGate.handleConfirm` calls `refreshFileTree()`
+right after dispatching the event, which is what hides this on the common path;
+the gate's other dispatch site (`hasConfiguredRoot()` resolving true) does not.
+
+Measured: with the tree loaded and no cached root, the Drive section renders
+exactly one `placeState:setup` row and `disableDrop` refuses a session→Drive
+drag; after the root id appears and `axoview-drive-root-ready` fires, the row is
+unchanged — and a refresh-token bump alone (no new Drive data) clears it.
+
+**Workaround:** collapse/expand or refresh the file explorer.
+
+**Status:** Open. Fix direction: make the root id reactive — subscribe to
+`axoview-drive-root-ready` in the explorer (or hold the root id in state
+alongside `driveTree.status`) rather than reading a cache during render.
+Repro:
+[`movetodrive-fex-13-14.explore.test.tsx`](packages/axoview-app/src/__explore__/A4/movetodrive-fex-13-14.explore.test.tsx).
+
+## One transient listing failure permanently consumes the "move session diagrams to Drive" offer
+
+**Found by:** exploratory campaign A4/FEX-15
+
+**Symptom:** Sign in to Google with session-only diagrams open. If the session
+listing hiccups at that moment, the migration dialog never appears — and never
+appears again for the rest of the session, however long it stays signed in. The
+diagrams it exists to rescue stay session-only until the tab closes and they are
+gone.
+
+**Root cause:** `MigrateSessionDialog`'s auth effect sets
+`offeredThisGrantRef.current = true` and `pendingOfferRef.current = true`, then
+calls `tryAutoOffer()`, which clears `pendingOfferRef` *before* its first await
+and then calls `enumerateSession()`. `enumerateSession` catches every failure
+and returns `[]`, which the caller cannot distinguish from "nothing to move", so
+it returns silently. Both refs are now spent: the `axoview-drive-root-ready`
+listener finds `pendingOfferRef` false, and `offeredThisGrantRef` is reset only
+on `UNAUTHENTICATED` / `SESSION_EXPIRED`.
+
+Measured: with `listDiagrams` rejecting once at the moment of the grant, the
+dialog never opens; after storage recovers and the root-ready event fires again,
+there is still no dialog and no second enumeration attempt.
+
+The other half of the hypothesis — the offer firing *twice* — does not
+reproduce: `pendingOfferRef` is cleared synchronously before the first await, so
+every later caller returns at the first line (probe `FEX-15a`).
+
+**Workaround:** open it by hand from the avatar menu / session section header
+("Move to Drive"), which goes through the `axoview-open-migrate` path.
+
+**Status:** Open. Fix direction: consume the one-per-grant offer only after the
+dialog actually opens — let `enumerateSession` distinguish failure from empty
+and leave both refs armed on failure. Repro:
+[`migrate-fex-15.explore.test.tsx`](packages/axoview-app/src/__explore__/A4/migrate-fex-15.explore.test.tsx).
