@@ -5,7 +5,7 @@
 > - [docs/exploratory/DECISIONS.md](../exploratory/DECISIONS.md) — the 22 owner rulings this plan implements (incl. the ADR amendments each ruling names)
 > - [docs/exploratory/LEDGER.md](../exploratory/LEDGER.md) — per-area bug counts; [known_issues.md](../../known_issues.md) — the 172 filed entries (`Found by: exploratory campaign <ID>`)
 >
-> **Status:** Not started · **Owner:** molikas · **Last updated:** 2026-07-30
+> **Status:** Wave 0 done (campaign closed, branch cut) · **Owner:** molikas · **Last updated:** 2026-07-30
 >
 > This is a **short-lived working doc.** Delete it after the work merges; ADRs are the durable record. PLAN.md gets a one-line entry referencing ADR 0047 once shipped — see "Wrap-up" below.
 
@@ -50,12 +50,23 @@ Fix **every** bug the 2026-07 exploratory campaign filed (220 + whatever A4/A5 c
 
 Per-wave working method: `grep "Found by:.*exploratory campaign" known_issues.md`, filter to the wave's ID prefixes, cluster by root cause, fix cluster-by-cluster. A wave is DONE when every one of its entries is `Fixed`-annotated, every probe is promoted, its class gates are green in CI, and `npm run test:regression` passes.
 
-### Wave 0 — Close the campaign, land the branch
-- [ ] A4: resolve FEX-08..15 (all inside `FileExplorer.tsx`; handoff note + rig pointers in the area file).
-- [ ] A5: full wave, ≥10 counted (app chrome/boot/i18n/storage hygiene; overlap-dedupe against S1 per the area file note).
-- [ ] Owner triage of any new SUSPECTs (same industry-analysis format as the 2026-07-30 review).
-- [ ] LEDGER all-DONE; run the cross-area mop-up pass (APPROACH §8) — one hypothesis per uncrossed area pair that looks suspicious.
-- [ ] Cut `remediation/exploratory-campaign` from `master`, then land `explore/campaign` into it (docs + quarantined probes + 3-line configs; verify quarantine with `--listTests` before merge). Do **not** touch `integration` — MCP POC in flight there.
+### Wave 0 — Close the campaign, land the branch ✅ 2026-07-30
+
+- [x] A4: resolved FEX-08..15 — **all eight are bugs**, plus FEX-16 by anomaly capture. Area closed at 16/10, 15 bugs. Probed through the real `FileExplorer` with a react-arborist capture stub (`__explore__/A4/harness.tsx` + `arboristStub.tsx`); its header records the two rig traps this cost.
+- [x] A5: closed at 12/10 — 10 bugs, 1 SUSPECT (CHR-08), 1 FALSIFIED (CHR-12). Scoped away from the auth seams (S1/S3 own them) onto the surfaces with zero tests: the quota-full storage escape hatch, boot utilities, deployment sniffing, locale catalogues.
+- [x] LEDGER all-DONE (27/27) and the cross-area mop-up wave run: **MOP-01** (a copied diagram carries the original's `shareUuid` — A4 × A3 × S2) and **MOP-02** (S2/SHARE-06 and A4/FEX-02 contradicted each other; the SHARE-06 entry now carries the correction). Seven other pairs examined and found already crossed — listed in the LEDGER.
+- [x] Cut `remediation/exploratory-campaign` from `master` and landed `explore/campaign` into it (merge `9fa70364`). `integration` untouched. Quarantine re-verified on the merge result with `--listTests`: app 26 / lib 155 / backend 7 / worker 4 suites and Playwright 178 tests in 75 files, **zero** exploratory files in any. Default suites green and unchanged (app 268 tests, lib 1738).
+- [ ] **Owner triage of the one new SUSPECT — A5/CHR-08** (which origin a share link should be anchored to). Analysis, industry practice, three options and a recommendation are in the A5 area file's product-questions section; ruling pending. This is the only Wave 0 item still open, and it gates nothing before Wave 2's share cluster.
+
+**Campaign totals after Wave 0:** 385 counted hypotheses, **240 bugs**, 22 product
+questions, 190 filed known_issues entries. The wave counts below were written
+against the pre-close-out numbers — Wave 4 now also carries A4's nine new
+FileExplorer bugs and A5's ten, and Wave 2's share cluster carries MOP-01.
+
+*Note: `npm run test:regression`'s e2e half was not re-run for this wave — Wave 0
+lands documentation, quarantined probes and the three config lines only, and the
+quarantine check above proves none of it reaches the regression suites. It runs
+for the first product-code wave.*
 
 ### Wave 1 — Data integrity 🔴 (E1/E3/E4 + A1/A2 clusters, ~86 filed bugs)
 - [ ] **Autosave/save cluster (A1):** flush-not-cancel on unmount/disable/reset; failed saves count as unsaved work in both `beforeunload` guards; un-stale the Retry gate. (Thread A-b/A-c in the area files.)
