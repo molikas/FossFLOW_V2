@@ -5750,3 +5750,351 @@ the canvas. Only the last-opened diagram escapes, because
 storage provider (as `openDiagramById` does) and use the list entry only for the
 name/timestamps. Repro:
 [`readonly-rename-life-11-12-15.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/readonly-rename-life-11-12-15.explore.test.tsx).
+
+## A project ZIP whose folders form a loop freezes the app
+
+**Found by:** exploratory campaign A3/ZIP-01
+
+**Symptom:** Importing a project ZIP whose manifest describes a folder that is
+(directly or transitively) its own parent hangs the tab — no error, no progress,
+no way out but closing it. The anti-zip-bomb caps do not help: the archive can be
+a few hundred bytes.
+
+**Root cause:** `importProject` orders folders by climbing the parent chain with
+no visited set:
+
+    const depthIn = (f: FolderMeta): number => {
+      let n = 0; let cur = f;
+      while (cur && cur.parentId) {
+        const next = rewritten.folders.find((x) => x.id === cur!.parentId);
+        if (!next) break;
+        cur = next; n++;
+      }
+      return n;
+    };
+
+With `A.parent = B` and `B.parent = A` the `while` never terminates.
+`wipeWorkspace`'s `depth` helper has the identical shape. The same file already
+knows the fix — `collectFolderSubtree` (the export side) carries a
+`seen` set precisely to survive this — and `rewriteIds` maps parents through
+`idMap` with no walk at all, so it terminates on the same input. Nothing between
+`parseProject` and the walk validates acyclicity: `validateFolderIds` checks the
+id characters only.
+
+Measured by capping `Array.prototype.find` (the walk calls it once per step, and
+a jest timeout cannot help because the loop never yields): an acyclic two-folder
+manifest completes in under 100 calls, the cyclic one is still going at 10 000.
+
+**Workaround:** none from inside the app.
+
+**Status:** Open. Fix direction: add the `seen` set both walks are missing, or
+validate the folder graph in `parseProject` and reject with a domain error.
+Repro: [`zip-01-to-15.explore.test.ts`](packages/axoview-app/src/__explore__/A3/zip-01-to-15.explore.test.ts).
+
+## Importing part of a project leaves its cross-diagram links pointing nowhere
+
+**Found by:** exploratory campaign A3/ZIP-02
+
+**Symptom:** Export a single folder (or a single diagram) and import it
+somewhere else. Any node in it that linked to a diagram left behind still
+carries the *source workspace's* id, so the link is dead — and nothing in the
+import result or the UI mentions it.
+
+**Root cause:** `rewriteRefsInModel` rewrites a reference only when the id is in
+the map it built from this archive's manifest:
+
+    if (k === 'link' && typeof v === 'string' && idMap.has(v)) { out[k] = idMap.get(v); }
+    else { out[k] = rewriteRefsInModel(v, idMap); }
+
+A folder- or diagram-scope export cannot contain every diagram the models point
+at, so `idMap.has(v)` is false for exactly those and the old id is copied
+through untouched. `importProject` returns `{ folderCount, diagramCount }` and
+nothing else, so there is no channel for "3 references could not be resolved".
+Measured with an in-archive control that IS rewritten, so the rewrite pass is
+demonstrably running.
+
+Worth noting for anyone extending this: `modelItems.link` is the only schema
+field that can hold a diagram id — `textBox` has no link field and
+`headerLink` is a plain URL — so the rewrite list is complete as far as diagram
+references go. The hole is scope, not coverage.
+
+**Workaround:** export whole projects rather than subtrees when links cross
+folders; re-point the links by hand after a partial import.
+
+**Status:** Open. Fix direction: drop an unresolvable `link` (a dead link is
+worse than none) and return the count so the importer can say so.
+Repro: [`zip-01-to-15.explore.test.ts`](packages/axoview-app/src/__explore__/A3/zip-01-to-15.explore.test.ts).
+
+## A failed "replace everything" import destroys part of the workspace and imports nothing
+
+**Found by:** exploratory campaign A3/ZIP-03
+
+**Symptom:** The import dialog's "replace all" (the destination that needs
+`replace` typed to confirm) wipes the workspace first. If any single delete
+fails part-way through — a network blip on the server backend, a Drive
+permission error — the import aborts, and the user is left with neither their old
+workspace nor the new one: whatever was deleted before the failure is gone.
+
+**Root cause:** `wipeWorkspace` is a plain sequential loop with no snapshot and
+no rollback, and `importProject` runs it before anything else:
+
+    if (opts.destination.kind === 'replaceAll') { await wipeWorkspace(storage); }
+    …
+    for (const d of diagrams) await storage.deleteDiagram(d.id, false);
+
+A throw propagates straight out of `importProject`. Measured with the second
+`deleteDiagram` failing: one diagram gone, two plus the folder still there,
+`createDiagram` never called. The module already models the all-or-nothing
+principle elsewhere — its own test suite asserts "a failed parse does not modify
+storage" — but only for failures before the wipe.
+
+**Workaround:** export a project ZIP before using "replace all".
+
+**Status:** Open. Fix direction: import first into a staging destination and
+delete the old content only once every create has succeeded; failing that, catch
+per item and report what was lost. Repro:
+[`zip-01-to-15.explore.test.ts`](packages/axoview-app/src/__explore__/A3/zip-01-to-15.explore.test.ts).
+
+## The import success message counts diagrams that were not imported
+
+**Found by:** exploratory campaign A3/ZIP-05
+
+**Symptom:** After importing a project ZIP the toast reports how many diagrams
+the archive *claimed*, not how many arrived. A ZIP with an entry whose diagram
+file is literally `null` reports one more than exists.
+
+**Root cause:** `importProject` skips such entries —
+
+    const rawModel = rewritten.models.get(d.newId);
+    if (rawModel == null) continue;
+
+— and returns the true `diagramCount`. `App.tsx` discards that return value and
+builds the message from the manifest instead:
+
+    await importProject({ storage }, parsed, { destination: { kind: 'root' } });
+    …
+    message: buildZipImportSummary(parsed.manifest.diagrams.length, parsed.manifest.folders.length)
+
+Measured with a three-entry manifest (`null` / `42` / valid):
+`diagramCount` is 2, the manifest length is 3, and the user is told 3. See also
+A3/ZIP-15 — the `42` entry is the one that *does* get counted, as a blank
+diagram.
+
+**Workaround:** check the file tree against the number in the toast.
+
+**Status:** Open. Fix direction: build the message from `importProject`'s return
+value (it is already correct) and say something when the two disagree. Repro:
+[`zip-01-to-15.explore.test.ts`](packages/axoview-app/src/__explore__/A3/zip-01-to-15.explore.test.ts).
+
+## A JSON file can file itself into a folder that does not exist
+
+**Found by:** exploratory campaign A3/ZIP-06
+
+**Symptom:** Importing a single `.json` diagram that happens to carry a
+`folderId` field (one exported from another workspace, or hand-edited) creates a
+diagram the file tree never shows. It counts against the storage budget and
+appears in listings, but it is in no folder the tree knows about.
+
+**Root cause:** both single-JSON call sites spread the untrusted file straight
+into the create:
+
+    const blob = isPersistedDiagramBlob(data) ? data : {};
+    const newId = await storage.createDiagram({ ...blob, name, title: name }, null);
+
+`isPersistedDiagramBlob` is a shape check, not a field whitelist, so
+`folderId` (and `id`, and `deletedAt`) ride along.
+`LocalStorageProvider.sessionSaveDiagram` then prefers the blob's value over the
+caller's:
+`const folderId = blob.folderId !== undefined ? blob.folderId : existing?.folderId ?? null`
+— so the explicit `null` destination loses. The ZIP importer strips the blob's
+`id` for exactly this class of reason, with a comment about the 409 it once
+caused; this path strips nothing. End state is the same orphan as A2/STOR-03.
+
+Measured against the real provider, with a control showing the same call lands at
+the root when the field is absent.
+
+**Workaround:** delete `folderId` from the file before importing it.
+
+**Status:** Open. Fix direction: whitelist the model fields on the way in
+(the create's destination argument should win), which also closes `id` and
+`deletedAt`. Repro: [`json-import-zip-06-09.explore.test.ts`](packages/axoview-app/src/__explore__/A3/json-import-zip-06-09.explore.test.ts).
+
+## Exporting and re-importing a project brings deleted diagrams back
+
+**Found by:** exploratory campaign A3/ZIP-07
+
+**Symptom:** Delete a diagram, export the project, import it again (into this or
+another workspace): the deleted diagram is back in the tree as a normal
+diagram.
+
+**Root cause:** the UI's delete is a *soft* delete (`deletedAt`, recoverable from
+the trash), and nothing on the export path filters it. `exportProject` walks
+`storage.listDiagrams()`, which returns trashed rows, and writes each one's model
+into the archive; `importProject` then creates every manifest entry as a live
+diagram. `deletedAt` is carried in the manifest and used by nothing.
+
+Measured end to end through a real ZIP: a soft-deleted diagram appears in
+`parsed.manifest.diagrams`, and after `importProject` its copy has no
+`deletedAt`.
+
+**Workaround:** empty the trash before exporting.
+
+**Status:** Open. Fix direction: decide whether the trash is part of a project
+export (defensible either way) and make export and import agree — either filter
+`deletedAt` rows out, or carry the flag through the import.
+Repro: [`zip-01-to-15.explore.test.ts`](packages/axoview-app/src/__explore__/A3/zip-01-to-15.explore.test.ts).
+
+## Every import failure shows the same message, and one of them is wrong
+
+**Found by:** exploratory campaign A3/ZIP-08
+
+**Symptom:** Whatever goes wrong with an import — a non-ZIP file, a ZIP with no
+manifest, an archive over the size cap, a valid archive missing one of its
+diagram files, or a project exported by a genuinely newer Axoview — the dialog
+says the same thing: *"This file isn't a valid Axoview diagram. Make sure it's a
+.json or .zip exported from Axoview."* For most of those causes that sentence is
+false and points the user at the wrong fix.
+
+**Root cause:** `projectZip.ts` classifies carefully — nine
+`ProjectZipError` codes (`BAD_ZIP`, `NO_MANIFEST`, `BAD_MANIFEST`,
+`BAD_FORMAT`, `UNSUPPORTED_VERSION`, `MISSING_DIAGRAM`, `BAD_DIAGRAM`,
+`TOO_LARGE`, `BAD_ID`), several with messages written for the user (Google's own
+wording is even threaded through elsewhere in the codebase for the same reason).
+None of it survives the caller. `App.tsx` does
+`console.error('handleDirectImportFile failed:', err); setImportError(true)` and
+`ImportErrorDialog`'s props are `{ open, onDismiss }` — no error, no code, a
+constant body string. `err.code` is read nowhere in the app.
+
+Compounding it, a manifest with **no** `version` at all is classified as
+`UNSUPPORTED_VERSION` ("exported by a newer Axoview (version undefined); please
+upgrade") because `SUPPORTED_VERSIONS.has(undefined)` is false — so a merely
+corrupt manifest, if its message were shown, would tell the user to upgrade an
+already-current app.
+
+This is thread S-d from the share/backend block: a typed failure is only as good
+as what the caller does with it.
+
+**Workaround:** none — the cause is not recoverable from the UI.
+
+**Status:** Open. Fix direction: pass the error into `ImportErrorDialog` and map
+the codes to distinct copy (at minimum: not-an-Axoview-file, too large,
+incomplete archive, newer version), and reclassify a missing/non-string
+`version` as `BAD_MANIFEST`. Repro:
+[`zip-01-to-15.explore.test.ts`](packages/axoview-app/src/__explore__/A3/zip-01-to-15.explore.test.ts).
+
+## Folder ordering never survives an export/import round trip
+
+**Found by:** exploratory campaign A3/ZIP-10
+
+**Symptom:** Import a project ZIP and the folder ordering the user arranged is
+gone — folders come back in whatever order the tree derives by default. The
+ordering *is* in the archive; it is read and then dropped.
+
+**Root cause:** `exportProject` writes `tree-manifest.json` and `parseProject`
+surfaces it as `ParsedProject.treeManifest` — but `importProject` never
+references `parsed.treeManifest` and never calls `storage.saveTreeManifest`.
+ADR 0001 lists the file as part of the format. Separately, the export does not
+scope it: a single-*diagram* export (an archive with zero folders) still embeds
+the entire workspace's folder ordering.
+
+Measured: a diagram-scope ZIP whose `manifest.folders` is `[]` carries
+`treeManifest: { folders: [{ id, order: 7 }] }`, and after import the destination
+still has its empty default.
+
+**Workaround:** re-order folders by hand after importing.
+
+**Status:** Open. Fix direction: apply the tree manifest on import, remapping its
+folder ids through the importer's `idMap`, and filter it to the exported scope on
+the way out. Repro: [`zip-01-to-15.explore.test.ts`](packages/axoview-app/src/__explore__/A3/zip-01-to-15.explore.test.ts).
+
+## One unreadable diagram aborts the whole project export
+
+**Found by:** exploratory campaign A3/ZIP-11
+
+**Symptom:** If any single diagram cannot be read while a project ZIP is being
+built — a 404 mid-listing on Drive, a corrupt session blob, a permission error —
+the export fails outright and no archive is produced. For a gesture whose entire
+purpose is "get my work out", losing everything because of one bad row is the
+worst available outcome.
+
+**Root cause:** the per-diagram read is unguarded while the optional read beside
+it is explicitly best-effort — the same function, two policies:
+
+    for (const meta of diagrams) {
+      const model = await storage.loadDiagram(meta.id);   // any throw ends the export
+      …
+    }
+    try { const treeManifest = await storage.getTreeManifest(); … }
+    catch { /* Tree manifest is best-effort — failure must not block export. */ }
+
+Measured with both halves in one test: a failing `loadDiagram` rejects
+`exportProject`, a failing `getTreeManifest` still yields a ZIP.
+
+**Workaround:** export a narrower scope (a folder or a single diagram) to route
+around the unreadable one.
+
+**Status:** Open. Fix direction: skip the failures, record them in the manifest
+or the return value, and let the dialog report "exported 41 of 42". Repro:
+[`zip-01-to-15.explore.test.ts`](packages/axoview-app/src/__explore__/A3/zip-01-to-15.explore.test.ts).
+
+## Importing renames a diagram back to a stale title
+
+**Found by:** exploratory campaign A3/ZIP-13
+
+**Symptom:** A diagram renamed from the toolbar (or any Drive diagram, where the
+file name and the stored title are separate things) comes back from an
+export/import round trip under its old name. The manifest recorded the right one.
+
+**Root cause:** `importProject` creates from the model alone and passes no name:
+
+    await storage.createDiagram(model, folderId);
+
+so the provider falls back to the blob (`blob.name ?? blob.title`), while
+`manifest.diagrams[].name` — the listing name, which is what the user sees and
+what the export correctly captured — is used for nothing. Any workspace where
+the listing name and the blob title disagree loses the listing name on import.
+A1/LIFE-12 is one way to reach that state from the toolbar; on Drive it is the
+normal state, because the file name lives on the Drive file and the title lives
+inside the blob.
+
+Measured end to end: exported with `manifest.diagrams[0].name === 'Name The User
+Sees'`, imported as `'Old Title'`.
+
+**Workaround:** rename from the file explorer (which syncs both) before
+exporting.
+
+**Status:** Open. Fix direction: pass the manifest name into the create (or
+rename right after it), so the import preserves what the export recorded.
+Repro: [`zip-01-to-15.explore.test.ts`](packages/axoview-app/src/__explore__/A3/zip-01-to-15.explore.test.ts).
+
+## A corrupt diagram entry imports as a blank diagram and counts as a success
+
+**Found by:** exploratory campaign A3/ZIP-15
+
+**Symptom:** A project ZIP whose diagram file contains valid JSON that is not an
+object (`42`, `"text"`, `[]`) imports as an empty untitled diagram, counted as
+imported, with no warning. Three kinds of broken entry get three different
+outcomes and only one of them is reported.
+
+**Root cause:** `importProject` normalises a non-object model to an object and
+then spreads it:
+
+    const { id: _strippedId, ...model } =
+      rawModel && typeof rawModel === 'object'
+        ? (rawModel as Record<string, unknown>)
+        : { id: undefined };
+    await storage.createDiagram(model, folderId);
+
+For `42` that destructure yields `{}`, so a blank diagram is created and
+`diagramCount` is incremented. Compare the other two cases: unparseable JSON is
+correctly rejected up front (`BAD_DIAGRAM`), and a `null` model is silently
+skipped by `if (rawModel == null) continue` (see A3/ZIP-05 for the resulting
+overcount). Measured with all three in one manifest: two diagrams created, named
+`Good one` and `Untitled Diagram`, the latter with `data === {}`.
+
+**Workaround:** none — the blank diagram has to be deleted by hand.
+
+**Status:** Open. Fix direction: validate each diagram entry as an object during
+`parseProject` and reject with `BAD_DIAGRAM`, so all three cases take the one
+path that already exists. Repro:
+[`zip-01-to-15.explore.test.ts`](packages/axoview-app/src/__explore__/A3/zip-01-to-15.explore.test.ts).
