@@ -38,8 +38,7 @@ This file is the campaign's resume point. Update the row (and the area file) **a
 
 All 27 areas DONE, plus the cross-area mop-up wave. **385 counted hypotheses**
 (383 area rows + 2 mop-up), **240 confirmed bugs**, **22 product questions**
-(21 ruled on 2026-07-30 in [DECISIONS.md](DECISIONS.md); A5/CHR-08 raised at
-close-out and pending), **190 known_issues entries** tagged
+(all 22 ruled on 2026-07-30 — see [DECISIONS.md](DECISIONS.md)), **190 known_issues entries** tagged
 `Found by: exploratory campaign <ID>`, every one carrying a committed
 `test.fail()` / `it.failing` repro in the quarantined lane.
 
@@ -142,7 +141,7 @@ Pairs examined and found already crossed (no new hypothesis proposed):
 
 ## Product questions (owner triage) — CLOSED
 
-All 21 questions were reviewed with the owner on **2026-07-30** and closed; every ruling, with its industry basis and the implied work items, is in [DECISIONS.md](DECISIONS.md), and each area file carries its closure line in place. SEL-12 had already been closed in-wave (2026-07-29, by design). One ruling went **against** the cheap recommendation: GPU-13 — real cross-type depth will be built (renderer restructure; ADR 0038 design pass before any code). Implementation of all rulings is intentionally unscheduled — the campaign records decisions, a fix wave schedules them.
+All 22 questions (21 in the owner review, plus A5/CHR-08 raised and ruled at the close-out) were reviewed with the owner on **2026-07-30** and closed; every ruling, with its industry basis and the implied work items, is in [DECISIONS.md](DECISIONS.md), and each area file carries its closure line in place. SEL-12 had already been closed in-wave (2026-07-29, by design). One ruling went **against** the cheap recommendation: GPU-13 — real cross-type depth will be built (renderer restructure; ADR 0038 design pass before any code). Implementation of all rulings is intentionally unscheduled — the campaign records decisions, a fix wave schedules them.
 
 ## Bugs filed
 

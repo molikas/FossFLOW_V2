@@ -1,6 +1,6 @@
 # Owner decisions — campaign SUSPECT verdicts
 
-**Decided:** 2026-07-30, owner review of all 21 open product questions (SEL-12 was closed 2026-07-29 in-wave). Each was presented with how the industry handles the case and which option is most consistent with contracts Axoview already established; the owner's ruling is final unless a row says otherwise. **This file records decisions, not implementations** — nothing below is built yet; see "Implied work items".
+**Decided:** 2026-07-30, owner review of all 21 open product questions (SEL-12 was closed 2026-07-29 in-wave). **A5/CHR-08 was added and ruled on the same day**, at the campaign close-out (remediation Wave 0) — it is the 22nd row. Each was presented with how the industry handles the case and which option is most consistent with contracts Axoview already established; the owner's ruling is final unless a row says otherwise. **This file records decisions, not implementations** — nothing below is built yet; see "Implied work items".
 
 ## Rulings
 
@@ -27,10 +27,11 @@
 | SHARE-10 | **Keep reads + allow revoke** — `GET /api/public/diagrams/:uuid` stays exempt from `ENABLE_SERVER_STORAGE=false`, and `DELETE /api/diagrams/:id/share` becomes exempt alongside it, so revocation is always reachable. Document the pair in `docs/deployment.md`. | Published artifacts surviving an API kill-switch is normal (S3/Pages/publish-to-web); unpublish must always remain reachable. The pair moves together. |
 | AUTH-13 | **Require email in the hint** — a profile hint is valid only with non-empty `name` AND `email`; otherwise drop it and render the never-signed-in control. Also stop persisting empty-email profiles at the `fetchUserInfo` write site. | OIDC practice: no silent auth without a usable `login_hint`; never show a "remembered" account that can neither be displayed nor reconnected. |
 | VIEW-08 | **Viewer session-only** — one shared `canvasMode` key; `/display` reads it as the default but its toggle no longer persists. Editor persistence unchanged; no migration. features.md wording corrected as part of the change. | Viewer-context settings don't reconfigure the authoring environment (Figma prototype viewer, playback prefs, presenter toggles). |
+| CHR-08 | **Optional public base + page-origin fallback** — add an optional public base URL to the runtime config `useRuntimeConfig` already fetches; `appDisplayBase()` uses it when set and falls back to `window.location.origin` otherwise. Both link builders (public-snapshot `shareUrl.ts`, Drive `driveSharing.ts`) inherit it. No behaviour change for single-origin deployments. | Standard for products that mint shareable links (GitLab `external_url`, Grafana `root_url`, Sentry `system.url-prefix`, Discourse `hostname`): resolve against configured base, fall back to the request/page origin. Keeps the fix that made page-origin win over the backend-derived host, and stops preview/staging/LAN origins leaking into durable links. |
 
 ## Implied work items (not yet scheduled)
 
 - **Large:** GPU-13 cross-type depth (renderer restructure, ADR 0038 amendment first). HIST-10 page-stamped history entries (touches both stores' entry shape).
 - **Medium:** STYL-02+08 strip derivation rework (lands with filed STYL-01/06 fixes); ZIP-09 import-flow unification; TXT-07 Label lifecycle; VIEW-13 (rides the VIEW-07 op-log fix); RED-13 confirm dialog; RND-14 cull bypass; PROJ-07 re-projection.
-- **Small:** SEL-15, TCH-06 (with TCH-14), STOR-11, HIST-08, STYL-03, PROJ-06, DRV-05, AUTH-13, SHARE-10 (route flag + deployment.md), VIEW-08.
+- **Small:** SEL-15, TCH-06 (with TCH-14), STOR-11, HIST-08, STYL-03, PROJ-06, DRV-05, AUTH-13, SHARE-10 (route flag + deployment.md), VIEW-08, CHR-08 (runtime-config key + `appDisplayBase()` fallback; rides Wave 2's share cluster, and `docs/deployment.md` documents the key).
 - **Docs/ADR only:** HIST-15 (document the cap). ADR amendments folded into their items: 0006 (SEL-15), 0009/0010 (SHARE-10), 0023 (PROJ-07), 0038 (GPU-13), 0039 (STYL-03).

@@ -120,4 +120,6 @@ non-canonical (localhost / bare IP / preview pattern).
 **Recommendation:** (b), with (a)'s documentation. Cheap, matches practice, and
 leaves the default behaviour intact for every deployment that is already correct.
 
-**Owner ruling:** *pending — raised at the 2026-07-30 campaign close-out.*
+**Owner ruling (2026-07-30):** **(b) — optional public base with page-origin
+fallback.** Recorded in [DECISIONS.md](../DECISIONS.md); implementation rides
+Wave 2's share cluster, and `docs/deployment.md` documents the new key.

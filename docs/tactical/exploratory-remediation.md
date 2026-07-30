@@ -5,7 +5,7 @@
 > - [docs/exploratory/DECISIONS.md](../exploratory/DECISIONS.md) — the 22 owner rulings this plan implements (incl. the ADR amendments each ruling names)
 > - [docs/exploratory/LEDGER.md](../exploratory/LEDGER.md) — per-area bug counts; [known_issues.md](../../known_issues.md) — the 172 filed entries (`Found by: exploratory campaign <ID>`)
 >
-> **Status:** Wave 0 done (campaign closed, branch cut) · **Owner:** molikas · **Last updated:** 2026-07-30
+> **Status:** Wave 0 COMPLETE (campaign closed, 22 rulings, branch cut) · **Owner:** molikas · **Last updated:** 2026-07-30
 >
 > This is a **short-lived working doc.** Delete it after the work merges; ADRs are the durable record. PLAN.md gets a one-line entry referencing ADR 0047 once shipped — see "Wrap-up" below.
 
@@ -56,7 +56,7 @@ Per-wave working method: `grep "Found by:.*exploratory campaign" known_issues.md
 - [x] A5: closed at 12/10 — 10 bugs, 1 SUSPECT (CHR-08), 1 FALSIFIED (CHR-12). Scoped away from the auth seams (S1/S3 own them) onto the surfaces with zero tests: the quota-full storage escape hatch, boot utilities, deployment sniffing, locale catalogues.
 - [x] LEDGER all-DONE (27/27) and the cross-area mop-up wave run: **MOP-01** (a copied diagram carries the original's `shareUuid` — A4 × A3 × S2) and **MOP-02** (S2/SHARE-06 and A4/FEX-02 contradicted each other; the SHARE-06 entry now carries the correction). Seven other pairs examined and found already crossed — listed in the LEDGER.
 - [x] Cut `remediation/exploratory-campaign` from `master` and landed `explore/campaign` into it (merge `9fa70364`). `integration` untouched. Quarantine re-verified on the merge result with `--listTests`: app 26 / lib 155 / backend 7 / worker 4 suites and Playwright 178 tests in 75 files, **zero** exploratory files in any. Default suites green and unchanged (app 268 tests, lib 1738).
-- [ ] **Owner triage of the one new SUSPECT — A5/CHR-08** (which origin a share link should be anchored to). Analysis, industry practice, three options and a recommendation are in the A5 area file's product-questions section; ruling pending. This is the only Wave 0 item still open, and it gates nothing before Wave 2's share cluster.
+- [x] Owner triage of the one new SUSPECT — **A5/CHR-08 ruled 2026-07-30**: optional public base URL in the runtime config with page-origin fallback (option b). Recorded as the 22nd row of [DECISIONS.md](../exploratory/DECISIONS.md); implementation rides Wave 2's share cluster.
 
 **Campaign totals after Wave 0:** 385 counted hypotheses, **240 bugs**, 22 product
 questions, 190 filed known_issues entries. The wave counts below were written
@@ -78,7 +78,7 @@ for the first product-code wave.*
 ### Wave 2 — Trust & security 🟠 (S1/S2/S3 + readonly class, ~40 filed bugs)
 - [ ] **Readonly enforcement class (F2/I1 subset):** enumerate every mutation surface against the readonly gate (VIEW-11, PTR-01..03, CTX-15); ships the **per-surface-opt-in class gate**.
 - [ ] **Auth cluster (S1):** all AUTH entries + AUTH-13 hint ruling (email required; stop persisting empty-email profiles).
-- [ ] **Share cluster (S2/S3):** all SHARE/DRV entries + SHARE-10 exemption-pair ruling (+ deployment.md) + DRV-05 refresh-in-catch ruling.
+- [ ] **Share cluster (S2/S3):** all SHARE/DRV entries + SHARE-10 exemption-pair ruling (+ deployment.md) + DRV-05 refresh-in-catch ruling + **A5/CHR-08 public-base ruling** + **MOP-01** (strip `shareUuid`/`sharedAt` in every copy path: duplicate, project-ZIP import, single-JSON import).
 - [ ] **Sanitization edges (F1 subset):** rel=noopener on JSX-built link surfaces outside the sanitizer path.
 
 ### Wave 3 — Interaction & rendering correctness 🟡 (I1–I5, R1–R5, ~67 filed bugs)
