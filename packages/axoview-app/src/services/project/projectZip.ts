@@ -5,6 +5,7 @@ import {
   StorageProvider,
   TreeManifest
 } from '../storage';
+import { stripSourceIdentity } from '../storage/importedBlob';
 
 // ----------------------------------------------------------------------------
 // Format constants — see ADR 0001
@@ -579,10 +580,16 @@ export const importProject = async (
     // the server 409s and the whole import aborts. Strip the original id
     // and let the server allocate a fresh one — keeps import idempotent
     // against pre-existing collisions and matches the duplicate flow.
-    const { id: _strippedId, ...model } =
+    //
+    // MOP-01: `shareUuid` / `sharedAt` go with it. An imported diagram is a
+    // COPY — it has never been shared, and inheriting the source's snapshot
+    // pointer meant unsharing the import took down the original's live link.
+    // Shared helper so all three copy paths cannot drift apart again.
+    const model = stripSourceIdentity(
       rawModel && typeof rawModel === 'object'
         ? (rawModel as Record<string, unknown>)
-        : { id: undefined };
+        : {}
+    );
     const folderId = d.folderId
       ? folderRemap.get(d.folderId) ?? d.folderId
       : rootOverride;

@@ -22,6 +22,7 @@ import { useDiagramLifecycle } from '../../providers/DiagramLifecycleProvider';
 import { useAuthStore } from '../../stores/authStore';
 import { GoogleDriveProvider } from '../../services/storage/providers/GoogleDriveProvider';
 import { moveDiagramsToDrive } from '../../services/storage/driveTransfer';
+import { stripSourceIdentity } from '../../services/storage/importedBlob';
 import { useFileTree, FileNode, PlaceId } from '../../hooks/useFileTree';
 import { FileTreeNode } from './FileTreeNode';
 import { FileTreeToolbar } from './FileTreeToolbar';
@@ -801,10 +802,17 @@ export function FileExplorer() {
           .map((d) => d.name);
         const newName = copySuffix(node.name, siblingsInFolder);
         const data = await provider.loadDiagram(node.id);
-        // Strip the original id so the server assigns a fresh one (prevents 409 Conflict).
-        const { id: _id, ...dataWithoutId } = data as Record<string, unknown>;
+        // MOP-01: the id was stripped here (so the server assigns a fresh one
+        // and the create can't 409) but `shareUuid` was not — so a duplicate
+        // claimed the ORIGINAL's public snapshot, and unsharing or deleting the
+        // copy took down the original's live link. One helper strips everything
+        // a copy must not inherit, shared with both import paths.
         await provider.createDiagram(
-          { ...dataWithoutId, title: newName, name: newName },
+          {
+            ...stripSourceIdentity(data as Record<string, unknown>),
+            title: newName,
+            name: newName
+          },
           node.diagramMeta?.folderId ?? null
         );
         await tree.refresh();

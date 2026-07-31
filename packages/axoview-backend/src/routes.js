@@ -201,8 +201,13 @@ export async function createDiagram(adapter, ctx) {
   if (await adapter.get(`diagrams/${id}`)) {
     throw new HttpError(409, 'Diagram already exists');
   }
+  // MOP-01 / SHARE-15: a create is the third write path, and `shareUuid` is
+  // server-owned on all three. The client strips it at every copy site
+  // (`stripSourceIdentity`), but a create that carried one would have made the
+  // new diagram claim an existing snapshot — so refuse it here too rather than
+  // trusting one side of the wire.
   const data = {
-    ...body,
+    ...stripServerOwnedFields(body),
     id,
     created: new Date().toISOString(),
     lastModified: new Date().toISOString()
