@@ -24,6 +24,7 @@ import {
 import { LABEL_LINK_COLOR } from 'src/utils/labelChip';
 import { stripHtmlTags } from 'src/utils/stripHtml';
 import { isLabelVisibleInPreview } from 'src/utils/previewLabelVisibility';
+import { isNodeLabelDrawn } from 'src/config/labelSettings';
 
 const INLINE_EDIT_EVENT = 'inlineEditNodeName';
 
@@ -249,9 +250,19 @@ const NodeContent = memo(
 
     const isReadonly = editorMode === 'EXPLORABLE_READONLY';
     const isEditable = editorMode === 'EDITABLE';
+    // R4/RND-05: the LOD gate. `NodesCanvas` stops drawing name chips below
+    // `LABEL_LOD_ZOOM` (unless "keep labels readable" is on), but this DOM
+    // overlay — which the hybrid promotes the SELECTED node into — had no such
+    // gate, so selecting a node at low zoom made its name reappear while every
+    // other node's stayed hidden. Same predicate both sides read now
+    // (config/labelSettings), so bulk and overlay cannot disagree.
+    const labelLodVisible = useUiStateStore((s) =>
+      isNodeLabelDrawn(s.zoom, s.readableLabels)
+    );
     // Merge the model's `showLabel` with the present-mode hide-labels flag at the
     // single documented merge point (forced hidden only while presenting).
     const labelVisible =
+      labelLodVisible &&
       isLabelVisibleInPreview(showLabel !== false, isReadonly, previewHideLabels) &&
       !exportHideLabels;
     const hasLink = isReadonly && !!modelItem?.link;

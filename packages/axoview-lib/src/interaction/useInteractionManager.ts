@@ -700,7 +700,10 @@ export const useInteractionManager = () => {
           batchUpdateViewItemTiles:
             deps.sceneRef.current.batchUpdateViewItemTiles,
           batchUpdateRectangles: deps.sceneRef.current.batchUpdateRectangles,
-          batchUpdateTextBoxTiles: deps.sceneRef.current.batchUpdateTextBoxTiles
+          batchUpdateTextBoxTiles: deps.sceneRef.current.batchUpdateTextBoxTiles,
+          // R5/OVL-14: floating Labels nudge like every other tile-anchored
+          // entity now. Same batch updater DragItems.mouseup commits with.
+          batchUpdateLabelTiles: deps.sceneRef.current.batchUpdateLabelTiles
         },
         allow('arrowNudge')
       );

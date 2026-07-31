@@ -1,11 +1,13 @@
 /**
- * R4 / RND-01, RND-09, RND-10 — the fit-to-view parameter chain.
+ * R4 / RND-09, RND-10, RND-08 — the fit-to-view parameter chain.
  *
  * `getFitToViewParams` is the shared engine behind BOTH fit paths: the
  * `canvas-zoom-fit` button (`useDiagramUtils.fitToView`) and the deferred
- * open-time fit the Renderer applies in a `useLayoutEffect`. It has no
- * production unit test at all (only R1's bounds probe touches it), so its
- * clamping and its content set are unpinned.
+ * open-time fit the Renderer applies in a `useLayoutEffect`.
+ *
+ * RND-01 (the missing MIN_ZOOM floor) was fixed in wave 3 and its probe is
+ * promoted to `src/utils/__tests__/fitToView.test.ts`, which is also where the
+ * function's first production unit coverage now lives.
  *
  * RIG NOTE: every `it.failing` is paired with a passing characterization that
  * asserts the observed numbers, and each probe asserts its PRECONDITION (the
@@ -30,11 +32,9 @@ import {
   getStrategy
 } from 'src/utils/coordinateTransforms';
 // eslint-disable-next-line import/first
-import { MIN_ZOOM, MAX_ZOOM, DEFAULT_LABEL_HEIGHT } from 'src/config';
+import { MAX_ZOOM, DEFAULT_LABEL_HEIGHT } from 'src/config';
 // eslint-disable-next-line import/first
 import { LABEL_OFFSET_MAX } from 'src/utils/labelPosition';
-// eslint-disable-next-line import/first
-import { incrementZoom, decrementZoom } from 'src/utils/isoMath';
 // eslint-disable-next-line import/first
 import { viewWith, item } from '../R1/harness';
 
@@ -53,63 +53,6 @@ const gridView = (span: number) =>
       item('d', { x: span, y: span })
     ]
   });
-
-// ---------------------------------------------------------------------------
-// RND-01 — fit-to-view has no MIN_ZOOM floor
-// ---------------------------------------------------------------------------
-
-describe('RND-01 — fit-to-view can land below MIN_ZOOM', () => {
-  // 100 tiles across is an ordinary large diagram, not a pathological one.
-  const view = gridView(100);
-
-  it('PRECONDITION: MIN_ZOOM is the floor every other zoom path enforces', () => {
-    expect(MIN_ZOOM).toBe(0.1);
-    expect(decrementZoom(MIN_ZOOM)).toBe(MIN_ZOOM);
-    expect(decrementZoom(MIN_ZOOM + 0.01)).toBeCloseTo(MIN_ZOOM);
-    expect(incrementZoom(MAX_ZOOM)).toBe(MAX_ZOOM);
-  });
-
-  it('PRECONDITION: the diagram really is 100 tiles wide', () => {
-    const b = sortByPosition(getProjectBounds(view));
-    expect(b.highX - b.lowX).toBeGreaterThanOrEqual(100);
-    expect(b.highY - b.lowY).toBeGreaterThanOrEqual(100);
-  });
-
-  it('characterization: the fit zoom for a 100-tile diagram is far below MIN_ZOOM', () => {
-    const { zoom } = getFitToViewParams(view, VIEWPORT, isoTilePos);
-    expect(zoom).toBeGreaterThan(0);
-    expect(zoom).toBeLessThan(MIN_ZOOM);
-    // Pin the observed value so a change in the bounds chain is visible here.
-    expect(zoom).toBeCloseTo(0.083, 3);
-  });
-
-  it.failing('fit-to-view should never produce a zoom below MIN_ZOOM', () => {
-    const { zoom } = getFitToViewParams(view, VIEWPORT, isoTilePos);
-    expect(zoom).toBeGreaterThanOrEqual(MIN_ZOOM);
-  });
-
-  it('the smallest diagram that trips it is ~85 tiles across on a 1280×720 viewport', () => {
-    const trips = (span: number) =>
-      getFitToViewParams(gridView(span), VIEWPORT, isoTilePos).zoom < MIN_ZOOM;
-    expect(trips(60)).toBe(false);
-    expect(trips(100)).toBe(true);
-    // Bisect so the threshold is recorded rather than guessed.
-    let lo = 60;
-    let hi = 100;
-    while (hi - lo > 1) {
-      const mid = Math.floor((lo + hi) / 2);
-      if (trips(mid)) hi = mid;
-      else lo = mid;
-    }
-    expect(hi).toBeGreaterThan(60);
-    expect(hi).toBeLessThan(100);
-  });
-
-  it('the upper clamp IS enforced — a one-node diagram stops at MAX_ZOOM', () => {
-    const one = viewWith({ items: [item('a', { x: 0, y: 0 })] });
-    expect(getFitToViewParams(one, VIEWPORT, isoTilePos).zoom).toBe(MAX_ZOOM);
-  });
-});
 
 // ---------------------------------------------------------------------------
 // RND-09 — getProjectBounds ignores the node NAME CHIP's extent

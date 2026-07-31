@@ -40,6 +40,17 @@ const canvasMode = (page: Page) =>
     () => (window as any).__axoview__.ui.getState().canvasMode as string
   );
 
+/**
+ * The residual of an item that must have one. `offset` is optional on the wire
+ * (ADR 0023: a snapped item carries none), so every off-grid assertion has to
+ * say out loud that it is looking at an off-grid item — otherwise a setup that
+ * silently snapped would read as "the offsets match" on two undefineds.
+ */
+const residual = (item: { offset?: { x: number; y: number } }) => {
+  expect(item.offset, 'the item under test must carry a residual').toBeTruthy();
+  return item.offset!;
+};
+
 /** Closes the Elements dock so it can't intercept real mouse events. */
 async function closeElementsDock(page: Page) {
   const icon = page.locator('[data-axoview-id="canvas-icon-grid-item"]').first();
@@ -85,8 +96,9 @@ test.describe('the off-grid residual across a projection switch (PROJ-07)', () =
     // an item drawn inside its ISO cell mostly over the neighbouring 2D one.
     expect(after.offset).not.toEqual(before.offset);
     // …and it now sits inside the 2D tile square (half-tile = 50 px).
-    expect(Math.abs(after.offset.x)).toBeLessThanOrEqual(50.001);
-    expect(Math.abs(after.offset.y)).toBeLessThanOrEqual(50.001);
+    const res = residual(after);
+    expect(Math.abs(res.x)).toBeLessThanOrEqual(50.001);
+    expect(Math.abs(res.y)).toBeLessThanOrEqual(50.001);
   });
 
   test('toggling back restores the original residual exactly', async ({
@@ -107,8 +119,8 @@ test.describe('the off-grid residual across a projection switch (PROJ-07)', () =
 
     // The two maps are an exact inverse pair, so repeated toggling cannot drift.
     const [after] = await getOffGridItems(page);
-    expect(after.offset.x).toBeCloseTo(before.offset.x, 6);
-    expect(after.offset.y).toBeCloseTo(before.offset.y, 6);
+    expect(residual(after).x).toBeCloseTo(residual(before).x, 6);
+    expect(residual(after).y).toBeCloseTo(residual(before).y, 6);
   });
 
   test('an all-snapped diagram is not touched by a toggle', async ({ app }) => {

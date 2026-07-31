@@ -3,8 +3,11 @@ import { ViewItem } from 'src/types';
 import { DEFAULT_LABEL_HEIGHT, DEFAULT_FONT_FAMILY } from 'src/config';
 import {
   LABEL_BASE_FONT_PX,
+  LABEL_MIN_READABLE_PX,
+  LABEL_MAX_COUNTER_SCALE,
   isNodeLabelDrawn
 } from 'src/config/labelSettings';
+import { computeLabelCounterScale } from 'src/utils/labelScale';
 import { useCanvasMode } from 'src/contexts/CanvasModeContext';
 import { useLayerContext } from 'src/hooks/useLayerContext';
 import { useModelStore } from 'src/stores/modelStore';
@@ -104,16 +107,25 @@ export const NodeLabelHitLayer = ({ nodes }: Props) => {
   const { updateViewItem } = useSceneActions();
   // Coarse zoom + mode gates — boolean selectors so this only re-renders when
   // the gate flips, not on every zoom tick.
-  const active = useUiStateStore(
-    (s) =>
-      s.editorMode === 'EDITABLE' && isNodeLabelDrawn(s.zoom, s.readableLabels)
+  // R5/OVL-06: this used to be EDITABLE-only, so in present mode a node's name
+  // chip was completely inert while a floating Label's stayed hoverable — a
+  // linked node's card could not be raised from its name. `LabelHitLayer` had
+  // already made the split (hover-only proxies in view mode, with no press
+  // handlers and no stopPropagation, so a pan started over the chip still pans);
+  // this layer is its sibling and now makes the same one.
+  const editorMode = useUiStateStore((s) => s.editorMode);
+  const editable = editorMode === 'EDITABLE';
+  const viewMode = editorMode === 'EXPLORABLE_READONLY';
+  const lodVisible = useUiStateStore((s) =>
+    isNodeLabelDrawn(s.zoom, s.readableLabels)
   );
+  const active = (editable || viewMode) && lodVisible;
   const modelItems = useModelStore((s) => s.items);
   // Layer visibility: a node on a hidden layer is not drawn (NodesCanvas), so it
   // must expose no invisible drag/rename hit-proxy either. `layers.length === 0`
   // is the no-layer-system escape hatch — NOT `visibleIds.size`, which is also
   // empty when every node sits on a hidden layer.
-  const { visibleIds, layers } = useLayerContext();
+  const { visibleIds, lockedIds, layers } = useLayerContext();
 
   // ADR 0032 amendment: the on-canvas chip shows `label` (fallback `name`), so
   // size the hit box from that text to match the drawn chip. Carries headerLink
@@ -271,13 +283,57 @@ export const NodeLabelHitLayer = ({ nodes }: Props) => {
     };
   }, [onWindowMove, onWindowUp, uiStoreApi]);
 
+  // R5/OVL-12: "keep labels readable" counter-scales the DRAWN chip about its
+  // centre (ADR 0015), and this proxy did not follow — so with the setting on at
+  // low zoom the grab box stayed at the un-scaled size while the chip grew,
+  // leaving the enlarged chip's outer margin dead to the pointer. Same mechanism
+  // `LabelHitLayer` uses: a direct store subscription publishes the factor on a
+  // `display: contents` wrapper (no per-zoom React re-render) and each proxy
+  // composes it into `transform: scale(...)` about the same centre.
+  const counterScaleRef = useRef<HTMLDivElement>(null);
+  const applyCounterScale = useCallback(() => {
+    if (!counterScaleRef.current) return;
+    const { zoom, readableLabels } = uiStoreApi.getState();
+    counterScaleRef.current.style.setProperty(
+      '--axoview-label-scale',
+      String(
+        computeLabelCounterScale(zoom, {
+          enabled: readableLabels,
+          baseFontPx: LABEL_BASE_FONT_PX,
+          minReadablePx: LABEL_MIN_READABLE_PX,
+          maxCounterScale: LABEL_MAX_COUNTER_SCALE
+        })
+      )
+    );
+  }, [uiStoreApi]);
+  useEffect(() => {
+    applyCounterScale();
+    return uiStoreApi.subscribe((s, p) => {
+      if (s.zoom === p.zoom && s.readableLabels === p.readableLabels) return;
+      applyCounterScale();
+    });
+  }, [uiStoreApi, applyCounterScale]);
+  // Re-apply after every commit so a wrapper that just mounted (this layer
+  // returns null when inactive) carries the current scale immediately.
+  useEffect(() => {
+    applyCounterScale();
+  });
+
   if (!active) return null;
 
   return (
-    <>
+    <div ref={counterScaleRef} style={{ display: 'contents' }}>
       {nodes.map((node) => {
         if (node.showLabel === false) return null;
         if (layers.length > 0 && !visibleIds.has(node.id)) return null;
+        // R5/OVL-13: a LOCKED layer still exposed its nodes' label drag and
+        // rename handles — the fourth instance of "the gesture paths consult
+        // isItemInteractable and this affordance layer does not".
+        // `LabelHitLayer` gates edit gestures on `lockedIds`; this one did not.
+        // Edit-mode only: the view-mode proxy is a pure hover surface, and the
+        // tile hit-test the other element types hover through never consults
+        // `lockedIds`, so parity keeps a locked node's link card reachable.
+        if (editable && lockedIds.has(node.id)) return null;
         const meta = metaById.get(node.id);
         if (!meta) return null;
         const { name, headerLink } = meta;
@@ -297,9 +353,15 @@ export const NodeLabelHitLayer = ({ nodes }: Props) => {
             key={node.id}
             data-axoview-id="canvas-label-hit"
             data-label-hit-id={node.id}
-            onPointerDown={(e) => onPointerDown(e, node)}
-            onDoubleClick={(e) => onLabelDoubleClick(e, node)}
-            onContextMenu={(e) => onContextMenu(e, node)}
+            onPointerDown={
+              editable ? (e) => onPointerDown(e, node) : undefined
+            }
+            onDoubleClick={
+              editable ? (e) => onLabelDoubleClick(e, node) : undefined
+            }
+            onContextMenu={
+              editable ? (e) => onContextMenu(e, node) : undefined
+            }
             // Hovering a LINKED, unselected node's name raises the element link
             // card as a view chip (ADR 0034 addendum 2026-07-05) — parity with
             // the floating Label hit-proxy and the selected node's own DOM
@@ -341,12 +403,19 @@ export const NodeLabelHitLayer = ({ nodes }: Props) => {
               width: chip.width,
               height: chip.height,
               pointerEvents: 'auto',
-              cursor: headerLink ? 'pointer' : 'grab',
-              touchAction: 'none'
+              // 'grab' advertises the edit-mode label drag; a view-mode chip is
+              // not grabbable, so it keeps the pointer/default.
+              cursor: headerLink ? 'pointer' : editable ? 'grab' : 'default',
+              touchAction: 'none',
+              // Congruent with the counter-scaled chip: the proxy is centred on
+              // the chip rect, so scaling about its centre keeps the whole drawn
+              // chip grabbable when readable-labels enlarges it. 1× when off.
+              transform: 'scale(var(--axoview-label-scale, 1))',
+              transformOrigin: 'center'
             }}
           />
         );
       })}
-    </>
+    </div>
   );
 };

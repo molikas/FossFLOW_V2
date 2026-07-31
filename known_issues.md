@@ -3266,12 +3266,16 @@ only that a fit CHANGES the zoom.
 **Workaround:** press the zoom-out or zoom-in button once after fitting — that
 re-clamps into range (and loses the fitted framing).
 
-**Status:** Open. Fix direction: clamp to `[MIN_ZOOM, MAX_ZOOM]` in
-`getFitToViewParams`. That leaves a real product question the clamp alone does
-not answer — a diagram too large to fit at `MIN_ZOOM` will be framed with
-content off-screen — so the fix should either accept that (and say so) or make
-`MIN_ZOOM` content-dependent for the fit path specifically. Repro:
-[`fit-rnd-01-09-10.explore.test.ts`](packages/axoview-lib/src/__explore__/R4/fit-rnd-01-09-10.explore.test.ts).
+**Status:** Fixed in wave 3 (2026-07-31): the lower bound is `MIN_ZOOM`, and
+the product question is ACCEPTED rather than engineered around. A diagram too
+large to fit at `MIN_ZOOM` is framed with content off-screen. Fit means "get as
+close to the whole thing as the zoom range allows", not "widen the zoom range" —
+a content-dependent `MIN_ZOOM` for this one path would let fit reach a zoom the
+user then cannot return to, because every other control (the buttons, the wheel,
+the pinch) still clamps at `MIN_ZOOM`. Promoted regression:
+[`fitToView.test.ts`](packages/axoview-lib/src/utils/__tests__/fitToView.test.ts),
+with a mid-sized control so the clamp cannot have flattened the function into a
+constant.
 
 ## Hiding a layer leaves its connectors' label chips on the canvas
 
@@ -3304,12 +3308,20 @@ and by whichever consumers happened to remember it.
 **Workaround:** none from the UI — delete the label or move the connector off
 the layer.
 
-**Status:** Open. Fix direction: add the standard
-`layers.length === 0 || visibleIds.has(connector.id)` filter to
-`ConnectorLabels`. Worth pairing with a shared helper (or a single
-`useVisibleEntities` hook) so the next layer added to the Renderer cannot skip
-the gate by omission. Repro:
-[`rnd-02-07-overlay-gates.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R4-renderer/rnd-02-07-overlay-gates.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) as directed, through the existing
+`makeInteractableCheck` helper rather than a new hook — and the "cannot skip the
+gate by omission" half is done as a CLASS GATE instead, which is what ADR 0047 §3
+asks for and what a helper alone would not achieve (a new layer can decline to
+call a helper; it cannot decline to be enumerated).
+[`layerFilter.contract.test.ts`](packages/axoview-lib/src/components/SceneLayers/__tests__/layerFilter.contract.test.ts) lists every canvas paint and affordance
+layer with what its filter must cover and why, and a layer added without an entry
+fails on the enumeration. It was verified able to go red — and the first version
+of it was NOT: an unused `import { useLayerContext }` satisfied the scan, so the
+gate now strips imports and comments before looking.
+
+Locked is deliberately NOT filtered here: a locked connector's label still DRAWS,
+it just cannot be edited. Hidden and locked are different verdicts, and the gate
+records which layers owe which.
 
 ## A link inside a text box cannot be clicked
 
@@ -3344,14 +3356,19 @@ but the promotion covers the editing box only.
 **Workaround:** open the box for editing and use the link chip in the inline
 editor, or reach the target diagram from the file explorer.
 
-**Status:** Open. Fix direction: either give the resting text-box layer a
-targeted hit path above the interactions box (mount a link-only proxy the way
-`NodeLabelHitLayer` proxies node names, which is the established pattern for
-"canvas-drawn thing that needs a DOM gesture"), or route link activation through
-the interaction pipeline — resolve an `<a>` under the pointer in the click
-handler that already owns the press. A test asserting a link is followable from
-a resting box belongs with it; the whole ADR 0034 link feature currently has no
-end-to-end coverage of the resting state. Repro:
+**Status:** Open. **Deliberately not attempted in wave 3.** Both directions are
+new interaction surface rather than a corrected filter or gate, which is what the
+rest of this wave was: option one mounts a whole new hit-proxy layer (and then
+owes the layer-filter class gate an entry, a locked/hidden verdict, and a zoom
+LOD decision like every other proxy — see
+[`layerFilter.contract.test.ts`](packages/axoview-lib/src/components/SceneLayers/__tests__/layerFilter.contract.test.ts)),
+and option two adds `<a>` resolution to the canvas click path, which is the
+pipeline wave 3 spent its I-block budget narrowing rather than widening.
+
+The observation that carries forward is the entry's last sentence, and it is the
+strongest argument for doing this properly: the ADR 0034 link feature has NO
+end-to-end coverage of the resting state at all, so whichever route is taken has
+to arrive with that coverage rather than after it. Repro:
 [`rnd-02-07-overlay-gates.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R4-renderer/rnd-02-07-overlay-gates.explore.spec.ts).
 
 ## Selecting an element restacks it above the rest of the diagram
@@ -3388,16 +3405,16 @@ crosses every type at once.
 
 **Workaround:** none — deselect to see the true stacking.
 
-**Status:** Open. Fix direction: give the promoted overlay the same stacking
-position its bulk canvas has rather than a later one — e.g. mount the DOM
-`<Nodes>` overlay immediately after `NodesCanvas` (before `LabelsCanvas`) and
-set the SceneLayer `order` from the promoted node's resolved render order, so a
-selected node keeps its place among its peers. Note the constraint that put the
-overlay where it is: the F2 inline-rename and label-drag affordances need to sit
-ABOVE the `canvas-interactions` box, so the fix has to separate "where the node
-paints" from "where its interactive chrome lives" — the same split
-`NodeLabelHitLayer` already makes. Repro:
-[`rnd-05-13-14-15-promotion.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R4-renderer/rnd-05-13-14-15-promotion.explore.spec.ts).
+**Status:** Open. **Deliberately not attempted in wave 3.** The direction is
+sound and unchanged; what it describes is a Renderer restructure — splitting
+"where the node paints" from "where its interactive chrome lives" for the
+promoted overlay — not a contained fix, and it interacts with the same stacking
+order R3/GPU-13's cross-type z-depth work (wave 5, design-gated) will have to
+settle. Doing it twice would be worse than doing it once, with that design in
+hand. Wave 3 did land the **RND-14 ruling** on the neighbouring code path
+(promoted ids bypass the viewport cull, so a keyboard command on an off-screen
+selection is no longer a silent no-op) — recorded here because the two touch the
+same `hybridIds` machinery and a reader of one should know about the other.
 
 ## Below the label LOD zoom the selected node still shows its name
 
@@ -3426,12 +3443,15 @@ where its siblings are not).
 
 **Workaround:** none needed to keep working; zoom past 25% for consistent labels.
 
-**Status:** Open. Fix direction: apply the same
-`readableLabels || zoom >= LABEL_LOD_ZOOM` gate to the DOM `<Node>` label, or
-hoist the decision into a shared `useLabelLod()` so bulk and overlay cannot
-disagree. Worth deciding once, with GPU-04/GPU-05, what the whole label-threshold
-ladder should be. Repro:
-[`rnd-05-13-14-15-promotion.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R4-renderer/rnd-05-13-14-15-promotion.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) via the second direction, and decided
+with GPU-04/GPU-05 as suggested — one predicate,
+`isNodeLabelDrawn(zoom, readableLabels)` in
+[`config/labelSettings.ts`](packages/axoview-lib/src/config/labelSettings.ts),
+read by `NodesCanvas` (bulk paint), the DOM `<Node>` overlay (this entry),
+`NodeLabelHitLayer` (GPU-05) and stated as the rule the whole ladder follows:
+**nothing may be painted at a zoom where it cannot be hit.** `LABEL_LOD_ZOOM`
+moved there too — it was module-private to `NodesCanvas`, which is how the
+thresholds came to be authored independently in the first place.
 
 ## Fit-to-view frames the diagram into the whole window, docks included
 
@@ -3461,14 +3481,24 @@ that already produced TCH-05 and CTX-01 on the hit-testing side.
 
 **Workaround:** close the docks before fitting.
 
-**Status:** Open. Fix direction: give fit-to-view a VISIBLE viewport rather than
-the container rect — subtract the open docks' widths/heights (they are already
-in uiState: `leftDock`/`rightSidebarOpen` and their fixed widths) and centre on
-the resulting inset box. Note this is arguably a product call rather than a
-defect — some tools fit to the full canvas and let panels overlap — so decide it
-once and state it, ideally alongside RND-01 (the missing `MIN_ZOOM` clamp on the
-same function). Repro:
-[`rnd-03-04-06-12-culling.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R4-renderer/rnd-03-04-06-12-culling.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31), decided alongside RND-01 as suggested.
+The call: **fit targets the VISIBLE canvas.** Letting panels overlap is
+defensible when they are translucent or transient; ours are opaque and
+persistent, so anything behind them is simply not shown, and a user who asked to
+see everything could not.
+
+Only the WIDTH is inset. The docks are full-height columns on the left and
+right; nothing opaque is stacked above or below the canvas, so subtracting height
+would shrink the fit for no reason.
+
+**One gap, stated rather than papered over:** the file-explorer column is NOT
+subtracted. Its open state is a PROP the app passes to `LeftDock`, not uiState,
+so `useDiagramUtils` cannot see it — a fit taken with the explorer open is still
+~280px too wide. Narrower than the bug this fixes, and it needs the flag lifted
+into uiState (or the viewport measured rather than computed) to close properly.
+Promoted regression: the responds-to-width case in
+[`fitToView.test.ts`](packages/axoview-lib/src/utils/__tests__/fitToView.test.ts)
+— without it the inset could be a silent no-op.
 
 ## An imported element whose id contains a comma has no drag preview
 
@@ -3505,13 +3535,14 @@ is why the node teleports into place at the end.
 **Workaround:** none from the UI; re-save the diagram after any edit that
 regenerates ids, or avoid commas in ids at import time.
 
-**Status:** Open. Fix direction: the join/split is a performance trick, not a
-data structure — use a delimiter that cannot appear in an id (`\u0000`), or keep
-the primitive selector and derive the Set from `mode.items` directly with the key
-only as a memo dependency. Both are one-line changes. The broader point belongs
-with the id-validation cluster: ids are treated as opaque strings everywhere
-except the handful of places that pack them into one. Repro:
-[`rnd-03-04-06-12-culling.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R4-renderer/rnd-03-04-06-12-culling.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) via the first option: `ID_KEY_SEP =
+'\u0000'`, applied to all FOUR joined-id primitives in `Renderer` (dragged
+items, dragged rectangles, resizing nodes, selected connectors) — the campaign
+found it through the drag preview, but every one of them had the same shape.
+Deriving the Set from `mode.items` with the key only as a memo dependency was
+rejected: it re-introduces an object dependency the primitive selector exists to
+avoid, and the point of the key is that the selector re-runs on drag start/end
+rather than per frame.
 
 ## A locked layer still exposes its nodes' label drag and rename handles
 
@@ -3544,12 +3575,18 @@ anywhere.
 
 **Workaround:** hide the layer instead of locking it, or move the nodes off it.
 
-**Status:** Open. Fix direction: copy `LabelHitLayer`'s gate into
-`NodeLabelHitLayer`. Worth doing structurally rather than by hand — a shared
-`useInteractableIds()` (or one `isItemInteractable` the affordance layers all
-call, the way `processMouseUpdate` already does for the gesture paths) would
-close this class instead of its fourth instance. Repro:
-[`ovl-01-12-13-15-hitproxy.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R5-overlays/ovl-01-12-13-15-hitproxy.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31). `NodeLabelHitLayer` gates its EDIT
+gestures on `lockedIds`, exactly as `LabelHitLayer` does — and the "structurally
+rather than by hand" half is a CLASS GATE
+([`layerFilter.contract.test.ts`](packages/axoview-lib/src/components/SceneLayers/__tests__/layerFilter.contract.test.ts)) rather than a shared hook. A hook is
+the weaker instrument here: a new layer can simply not call it, which is how this
+class produced four instances in the first place. The gate enumerates every paint
+and affordance layer, and one added without an entry fails.
+
+Edit-mode only, matching the sibling: the view-mode proxy is a pure hover
+surface, and the tile hit-test the other element types hover through never
+consults `lockedIds`, so parity keeps a locked node's link card reachable while
+presenting.
 
 ## The node-name grab box does not follow the readable-labels counter-scale
 
@@ -3576,12 +3613,13 @@ setting most likely to be on for a user who needs the bigger target.
 
 **Workaround:** zoom in until the counter-scale returns to 1.
 
-**Status:** Open. Fix direction: mirror `LabelHitLayer`'s wrapper in
-`NodeLabelHitLayer`. This is the third threshold problem in the label ladder
-(with GPU-04's 0.4 hit floor and GPU-05's `readableLabels` interaction) and they
-should be decided together — the underlying rule being "the box that grabs a
-label is the box that draws it, at every zoom and every setting". Repro:
-[`ovl-01-12-13-15-hitproxy.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R5-overlays/ovl-01-12-13-15-hitproxy.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) as directed, and decided together with
+GPU-04 and GPU-05 as suggested. `NodeLabelHitLayer` now carries the same
+`display: contents` wrapper publishing `--axoview-label-scale` from a direct
+store subscription (no per-zoom React re-render), and each proxy composes it into
+`transform: scale(...)` about the same centre the chip scales about. The rule the
+three share is stated once in
+[`config/labelSettings.ts`](packages/axoview-lib/src/config/labelSettings.ts).
 
 ## A node's name chip is inert in present mode while a floating Label's is not
 
@@ -3614,11 +3652,12 @@ unchanged.
 
 **Workaround:** hover the node's icon instead of its name.
 
-**Status:** Open. Fix direction: give `NodeLabelHitLayer` the same
-`editable || viewMode` gate with press handlers suppressed in view mode, so a
-linked node's name raises its card and a pan started over the chip still pans.
-Repro:
-[`ovl-04-05-06-08-surfaces.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R5-overlays/ovl-04-05-06-08-surfaces.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) exactly as directed: the layer mounts
+for `editable || viewMode`, and in view mode the press, double-click and
+context-menu handlers are all `undefined` — so the chip is hover-only, a linked
+node's name raises its card, and a pan started over the chip still reaches the
+window-level pan handlers. The cursor drops from `grab` to the default there
+too, since a view-mode chip is not grabbable.
 
 ## The "keep labels readable" scale ignores a node's own label font size
 
@@ -3652,11 +3691,26 @@ sizes (ADR 0032's style strip) arrived later without revisiting it.
 **Workaround:** leave label font sizes at the default if you rely on the Aa
 toggle.
 
-**Status:** Open. Fix direction: pack the per-node counter-scale into the sprite
-instance (it is a single float alongside the existing counter-scale flag) and
-pass `node.labelFontSize ?? LABEL_BASE_FONT_PX` on both paths. If that is judged
-too costly, the honest alternative is to document the setting as base-font-only
-and disable it for restyled labels rather than mis-scaling them. Repro:
+**Status:** Open. **Deliberately not attempted in wave 3**, with the scope
+corrected — both offered options are wider than the entry assumed.
+
+"Pack it into the sprite instance" is the right shape and is feasible (`i_misc.w`
+is spare, and the vertex shader's `mix(1.0, u_counterScale, i_misc.x)` would
+become a per-instance select), but it is NOT the whole fix: the counter-scale has
+**three** consumers, not one. `LabelHitLayer` and `NodeLabelHitLayer` publish
+`--axoview-label-scale` from the same base-font computation, so a per-node scale
+landed on the GPU alone would leave both grab boxes scaled differently from the
+chips they proxy — which is R5/OVL-12, the bug wave 3 just fixed, reintroduced
+from the other side. All three have to move together.
+
+The "disable it for restyled labels" alternative is genuinely cheap but is a
+regression for the user it is meant to serve: a node whose label the user
+enlarged would stop being kept readable precisely because they styled it.
+
+Wave 3 did make the ladder decidable rather than scattered — the LOD predicate
+and the constants now live in
+[`config/labelSettings.ts`](packages/axoview-lib/src/config/labelSettings.ts),
+which is where a per-node scale would be introduced. Repro:
 [`scale-nudge-ovl-02-14.explore.test.ts`](packages/axoview-lib/src/__explore__/R5/scale-nudge-ovl-02-14.explore.test.ts).
 
 ## Arrow keys cannot move a floating Label — they pan the canvas instead
@@ -3688,12 +3742,33 @@ keyboard consumer that enumerates entity types and misses the newest one.
 
 **Workaround:** drag the Label with the mouse.
 
-**Status:** Open. Fix direction: add `LABEL` to `NUDGEABLE_TYPES`, add
-`labels` to `NudgeScene`, and route the update through the same
-begin/commit bracket so one press stays one undo step — and, while there,
-decide whether a mixed selection containing a non-nudgeable type should move
-what it can (today) or nothing at all. Repro:
-[`scale-nudge-ovl-02-14.explore.test.ts`](packages/axoview-lib/src/__explore__/R5/scale-nudge-ovl-02-14.explore.test.ts).
+**Status:** Fixed in wave 3 (2026-07-31) exactly as directed, through
+`batchUpdateLabelTiles` — the same updater `DragItems.mouseup` commits a label
+move with — inside the existing bracket, so one press is one undo step however
+many types it touched. The residual rides along like every other type (SEL-01).
+
+**The mixed-selection question is answered: move what it CAN**, i.e. today's
+behaviour, kept deliberately. A selection of a node plus a connector is the
+common shape (Ctrl+A produces it), and refusing the whole nudge because one
+member is not tile-nudge-able would make the arrows useless on most real
+selections. Promoted regressions: [`handleArrowKey.test.ts`](packages/axoview-lib/src/interaction/__tests__/handleArrowKey.test.ts),
+including the mixed Label + node case asserting ONE transaction.
+
+**Rig correction (2026-07-31).** Promoting this probe surfaced a defect in the
+JEST half of the exploratory lane, in the same family as wave 2's TCH-14
+protocol-error false red. One of OVL-14's two `it.failing` probes was written
+`expect(calls.scroll, 'the canvas must not pan').toEqual([])` — and Jest's
+`expect` **throws `"Expect takes at most one argument."`**, so that probe was red
+for the arity error rather than for the bug, and would have stayed red after any
+fix. (Playwright's `expect(value, message)` DOES take a description, which is
+where the habit came from; the campaign's e2e invariant fixture uses it 178 times
+and is unaffected — had it not worked there, every explore spec would have failed
+at the fixture rather than at its assertions.)
+
+The bug itself is unaffected: OVL-14's other `it.failing` and both
+characterizations used the single-argument form and were genuinely red. A scan of
+every Jest suite in the repo, main and lane, found this to be the **only**
+occurrence, so no other entry's evidence rests on it.
 
 ## The selection outline has no icon-load failure path and re-fetches dead urls
 
@@ -3726,12 +3801,19 @@ publishes its default 1 to the outline immediately.
 
 **Workaround:** none needed for correctness; the outline is cosmetic.
 
-**Status:** Open. Fix direction: cache a sentinel on `onerror` (so a known-bad
-url is asked for once) and seed the initial state from that sentinel, matching
-what `decodedRef` does on the GL side. If the two icon caches are unified while
-fixing GPU-01/GPU-03, this hook should be a reader of that cache rather than a
-third fetcher. Repro:
-[`aspect-ovl-03.explore.test.tsx`](packages/axoview-lib/src/__explore__/R5/aspect-ovl-03.explore.test.tsx).
+**Status:** Fixed in wave 3 (2026-07-31) as directed: a `FAILED` symbol in the
+aspect cache, seeded synchronously on the next mount, so a dead url is requested
+once per session instead of on every mount of every selection outline naming it.
+
+The caches were **not** unified while fixing GPU-01/GPU-03, and the reason is
+worth recording: they answer different questions. `useImageAspect` needs the
+natural aspect ratio and can serve a square fallback immediately;
+`NodesCanvas.getImage` needs a DECODED bitmap safe for `texSubImage2D` and must
+not serve anything until `decode()` resolves (an undecoded upload bakes a black
+atlas tile). Unifying them means one cache carrying two readiness states, which
+is a design change rather than a bug fix. Both now memoise failure, which was the
+actual defect on each side — noting that they had it wrong in OPPOSITE directions
+(this one never cached a miss; GPU-03 cached a transient one as permanent).
 
 ## The placement ghost ignores the off-grid residual
 
@@ -3761,11 +3843,18 @@ rather than a committed entity.
 
 **Workaround:** none; the drop is correct, only the preview lies.
 
-**Status:** Open. Fix direction: resolve the ghost through the same
-`cursorTileResidual` + `isSnappedPlacement` pair the modes use (or, better,
-have the modes publish the resolved placement to uiState so the ghost renders
-exactly what will be committed rather than recomputing it). Repro:
-[`ovl-07-10-11-gestures.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R5-overlays/ovl-07-10-11-gestures.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) via the first option — the `Cursor`
+ghost reads the same `cursorTileResidual` + `isSnappedPlacement` pair the
+placement modes do, and composes the residual through
+`getRenderedDragTransform`, the same wrapper `<Rectangle>` and `<TextBox>` use.
+A snapped placement renders with no wrapper at all, so the common path is
+untouched.
+
+The "better" option was rejected on cost: publishing the resolved placement to
+uiState means a store write per pointer MOVE on the hot path, which is precisely
+what the CSS-preview design exists to avoid. Reading the same two functions is
+the cheap half of the guarantee — a divergence would now require changing one of
+them.
 
 ## A Drive scope-403 during a token refresh hangs the awaiting write forever
 

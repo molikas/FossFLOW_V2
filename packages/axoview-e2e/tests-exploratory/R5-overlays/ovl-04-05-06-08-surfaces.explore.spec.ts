@@ -222,50 +222,6 @@ async function setupNodeAndLabel(page: Page, canvas: CanvasPOM) {
   expect(ids.labelId, 'PRECONDITION: a floating Label exists').toBeTruthy();
   return ids as { nodeId: string; labelId: string };
 }
-
-test.describe('OVL-06 — in present mode a node NAME chip has no hit proxy', () => {
-  test('a floating Label keeps a hover proxy; a node name loses its own', async ({
-    page,
-    app
-  }) => {
-    void app;
-    test.setTimeout(180_000);
-    const canvas = new CanvasPOM(page);
-    const { nodeId, labelId } = await setupNodeAndLabel(page, canvas);
-
-    // PRECONDITION: in EDITABLE both proxy layers are live.
-    await expect(page.locator(proxyFor(nodeId))).toHaveCount(1);
-    await expect(page.locator(proxyFor(labelId))).toHaveCount(1);
-
-    await setEditorMode(page, 'EXPLORABLE_READONLY');
-    await page.waitForTimeout(900);
-
-    // Characterization: the Label layer stays, the node-name layer does not.
-    expect(await page.locator(proxyFor(labelId)).count()).toBe(1);
-    expect(await page.locator(proxyFor(nodeId)).count()).toBe(0);
-  });
-
-  test.fail(
-    'BUG: a node name should stay hoverable in present mode, like a Label',
-    async ({ page, app }) => {
-      void app;
-      test.setTimeout(180_000);
-      const canvas = new CanvasPOM(page);
-      const { nodeId, labelId } = await setupNodeAndLabel(page, canvas);
-      await expect(page.locator(proxyFor(nodeId))).toHaveCount(1);
-
-      await setEditorMode(page, 'EXPLORABLE_READONLY');
-      await page.waitForTimeout(900);
-      expect(
-        await page.locator(proxyFor(labelId)).count(),
-        'PRECONDITION: the Label proxy survived the mode switch'
-      ).toBe(1);
-
-      expect(await page.locator(proxyFor(nodeId)).count()).toBe(1);
-    }
-  );
-});
-
 // ---------------------------------------------------------------------------
 // OVL-08 — the compositing workaround's contract
 // ---------------------------------------------------------------------------

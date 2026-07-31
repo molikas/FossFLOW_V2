@@ -46,7 +46,25 @@ const activeView = (page: Page) =>
     return bridge.model.getState().views.find((v: any) => v.id === viewId);
   });
 
-const connectors = async (page: Page) =>
+/**
+ * An anchor's `ref`: `{ item }` when it is bound to an entity, `{ tile }` when
+ * it fell back to a bare tile. Both halves are optional because which one is
+ * present is precisely what several of these tests assert.
+ */
+interface AnchorRef {
+  item?: string;
+  tile?: { x: number; y: number };
+}
+
+interface ProbedConnector {
+  id: string;
+  anchors: AnchorRef[];
+}
+
+// The return type is written out because `activeView` is bridge-shaped (`any`)
+// and everything downstream of it would inherit that, which silently drops the
+// checking on the assertions below.
+const connectors = async (page: Page): Promise<ProbedConnector[]> =>
   ((await activeView(page))?.connectors ?? []).map((c: any) => ({
     id: c.id as string,
     anchors: c.anchors.map((a: any) => a.ref)

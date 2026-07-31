@@ -56,10 +56,18 @@ export const ARROW_TILE_DELTAS: Record<string, Coords> = {
 // Refs of selectable item types that can be tile-nudged. CONNECTOR /
 // CONNECTOR_ANCHOR are excluded — they aren't directly tile-nudge-able here, so a
 // connectors-only selection falls back to pan.
+//
+// R5/OVL-14: LABEL was missing, so the arrow keys PANNED the canvas with a
+// floating Label selected — the one canvas entity with no keyboard nudge at all,
+// while the mouse drag moved it fine. Labels are tile-anchored like everything
+// else here (ADR 0031); being outside the TILE HIT-TEST is what makes them
+// special, and that has nothing to do with nudging a ref that is already
+// selected.
 const NUDGEABLE_TYPES = new Set<ItemReference['type']>([
   'ITEM',
   'RECTANGLE',
-  'TEXTBOX'
+  'TEXTBOX',
+  'LABEL'
 ]);
 
 // Minimal scene shape the nudge needs to read CURRENT positions (the batch
@@ -76,6 +84,8 @@ interface NudgeScene {
   items: { id: string; tile: Coords; offset?: Coords }[];
   rectangles: { id: string; from: Coords; to: Coords; offset?: Coords }[];
   textBoxes: { id: string; tile: Coords; offset?: Coords }[];
+  /** Optional so partial scenes (tests, older callers) keep compiling. */
+  labels?: { id: string; tile: Coords; offset?: Coords }[];
 }
 
 // Minimal dependency surface for the arrow handler — a structural subset of
@@ -101,6 +111,10 @@ export interface ArrowKeyDeps {
     updates: { id: string; from: Coords; to: Coords; offset?: Coords }[]
   ) => void;
   batchUpdateTextBoxTiles: (
+    updates: { id: string; tile: Coords; offset?: Coords }[]
+  ) => void;
+  /** Optional (OVL-14) so callers that predate the Label nudge still compile. */
+  batchUpdateLabelTiles?: (
     updates: { id: string; tile: Coords; offset?: Coords }[]
   ) => void;
 }
@@ -181,11 +195,19 @@ const nudge = (
       tile: CoordsUtils.add(tb.tile, delta),
       offset: tb.offset
     }));
+  const labelUpdates = (scene.labels ?? [])
+    .filter((l) => selectedIds.has(l.id))
+    .map((l) => ({
+      id: l.id,
+      tile: CoordsUtils.add(l.tile, delta),
+      offset: l.offset
+    }));
 
   if (
     itemUpdates.length === 0 &&
     rectUpdates.length === 0 &&
-    textBoxUpdates.length === 0
+    textBoxUpdates.length === 0 &&
+    labelUpdates.length === 0
   ) {
     // Selection referenced only missing items — nothing to move, and we must
     // NOT open a dangling transaction. Consume the key (it WAS a nudge intent).
@@ -197,6 +219,7 @@ const nudge = (
   if (itemUpdates.length > 0) deps.batchUpdateViewItemTiles(itemUpdates);
   if (rectUpdates.length > 0) deps.batchUpdateRectangles(rectUpdates);
   if (textBoxUpdates.length > 0) deps.batchUpdateTextBoxTiles(textBoxUpdates);
+  if (labelUpdates.length > 0) deps.batchUpdateLabelTiles?.(labelUpdates);
   deps.commitDragTransaction();
 
   return true;

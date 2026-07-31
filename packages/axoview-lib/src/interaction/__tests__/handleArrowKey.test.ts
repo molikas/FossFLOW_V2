@@ -24,12 +24,19 @@ function makeUiState(overrides = {}) {
 
 function makeDeps(scene = {}) {
   return {
-    getScene: () => ({ items: [], rectangles: [], textBoxes: [], ...scene }),
+    getScene: () => ({
+      items: [],
+      rectangles: [],
+      textBoxes: [],
+      labels: [],
+      ...scene
+    }),
     beginDragTransaction: jest.fn(),
     commitDragTransaction: jest.fn(),
     batchUpdateViewItemTiles: jest.fn(),
     batchUpdateRectangles: jest.fn(),
-    batchUpdateTextBoxTiles: jest.fn()
+    batchUpdateTextBoxTiles: jest.fn(),
+    batchUpdateLabelTiles: jest.fn()
   };
 }
 
@@ -218,5 +225,71 @@ describe('handleArrowKey — the layer gate (PTR-11)', () => {
     expect(deps.batchUpdateViewItemTiles).toHaveBeenCalledWith([
       { id: 'n1', tile: { x: 6, y: 5 } }
     ]);
+  });
+});
+
+// Promoted from the exploratory lane (R5/OVL-14). A floating Label was the one
+// canvas entity with no keyboard nudge at all: it was missing from
+// NUDGEABLE_TYPES, so the arrow keys PANNED the canvas with one selected, while
+// the mouse drag moved it fine.
+describe('handleArrowKey — floating Labels nudge too (OVL-14)', () => {
+  it('nudges a selected Label instead of panning', () => {
+    const uiState = makeUiState({ selectedIds: [{ type: 'LABEL', id: 'l1' }] });
+    const deps = makeDeps({
+      labels: [{ id: 'l1', tile: { x: 4, y: 4 } }]
+    });
+
+    expect(handleArrowKey(makeKey('ArrowRight'), uiState, deps)).toBe(true);
+
+    expect(deps.batchUpdateLabelTiles).toHaveBeenCalledWith([
+      { id: 'l1', tile: { x: 5, y: 4 }, offset: undefined }
+    ]);
+    expect(uiState.actions.setScroll).not.toHaveBeenCalled();
+  });
+
+  it('carries a Label off-grid residual, like every other type', () => {
+    const OFFSET = { x: -3.5, y: 7.25 };
+    const uiState = makeUiState({ selectedIds: [{ type: 'LABEL', id: 'l1' }] });
+    const deps = makeDeps({
+      labels: [{ id: 'l1', tile: { x: 4, y: 4 }, offset: OFFSET }]
+    });
+
+    handleArrowKey(makeKey('ArrowUp'), uiState, deps);
+
+    expect(deps.batchUpdateLabelTiles).toHaveBeenCalledWith([
+      { id: 'l1', tile: { x: 4, y: 5 }, offset: OFFSET }
+    ]);
+  });
+
+  it('moves a mixed Label + node selection in ONE transaction', () => {
+    const uiState = makeUiState({
+      selectedIds: [
+        { type: 'ITEM', id: 'n1' },
+        { type: 'LABEL', id: 'l1' }
+      ]
+    });
+    const deps = makeDeps({
+      items: [{ id: 'n1', tile: { x: 0, y: 0 } }],
+      labels: [{ id: 'l1', tile: { x: 4, y: 4 } }]
+    });
+
+    handleArrowKey(makeKey('ArrowRight'), uiState, deps);
+
+    // One press = one undo step, however many types it touched.
+    expect(deps.beginDragTransaction).toHaveBeenCalledTimes(1);
+    expect(deps.commitDragTransaction).toHaveBeenCalledTimes(1);
+    expect(deps.batchUpdateViewItemTiles).toHaveBeenCalled();
+    expect(deps.batchUpdateLabelTiles).toHaveBeenCalled();
+  });
+
+  it('does not throw when a caller supplies no Label updater', () => {
+    // The dep is optional so callers predating the Label nudge keep compiling.
+    const uiState = makeUiState({ selectedIds: [{ type: 'LABEL', id: 'l1' }] });
+    const deps = makeDeps({ labels: [{ id: 'l1', tile: { x: 4, y: 4 } }] });
+    delete (deps as { batchUpdateLabelTiles?: unknown }).batchUpdateLabelTiles;
+
+    expect(() =>
+      handleArrowKey(makeKey('ArrowRight'), uiState, deps)
+    ).not.toThrow();
   });
 });

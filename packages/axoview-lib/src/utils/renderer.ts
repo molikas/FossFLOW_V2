@@ -10,7 +10,8 @@ export * from 'src/utils/hitDetection';
 
 import {
   PROJECT_BOUNDING_BOX_PADDING,
-  MAX_ZOOM
+  MAX_ZOOM,
+  MIN_ZOOM
 } from 'src/config';
 import { Coords, Size, Scroll, Mouse, SlimMouseEvent, View } from 'src/types';
 import { CoordsUtils } from 'src/utils/coordsUtils';
@@ -261,12 +262,22 @@ export const getFitToViewParams = (
   const projectBounds = getProjectBounds(view);
   const sortedCornerPositions = sortByPosition(projectBounds);
   const unprojectedBounds = getUnprojectedBounds(view, getTilePositionFn);
+  // R4/RND-01: the lower bound was 0, so a large diagram fitted to a zoom every
+  // other path refuses — the zoom buttons, the wheel and the pinch all clamp to
+  // MIN_ZOOM — and the canvas ended up somewhere the UI could not have taken it.
+  //
+  // The product question the clamp does not answer, decided and stated here: a
+  // diagram too large to fit at MIN_ZOOM IS framed with content off-screen. Fit
+  // means "get as close to the whole thing as the zoom range allows", not "make
+  // the zoom range bigger" — a content-dependent MIN_ZOOM for this one path
+  // would let fit reach a zoom the user then cannot return to, because every
+  // other control still clamps at MIN_ZOOM.
   const zoom = clamp(
     Math.min(
       viewportSize.width / unprojectedBounds.width,
       viewportSize.height / unprojectedBounds.height
     ),
-    0,
+    MIN_ZOOM,
     MAX_ZOOM
   );
 

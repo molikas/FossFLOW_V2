@@ -55,6 +55,12 @@ const VIEWPORT_TILE_PADDING = 4;
 const PAN_GESTURE_GAP_MS = 250; // scroll/zoom changes closer than this = one gesture
 const PAN_BOUNDS_THROTTLE_MS = 180; // max cull cadence mid-gesture
 const PAN_SETTLE_MS = 120; // flush the final cull this long after motion stops
+/**
+ * Delimiter for the joined-id primitives below (R4/RND-04). NUL, because an id
+ * is an opaque string that an imported diagram may have minted anywhere, and a
+ * comma in one used to split the key into fragments matching no id at all.
+ */
+const ID_KEY_SEP = '\u0000';
 
 interface TileBounds {
   minX: number;
@@ -286,14 +292,22 @@ export const Renderer = ({ showGrid, backgroundColor }: RendererProps) => {
   const selectedNodeId = useUiStateStore((s) =>
     s.itemControls?.type === 'ITEM' ? s.itemControls.id : null
   );
-  // Comma-joined dragged-ITEM ids (a primitive, so the selector re-renders only
-  // on drag start/end, not per drag frame — mode.items is set once at entry).
+  // Joined dragged-ITEM ids (a primitive, so the selector re-renders only on
+  // drag start/end, not per drag frame — mode.items is set once at entry).
+  //
+  // R4/RND-04: the delimiter was a COMMA, and an id is an opaque string —
+  // `generateId()` produces UUIDs, but an IMPORTED diagram carries whatever ids
+  // its author's tool minted. One containing a comma split into fragments that
+  // matched no id, so the node was never promoted to the DOM overlay and had no
+  // drag preview at all. NUL cannot appear in an id from any real source, and
+  // the join/split is a re-render optimisation rather than a data structure, so
+  // the delimiter is free to be one no id can contain.
   const draggingKey = useUiStateStore((s) =>
     s.mode.type === 'DRAG_ITEMS'
       ? s.mode.items
           .filter((i) => i.type === 'ITEM')
           .map((i) => i.id)
-          .join(',')
+          .join(ID_KEY_SEP)
       : ''
   );
   // Track P (T6 fix): a canvas node whose NAME label is being dragged is promoted
@@ -310,7 +324,7 @@ export const Renderer = ({ showGrid, backgroundColor }: RendererProps) => {
   // start/end, not per frame.
   const resizingNodesKey = useUiStateStore((s) =>
     s.mode.type === 'NODE.TRANSFORM'
-      ? s.mode.targets.map((t) => t.id).join(',')
+      ? s.mode.targets.map((t) => t.id).join(ID_KEY_SEP)
       : ''
   );
   // Rectangle GPU-fold (2026-07-08): the DRAGGED rectangles keep their DOM
@@ -322,7 +336,7 @@ export const Renderer = ({ showGrid, backgroundColor }: RendererProps) => {
       ? s.mode.items
           .filter((i) => i.type === 'RECTANGLE')
           .map((i) => i.id)
-          .join(',')
+          .join(ID_KEY_SEP)
       : ''
   );
   // ADR 0034: the text box being edited inline is promoted ABOVE the
@@ -350,10 +364,10 @@ export const Renderer = ({ showGrid, backgroundColor }: RendererProps) => {
       return null;
     const ids = new Set<string>();
     if (selectedNodeId) ids.add(selectedNodeId);
-    if (draggingKey) for (const id of draggingKey.split(',')) ids.add(id);
+    if (draggingKey) for (const id of draggingKey.split(ID_KEY_SEP)) ids.add(id);
     if (labelDragId) ids.add(labelDragId);
     if (resizingNodesKey)
-      for (const id of resizingNodesKey.split(',')) ids.add(id);
+      for (const id of resizingNodesKey.split(ID_KEY_SEP)) ids.add(id);
     return ids;
   }, [selectedNodeId, draggingKey, labelDragId, resizingNodesKey]);
 
@@ -362,12 +376,22 @@ export const Renderer = ({ showGrid, backgroundColor }: RendererProps) => {
     if (minX === -Infinity) return items; // bounds not yet computed
     return items.filter(
       (item) =>
-        item.tile.x >= minX &&
-        item.tile.x <= maxX &&
-        item.tile.y >= minY &&
-        item.tile.y <= maxY
+        // R4/RND-14 (ruled 2026-07-30 — "adopt reveal-then-act", cheap form):
+        // a PROMOTED id bypasses the viewport cull. A keyboard command on an
+        // off-screen selection — F2, the z-order chords, the arrow nudge — used
+        // to act on a node the cull had removed from `visibleItems`, so its DOM
+        // overlay never mounted and the command was a silent no-op. VS Code,
+        // Figma, Miro and Finder all reveal before acting; a silent no-op is the
+        // worst of the options. Keeping the promoted node mounted is what makes
+        // the command land; scrolling the viewport to it is the expensive half
+        // the ruling explicitly deferred.
+        hybridIds?.has(item.id) ||
+        (item.tile.x >= minX &&
+          item.tile.x <= maxX &&
+          item.tile.y >= minY &&
+          item.tile.y <= maxY)
     );
-  }, [items, coarseBounds]);
+  }, [items, coarseBounds, hybridIds]);
   // Keep the same array ref when a bounds change exposed no new node, so the
   // connector layers + the NodesCanvas [nodes] effect bail (see useStableList).
   const visibleItems = useStableList(visibleItemsRaw);
@@ -434,13 +458,13 @@ export const Renderer = ({ showGrid, backgroundColor }: RendererProps) => {
     s.selectedIds
       .filter((r) => r.type === 'CONNECTOR')
       .map((r) => r.id)
-      .join(',')
+      .join(ID_KEY_SEP)
   );
   const connectorHybridIds = useMemo(() => {
     const ids = new Set<string>();
     if (selectedConnectorId) ids.add(selectedConnectorId);
     if (selectedConnectorKey)
-      for (const id of selectedConnectorKey.split(',')) ids.add(id);
+      for (const id of selectedConnectorKey.split(ID_KEY_SEP)) ids.add(id);
     for (const hc of hitConnectors) {
       if (hc.unroutable || (hc.path?.tiles && hc.path.tiles.length < 2))
         ids.add(hc.id);
@@ -475,7 +499,7 @@ export const Renderer = ({ showGrid, backgroundColor }: RendererProps) => {
   const visibleLabels = useStableList(visibleLabelsRaw);
 
   const rectHybridIds = useMemo(
-    () => (draggingRectKey ? new Set(draggingRectKey.split(',')) : null),
+    () => (draggingRectKey ? new Set(draggingRectKey.split(ID_KEY_SEP)) : null),
     [draggingRectKey]
   );
   const domRectangles = useMemo(
