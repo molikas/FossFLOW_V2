@@ -5,14 +5,14 @@
 > - [docs/exploratory/DECISIONS.md](../exploratory/DECISIONS.md) — the 22 owner rulings this plan implements (incl. the ADR amendments each ruling names)
 > - [docs/exploratory/LEDGER.md](../exploratory/LEDGER.md) — per-area bug counts; [known_issues.md](../../known_issues.md) — the 172 filed entries (`Found by: exploratory campaign <ID>`)
 >
-> **Status:** Waves 0, 1 and 2 COMPLETE · **Owner:** molikas · **Last updated:** 2026-07-30
+> **Status:** Waves 0, 1, 2 and 3 COMPLETE · **Owner:** molikas · **Last updated:** 2026-07-31
 >
-> Wave 3 is next. Read the wave 1 and wave 2 sections first — between them they
-> carry the items deliberately routed forward (HIST-03/04 to wave 5, CLIP-14 and
-> STOR-14's override half to wave 4), the two CI gates the probe lane had broken,
-> and the four class gates now in place.
+> Wave 4 is next. Read the wave 1–3 sections first — between them they carry the
+> items deliberately routed forward (HIST-03/04 and RND-13/15 to wave 5, CLIP-14
+> and STOR-14's override half to wave 4), the two CI gates the probe lane had
+> broken, and the five class gates now in place.
 >
-> **Two things wave 2 learned that wave 3 will need.**
+> **Two things wave 2 learned, which wave 3 confirmed and wave 4 will need.**
 >
 > 1. Three entries' recorded "fix direction" turned out to be wrong about the
 >    CAUSE while right about the symptom (I5/CTX-15, S1/AUTH-02, F2/VIEW-11's
@@ -28,6 +28,15 @@
 >    click the canvas; only the **full** suite, where a journey clicks real app
 >    chrome, caught it. Budget for the full e2e run when a wave revives dead
 >    code — the targeted specs will not tell you.
+>
+> Wave 3 added a third, which is really the first one turned on the rig:
+>
+> 3. **A probe can be red for a reason that is not the bug.** Wave 2 found one
+>    (a CDP protocol error under `test.fail()`); wave 3 found another (Jest
+>    rejects the two-argument `expect` the Playwright specs use). Before
+>    implementing, check that the probe fails the way the entry says it does —
+>    and when a wave promotes a probe, that check happens for free, which is a
+>    second reason the flip rule earns its keep.
 >
 > This is a **short-lived working doc.** Delete it after the work merges; ADRs are the durable record. PLAN.md gets a one-line entry referencing ADR 0047 once shipped — see "Wrap-up" below.
 
@@ -246,16 +255,98 @@ earned its keep.*
   finding was a hole in the COVERAGE, not a live defect. Shipped as two class
   gates (lib + app) rather than a fix, so the next surface cannot omit it.
 
-### Wave 3 — Interaction & rendering correctness 🟡 (I1–I5, R1–R5, ~67 filed bugs)
-- [ ] **Gesture/mode state machines (I-block):** cancel/interrupt leaks incl. TCH-06+TCH-14 shared `endPointer`; SEL-15 additive marquee (+ ADR 0006 addendum).
-- [ ] **Projection cluster (R1):** PROJ-06 exact ratio, PROJ-07 offset re-projection (+ ADR 0023 addendum), remaining PROJ entries.
-- [ ] **Renderer/overlay cluster (R2–R5):** RND-14 reveal-then-act (cull bypass for promoted ids), layer-filter omissions (ships the **layer-filter class gate**), parity and invalidation entries.
+### Wave 3 — Interaction & rendering correctness ✅ 2026-07-31
+
+**Closed.** **51 filed known_issues entries** covering **65 campaign bug IDs**:
+**47 annotated `Fixed`**, **4 left open with their scope corrected in place**
+(GPU-15, RND-07, RND-13/15, OVL-02 — see below). Five owner rulings implemented
+(SEL-15, TCH-06, RND-14, PROJ-06, PROJ-07) with **three dated ADR addendums**
+landed in the same PRs as their code: ADR 0006 §10 (additive marquee) and two on
+ADR 0023 (PROJ-07 re-projection; PROJ-06 one ratio). Every promoted probe moved
+into a main suite and trimmed from the lane, and the **layer-filter class gate**
+shipped and was verified able to go red.
+
+Eight commits, `ccb37580..420c0fdd`:
+
+| Commit | Cluster |
+| --- | --- |
+| `9b604bc5` | I1 — canvas keydown scoping |
+| `132630da` | I2 — one end-of-pointer path, one canvas-drop test |
+| `d5a3524d` | I3 — group integrity, additive marquee |
+| `29eeb25d` | I4 — the connector tool distrusts its inputs |
+| `99e8bed4` | I5 — pan does not disarm the tool; hidden means no chrome |
+| `c8e99fb5` | R1 — frame the whole diagram, keep geometry agreeing |
+| `3d93357a` | R2/R3 — the GPU substrate stops failing silently |
+| `420c0fdd` | R4/R5 — the DOM overlays agree with the canvas, **+ class gate** |
+
+**Regression gate (final state):** `npm test` per package — lib **175 suites /
+2022** (+1 skipped), app **39 / 423**, backend **9 / 134**, worker **4 / 129** —
+and the full Playwright suite (see the run note below). `npx knip`,
+`check-cycles` (47, at baseline) and `lint:docs` clean; `tsc --noEmit` clean for
+lib and app. *Backend has no package-root tsconfig and worker's test config has
+pre-existing errors in `app.spec.ts`; both pre-date this wave, which touched
+neither package.* Quarantine re-verified in both directions: zero `__explore__` /
+`tests-exploratory` files discovered by any default config, and the lane still
+runs (lib 28 probe files, app 13, e2e 35 — down from 34/13/38 as the promoted
+probes retired).
+
+**Four entries deliberately left open, with the analysis sharpened rather than
+the work deferred silently.** Each says in `known_issues.md` what the recorded
+fix direction got wrong:
+
+- **GPU-15** — the border is four line quads plus join discs, so an SDF fill
+  mode is not enough; the alternative changes every rectangle.
+- **RND-07** — both directions are new interaction surface (a whole hit-proxy
+  layer, or `<a>` resolution in the canvas click path). The finding that carries
+  forward: ADR 0034's link feature has **no** end-to-end coverage of the resting
+  state, so whichever route is taken must arrive with it.
+- **RND-13/15** — a Renderer restructure that interacts with wave 5's GPU-13
+  design. Wave 3 did land the neighbouring RND-14 ruling on the same
+  `hybridIds` path.
+- **OVL-02** — the counter-scale has **three** consumers, not the one the entry
+  assumed. Landing a per-node scale on the GPU alone would reintroduce OVL-12,
+  which this wave just fixed, from the other side.
+
+**Corrections to the record.** Several recorded "fix directions" were wrong
+about the cause — the wave 2 lesson held. GL-05's leak is key churn (so "evict
+when content changes" can never fire); PROJ-10's layer order is not available to
+`hitDetection` at all; GPU-01 and GPU-03 pull against each other, hence a
+bounded attempt count rather than either proposed rule; RND-06's file-explorer
+column is a prop, not store state; CONN-13 resolved as by-design. PROJ-04's
+off-by-one showed up as a `SizeIndicator` snapshot moving 850 → 849 — a place
+nobody had asserted.
+
+**Two rig corrections**, both the same family as wave 2's TCH-14 false red:
+
+1. `Fingers.cancel` dispatched a CDP `TouchCancel` with no remaining touch
+   points, which is a protocol error — read as a confirmed bug under
+   `test.fail()`. It now dispatches a synthetic per-pointer `pointercancel`
+   when others remain.
+2. **Jest's `expect` throws `"Expect takes at most one argument."`**, so a probe
+   written in the Playwright `expect(value, 'message')` style is red whatever
+   the code does. One OVL-14 probe was. A scan of every Jest suite in the repo,
+   main and lane, found it to be the **only** occurrence; Playwright's 178 uses
+   (including the campaign's e2e invariant fixture) are unaffected — had that
+   form not worked there, every explore spec would have failed at the fixture.
+
+**Tooling note carried forward:** the app resolves `axoview` to
+`packages/axoview-lib/dist`, so **`npm run build:lib` before every Playwright
+run** — otherwise a green fix reads as seven failing new specs.
 
 ### Wave 4 — Consistency & decided UX 🟡 (F-block + E2 remainder + A4/A5 new, ~40 filed bugs)
 - [ ] **Styling cluster (F3):** STYL-01/06 fixes + STYL-02/03/08 rulings (+ ADR 0039 addendum).
 - [ ] **Text/label cluster (F1):** TXT-07 lifecycle parity + remaining TXT entries; **app/lib dual-implementation class gate** (dead lean-save half, ICON-01/02/05).
 - [ ] **Layers/annotation/view cluster (F2/F4/E2):** RED-13 confirm dialog, VIEW-07+VIEW-13 op-log, VIEW-08 session-only viewer toggle, LAY structural entries, ICON remainder.
 - [ ] Wave 0's A4/A5 bugs, slotted by root cause.
+
+> **Inherited lane state (measured 2026-07-31, end of wave 3).** The jest explore
+> lane is green except for **four** characterizations, all in wave-4 areas and
+> all stale rather than broken: `F4/layers-lay-01-05-07-11` ×2 (LAY-01b, LAY-11)
+> and `A4/filetree-fex-01-to-07` ×2 (FEX-01). Wave 1's RED-03/05 fixes changed
+> the behaviour these two describe *through a second door* — the probes still
+> assert the pre-fix world. Re-derive them as part of the F4/A4 work rather than
+> treating them as new findings; they are not evidence of a live defect. The
+> e2e lane and every other jest area are green.
 
 ### Wave 5 — Design-gated larges (rulings 2026-07-30)
 - [ ] **HIST-10:** design note for page-stamped history entries (entry shape touches both stores) → implement always-navigate undo.

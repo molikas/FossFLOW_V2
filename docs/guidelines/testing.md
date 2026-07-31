@@ -1,15 +1,21 @@
 # Regression Test Suite Reference
 
-**Last updated:** 2026-07-30 (exploratory remediation wave 2 — trust & security; totals re-measured for all four workspaces)
-**Unit / integration totals** (measured 2026-07-30 via per-workspace `npm test`):
+**Last updated:** 2026-07-31 (exploratory remediation wave 3 — interaction & rendering correctness)
+**Unit / integration totals** (measured 2026-07-31 via per-workspace `npm test`):
 
 | Workspace | Passing | Suites |
 |---|---|---|
-| `axoview-lib` | 1834 (+1 skipped) | 162 |
+| `axoview-lib` | 2022 (+1 skipped) | 175 |
 | `axoview-app` | 423 | 39 |
 | `axoview-backend` | 134 | 9 |
 | `axoview-worker` | 129 | 4 |
-| **Total** | **2520 (+1 skipped)** | **214** |
+| **Total** | **2708 (+1 skipped)** | **227** |
+
+*(Wave 3 of the exploratory remediation, 2026-07-31: lib `+188` / `+13` suites —
+the whole delta is lib, because the I-block and R-block are both lib code. All
+of it probes promoted out of the quarantined lane under the ADR 0047 §2 flip
+rule, plus the layer-filter class gate. See "Exploratory remediation wave 3"
+below.)*
 
 *(Wave 2 of the exploratory remediation, 2026-07-30: lib `+6` / `+1` suite, app
 `+14` / `+1`, backend `+32` / `+2`, worker `+5`. All of it probes promoted out
@@ -29,7 +35,7 @@ class gate. See the additions below.)*
 
 **Run:** `npm test --workspace=packages/<pkg>` per package, or `npm test --workspaces` for all. The v1.1 wave added the backend + worker server-runtime suites — the only **high**-severity gap the post-v1.0.0 review named — plus the app-side error-UX, startup-timeout, parallelism-contract, file-explorer-delete, share-URL, and backend-routes contract suites. The single skipped test is `leanSave bundledFixtures[0]` (see [known_issues.md](../../known_issues.md)).
 
-E2E suite lives at [`packages/axoview-e2e/`](../../packages/axoview-e2e/) (Playwright, 76 spec files covering canonical journeys J1–J20 + the v1.1 cross-interaction additions + the Phase 6 presentation/annotation specs + the Phase 6.5 touch/pen specs + the labels & text-styling productization specs). Touch specs run under a dedicated `chromium-touch` project (`hasTouch: true`, `testMatch: /touch-.*\.spec\.ts/`) and drive real touch via CDP `Input.dispatchTouchEvent`; the default `chromium` project ignores them. Runs on PRs + master push via [`.github/workflows/e2e-playwright.yml`](../../.github/workflows/e2e-playwright.yml). Locally: `npm run test:e2e:ci` from repo root, or `npx playwright test --ui` from the package. The legacy Python/Selenium suite at `e2e-tests/` was deleted 2026-05-23 (audit C.2 I9; the T1-rewrite tactical was retired along with the rest of `docs/tactical/`).
+E2E suite lives at [`packages/axoview-e2e/`](../../packages/axoview-e2e/) (Playwright, 83 spec files covering canonical journeys J1–J20 + the v1.1 cross-interaction additions + the Phase 6 presentation/annotation specs + the Phase 6.5 touch/pen specs + the labels & text-styling productization specs). Touch specs run under a dedicated `chromium-touch` project (`hasTouch: true`, `testMatch: /touch-.*\.spec\.ts/`) and drive real touch via CDP `Input.dispatchTouchEvent`; the default `chromium` project ignores them. Runs on PRs + master push via [`.github/workflows/e2e-playwright.yml`](../../.github/workflows/e2e-playwright.yml). Locally: `npm run test:e2e:ci` from repo root, or `npx playwright test --ui` from the package. The legacy Python/Selenium suite at `e2e-tests/` was deleted 2026-05-23 (audit C.2 I9; the T1-rewrite tactical was retired along with the rest of `docs/tactical/`).
 
 **CI execution model — sharding (2026-07-10, PR #66).** The suite runs at `workers: 1` because the shared rsbuild dev server can't take parallel HMR clients (a 2-worker "Loading-Axoview" stall is documented in the config). CI parallelism is therefore achieved by **sharding across runners**: [`e2e-playwright.yml`](../../.github/workflows/e2e-playwright.yml) fans the run out over 4 jobs via a `shard` matrix, each running `--shard=i/4` at `workers: 1`. Within a runner the execution is byte-for-byte the sequential local flow, so the fan-out is machine-level, not context-level — no new flake risk. This cut the E2E wall-clock **~20m28s → ~6m30s (≈3.2×)**. Per-shard blob reports merge into one HTML report only on failure. Two invariants keep this safe for the future:
 
@@ -37,6 +43,41 @@ E2E suite lives at [`packages/axoview-e2e/`](../../packages/axoview-e2e/) (Playw
 - **Don't swap the dev server for a precompiled prod bundle to raise `workers`.** A `NODE_ENV=production` build tree-shakes out the `window.__axoview__` debug bridge that ~every spec reads (gated in `Axoview.tsx` by `enableDebugTools || exposeStoreBridge || NODE_ENV !== 'production'`); the whole suite would fail on `waitForDebugBridge`. If that route is ever needed for within-runner parallelism, re-expose the bridge via `exposeStoreBridge` behind a **CI-only build flag** (never the Cloudflare prod build).
 
 To scale further, raise the shard count (`SHARD_TOTAL` + the matrix list in the workflow, kept in sync) — diminishing past ~6 shards because a fixed ~3 min setup (npm ci + build:lib + Playwright install + dev-server boot) is paid per shard.
+
+### Exploratory remediation wave 3 — interaction & rendering correctness (2026-07-31)
+
+The I-block (pointer, touch, selection, connectors, pan/menu) and the R-block
+(projection, WebGL, GPU layers, renderer, overlays). Same flip rule: each probe
+was promoted as its bug was fixed and trimmed out of the lane.
+
+**One class gate landed** (ADR 0047 §3), verified able to go red before it was
+committed:
+
+- **[`layerFilter.contract.test.ts`](../../packages/axoview-lib/src/components/SceneLayers/__tests__/layerFilter.contract.test.ts)** · 38 tests · **CLASS GATE** for *"layer visible/locked filter re-application in new paint/affordance layers"*. Four layers had drifted, each added at a different time by someone without the rule in front of them: `ConnectorLabels` had no filter at all (RND-02), `NodeLabelHitLayer` had the visible half and not the locked half (OVL-13), `TransformControlsManager` consulted `lockedIds` and never `visibleIds` (CTX-06). The gate enumerates every paint/affordance layer with what its filter must cover **and why** — HIDDEN means nothing belonging to the entity may draw; LOCKED means only the gestures that *mutate* it are withheld, so a paint-only layer has no reason to read `lockedIds`. A new layer with no table entry fails on the enumeration; a listed layer that drops its filter fails on the scan. Two details are load-bearing and were both found by checking the gate could go red rather than by reasoning: the scan strips **comments** (these files explain their filters at length, and the two that warn *"NOT `visibleIds.size`"* would fail a negative scan for saying exactly the right thing) **and import statements** (the first version passed with the filter deleted, because `import { useLayerContext } …` still contained the word — a gate satisfied by an unused import is a gate that cannot fail).
+
+Promoted suites — lib:
+
+- **[`keyboardScope.test.ts`](../../packages/axoview-lib/src/interaction/__tests__/keyboardScope.test.ts)** + **[`canvas-keyboard-scope.spec.ts`](../../packages/axoview-e2e/tests/canvas-keyboard-scope.spec.ts)** (13 e2e) · the canvas keydown dispatcher listens on `document`, so it also ran while a modal dialog was open or a text selection the app does not own was live. `isModalDialogOpen()` deliberately does **not** match `role="menu"` — a menu is the app's own surface and its shortcuts should keep working.
+- **[`connectorHitTest.test.ts`](../../packages/axoview-lib/src/interaction/modes/__tests__/connectorHitTest.test.ts)** + **[`connector-integrity.spec.ts`](../../packages/axoview-e2e/tests/connector-integrity.spec.ts)** (10 e2e) · degenerate connectors, parallel fan-out, and the reconnect abort path, which had no revert at all.
+- **[`mergeMarqueeSelection.test.ts`](../../packages/axoview-lib/src/utils/__tests__/mergeMarqueeSelection.test.ts)** + **[`selection-group-rules.spec.ts`](../../packages/axoview-e2e/tests/selection-group-rules.spec.ts)** (8 e2e) · SEL-15 additive marquee (ADR 0006 §10 addendum) and the group-integrity rules around it.
+- **[`canvasDropTarget.test.ts`](../../packages/axoview-lib/src/utils/__tests__/canvasDropTarget.test.ts)** + **[`touch-gesture-interrupts.spec.ts`](../../packages/axoview-e2e/tests/touch-gesture-interrupts.spec.ts)** (15 e2e) · the shared `endPointer(e, {cancelled})` (TCH-06 + TCH-14) and one canvas-drop test shared by the three placement modes.
+- **[`reprojectOffset.test.ts`](../../packages/axoview-lib/src/utils/__tests__/reprojectOffset.test.ts)**, **[`projectBounds.test.ts`](../../packages/axoview-lib/src/utils/__tests__/projectBounds.test.ts)**, **[`hitPaintOrder.test.ts`](../../packages/axoview-lib/src/utils/__tests__/hitPaintOrder.test.ts)**, **[`fitToView.test.ts`](../../packages/axoview-lib/src/utils/__tests__/fitToView.test.ts)** + **[`projection-geometry.spec.ts`](../../packages/axoview-e2e/tests/projection-geometry.spec.ts)** (5 e2e) · the R1 cluster. `getFitToViewParams` had **no** production unit test before this wave, which is how it kept a missing `MIN_ZOOM` floor.
+- **[`glSpriteBatch.atlas.test.ts`](../../packages/axoview-lib/src/webgl/__tests__/glSpriteBatch.atlas.test.ts)**, **[`itemRaster.ellipsize.test.ts`](../../packages/axoview-lib/src/webgl/__tests__/itemRaster.ellipsize.test.ts)** + **[`gpu-icon-recovery.spec.ts`](../../packages/axoview-e2e/tests/gpu-icon-recovery.spec.ts)** (2 e2e) · the atlas never staying unpacked, and the icon-decode failure path that used to hold `data-all-icons-drawn` at false for a whole session.
+- **[`useImageAspect.test.tsx`](../../packages/axoview-lib/src/hooks/__tests__/useImageAspect.test.tsx)** · 7 tests · the hook the ADR 0044 selection outline sizes itself from, which had no failure path: a dead url was re-requested on **every** mount of every outline naming it. The exact inverse of GPU-03, where a transient failure *was* cached as permanent — the two icon caches got the trade-off wrong in opposite directions.
+- **[`TransformControlsManager.layerGate.test.tsx`](../../packages/axoview-lib/src/components/TransformControlsManager/__tests__/TransformControlsManager.layerGate.test.tsx)** · the CTX-06 half of the layer-filter class.
+
+E2E: **[`renderer-overlay-parity.spec.ts`](../../packages/axoview-e2e/tests/renderer-overlay-parity.spec.ts)** · 8 tests · the behavioural half of the layer-filter class, which the static gate cannot reach: the gate can see that a filter *exists*, not that it removes anything on screen. Covers hidden-layer connector chips (RND-02), promotion for an id containing the join separator (RND-04), the LOD band applying to the promoted node too (RND-05), the RND-14 reveal-then-act cull bypass, present-mode hover proxies (OVL-06), the counter-scaled grab box (OVL-12) and the locked-layer handle (OVL-13). Every test asserts its precondition — the layer really is hidden/locked, the cull really fired, the counter-scale really is engaged — so a setup that silently did not happen cannot read as a pass.
+
+**A second rig lesson, after wave 2's CDP one.** Jest's `expect` throws
+`"Expect takes at most one argument."`, so a probe written in the Playwright
+`expect(value, 'message')` style is red whatever the code does. One OVL-14 probe
+was, and would have stayed red after any fix. A scan of every Jest suite in the
+repo found it to be the only occurrence, and Playwright's 178 uses (including
+the campaign's e2e invariant fixture) are unaffected — had that form not worked
+there, every explore spec would have failed at the fixture rather than at its
+assertions. Promotion is what surfaced it: flipping a probe re-runs it against
+fixed code, which is precisely the check that catches a probe red for the wrong
+reason.
 
 ### Exploratory remediation wave 2 — trust & security (2026-07-30)
 
