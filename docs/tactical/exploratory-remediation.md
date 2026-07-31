@@ -281,7 +281,8 @@ Eight commits, `ccb37580..df5e6bbe`:
 
 **Regression gate (final state):** `npm test` per package — lib **175 suites /
 2022** (+1 skipped), app **39 / 423**, backend **9 / 134**, worker **4 / 129** —
-and the full Playwright suite (see the run note below). `npx knip`,
+and the full Playwright suite **250 passed (34.8 min), exit 0**, run unpiped per
+the wave 1 tooling note. `npx knip`,
 `check-cycles` (47, at baseline) and `lint:docs` clean; `tsc --noEmit` clean for
 lib and app. *Backend has no package-root tsconfig and worker's test config has
 pre-existing errors in `app.spec.ts`; both pre-date this wave, which touched

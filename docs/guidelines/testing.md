@@ -68,6 +68,10 @@ Promoted suites — lib:
 
 E2E: **[`renderer-overlay-parity.spec.ts`](../../packages/axoview-e2e/tests/renderer-overlay-parity.spec.ts)** · 8 tests · the behavioural half of the layer-filter class, which the static gate cannot reach: the gate can see that a filter *exists*, not that it removes anything on screen. Covers hidden-layer connector chips (RND-02), promotion for an id containing the join separator (RND-04), the LOD band applying to the promoted node too (RND-05), the RND-14 reveal-then-act cull bypass, present-mode hover proxies (OVL-06), the counter-scaled grab box (OVL-12) and the locked-layer handle (OVL-13). Every test asserts its precondition — the layer really is hidden/locked, the cull really fired, the counter-scale really is engaged — so a setup that silently did not happen cannot read as a pass.
 
+Suite total **250 passed (34.8 min), exit 0** — up from wave 2's 189, the
+difference being wave 3's seven promoted e2e specs and the touch-project
+additions.
+
 **A second rig lesson, after wave 2's CDP one.** Jest's `expect` throws
 `"Expect takes at most one argument."`, so a probe written in the Playwright
 `expect(value, 'message')` style is red whatever the code does. One OVL-14 probe
