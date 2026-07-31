@@ -266,7 +266,7 @@ ADR 0023 (PROJ-07 re-projection; PROJ-06 one ratio). Every promoted probe moved
 into a main suite and trimmed from the lane, and the **layer-filter class gate**
 shipped and was verified able to go red.
 
-Eight commits, `ccb37580..420c0fdd`:
+Eight commits, `ccb37580..df5e6bbe`:
 
 | Commit | Cluster |
 | --- | --- |
@@ -277,7 +277,7 @@ Eight commits, `ccb37580..420c0fdd`:
 | `99e8bed4` | I5 — pan does not disarm the tool; hidden means no chrome |
 | `c8e99fb5` | R1 — frame the whole diagram, keep geometry agreeing |
 | `3d93357a` | R2/R3 — the GPU substrate stops failing silently |
-| `420c0fdd` | R4/R5 — the DOM overlays agree with the canvas, **+ class gate** |
+| `df5e6bbe` | R4/R5 — the DOM overlays agree with the canvas, **+ class gate** |
 
 **Regression gate (final state):** `npm test` per package — lib **175 suites /
 2022** (+1 skipped), app **39 / 423**, backend **9 / 134**, worker **4 / 129** —
