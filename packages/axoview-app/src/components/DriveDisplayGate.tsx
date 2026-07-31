@@ -29,7 +29,6 @@ export function DriveDisplayGate() {
   const { runtimeConfig } = useAppStorage();
   const authStatus = useAuthStore((s) => s.status);
   const signIn = useAuthStore((s) => s.signIn);
-  const signOut = useAuthStore((s) => s.signOut);
   const signedInEmail = useAuthStore((s) => s.user?.email || null);
   const [pickerBusy, setPickerBusy] = useState(false);
   const [switchBusy, setSwitchBusy] = useState(false);
@@ -114,9 +113,18 @@ export function DriveDisplayGate() {
   // Wrong-account recovery (owner report 2026-07-28: "they still couldn't open
   // it"). In `needs-grant` the viewer IS signed in — the account just can't see
   // the file, typically a personal address when the link was shared to a work
-  // one. `signOut()` clears the profile hint, so the next `signIn()` shows
-  // Google's account chooser instead of silently re-picking the same account
-  // (`attemptSilentReconnect` passes the persisted email as `login_hint`).
+  // one. What is needed is Google's account chooser rather than the silent
+  // re-pick `attemptSilentReconnect` performs with the persisted email.
+  //
+  // S1/AUTH-11: this used to get the chooser by calling `signOut()` first,
+  // which clears the profile hint. That works — but `signOut()` also nulls
+  // `user` and clears the hint IRREVERSIBLY, and nothing restored them when the
+  // chooser was then closed without picking. The viewer ended up strictly worse
+  // off than before the click: the gate's copy no longer named the account it
+  // tried, the avatar's amber-dot reconnect affordance (`!!user && …`) was
+  // exactly what `signOut()` had destroyed, and no re-read was attempted.
+  // `prompt: 'select_account'` gets the same chooser without spending the
+  // session first, and a cancelled request now restores a still-valid one.
   //
   // The one-shot auto-retry above fires only on `needs-signin`, so it does NOT
   // cover this state — re-read explicitly once the new session lands, or the
@@ -124,8 +132,7 @@ export function DriveDisplayGate() {
   const handleSwitchAccount = async () => {
     setSwitchBusy(true);
     try {
-      signOut();
-      await signIn();
+      await signIn({ prompt: 'select_account' });
       if (useAuthStore.getState().status === 'AUTHENTICATED') {
         retryDriveDisplayRead(false);
       }

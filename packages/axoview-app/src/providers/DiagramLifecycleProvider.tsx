@@ -1181,8 +1181,16 @@ export function DiagramLifecycleProvider({
         // A Drive insufficient-scope 403 (scope revoked out-of-band, or a stale
         // grant) surfaces the blocking re-consent dialog instead of a dead-end
         // "Failed to create diagram" toast the user can't act on.
-        const err = e as { name?: string; status?: number };
-        if (err?.name === 'DriveError' && err.status === 403) {
+        //
+        // S1/AUTH-08: this used to test `status === 403` alone, and `request()`
+        // threw 403 for an exhausted RATE LIMIT too — so Drive being busy parked
+        // a healthy session in DRIVE_ACCESS_REQUIRED and nulled a valid token,
+        // asking the user to re-consent to a permission they never lost. The
+        // classification travels on the error now, and `request()` itself calls
+        // `markDriveScopeMissing()` for the scope case (AUTH-09), so this branch
+        // is only about swallowing the toast the dialog replaces.
+        const err = e as { name?: string; status?: number; reason?: string };
+        if (err?.name === 'DriveError' && err.reason === 'drive-scope-required') {
           useAuthStore.getState().markDriveScopeMissing();
           return;
         }

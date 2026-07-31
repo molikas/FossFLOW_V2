@@ -94,3 +94,30 @@ incomplete.
 > **CLOSED 2026-07-30 — owner decisions** ([DECISIONS.md](../DECISIONS.md)): AUTH-13 — a hint is valid only with non-empty name AND email; otherwise drop it and show the never-signed-in control; stop persisting empty-email profiles.
 
 **Next:** area closed — nothing outstanding. Next in the S track: S2 (share backend).
+
+## Remediation — FIXED 2026-07-30 (wave 2)
+
+All twelve bugs and the AUTH-13 ruling shipped together; see
+`known_issues.md` for the per-entry `Fixed in <sha>` notes.
+
+**Probes retired, per the ADR 0047 §1 flip rule.** The five `__explore__/S1`
+files and their harness are gone; their coverage lives in the default suites as
+[`authStore.sessionIntegrity.test.ts`](../../../packages/axoview-app/src/stores/__tests__/authStore.sessionIntegrity.test.ts),
+[`GoogleDriveProvider.authFailures.test.ts`](../../../packages/axoview-app/src/services/storage/__tests__/GoogleDriveProvider.authFailures.test.ts)
+and [`AuthControl.identity.test.tsx`](../../../packages/axoview-app/src/components/__tests__/AuthControl.identity.test.tsx).
+
+The three FALSIFIED hypotheses (AUTH-10, AUTH-14, AUTH-15) went with them and
+were **not** promoted: a falsification is evidence about a hypothesis, not a
+contract to pin, and the reasoning is recorded in the table above. The harness's
+rig notes are the part worth carrying forward — `pendingAuthTimeout` is MODULE
+state (a probe leaving a request in flight leaks its timer into the next test),
+`fetchUserInfo` fires fire-and-forget on every grant, and every leg must assert
+its precondition — so they are reproduced in the promoted suites' own setup.
+
+**One correction to the record.** AUTH-02's stated cause — "reachable because
+`markDriveScopeMissing()` can park the session in DRIVE_ACCESS_REQUIRED
+mid-refresh" — was right about the route but implied the *status* was the
+signal. It is not: fixing AUTH-01 moves the session out of REFRESHING, and the
+superseded GIS request is still outstanding regardless of what the status says.
+The store tracks that explicitly now (`_silentRequestOutstanding`), which the
+first version of the fix did not — the promoted AUTH-02 test caught it.
