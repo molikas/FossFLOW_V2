@@ -244,7 +244,7 @@ baseTest.describe('Drive display route — ADR 0042 §2/§8 (/app/display/drive/
     expect(tokenLog.hadAuthorization.every((had) => !had)).toBe(true);
   });
 
-  baseTest('a deleted (trashed) file → proxy 410 → "could not open", NOT the sign-in gate', async ({ page }) => {
+  baseTest('a deleted (trashed) file → proxy 410 → "the owner trashed it", NOT the sign-in gate', async ({ page }) => {
     await installConfigMock(page, { drivePublicPreview: true });
     // The proxy honors Drive's trashed flag and returns 410 Gone (ADR 0042 §8);
     // the client treats it as terminal, so no misleading "sign in to check".
@@ -252,11 +252,46 @@ baseTest.describe('Drive display route — ADR 0042 §2/§8 (/app/display/drive/
 
     await page.goto(`/app/display/drive/${DRIVE_FILE_ID}`);
 
-    // The terminal "could not open" dialog (copy already covers "may have been
-    // deleted") — and crucially NOT the misleading sign-in gate. (The empty
-    // editor mounts behind the dialog overlay; the diagram content never loads.)
-    await expect(page.locator('text=Could not open this diagram.')).toBeVisible({ timeout: 10_000 });
+    // S3/DRV-02: this used to land on the generic "Could not open this diagram.
+    // The diagram may have been deleted, or you may not have access to it." —
+    // one sentence shared by four different upstream answers, two of which it
+    // did not describe. A trashed file has its own gate copy now, and it says
+    // the thing the viewer can act on: restoring it revives the link.
+    await expect(byAxoviewId(page, 'drive-display-gate-gone')).toBeVisible({
+      timeout: 10_000
+    });
     await expect(byAxoviewId(page, 'drive-display-gate-signin')).toHaveCount(0);
+    await expect(page.locator('text=Could not open this diagram.')).toHaveCount(0);
+  });
+
+  baseTest('an over-cap file → proxy 413 → "too large to preview", its own copy', async ({ page }) => {
+    await installConfigMock(page, { drivePublicPreview: true });
+    // S3/DRV-02: 413 collapsed into the same terminal message as 410. It is a
+    // different situation with a different remedy — the SENDER can share the
+    // file directly — so it gets its own copy.
+    await installDriveProxyMock(page, { status: 413, body: { error: 'too-large' } });
+
+    await page.goto(`/app/display/drive/${DRIVE_FILE_ID}`);
+
+    await expect(byAxoviewId(page, 'drive-display-gate-too-large')).toBeVisible({
+      timeout: 10_000
+    });
+    await expect(byAxoviewId(page, 'drive-display-gate-signin')).toHaveCount(0);
+  });
+
+  baseTest('a malformed link is named immediately, with no sign-in ladder', async ({ page }) => {
+    await installConfigMock(page, { drivePublicPreview: true });
+    // S3/DRV-12: a truncated copy-paste used to walk the viewer through "sign in
+    // with Google" and then "open with Google Drive access" for an id Drive
+    // itself rejects. The client applies the same shape check the proxy does,
+    // before making any request at all.
+    await page.goto('/app/display/drive/short');
+
+    await expect(byAxoviewId(page, 'drive-display-gate-bad-link')).toBeVisible({
+      timeout: 10_000
+    });
+    await expect(byAxoviewId(page, 'drive-display-gate-signin')).toHaveCount(0);
+    await expect(byAxoviewId(page, 'drive-display-gate-grant')).toHaveCount(0);
   });
 
   baseTest('a transient upstream failure → proxy 503 → Retry, NOT the sign-in gate (anonymous)', async ({ page }) => {
