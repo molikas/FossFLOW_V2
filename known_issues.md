@@ -3713,6 +3713,20 @@ and the constants now live in
 which is where a per-node scale would be introduced. Repro:
 [`scale-nudge-ovl-02-14.explore.test.ts`](packages/axoview-lib/src/__explore__/R5/scale-nudge-ovl-02-14.explore.test.ts).
 
+**Direction ruled 2026-07-31 (owner review, wave-3 handoff):** fix in wave 4 as
+**one PR moving all three consumers together** — the per-label factor is derived
+in exactly one place (`config/labelSettings.ts`, fed the label's *effective*
+font so `factor = max(1, floor / effectiveOnScreenPx)`: an enlarged label above
+the floor gets no boost, a shrunk one is lifted to the floor), consumed by the
+GL instance buffer (`i_misc.w`, `mix` → per-instance select) and by both hit
+layers' `--axoview-label-scale`. Ships with a contract gate (shape of
+`layerFilter.contract`) forbidding any counter-scale computed from
+`LABEL_BASE_FONT_PX` outside the shared derivation, and a dated ADR 0015
+addendum ("on-screen font size" now means the per-label effective size — ADR
+0032's per-node sizes postdate 0015). The "disable for restyled labels"
+alternative is **rejected** for the reason this entry gives. Rendered output
+changes for styled labels → full Playwright run, per the wave-2/3 lesson.
+
 ## Arrow keys cannot move a floating Label — they pan the canvas instead
 
 **Found by:** exploratory campaign OVL-14

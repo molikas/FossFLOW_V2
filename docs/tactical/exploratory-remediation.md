@@ -339,6 +339,8 @@ run** — otherwise a green fix reads as seven failing new specs.
 - [ ] **Text/label cluster (F1):** TXT-07 lifecycle parity + remaining TXT entries; **app/lib dual-implementation class gate** (dead lean-save half, ICON-01/02/05).
 - [ ] **Layers/annotation/view cluster (F2/F4/E2):** RED-13 confirm dialog, VIEW-07+VIEW-13 op-log, VIEW-08 session-only viewer toggle, LAY structural entries, ICON remainder.
 - [ ] Wave 0's A4/A5 bugs, slotted by root cause.
+- [ ] **OVL-02 (from wave 3 — direction ruled 2026-07-31):** one PR, all three counter-scale consumers move together — per-label factor derived once in `config/labelSettings.ts` (effective-font, `max(1, floor/effective)`), consumed by the GL instance buffer (`i_misc.w`) and both hit layers' `--axoview-label-scale`; contract gate forbids counter-scale math outside the derivation; dated ADR 0015 addendum; **full** Playwright run (rendered output changes for styled labels). "Disable for restyled labels" rejected. Details in the known_issues entry.
+- [ ] **Lane rig gate (ruled 2026-07-31):** main-suite source-scan contract test — no two-argument `expect(value, 'msg')` in any Jest-context test file, **lane included** (scan files as data; the lane stays excluded from execution/tsc/knip). Pinned positive + negative samples; verified red once. Rationale: the lane is *permanent* (ADR 0047 §1), future delta campaigns write new Jest probes, and this class already produced one false CONFIRMED verdict (OVL-14's probe).
 
 > **Inherited lane state (measured 2026-07-31, end of wave 3).** The jest explore
 > lane is green except for **four** characterizations, all in wave-4 areas and
@@ -354,7 +356,7 @@ run** — otherwise a green fix reads as seven failing new specs.
 - [ ] **GPU-13:** ADR 0038 amendment + design pass for cross-type z-depth (single canvas vs per-entity depth) → owner sign-off → implement.
 
 ### Wave 6 — Program build-out (should-have)
-- [ ] Write `.claude/skills/explore.md`: APPROACH distilled + COLDSTART flow + rig-traps appendix + delta-mode area selection (`git diff` vs last campaign end commit); regenerate-baseline step.
+- [ ] Write `.claude/skills/explore.md`: APPROACH distilled + COLDSTART flow + rig-traps appendix (must include the Jest two-arg-`expect` trap and the wave 2/3 "red for a reason that is not the bug" checklist) + delta-mode area selection (`git diff` vs last campaign end commit); regenerate-baseline step.
 - [ ] Headless path: verify `claude -p "/explore"` cold-start on this machine (subscription auth, no API key); document optional Task Scheduler wiring in the skill.
 - [ ] Archive: `git mv` campaign records → `docs/reviews/exploratory-2026-07/`; retire COLDSTART.md; fix inbound links (docs lint green).
 - [ ] Update workflow.md decision table (+ one line in testing.md) so `/explore` is discoverable.
