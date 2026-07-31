@@ -1635,13 +1635,19 @@ viewer's own store, so it does not corrupt the source diagram unless a save path
 is reachable — but it does mean a shared/read-only link renders content the
 owner never authored, and the viewer can silently delete what they came to read.
 
-**Status:** Open. Fix direction: gate the whole keydown dispatcher on
-`uiState.editorMode === 'EDITABLE'` (early-return in `handleKeyDown` after the
-Escape/Delete-guard split, keeping navigation-only keys — arrows-as-pan, F1 help
-— available to viewers), rather than adding a per-delegate check. Consider also
-making `EXPLORABLE_READONLY` gate the *pointer* effect's mutating modes for the
-same reason. Repro:
-[`ptr-01-03.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I1-pointer/ptr-01-03.explore.spec.ts).
+**Status:** Fixed in 72989e3a (2026-07-30) — per-delegate after all, but
+through one table rather than a check per site.
+[`readonlyPolicy.ts`](packages/axoview-lib/src/interaction/readonlyPolicy.ts)
+gives every keydown surface an access class, and the dispatcher asks it:
+tool hotkeys, Delete, cut/paste, Ctrl+A, z-order and the arrow *nudge* are
+`editor` surfaces, refused unless `editorMode === 'EDITABLE'`; Esc, F1, Ctrl+C
+and the arrow *pan* are `viewer` ones and keep working. A blanket early-return
+was rejected because it would have taken those four with it. Esc additionally
+stops exiting PAN → CURSOR in read-only — PAN is a viewer's resting mode, so
+that branch was handing out a live editing mode on every press. Promoted
+regressions: [`readonly-enforcement.spec.ts`](packages/axoview-e2e/tests/readonly-enforcement.spec.ts)
+and the class gate [`readonlySurfaces.contract.test.ts`](packages/axoview-lib/src/interaction/__tests__/readonlySurfaces.contract.test.ts),
+which fails if a new delegate arrives with no access class.
 
 ## An open modal dialog does not shield the canvas — Delete destroys the item behind it
 
@@ -2425,13 +2431,19 @@ and it does not work.
 
 **Workaround:** none for a viewer.
 
-**Status:** Open. Fix direction: in `Pan.mousedown`/`mouseup`, when
-`editorMode === 'EXPLORABLE_READONLY'` and the release was a stationary click on
-a content-bearing item, set `itemControls` for it (the popover reads exactly
-that state) before falling through to the pan logic. Note this is the mirror of
-PTR-01/02/03: read-only exposes the mutating keyboard paths it should not, and
-withholds the one read-only interaction it should offer. Repro:
-[`ctx-01-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I5-pan-menu/ctx-01-15.explore.spec.ts).
+**Status:** Fixed in 72989e3a (2026-07-30) — and the fix direction above was
+wrong about the cause. `Pan.mouseup` already had exactly that branch
+(`handleReadonlyClick`); what defeated it was the RAF throttle.
+`getMouse` rebuilds `mousedown` from the event type, and a `'mousemove'`
+carries forward whatever was current when it was *scheduled* — so a frame
+arriving after the press wrote `mouse.mousedown` back to `null`, and the
+branch's `mousedownTile === currentTile` test could never hold. `onMouseEvent`
+now flushes the throttle before any non-move event, which restores the
+user's own down/up ordering for every mode that reads `mouse.mousedown`, not
+just this one. The mirror-of-PTR-01/02/03 reading stands: both are the same
+read-only class, fixed together. Promoted regression (two legs — the click
+opens the popover, a click on empty canvas dismisses it):
+[`readonly-enforcement.spec.ts`](packages/axoview-e2e/tests/readonly-enforcement.spec.ts).
 
 ## The project bounding box mis-frames the diagram: text boxes extend the wrong way, labels are not counted
 
@@ -4971,10 +4983,18 @@ others.
 
 **Workaround:** none.
 
-**Status:** Open. Fix direction: thread `readOnly` through all five element
-panels (each already composes `NotesSection`, so one prop on that shared
-component covers most of it), and add a parity test that renders every branch in
-both modes. Repro: [`view-modes.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F2-view/view-modes.explore.spec.ts).
+**Status:** Fixed in 72989e3a (2026-07-30) — `readOnly` is threaded through all
+five branches, and `NotesSection` / `MetadataSection` take it (the connector
+panel's Add-label button, per-label text field and line select go with them).
+One thing the fix direction did not anticipate: `RightSidebar` derived
+`readOnly` from an `editorMode` **prop** while every other read-only consumer
+reads the store — two sources for one fact, agreeing only because
+`Axoview.tsx` is the store's sole production writer. It now fails closed on
+either. Promoted regression: the panel legs of
+[`readonly-enforcement.spec.ts`](packages/axoview-e2e/tests/readonly-enforcement.spec.ts),
+plus the class gate [`readonlyPanels.contract.test.tsx`](packages/axoview-lib/src/components/ItemControls/__tests__/readonlyPanels.contract.test.tsx)
+— the "parity test that renders every branch in both modes" this entry asked
+for, which also fails if the manager stops forwarding the prop to any branch.
 
 ## "Hide view controls" has no writer, and would trap an armed annotation tool if it did
 
