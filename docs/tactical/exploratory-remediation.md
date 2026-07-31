@@ -336,21 +336,39 @@ run** — otherwise a green fix reads as seven failing new specs.
 
 ### Wave 4 — Consistency & decided UX 🟡 IN PROGRESS (F-block + E2 remainder + A4/A5 new, ~55 open entries)
 
-> **Resume point (2026-07-31).** Three clusters are done and two of them are
-> committed; the rest is untouched. Read the per-cluster boxes below — each
-> records what landed, what was corrected in the record, and what it learned.
+> **Resume point (2026-07-31).** Four clusters plus the lane gate are DONE and
+> COMMITTED. Read the per-cluster boxes below — each records what landed, what
+> was corrected in the record, and what it learned.
 >
-> **Done:** F3 styling (`3c5c8a30`), F1 text/label + RED-06, F4 layers minus
-> LAY-05. **Not started:** F5 icons, the E2 reducer remainder (RED-01/02/07/08/
-> 14/15), F2 annotation/view, A4 FileExplorer, A5 chrome, OVL-02, the lane rig
-> gate. Lib unit **182 suites / 2141** green throughout; the full Playwright run
-> is the gate that still has to close over the F1/F4 changes.
+> | | |
+> |---|---|
+> | **Committed** | F3 styling (`3c5c8a30`) · F1 text/label + E2/RED-06 + F4 layers incl. LAY-05/RED-13 + the lane rig gate (`77ced974`) |
+> | **Gate** | full Playwright **265 passed, exit 0, 36.7 min** over the F1/F4 product code; lib **185 suites / 2171**, app **40 / 431**; tsc, knip, check-cycles (47) and lint:docs clean |
+> | **Not started** | F5 icons · E2 reducer remainder (RED-01/02/07/08/14/15) · F2 annotation/view · A4 FileExplorer · A5 chrome · OVL-02 |
 >
-> **A tooling trap this wave added to wave 1's:** never start a second
-> Playwright run while a full one is in flight. They share the dev-server port,
-> and the first run hangs indefinitely rather than failing — an hour of wall
-> clock with an empty log and no error. Run the full suite last, or run only
-> targeted specs until you are ready for it.
+> **Ordering for the remainder (owner, 2026-07-31).** F5 → E2 remainder → F2 →
+> A4 → A5 in root-cause cluster order, then **OVL-02 last-but-one** so its full
+> Playwright cost merges into the wave-final gate — and **nothing render-touching
+> after it**, because it changes rendered output for styled labels.
+>
+> **Where F5 starts, since it is not where the entry says.** ICON-01/02's
+> recorded direction is "have `exportAsJSON` and the project-ZIP export call the
+> same `leanIfModel` the storage providers use". That call cannot be made as
+> written: `leanIfModel` is APP-side
+> (`axoview-app/src/services/storage/leanModel.ts`, and it depends on
+> `ALL_ICON_PACK_NAMES`), while `exportAsJSON` is LIB-side
+> (`axoview-lib/src/utils/exportOptions.ts`). The lib cannot import from the app.
+> So the first decision is *where the one lean-save lives* — move it into the lib
+> with the pack list injected, or lean app-side before handing the model to the
+> lib's exporter — and the same question decides STOR-14's override half, which
+> needs a bundled catalog the app's half of does not have either.
+>
+> **Two tooling traps this wave added to wave 1's** — both now queued for the
+> wave-6 rig-traps appendix, see below: concurrent Playwright runs HANG rather
+> than fail, and `build:lib` over a live dev server poisons it into
+> `Can't resolve 'axoview'` (which presents as every test failing). And machine
+> speed is a confounder: this session ran ~4× slow for a while, which flipped a
+> spec racing an internal retry budget to red with no code change.
 
 - [x] **Styling cluster (F3)** — `3c5c8a30`. STYL-01/05/06 + the STYL-02/03/08
   rulings, all one defect seen from four sides: the strip derived every value
