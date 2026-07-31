@@ -73,46 +73,9 @@ const rightClickAt = async (page: Page, p: CanvasPoint) => {
   await page.waitForTimeout(350);
 };
 
-// ---------------------------------------------------------------------------
-// CTX-01 — a mouse palette drag released off-canvas
-// ---------------------------------------------------------------------------
-test.describe('CTX-01 — releasing a mouse palette drag off-canvas', () => {
-  async function dragIconIntoThePanel(page: Page) {
-    const icon = byAxoviewId(page, 'canvas-icon-grid-item').first();
-    if (!(await icon.isVisible().catch(() => false))) {
-      await byAxoviewId(page, 'dock-elements-toggle').click();
-      await icon.waitFor({ state: 'visible', timeout: 5_000 });
-    }
-    const box = await icon.boundingBox();
-    const start = { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 };
-    // Well past tap-slop, released a few rows down — still inside the panel.
-    await realDrag(page, start, { x: start.x + 24, y: start.y + 170 });
-    await page.waitForTimeout(400);
-  }
-
-  test.fail(
-    'BUG: the node is placed even though the release was never over the canvas',
-    async ({ app }) => {
-      const { page } = app;
-      await dragIconIntoThePanel(page);
-      expect(await getViewItemCount(page)).toBe(0);
-    }
-  );
-
-  test('characterization: it lands at the tile the panel is covering', async ({
-    app
-  }) => {
-    const { page } = app;
-    await dragIconIntoThePanel(page);
-    const items = await itemTiles(page);
-    // eslint-disable-next-line no-console
-    console.log(`CTX-01 observed — items ${JSON.stringify(items)}`);
-    expect(items).toHaveLength(1);
-    // Off to the left, behind the dock.
-    expect(items[0].tile.x).toBeLessThan(0);
-    await expectStoreInvariants(page, 'after an off-canvas palette release');
-  });
-});
+// CTX-01 is FIXED (wave 3) and its probe promoted — the mouse placement modes
+// now hit-test the release point (`isCanvasDrop`). See PlaceIcon/TextBox/Label
+// unit tests and utils/__tests__/canvasDropTarget.test.ts.
 
 // ---------------------------------------------------------------------------
 // CTX-03 / CTX-04 — mode restore after a pan

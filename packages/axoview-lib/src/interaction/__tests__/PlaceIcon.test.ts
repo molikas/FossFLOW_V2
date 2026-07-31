@@ -19,6 +19,28 @@ jest.mock('src/config', () => ({
   VIEW_ITEM_DEFAULTS: { zIndex: 0, labelHeight: 1 }
 }));
 
+// I5/CTX-01: a drag-from-panel release is a placement only when it ENDS OVER
+// the canvas. `isCanvasDrop` hit-tests the release point, so these cases need a
+// renderer element and a stubbed `elementFromPoint` (jsdom has no layout).
+const CANVAS_CHILD = { nodeType: 1, tag: 'canvas-child' };
+const PANEL_CHILD = { nodeType: 1, tag: 'panel-child' };
+const makeRenderer = (dropOverCanvas: boolean) => {
+  document.elementFromPoint = jest.fn(() =>
+    dropOverCanvas ? CANVAS_CHILD : PANEL_CHILD
+  );
+  return {
+    getBoundingClientRect: () => ({
+      left: 0,
+      top: 0,
+      right: 1280,
+      bottom: 720,
+      width: 1280,
+      height: 720
+    }),
+    contains: (node: unknown) => node === CANVAS_CHILD
+  };
+};
+
 function makeUiState(overrides: Record<string, unknown> = {}) {
   return {
     mode: { type: 'PLACE_ICON', id: 'icon-1', showCursor: true },
@@ -168,10 +190,10 @@ describe('PlaceIcon.mouseup', () => {
     expect(mockSetMode).not.toHaveBeenCalled();
   });
 
-  it('B1: a drag-from-panel release places even when the release target is off-canvas (moved past tap-slop)', () => {
-    // Mouse capture makes the release target the panel icon, so
-    // isRendererInteraction is false even though the cursor is over the canvas;
-    // the past-tap-slop move is what identifies the drag-to-place.
+  it('B1: a drag-from-panel release places when the drop POINT is over the canvas', () => {
+    // Capture makes the release TARGET the panel icon, so isRendererInteraction
+    // is false even though the cursor is over the canvas. The drop POINT is what
+    // identifies the drag-to-place — travelling alone is not enough (CTX-01).
     const targetTile = { x: 2, y: 3 };
     mockFindNearestUnoccupiedTile.mockReturnValue(targetTile);
     const uiState = makeUiState({
@@ -184,13 +206,35 @@ describe('PlaceIcon.mouseup', () => {
     PlaceIcon.mouseup?.({
       uiState: uiState as any,
       scene: makeScene() as any,
-      isRendererInteraction: false
+      isRendererInteraction: false,
+      rendererRef: makeRenderer(true) as any
     });
 
     expect(mockPlaceIcon).toHaveBeenCalled();
     expect(mockSetMode).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'CURSOR' })
     );
+  });
+
+  // Promoted from the exploratory lane (I5/CTX-01) — the mouse twin of TCH-05.
+  it('a drag-from-panel release back OVER THE PANEL places nothing', () => {
+    mockFindNearestUnoccupiedTile.mockReturnValue({ x: -8, y: 4 });
+    const uiState = makeUiState({
+      mouse: {
+        position: { tile: { x: -8, y: 4 }, screen: { x: 60, y: 200 } },
+        mousedown: { screen: { x: 0, y: 0 } }
+      }
+    });
+
+    PlaceIcon.mouseup?.({
+      uiState: uiState as any,
+      scene: makeScene() as any,
+      isRendererInteraction: false,
+      rendererRef: makeRenderer(false) as any
+    });
+
+    expect(mockPlaceIcon).not.toHaveBeenCalled();
+    expect(mockSetMode).not.toHaveBeenCalled();
   });
 
   it('does not place icon when no unoccupied tile is found, but still returns to CURSOR', () => {

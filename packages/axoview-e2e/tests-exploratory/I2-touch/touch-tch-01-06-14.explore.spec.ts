@@ -1,15 +1,22 @@
 /**
- * I2 probes — the touch gesture machine's phase transitions.
+ * I2 probe — TCH-01: a second finger during an item drag commits the node at
+ * ITS position. FALSIFIED; kept as characterization of the forwarded-mouseup
+ * design (the mouseup only ENDS the gesture — `DragItems.mouseup` commits the
+ * map the last mousemove filled).
  *
- *  TCH-01  a second finger during an item drag commits the node at ITS position
- *  TCH-02  the long-press `menu` phase leaves stale mousedown bookkeeping
- *  TCH-03  `suppressLongPressGestureEnd` swallows a fast tap-away
- *  TCH-06  double-tap bookkeeping survives a pointercancel
- *  TCH-14  one finger's pointercancel mid-pinch strands the other finger
+ * PROMOTED OUT — wave 3 fixed TCH-02/03 (the menu phase closes its press; the
+ * lift suppression stops swallowing the tap-away), TCH-06 (ruling: a cancel
+ * breaks the double-tap streak) and TCH-14 (a cancel demotes pinch → pan).
+ * Their legs moved to `tests/touch-gesture-interrupts.spec.ts`.
  *
- * TouchPOM covers whole gestures; these probes need finger-by-finger control
- * (add a second finger mid-drag, cancel one of two), so they drive
- * `Input.dispatchTouchEvent` through a small local multi-touch driver.
+ * **Rig correction carried out of this file.** TCH-14's probe called
+ * `Fingers.cancel` with a second finger still down. CDP rejects that —
+ * "TouchCancel must not have any touch points" — so the call THREW, and because
+ * the probe was a `test.fail()` the protocol error read as a confirmed bug.
+ * The defect was real (by code reading: `onTouchPointerUp` demoted pinch → pan
+ * and `onTouchPointerCancel` did not), but that run was not evidence of it.
+ * The promoted suite drives a real per-finger cancel — see `Fingers.cancel` in
+ * the shared TouchPOM.
  */
 import {
   exploreTest as test,
@@ -178,216 +185,3 @@ test.describe('TCH-01 — second finger during a node drag', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// TCH-02 — the `menu` phase leaves stale press bookkeeping
-// ---------------------------------------------------------------------------
-test.describe('TCH-02 — long-press menu leaves the press half-open', () => {
-  test.fail(
-    'BUG: no mouseup is forwarded, so uiState.mouse.mousedown stays populated',
-    async ({ app }) => {
-      const { page } = app;
-      const canvas = new CanvasPOM(page);
-      const node = await setupNode(page, canvas, { x: 500, y: 300 });
-
-      const touch = new TouchPOM(page, canvas);
-      await touch.hold(await canvas.tileToScreen(node.tile), 700);
-      await expect.poll(() => menuOpen(page), { timeout: 3_000 }).toBe(true);
-
-      // The finger has lifted; nothing is pressed any more.
-      expect((await mouseState(page)).mousedown).toBeNull();
-    }
-  );
-
-  test('characterization: the press stays open after the finger lifted', async ({
-    app
-  }) => {
-    const { page } = app;
-    const canvas = new CanvasPOM(page);
-    const node = await setupNode(page, canvas, { x: 500, y: 300 });
-
-    const touch = new TouchPOM(page, canvas);
-    await touch.hold(await canvas.tileToScreen(node.tile), 700);
-    await expect.poll(() => menuOpen(page), { timeout: 3_000 }).toBe(true);
-
-    const st = await mouseState(page);
-    // eslint-disable-next-line no-console
-    console.log(`TCH-02 observed — ${JSON.stringify(st)}`);
-    expect(st.mousedown).not.toBeNull();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// TCH-03 — the menu cannot be dismissed by a fast tap-away
-// ---------------------------------------------------------------------------
-test.describe('TCH-03 — dismissing the long-press menu immediately', () => {
-  test.fail(
-    'BUG: a tap-away inside the 700 ms suppression window does not dismiss',
-    async ({ app }) => {
-      const { page } = app;
-      const canvas = new CanvasPOM(page);
-      const node = await setupNode(page, canvas, { x: 500, y: 300 });
-
-      const touch = new TouchPOM(page, canvas);
-      await touch.hold(await canvas.tileToScreen(node.tile), 600);
-      await expect.poll(() => menuOpen(page), { timeout: 3_000 }).toBe(true);
-
-      // Deliberate tap-away, immediately (well inside the 700 ms window).
-      await touch.tapPoint({ x: 200, y: 480 });
-      await page.waitForTimeout(250);
-      expect(await menuOpen(page)).toBe(false);
-    }
-  );
-
-  test('control: a tap-away AFTER the suppression window does dismiss it', async ({
-    app
-  }) => {
-    const { page } = app;
-    const canvas = new CanvasPOM(page);
-    const node = await setupNode(page, canvas, { x: 500, y: 300 });
-
-    const touch = new TouchPOM(page, canvas);
-    await touch.hold(await canvas.tileToScreen(node.tile), 600);
-    await expect.poll(() => menuOpen(page), { timeout: 3_000 }).toBe(true);
-
-    await page.waitForTimeout(900);
-    await touch.tapPoint({ x: 200, y: 480 });
-    await expect.poll(() => menuOpen(page), { timeout: 3_000 }).toBe(false);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// TCH-06 — double-tap bookkeeping across a pointercancel
-// ---------------------------------------------------------------------------
-test.describe('TCH-06 — tap, cancel, tap', () => {
-  const sidebarOpen = (page: Page) =>
-    page.evaluate(
-      () => (window as any).__axoview__.ui.getState().rightSidebarOpen === true
-    );
-
-  /**
-   * The interruption has to sit INSIDE the 300 ms window for the streak to
-   * matter, so all three presses run back to back. Control below shows the
-   * same two real taps with no interruption between them.
-   */
-  test('an interrupted press between two taps does not break the double-tap streak', async ({
-    app
-  }) => {
-    const { page } = app;
-    const canvas = new CanvasPOM(page);
-    const node = await setupNode(page, canvas, { x: 500, y: 300 });
-    const f = await Fingers.open(page);
-
-    // Tap 1 — completed normally, so it seeds lastTapItem/lastTapTime.
-    await f.down(0, node.abs);
-    await f.up(0);
-    // An OS interruption (app switch / notification) cancels the next press.
-    await f.down(0, node.abs);
-    await f.cancel(0);
-    // Tap 2, still inside DOUBLE_TAP_MS of tap 1.
-    await f.down(0, node.abs);
-    await f.up(0);
-    await f.close();
-    await page.waitForTimeout(300);
-
-    const open = await sidebarOpen(page);
-    const controls = await getItemControls(page);
-    // eslint-disable-next-line no-console
-    console.log(
-      `TCH-06 observed — sidebarOpen ${open}; itemControls ${JSON.stringify(controls)}`
-    );
-    expect(controls?.type).toBe('ITEM');
-    // The observation, whichever way it lands, is recorded in the area file.
-    expect(typeof open).toBe('boolean');
-  });
-
-  test('control: two clean taps inside the window DO open the details deck', async ({
-    app
-  }) => {
-    const { page } = app;
-    const canvas = new CanvasPOM(page);
-    const node = await setupNode(page, canvas, { x: 500, y: 300 });
-    const f = await Fingers.open(page);
-
-    await f.down(0, node.abs);
-    await f.up(0);
-    await f.down(0, node.abs);
-    await f.up(0);
-    await f.close();
-    await page.waitForTimeout(300);
-
-    // eslint-disable-next-line no-console
-    console.log(`TCH-06 control — sidebarOpen ${await sidebarOpen(page)}`);
-    expect(await sidebarOpen(page)).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// TCH-14 — one finger cancelled mid-pinch
-// ---------------------------------------------------------------------------
-test.describe('TCH-14 — pointercancel on one of two pinch fingers', () => {
-  test.fail(
-    'BUG: the surviving finger is dead — no pan, no zoom, until it lifts',
-    async ({ app }) => {
-      const { page } = app;
-      const canvas = new CanvasPOM(page);
-      await setupNode(page, canvas, { x: 500, y: 300 });
-      const box = await canvas.interactionsLayer().boundingBox();
-      const c = { x: box!.x + 500, y: box!.y + 300 };
-      const f = await Fingers.open(page);
-
-      await f.down(0, { x: c.x - 60, y: c.y });
-      await f.down(1, { x: c.x + 60, y: c.y });
-      await f.moveTo(0, { x: c.x - 100, y: c.y });
-      await page.waitForTimeout(80);
-
-      const zoomBefore = await getZoom(page);
-      const scrollBefore = await scrollPos(page);
-
-      // One finger is reclaimed by the OS; the other stays down and keeps
-      // moving. `onTouchPointerUp` resumes a one-finger pan in this case —
-      // `onTouchPointerCancel` has no such branch.
-      await f.cancel(1);
-      await f.moveTo(0, { x: c.x - 300, y: c.y + 120 }, 10);
-      await page.waitForTimeout(200);
-
-      const scrollAfter = await scrollPos(page);
-      await f.up(0);
-      await f.close();
-
-      expect(
-        JSON.stringify(scrollAfter) !== JSON.stringify(scrollBefore) ||
-          (await getZoom(page)) !== zoomBefore
-      ).toBe(true);
-    }
-  );
-
-  test('control: lifting (not cancelling) one finger resumes a one-finger pan', async ({
-    app
-  }) => {
-    const { page } = app;
-    const canvas = new CanvasPOM(page);
-    await setupNode(page, canvas, { x: 500, y: 300 });
-    const box = await canvas.interactionsLayer().boundingBox();
-    const c = { x: box!.x + 500, y: box!.y + 300 };
-    const f = await Fingers.open(page);
-
-    await f.down(0, { x: c.x - 60, y: c.y });
-    await f.down(1, { x: c.x + 60, y: c.y });
-    await f.moveTo(0, { x: c.x - 100, y: c.y });
-    await page.waitForTimeout(80);
-
-    const scrollBefore = await scrollPos(page);
-    await f.up(1);
-    await f.moveTo(0, { x: c.x - 300, y: c.y + 120 }, 10);
-    await page.waitForTimeout(200);
-    const scrollAfter = await scrollPos(page);
-    await f.up(0);
-    await f.close();
-
-    // eslint-disable-next-line no-console
-    console.log(
-      `TCH-14 control — scroll ${JSON.stringify(scrollBefore)} -> ${JSON.stringify(scrollAfter)}`
-    );
-    expect(JSON.stringify(scrollAfter)).not.toBe(JSON.stringify(scrollBefore));
-  });
-});

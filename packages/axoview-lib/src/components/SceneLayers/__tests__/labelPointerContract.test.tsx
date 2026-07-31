@@ -21,9 +21,16 @@ import type { Coords } from 'src/types';
 // jsdom has no PointerEvent, and without it RTL falls back to a bare Event —
 // which silently drops `button`, so EVERY press would read as `undefined` and
 // the button guard under test would appear to hold for the wrong reason.
+//
+// `pointerType` is copied across for the same reason: `MouseEvent` does not
+// carry it, so without this every press would read as `undefined` and the
+// touch-vs-mouse split in the long-press cases below would be vacuous — both
+// legs would take the same branch and both would still pass.
 class TestPointerEvent extends MouseEvent {
+  readonly pointerType: string;
   constructor(type: string, params: PointerEventInit = {}) {
     super(type, params);
+    this.pointerType = params.pointerType ?? '';
   }
 }
 (window as unknown as { PointerEvent: unknown }).PointerEvent = TestPointerEvent;
@@ -94,6 +101,7 @@ jest.mock('src/hooks/useInlineRename', () => ({
 /* eslint-disable import/first */
 import { LabelHitLayer } from 'src/components/SceneLayers/Labels/LabelHitLayer';
 import { NodeLabelHitLayer } from 'src/components/SceneLayers/Nodes/NodeLabelHitLayer';
+import { LONG_PRESS_MS } from 'src/config/tapGesture';
 /* eslint-enable import/first */
 
 const TILE: Coords = { x: 1, y: 1 };
@@ -213,6 +221,81 @@ describe.each(LAYERS)(
     });
     fireEvent(proxy(container), event);
     expect(event.defaultPrevented).toBe(true);
+  });
+
+  // Promoted from the exploratory lane (I2/TCH-09). A finger has no right
+  // button, so the touch equivalent of the case above is a HOLD — and the canvas
+  // gesture machine cannot supply it: chips are outside the tile hit-test (ADR
+  // 0031 §4) AND the proxy swallows the press, so the window pointerdown the
+  // machine listens on never fires. A long press on a floating Label produced
+  // nothing at all: no menu, and not even the hold-on-empty lasso fallback.
+  describe('the touch long-press opens the same menu (TCH-09)', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+    afterEach(() => {
+      jest.runOnlyPendingTimers();
+      jest.useRealTimers();
+    });
+
+    it('a held touch press opens the item menu at the press point', () => {
+      const { container } = mount();
+      fireEvent.pointerDown(proxy(container), {
+        button: 0,
+        pointerType: 'touch',
+        clientX: 210,
+        clientY: 130
+      });
+      expect(actions.openContextMenu).not.toHaveBeenCalled();
+
+      jest.advanceTimersByTime(LONG_PRESS_MS);
+
+      expect(actions.openContextMenu).toHaveBeenCalledWith({
+        anchor: { x: 210, y: 130 },
+        variant: 'item',
+        target: menuTarget
+      });
+    });
+
+    it('a MOUSE press never arms the hold (right-click owns that path)', () => {
+      const { container } = mount();
+      fireEvent.pointerDown(proxy(container), {
+        button: 0,
+        pointerType: 'mouse',
+        clientX: 210,
+        clientY: 130
+      });
+      jest.advanceTimersByTime(LONG_PRESS_MS * 2);
+      expect(actions.openContextMenu).not.toHaveBeenCalled();
+    });
+
+    it('a touch press that travels past slop is a move, not a hold', () => {
+      const { container } = mount();
+      fireEvent.pointerDown(proxy(container), {
+        button: 0,
+        pointerType: 'touch',
+        clientX: 210,
+        clientY: 130
+      });
+      // The layers listen on `window` for the move, so drive it there.
+      fireEvent.pointerMove(window, { clientX: 260, clientY: 190 });
+      jest.advanceTimersByTime(LONG_PRESS_MS * 2);
+      expect(actions.openContextMenu).not.toHaveBeenCalled();
+    });
+
+    it('a quick tap releases before the hold fires', () => {
+      const { container } = mount();
+      fireEvent.pointerDown(proxy(container), {
+        button: 0,
+        pointerType: 'touch',
+        clientX: 210,
+        clientY: 130
+      });
+      jest.advanceTimersByTime(LONG_PRESS_MS - 50);
+      fireEvent.pointerUp(window);
+      jest.advanceTimersByTime(LONG_PRESS_MS);
+      expect(actions.openContextMenu).not.toHaveBeenCalled();
+    });
   });
   }
 );

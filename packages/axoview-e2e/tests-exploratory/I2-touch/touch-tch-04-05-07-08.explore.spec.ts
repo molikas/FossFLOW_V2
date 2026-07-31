@@ -1,10 +1,15 @@
 /**
- * I2 probes — pen parity, palette drop scoping, off-grid hit-testing, two-finger pan.
+ * I2 probes — off-grid hit-testing and two-finger pan.
  *
- *  TCH-04  pen hover produces none of the hover state a mouse produces
- *  TCH-05  the palette drop test ignores panels overlaying the renderer
  *  TCH-07  the touch hit-test omits the ADR-0023 `point` argument
  *  TCH-08  two fingers moving in parallel are handled as a pinch
+ *
+ * Both FALSIFIED; kept as characterization.
+ *
+ * PROMOTED OUT — wave 3 fixed TCH-04 (a hovering pen now sets `hoveredItem`
+ * like the mouse) and TCH-05 (the palette drop hit-tests the release point
+ * instead of testing the renderer's bounding rect, which every overlaying panel
+ * sits inside). Their legs moved to `tests/touch-gesture-interrupts.spec.ts`.
  */
 import {
   exploreTest as test,
@@ -76,137 +81,6 @@ async function hoverAs(
   await client.detach();
   await page.waitForTimeout(150);
 }
-
-// ---------------------------------------------------------------------------
-// TCH-04 — pen hover parity
-// ---------------------------------------------------------------------------
-test.describe('TCH-04 — hovering with a pen', () => {
-  async function nodePoint(page: Page, canvas: CanvasPOM) {
-    await placeIconViaMouse(page, { x: 640, y: 300 });
-    await expect.poll(() => getModelItemCount(page), { timeout: 8_000 }).toBe(1);
-    await clearCanvasForTouch(page);
-    const [item] = await itemTiles(page);
-    const rel = await canvas.tileToScreen(item.tile);
-    const box = await canvas.interactionsLayer().boundingBox();
-    return { id: item.id, abs: { x: box!.x + rel.x, y: box!.y + rel.y } };
-  }
-
-  test('control: a MOUSE hover sets hoveredItem', async ({ app }) => {
-    const { page } = app;
-    const canvas = new CanvasPOM(page);
-    const node = await nodePoint(page, canvas);
-
-    await hoverAs(page, 'mouse', node.abs);
-    expect(await hoveredItemId(page)).toBe(node.id);
-  });
-
-  test.fail('BUG: a PEN hover over the same node sets nothing', async ({
-    app
-  }) => {
-    const { page } = app;
-    const canvas = new CanvasPOM(page);
-    const node = await nodePoint(page, canvas);
-
-    await hoverAs(page, 'pen', node.abs);
-    expect(await hoveredItemId(page)).toBe(node.id);
-  });
-
-  test('characterization: pen hover leaves hoveredItem null (and mouse then works)', async ({
-    app
-  }) => {
-    const { page } = app;
-    const canvas = new CanvasPOM(page);
-    const node = await nodePoint(page, canvas);
-
-    await hoverAs(page, 'pen', node.abs);
-    const afterPen = await hoveredItemId(page);
-    await hoverAs(page, 'mouse', node.abs);
-    const afterMouse = await hoveredItemId(page);
-    // eslint-disable-next-line no-console
-    console.log(
-      `TCH-04 observed — after pen: ${afterPen}; after mouse: ${afterMouse}`
-    );
-    expect(afterPen).toBeNull();
-    expect(afterMouse).toBe(node.id);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// TCH-05 — palette drop over an overlaying panel
-// ---------------------------------------------------------------------------
-test.describe('TCH-05 — releasing a palette drag over another panel', () => {
-  /**
-   * The hypothesis only bites if a panel actually OVERLAPS `rendererEl`'s
-   * bounding rect, so the probe measures the geometry first and drops on the
-   * overlap. If nothing overlaps, the containment test cannot be fooled and the
-   * hypothesis is structurally falsified — which the assertion below records.
-   */
-  /**
-   * The Elements panel must be open to start a palette drag, and it is the
-   * realistic "changed my mind" release point. The left dock shows ONE panel at
-   * a time, so it is also the only panel that can overlap the renderer during
-   * such a drag.
-   */
-  async function dragIconBackOntoThePanel(page: Page, canvas: CanvasPOM) {
-    const touch = new TouchPOM(page, canvas);
-    const icon = byAxoviewId(page, 'canvas-icon-grid-item').first();
-    if (!(await icon.isVisible().catch(() => false))) {
-      await byAxoviewId(page, 'dock-elements-toggle').click();
-      await icon.waitFor({ state: 'visible', timeout: 5_000 });
-    }
-    const iconBox = await icon.boundingBox();
-    const rendererBox = await canvas.interactionsLayer().boundingBox();
-
-    const overlapsRenderer =
-      !!iconBox &&
-      !!rendererBox &&
-      iconBox.x < rendererBox.x + rendererBox.width &&
-      iconBox.x + iconBox.width > rendererBox.x &&
-      iconBox.y < rendererBox.y + rendererBox.height &&
-      iconBox.y + iconBox.height > rendererBox.y;
-
-    const start = {
-      x: iconBox!.x + iconBox!.width / 2,
-      y: iconBox!.y + iconBox!.height / 2
-    };
-    // Past tap-slop, released a few rows down — still inside the panel.
-    await touch.dragAbsolute(start, { x: start.x + 30, y: start.y + 150 }, 10);
-    await page.waitForTimeout(400);
-    return { overlapsRenderer, rendererBox, iconBox };
-  }
-
-  test.fail(
-    'BUG: a drop back onto the Elements panel places a node behind it',
-    async ({ app }) => {
-      const { page } = app;
-      const canvas = new CanvasPOM(page);
-      await dragIconBackOntoThePanel(page, canvas);
-      expect(await itemTiles(page)).toHaveLength(0);
-    }
-  );
-
-  test('characterization: the renderer rect spans the whole window, so the panel is "canvas"', async ({
-    app
-  }) => {
-    const { page } = app;
-    const canvas = new CanvasPOM(page);
-    const geo = await dragIconBackOntoThePanel(page, canvas);
-
-    const items = await itemTiles(page);
-    // eslint-disable-next-line no-console
-    console.log(
-      `TCH-05 observed — renderer ${JSON.stringify(geo.rendererBox)}; elements icon ${JSON.stringify(geo.iconBox)}; overlaps ${geo.overlapsRenderer}; items ${JSON.stringify(items)}`
-    );
-
-    // The panel really is inside the renderer's bounding rect...
-    expect(geo.overlapsRenderer).toBe(true);
-    // ...so the `palette` drop's containment test accepts it, and a node lands
-    // at a tile the user cannot see, off to the left behind the panel.
-    expect(items).toHaveLength(1);
-    expect(items[0].tile.x).toBeLessThan(0);
-    await expectStoreInvariants(page, 'after palette drop on the panel');
-  });
-});
 
 // ---------------------------------------------------------------------------
 // TCH-07 — off-grid hit-testing under a finger

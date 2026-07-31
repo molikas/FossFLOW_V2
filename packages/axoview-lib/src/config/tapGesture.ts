@@ -12,6 +12,18 @@ import { Coords } from 'src/types';
 export const TAP_SLOP_PX = 8;
 
 /**
+ * How long a stationary press must be held before it counts as a long press
+ * (→ the per-item context menu, or a marquee lasso on empty canvas; ADR 0027 §2).
+ *
+ * Lives here rather than inside the gesture machine because it is not the only
+ * consumer: the label hit-proxies own their own presses (ADR 0031 §4 — chips are
+ * outside the tile hit-test), so they have to time the same hold themselves.
+ * Two hard-coded delays would let the chip's menu and the node's menu open at
+ * visibly different moments (I2/TCH-09).
+ */
+export const LONG_PRESS_MS = 450;
+
+/**
  * True when the pointer has travelled beyond the tap slop radius — i.e. the
  * gesture is a drag/pan, not a tap. Pure + zoom-independent (operates on raw
  * screen pixels), so it is the single drag-start classifier for every mode

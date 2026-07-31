@@ -35,6 +35,28 @@ jest.mock('src/config/tapGesture', () => ({
   exceedsTapSlop: (a: unknown, b: unknown) => mockExceedsTapSlop(a, b)
 }));
 
+// I5/CTX-01: a drag-from-panel release is a placement only when it ENDS OVER
+// the canvas. `isCanvasDrop` hit-tests the release point, so these cases need a
+// renderer element and a stubbed `elementFromPoint` (jsdom has no layout).
+const CANVAS_CHILD = { nodeType: 1, tag: 'canvas-child' };
+const PANEL_CHILD = { nodeType: 1, tag: 'panel-child' };
+const makeRenderer = (dropOverCanvas: boolean) => {
+  document.elementFromPoint = jest.fn(() =>
+    dropOverCanvas ? CANVAS_CHILD : PANEL_CHILD
+  );
+  return {
+    getBoundingClientRect: () => ({
+      left: 0,
+      top: 0,
+      right: 1280,
+      bottom: 720,
+      width: 1280,
+      height: 720
+    }),
+    contains: (node: unknown) => node === CANVAS_CHILD
+  };
+};
+
 function makeUiState(overrides: Record<string, unknown> = {}) {
   return {
     mode: { type: 'LABEL', showCursor: true, id: null },
@@ -115,7 +137,7 @@ describe('Label.mouseup', () => {
     expect(mockSetItemControls).not.toHaveBeenCalled();
   });
 
-  it('a drag-from-panel release (off-canvas but past tap-slop) places one Label', () => {
+  it('a drag-from-panel release that ends OVER THE CANVAS places one Label', () => {
     mockExceedsTapSlop.mockReturnValue(true);
     const uiState = makeUiState({
       mouse: {
@@ -127,11 +149,33 @@ describe('Label.mouseup', () => {
     Label.mouseup?.({
       uiState: uiState as any,
       scene: makeScene() as any,
-      isRendererInteraction: false
+      isRendererInteraction: false,
+      rendererRef: makeRenderer(true) as any
     });
 
     expect(mockCreateLabel).toHaveBeenCalledTimes(1);
     expect(mockSetMode).toHaveBeenCalledWith(expect.objectContaining({ type: 'CURSOR' }));
+  });
+
+  // Promoted from the exploratory lane (I5/CTX-01).
+  it('a drag-from-panel release back OVER THE PANEL places nothing', () => {
+    mockExceedsTapSlop.mockReturnValue(true);
+    const uiState = makeUiState({
+      mouse: {
+        position: { tile: { x: 2, y: 3 }, screen: { x: 60, y: 200 } },
+        mousedown: { screen: { x: 0, y: 0 } }
+      }
+    });
+
+    Label.mouseup?.({
+      uiState: uiState as any,
+      scene: makeScene() as any,
+      isRendererInteraction: false,
+      rendererRef: makeRenderer(false) as any
+    });
+
+    expect(mockCreateLabel).not.toHaveBeenCalled();
+    expect(mockSetMode).not.toHaveBeenCalled();
   });
 
   it('does nothing when the mode is not LABEL', () => {

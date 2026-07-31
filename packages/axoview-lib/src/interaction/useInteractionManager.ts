@@ -6,7 +6,8 @@ import {
   State,
   SlimMouseEvent,
   Mouse,
-  ItemReference
+  ItemReference,
+  Coords
 } from 'src/types';
 import { DialogTypeEnum, ItemControls } from 'src/types/ui';
 import {
@@ -29,6 +30,8 @@ import {
   type CanvasKeyboardSurface
 } from './readonlyPolicy';
 import { isModalDialogOpen, hasLiveTextSelection } from './keyboardScope';
+import { isPointOverCanvas } from 'src/utils/canvasDropTarget';
+import { suppressLongPressGestureEnd } from 'src/utils/longPressMenu';
 import type { ScreenToTileFn } from 'src/utils/renderer';
 import { useLayerContext } from 'src/hooks/useLayerContext';
 import { collectSelectableRefs } from 'src/utils/selectableRefs';
@@ -46,7 +49,7 @@ import { Label } from './modes/Label';
 import { Lasso } from './modes/Lasso';
 import { FreehandLasso } from './modes/FreehandLasso';
 import { ReconnectAnchor } from './modes/ReconnectAnchor';
-import { exceedsTapSlop } from 'src/config/tapGesture';
+import { exceedsTapSlop, LONG_PRESS_MS } from 'src/config/tapGesture';
 import { MIN_ZOOM, MAX_ZOOM } from 'src/config';
 import { usePanHandlers } from './usePanHandlers';
 import { useRAFThrottle } from './useRAFThrottle';
@@ -76,47 +79,9 @@ const modes: { [k in string]: ModeActions } = {
 type PointerKind = 'mouse' | 'touch' | 'pen';
 
 // Hold duration before a stationary touch becomes a long-press (node → context
-// menu; empty → lasso). Slightly under the OS ~500ms callout so our menu wins.
-const LONG_PRESS_MS = 450;
-
-// ADR 0027 touch reconciliation: a long-press opens the context menu DURING the
-// hold, while the finger is still down. When the finger lifts, the browser
-// synthesises a compatibility mouse sequence (mousedown → mouseup → click) at
-// the press point. Portaled to <body>, the MUI Menu backdrop sits under that
-// point, so that synthesised mousedown/click immediately dismisses the
-// just-opened menu (the "verify on a device" risk ADR 0027 flagged). The
-// spec-compliant cure is to cancel the terminating `touchend`, which suppresses
-// the whole compat-mouse sequence; we also swallow a stray backdrop
-// mousedown/click in the capture phase as a belt-and-suspenders fallback for
-// environments that synthesise the click without a cancelable touchend. The
-// menu therefore survives the lift; a later, deliberate tap-away (a fresh touch
-// sequence) still dismisses it. Everything self-removes after the first
-// terminating event or 700 ms, so it can never eat a real interaction.
-const suppressLongPressGestureEnd = () => {
-  let timer: ReturnType<typeof setTimeout>;
-  const cleanup = () => {
-    window.removeEventListener('touchend', onTouchEnd, true);
-    window.removeEventListener('mousedown', onBackdropMouse, true);
-    window.removeEventListener('click', onBackdropMouse, true);
-    clearTimeout(timer);
-  };
-  const onTouchEnd = (ev: TouchEvent) => {
-    // Cancel the compat-mouse sequence the lift would otherwise synthesise.
-    if (ev.cancelable) ev.preventDefault();
-  };
-  const onBackdropMouse = (ev: MouseEvent) => {
-    if ((ev.target as HTMLElement | null)?.closest('.MuiBackdrop-root')) {
-      ev.stopPropagation();
-      ev.preventDefault();
-    }
-    // The click is the last event of the sequence — clean up once it lands.
-    if (ev.type === 'click') cleanup();
-  };
-  window.addEventListener('touchend', onTouchEnd, { capture: true, passive: false });
-  window.addEventListener('mousedown', onBackdropMouse, true);
-  window.addEventListener('click', onBackdropMouse, true);
-  timer = setTimeout(cleanup, 700);
-};
+// menu; empty → lasso) is `LONG_PRESS_MS` in config/tapGesture — slightly under
+// the OS ~500 ms callout so our menu wins. It lives there because the label
+// hit-proxies time the same hold themselves (I2/TCH-09).
 
 // Max gap between two taps on the SAME item for the second to count as a
 // double-tap (→ open the details panel, ADR 0022 §5). Debounced against the
@@ -1154,6 +1119,53 @@ export const useInteractionManager = () => {
       if (touchRaf === null) touchRaf = requestAnimationFrame(runTouchFrame);
     };
 
+    /**
+     * What a double-TAP opens — the touch twin of `onDoubleClick`.
+     *
+     * I2/TCH-12: the two had drifted. `onDoubleClick` drops a TEXT BOX into its
+     * on-canvas edit session (ADR 0034 §1) and a LABEL into its inline editor
+     * (LabelHitLayer's own double-click does that for the mouse); the touch
+     * double-tap only ever called `setItemControls`, so a double-tap on a text
+     * box opened the Details deck and touch had NO route into editing text on
+     * the canvas at all. The branches are mirrored here rather than shared with
+     * `onDoubleClick` because that handler resolves its own target by tile hit
+     * test — the touch machine already knows which item was tapped.
+     */
+    const openTouchDoubleTapTarget = (
+      downItem: ItemReference,
+      downTile: Coords
+    ) => {
+      const ui = uiStateApi.getState();
+      if (ui.editorMode !== 'EDITABLE') {
+        ui.actions.setItemControls({
+          type: downItem.type,
+          id: downItem.id
+        } as ItemControls);
+        return;
+      }
+      if (downItem.type === 'TEXTBOX') {
+        ui.actions.setItemControls(
+          { type: 'TEXTBOX', id: downItem.id },
+          { openPanel: false }
+        );
+        ui.actions.setEditingTextBoxId(downItem.id);
+        return;
+      }
+      if (downItem.type === 'LABEL') {
+        ui.actions.setItemControls(
+          { type: 'LABEL', id: downItem.id },
+          { openPanel: false }
+        );
+        ui.actions.setInlineEditLabelId(downItem.id);
+        return;
+      }
+      const controls: ItemControls =
+        downItem.type === 'CONNECTOR'
+          ? { type: 'CONNECTOR', id: downItem.id, tile: downTile }
+          : { type: downItem.type, id: downItem.id };
+      ui.actions.setItemControls(controls);
+    };
+
     const clearLongPress = () => {
       const ts = touchStateRef.current;
       if (ts.longPressTimer !== null) {
@@ -1340,7 +1352,20 @@ export const useInteractionManager = () => {
 
     const onTouchPointerMove = (e: PointerEvent) => {
       const ts = touchStateRef.current;
-      if (!ts.pointers.has(e.pointerId)) return;
+      if (!ts.pointers.has(e.pointerId)) {
+        // I2/TCH-04: a pen HOVERS. It is routed into the touch machine (which is
+        // the right home for its press gestures — pen and finger share the
+        // long-press, pinch and tap semantics), and that machine discards every
+        // move from a pointer that never pressed, because a finger cannot hover.
+        // So pen hover set no `hoveredItem`, painted no hover outline and showed
+        // no cursor, while a mouse at the same point did all three. Forward a
+        // bare hover move for it: `Cursor.mousemove` skips the hover path while a
+        // press is live, so this cannot disturb a gesture.
+        if (e.pointerType === 'pen' && ts.phase === 'idle') {
+          onMouseEvent(toSlim(e, 'mousemove'));
+        }
+        return;
+      }
       ts.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
       // Any real movement cancels a pending hold (it's a drag, not a long-press).
@@ -1387,7 +1412,22 @@ export const useInteractionManager = () => {
       if (ts.phase === 'pan' || ts.phase === 'pinch') scheduleTouchFrame();
     };
 
-    const onTouchPointerUp = (e: PointerEvent) => {
+    /**
+     * The single end-of-pointer path for the touch/pen machine — a lift
+     * (`cancelled: false`) or an OS takeover (`cancelled: true`).
+     *
+     * I2/TCH-06 + TCH-14: these were two hand-maintained handlers, and the
+     * cancel copy had drifted. `onTouchPointerUp` demoted pinch → pan when one
+     * finger remained and maintained the double-tap bookkeeping;
+     * `onTouchPointerCancel` did neither — so cancelling one finger mid-pinch
+     * froze the survivor until it lifted (TCH-14), and a press cancelled
+     * between two taps stitched them into a spurious double-tap (TCH-06, ruled
+     * 2026-07-30: Android `GestureDetector` and iOS `UITapGestureRecognizer`
+     * both abort a multi-tap sequence on cancel). One helper, with the two
+     * genuine differences named at their branch, is the fix the ruling asked
+     * for.
+     */
+    const endPointer = (e: PointerEvent, { cancelled }: { cancelled: boolean }) => {
       const ts = touchStateRef.current;
       const wasPhase = ts.phase;
       clearLongPress();
@@ -1395,12 +1435,31 @@ export const useInteractionManager = () => {
       releaseCapture(e);
 
       if (wasPhase === 'menu') {
-        // Long-press already opened the menu; the lift just ends the press.
+        // The long-press already opened the menu and consumed the gesture; the
+        // lift just ends the press. I2/TCH-02: it did so WITHOUT closing the
+        // press bookkeeping the forwarded `mousedown` opened, so
+        // `uiState.mouse.mousedown` and `mode.mousedownItem` stayed populated
+        // with nothing touching the screen — and `Cursor.entry` replays
+        // `mousedown` whenever `mousedownItem` is set, so the stale press was
+        // live input for the next mode transition. Clear it directly rather
+        // than forwarding a `mouseup`: the mode must not re-run its selection
+        // or drag-commit logic for a gesture the menu already took over.
+        const ui = uiStateApi.getState();
+        if (ui.mouse.mousedown) {
+          ui.actions.setMouse({ ...ui.mouse, mousedown: null });
+        }
+        if (ui.mode.type === 'CURSOR' && ui.mode.mousedownItem) {
+          ui.actions.setMode({ ...ui.mode, mousedownItem: null });
+        }
         ts.phase = 'idle';
+        ts.itemDownTarget = null;
         return;
       }
+
       if (wasPhase === 'pinch') {
-        // Lift back to one finger → resume single-finger pan. All gone → idle.
+        // Back to one finger → resume single-finger pan. All gone → idle.
+        // TCH-14: `runTouchFrame` needs two pointers, so without this demotion
+        // a cancelled finger left the survivor in `pinch` and the canvas frozen.
         if (ts.pointers.size === 1) {
           const remaining = [...ts.pointers.values()][0];
           ts.phase = 'pan';
@@ -1410,31 +1469,30 @@ export const useInteractionManager = () => {
         }
         return;
       }
+
       if (wasPhase === 'item') {
         // Complete the gesture: Cursor.mouseup selects (no move) or commits the
         // drag; RECONNECT_ANCHOR commits the reconnect; Lasso.mouseup commits an
-        // auto-lasso marquee.
+        // auto-lasso marquee. A cancel ends it the same way — commit where it is.
         forwardMouse(e, 'mouseup', interactionsEl);
         // Double-tap on an item → open its details panel (ADR 0022 §5). Only a
         // stationary tap on an interactable item counts; a drag (move past slop)
         // or an auto-lasso marquee resets the streak. The mouseup above already
         // (re-)selected it; this just escalates the second tap to "open".
+        // TCH-06: a CANCELLED press is not a tap — the OS took the gesture away
+        // (palm rejection, notification, app switch), so it breaks the streak.
         const movedItem = exceedsTapSlop(ts.downScreen, {
           x: e.clientX,
           y: e.clientY
         });
-        if (!ts.autoLasso && !movedItem && ts.downItem) {
+        if (!cancelled && !ts.autoLasso && !movedItem && ts.downItem) {
           const now = Date.now();
           const sameItem =
             !!ts.lastTapItem &&
             ts.lastTapItem.id === ts.downItem.id &&
             ts.lastTapItem.type === ts.downItem.type;
           if (sameItem && now - ts.lastTapTime < DOUBLE_TAP_MS) {
-            const controls: ItemControls =
-              ts.downItem.type === 'CONNECTOR'
-                ? { type: 'CONNECTOR', id: ts.downItem.id, tile: ts.downTile }
-                : { type: ts.downItem.type, id: ts.downItem.id };
-            uiStateApi.getState().actions.setItemControls(controls);
+            openTouchDoubleTapTarget(ts.downItem, ts.downTile);
             ts.lastTapTime = 0;
             ts.lastTapItem = null;
           } else {
@@ -1458,33 +1516,34 @@ export const useInteractionManager = () => {
         ts.itemDownTarget = null;
         return;
       }
+
       if (wasPhase === 'pan') {
         if (ts.pointers.size === 0) ts.phase = 'idle';
         return;
       }
+
       if (wasPhase === 'palette') {
         // Elements-panel drag (started off-canvas, placement armed). A real drag
         // that lifts OVER the canvas drops/places the icon there; off the canvas
         // cancels. A no-move tap leaves the placement armed for a later canvas
         // tap (the tap-then-tap-canvas flow is unchanged).
+        //
+        // A cancel is handled the same way on purpose: some browsers fire
+        // pointercancel when the touch leaves the panel even with capture +
+        // touch-action:none, so a moved cancel over the canvas is still a drop
+        // (#1 robustness). It does NOT disarm the placement — the user did not
+        // choose to end the gesture.
         ts.phase = 'idle';
         const moved = exceedsTapSlop(ts.downScreen, {
           x: e.clientX,
           y: e.clientY
         });
         if (!moved) return;
-        const rect = rendererEl?.getBoundingClientRect();
-        const overCanvas =
-          !!rect &&
-          e.clientX >= rect.left &&
-          e.clientX <= rect.right &&
-          e.clientY >= rect.top &&
-          e.clientY <= rect.bottom;
-        if (overCanvas) {
+        if (isPointOverCanvas(rendererEl, e.clientX, e.clientY)) {
           forwardMouse(e, 'mousemove', interactionsEl);
           forwardMouse(e, 'mousedown', interactionsEl);
           forwardMouse(e, 'mouseup', interactionsEl);
-        } else {
+        } else if (!cancelled) {
           const ui = uiStateApi.getState();
           if (ui.mode.type === 'PLACE_ICON') {
             ui.actions.setMode({
@@ -1496,51 +1555,31 @@ export const useInteractionManager = () => {
         }
         return;
       }
+
       if (wasPhase === 'pan-pending') {
         // Tap on empty canvas → clear selection. Forward a click (no move → no
-        // lasso); Cursor.mouseup with no item clears.
-        forwardMouse(e, 'mousemove', interactionsEl);
-        forwardMouse(e, 'mousedown', interactionsEl);
-        forwardMouse(e, 'mouseup', interactionsEl);
-        ts.phase = 'idle';
-      }
-    };
-
-    const onTouchPointerCancel = (e: PointerEvent) => {
-      const ts = touchStateRef.current;
-      const wasPhase = ts.phase;
-      clearLongPress();
-      ts.pointers.delete(e.pointerId);
-      releaseCapture(e);
-      // End an in-flight item gesture cleanly (commit where it is).
-      if (wasPhase === 'item') forwardMouse(e, 'mouseup', interactionsEl);
-      // Palette drag: some browsers fire pointercancel when the touch leaves the
-      // panel even with capture + touch-action:none. Treat a moved cancel over
-      // the canvas as a drop so drag-from-panel still places (#1 robustness).
-      if (wasPhase === 'palette') {
-        const moved = exceedsTapSlop(ts.downScreen, {
-          x: e.clientX,
-          y: e.clientY
-        });
-        const rect = rendererEl?.getBoundingClientRect();
-        const overCanvas =
-          !!rect &&
-          e.clientX >= rect.left &&
-          e.clientX <= rect.right &&
-          e.clientY >= rect.top &&
-          e.clientY <= rect.bottom;
-        if (moved && overCanvas) {
+        // lasso); Cursor.mouseup with no item clears. A cancelled press is not a
+        // tap, so it clears nothing.
+        if (!cancelled) {
           forwardMouse(e, 'mousemove', interactionsEl);
           forwardMouse(e, 'mousedown', interactionsEl);
           forwardMouse(e, 'mouseup', interactionsEl);
         }
+        ts.phase = 'idle';
+        return;
       }
+
       if (ts.pointers.size === 0) {
         ts.phase = 'idle';
         ts.itemDownTarget = null;
         ts.autoLasso = false;
       }
     };
+
+    const onTouchPointerUp = (e: PointerEvent) => endPointer(e, { cancelled: false });
+
+    const onTouchPointerCancel = (e: PointerEvent) =>
+      endPointer(e, { cancelled: true });
 
     // True when the pointerdown landed on the canvas (the interactions box, a
     // node, an anchor — anything inside the Renderer container). Listeners are

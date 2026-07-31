@@ -1,5 +1,6 @@
 import { setWindowCursor, generateId } from 'src/utils';
 import { resolvePlacement, cursorTileResidual } from 'src/utils/resolvePlacement';
+import { isCanvasDrop } from 'src/utils/canvasDropTarget';
 import { TEXTBOX_DEFAULTS } from 'src/config';
 import { exceedsTapSlop } from 'src/config/tapGesture';
 import { ModeActions } from 'src/types';
@@ -17,20 +18,30 @@ export const TextBox: ModeActions = {
     setWindowCursor('default');
   },
   mousemove: () => {},
-  mouseup: ({ uiState, scene, isRendererInteraction }) => {
+  mouseup: ({ uiState, scene, isRendererInteraction, rendererRef }) => {
     if (uiState.mode.type !== 'TEXTBOX') return;
 
     // Distinguish the arming tap on the deck card (no renderer release, no move →
     // just arm) from a real placement: a canvas tap (renderer release) or a
-    // drag from the panel onto the canvas (past tap-slop). Same gating PlaceIcon
-    // uses so the panel click only arms.
+    // drag from the panel that ENDS OVER the canvas. Same gating PlaceIcon uses
+    // so the panel click only arms. (I5/CTX-01: "did the pointer travel?" alone
+    // dropped elements behind the panel the drag was released over.)
     const moved =
       !!uiState.mouse.mousedown &&
       exceedsTapSlop(
         uiState.mouse.mousedown.screen,
         uiState.mouse.position.screen
       );
-    if (!isRendererInteraction && !moved) return;
+    if (
+      !isCanvasDrop(
+        rendererRef,
+        isRendererInteraction,
+        uiState.mouse.position.screen,
+        moved
+      )
+    ) {
+      return;
+    }
 
     const globalSnap = uiState.snapToGrid ?? true;
     const tile = uiState.mouse.position.tile;

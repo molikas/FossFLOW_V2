@@ -1934,13 +1934,25 @@ too.
 
 **Workaround:** wait ~1 s before tapping away, or pick a menu item.
 
-**Status:** Open. Fix direction: forward a `mouseup` when entering the `menu`
-phase (or clear `mousedownItem`/`mouse.mousedown` explicitly); and scope the
-suppression to the compat sequence rather than a time window — e.g. record the
-`touchend` timestamp and only swallow synthesised events within one frame of it,
-or drop the belt-and-braces backdrop listeners now that the `touchend`
-`preventDefault` does the real work. Repro:
-[`touch-tch-01-06-14.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I2-touch/touch-tch-01-06-14.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31), both halves, taking the parenthetical
+of each direction rather than the headline.
+
+(1) The `menu` branch of the end-of-pointer path CLEARS `mouse.mousedown` and
+`mode.mousedownItem` directly instead of forwarding a `mouseup`. Forwarding
+would re-enter the active mode's mouseup — selection, or a drag commit — for a
+gesture the menu had already taken over.
+
+(2) The suppression is not time-scoped; it is *event*-scoped. The reason it ran
+for the full 700 ms is that cancelling the `touchend` suppresses the whole
+compat sequence, so the `click` its cleanup waited on never arrived — it was
+waiting for an event its own `preventDefault` had removed. It now tears down one
+macrotask after the terminating `touchend`, which is the lift it exists for; the
+700 ms timer stays only as an outer net for a gesture that produces no
+`touchend` at all, and the backdrop listeners stay for environments that
+synthesise a click without a cancelable touchend. The helper moved to
+[`longPressMenu.ts`](packages/axoview-lib/src/utils/longPressMenu.ts) so the
+label hit-proxies can arm it too (see TCH-09). Promoted regressions:
+[`touch-gesture-interrupts.spec.ts`](packages/axoview-e2e/tests/touch-gesture-interrupts.spec.ts).
 
 ## Pen hover does nothing — no hover cursor, no hover outline, no `hoveredItem`
 
@@ -1964,10 +1976,15 @@ equivalence breaks.
 
 **Workaround:** none; press instead of hovering.
 
-**Status:** Open. Fix direction: route hovering pen moves (`pointerType === 'pen'`
-with no active press) down the mouse path — `onMouseEvent(toSlim(e, 'mousemove'))` —
-and keep the touch machine for pen moves that belong to an active press. Repro:
-[`touch-tch-04-05-07-08.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I2-touch/touch-tch-04-05-07-08.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) exactly as directed:
+`onTouchPointerMove` forwards a bare `mousemove` for a pen pointer that is not
+in the tracked set and whose gesture phase is idle, and every pen move that
+belongs to a press keeps taking the touch path. `Cursor.mousemove` skips the
+hover branch while a press is live, so the forward cannot disturb a gesture.
+Promoted regressions: [`touch-gesture-interrupts.spec.ts`](packages/axoview-e2e/tests/touch-gesture-interrupts.spec.ts) — with a MOUSE
+control beside it, because the hover path is gated on `hasMovedTile` and a
+single synthetic move updates `hoveredItem` for neither device (a one-move
+version of this test reads as a pen bug and is a rig artifact).
 
 ## A touch palette drag released back onto the Elements panel places a node behind the panel
 
@@ -1991,11 +2008,15 @@ containment cannot answer the question hit-testing answers.
 **Workaround:** drag the icon off the panel and release over empty canvas, or
 delete the stray node afterwards.
 
-**Status:** Open. Fix direction: replace the rect test with
-`document.elementFromPoint(clientX, clientY)` and require the hit element to be
-the interactions box (or inside it) — the same `isRendererInteraction` question
-the mouse path already asks. Repro:
-[`touch-tch-04-05-07-08.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I2-touch/touch-tch-04-05-07-08.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) as directed. The predicate is
+[`isPointOverCanvas`](packages/axoview-lib/src/utils/canvasDropTarget.ts), and
+it is shared with the MOUSE placement modes, which had the same defect from the
+other direction (I5/CTX-01 — they asked nothing at all and committed on travel
+alone). One module answers "was this released over the canvas?" for every drop
+path now. Promoted regressions:
+[`touch-gesture-interrupts.spec.ts`](packages/axoview-e2e/tests/touch-gesture-interrupts.spec.ts) (which first asserts the panel really
+does sit inside the renderer's rect, or the case proves nothing) and
+[`canvasDropTarget.test.ts`](packages/axoview-lib/src/utils/__tests__/canvasDropTarget.test.ts).
 
 ## A floating Label has no long-press menu on touch — the press never reaches the gesture machine
 
@@ -2020,11 +2041,19 @@ unaffected because the right-click menu is raised from the proxy element itself
 
 **Workaround:** none on touch.
 
-**Status:** Open. Fix direction: give `LabelHitLayer` a long-press handler that
-opens the item menu (mirroring its existing right-click branch), or let the
-proxy's pointerdown fall through to the window machine with the label id carried
-the way `data-anchor-id` is for connector anchors. Repro:
-[`touch-tch-09-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I2-touch/touch-tch-09-15.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) via the first direction. The
+fall-through alternative was rejected: the proxy swallows the press deliberately
+(`shouldBeginLabelDrag`) so a press aimed at a chip cannot clear the selection
+or start a pan underneath it — letting it through would trade this bug for that
+one. `createLabelLongPress` lives in
+[`labelPointerContract.ts`](packages/axoview-lib/src/utils/labelPointerContract.ts),
+the module that exists to stop the two hit-proxies drifting, and BOTH use it —
+the node name chip had the same hole, unfiled, for the same reason. It also arms
+the lift suppression (TCH-03's helper) so the menu survives the compat-mouse
+sequence. `LONG_PRESS_MS` moved to `config/tapGesture` so the chip's hold and
+the canvas machine's cannot disagree. Promoted regressions: the touch cases in
+[`labelPointerContract.test.tsx`](packages/axoview-lib/src/components/SceneLayers/__tests__/labelPointerContract.test.tsx),
+run against both layers, and [`touch-gesture-interrupts.spec.ts`](packages/axoview-e2e/tests/touch-gesture-interrupts.spec.ts).
 
 ## Double-tapping a text box opens the Details deck instead of editing it — touch cannot edit text on canvas
 
@@ -2049,10 +2078,17 @@ was special-cased later.
 
 **Workaround:** none on touch.
 
-**Status:** Open. Fix direction: factor the double-activation body out of
-`onDoubleClick` and call it from the touch branch too, so the TEXTBOX case (and
-any future type-specific case) cannot diverge again. Repro:
-[`touch-tch-09-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I2-touch/touch-tch-09-15.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31). The direction was to factor
+`onDoubleClick`'s body out and share it; what shipped mirrors the branches
+instead, in one named function (`openTouchDoubleTapTarget`). Sharing the whole
+body is not possible without pretending: `onDoubleClick` RESOLVES its target by
+tile hit-test with `connectorMatch: 'exact'`, and the touch machine already
+knows which item was tapped — labels, notably, are not tile-hit-testable at all
+(ADR 0031 §4), so a shared resolver would silently drop the LABEL case the touch
+path can serve. The mirrored version covers TEXTBOX (on-canvas editor, ADR 0034
+§1), LABEL (inline editor) and the deck for everything else. Promoted
+regressions: [`touch-gesture-interrupts.spec.ts`](packages/axoview-e2e/tests/touch-gesture-interrupts.spec.ts), with the mouse
+double-click as the parity control in the same file.
 
 ## Cancelling one finger during a pinch strands the other — the canvas freezes until it lifts
 
@@ -2075,11 +2111,23 @@ so the machine stays in `pinch` with one pointer, and `runTouchFrame`'s
 
 **Workaround:** lift the remaining finger and start again.
 
-**Status:** Open. Fix direction: give `onTouchPointerCancel` the same
-pinch → pan demotion `onTouchPointerUp` has (ideally by sharing one
-`endPointer(e, { cancelled })` helper, since the two handlers have drifted in
-exactly this way). Repro:
-[`touch-tch-01-06-14.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I2-touch/touch-tch-01-06-14.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) via the parenthetical: one
+`endPointer(e, { cancelled })` owns both handlers, with the two genuine
+differences named at their branch (a cancel does not count as a tap, and does
+not disarm an armed placement). That is also what the TCH-06 ruling asked for,
+so both land together.
+
+**Rig correction — the probe's evidence was not evidence.** It called its
+per-finger `cancel` with the second finger still down, and CDP rejects that
+("TouchCancel must not have any touch points"), so the call THREW; because the
+probe was a `test.fail()`, the protocol error read as a confirmed bug. The
+defect is real — `onTouchPointerUp` demoted pinch → pan and
+`onTouchPointerCancel` had no such branch, plainly, in the source — but that run
+did not demonstrate it. The promoted suite cancels ONE pointer for real
+(`Fingers.cancel` in the shared TouchPOM dispatches the `pointercancel` with the
+pointerId Chromium assigned to that finger, which is what an OS takeover
+delivers). Promoted regressions:
+[`touch-gesture-interrupts.spec.ts`](packages/axoview-e2e/tests/touch-gesture-interrupts.spec.ts).
 
 ## Arrow-nudging an off-grid item erases its sub-tile offset and snaps it to the grid
 
@@ -2390,12 +2438,23 @@ different wrong ways, and not at all on the mouse path.
 
 **Workaround:** delete the stray node, or drop deliberately over the canvas.
 
-**Status:** Open. Fix direction: one shared "was the release over the canvas"
-helper, implemented as `document.elementFromPoint(clientX, clientY)` resolving
-inside the interactions box — the same question `isRendererInteraction` answers
-for every other gesture — used by both the mouse placement modes and the touch
-palette path. Repro:
-[`ctx-01-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I5-pan-menu/ctx-01-15.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) exactly as directed, and shipped with
+its touch twin (I2/TCH-05) since they are one root cause seen from two paths.
+[`canvasDropTarget.ts`](packages/axoview-lib/src/utils/canvasDropTarget.ts)
+carries `isPointOverCanvas` plus the `isCanvasDrop` gate all three mouse
+placement modes (`PlaceIcon`, `TextBox`, `Label`) now share.
+
+One recorded belief had to be corrected to do it: `PlaceIcon.mouseup` carried a
+comment saying "a hit-test can't help here: the panel overlays the renderer, and
+capture makes both e.target AND elementFromPoint resolve to the icon mid-drag."
+Pointer capture retargets EVENTS, not `document.elementFromPoint`, which stays a
+true stacking-aware hit-test — and when the release genuinely IS over the panel,
+resolving to the icon is the right answer, not a false one. Promoted
+regressions: the over-panel case in each of
+[`PlaceIcon.test.ts`](packages/axoview-lib/src/interaction/__tests__/PlaceIcon.test.ts),
+`TextBox.test.ts` and `Label.test.ts` (whose "off-canvas but past tap-slop
+places" cases encoded the old contract and were rewritten), plus
+[`canvasDropTarget.test.ts`](packages/axoview-lib/src/utils/__tests__/canvasDropTarget.test.ts).
 
 ## Panning drops the armed tool — always for a middle-drag, and for half the tools on a right-drag
 

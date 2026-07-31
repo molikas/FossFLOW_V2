@@ -11,6 +11,7 @@ import { resolveDraggedOffset } from 'src/utils/labelPosition';
 import { getRenderedTilePosition } from 'src/utils/renderedGeometry';
 import {
   LABEL_DRAG_SLOP_PX,
+  createLabelLongPress,
   openLabelContextMenu,
   shouldBeginLabelDrag
 } from 'src/utils/labelPointerContract';
@@ -122,6 +123,14 @@ export const NodeLabelHitLayer = ({ nodes }: Props) => {
   }, [modelItems]);
 
   const dragRef = useRef<DragState | null>(null);
+  // I2/TCH-09 (sibling half): a finger has no right button, so the chip's menu
+  // is reached by holding. This proxy swallows the press, so the canvas gesture
+  // machine's long-press never sees it — the layer has to time its own. The
+  // floating-Label proxy is where the campaign found this; the two are kept in
+  // lockstep by `labelPointerContract` on purpose.
+  const longPressRef = useRef<ReturnType<typeof createLabelLongPress> | null>(
+    null
+  );
 
   const onWindowMove = useCallback(
     (e: PointerEvent) => {
@@ -130,7 +139,9 @@ export const NodeLabelHitLayer = ({ nodes }: Props) => {
       if (!d.started) {
         if (Math.abs(e.clientY - d.startClientY) < LABEL_DRAG_SLOP_PX) return;
         d.started = true;
-        // Past slop: promote the node into the DOM overlay (via labelDrag), so the
+        // Past slop this is a move, not a hold.
+        longPressRef.current?.cancel();
+        // Promote the node into the DOM overlay (via labelDrag), so the
         // label now moves as a single-node DOM re-render. A plain click never gets
         // here, so it neither promotes nor commits.
         uiStoreApi.getState().actions.setLabelDrag(d.id, d.startOffset);
@@ -153,6 +164,8 @@ export const NodeLabelHitLayer = ({ nodes }: Props) => {
   const onWindowUp = useCallback(() => {
     const d = dragRef.current;
     dragRef.current = null;
+    longPressRef.current?.cancel();
+    longPressRef.current = null;
     window.removeEventListener('pointermove', onWindowMove);
     window.removeEventListener('pointerup', onWindowUp);
     window.removeEventListener('pointercancel', onWindowUp);
@@ -215,11 +228,26 @@ export const NodeLabelHitLayer = ({ nodes }: Props) => {
         started: false,
         lastOffset: startOffset
       };
+      // Touch/pen: a stationary hold opens the NODE's item menu, the same one
+      // the right-click path opens. Dropping the drag state first means the lift
+      // that follows commits nothing — the hold replaced the reposition.
+      const longPress = createLabelLongPress((point) => {
+        dragRef.current = null;
+        const actions = uiStoreApi.getState().actions;
+        actions.setSelectedIds?.([{ type: 'ITEM', id: node.id }]);
+        actions.openContextMenu({
+          anchor: point,
+          variant: 'item',
+          target: { type: 'ITEM', id: node.id }
+        });
+      });
+      longPressRef.current = longPress;
+      longPress.start(e);
       window.addEventListener('pointermove', onWindowMove);
       window.addEventListener('pointerup', onWindowUp);
       window.addEventListener('pointercancel', onWindowUp);
     },
-    [onWindowMove, onWindowUp]
+    [onWindowMove, onWindowUp, uiStoreApi]
   );
 
   // Safety net: if the layer unmounts mid-drag, drop the window listeners and any

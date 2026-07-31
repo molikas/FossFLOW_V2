@@ -21,6 +21,7 @@ import { computeLabelCounterScale } from 'src/utils/labelScale';
 import { getRenderedTilePosition } from 'src/utils/renderedGeometry';
 import {
   LABEL_DRAG_SLOP_PX,
+  createLabelLongPress,
   openLabelContextMenu,
   shouldBeginLabelDrag
 } from 'src/utils/labelPointerContract';
@@ -243,6 +244,15 @@ export const LabelHitLayer = ({ labels }: Props) => {
   const inlineEditLabelId = useUiStateStore((s) => s.inlineEditLabelId);
 
   const dragRef = useRef<DragState | null>(null);
+  // I2/TCH-09: a finger has no right button, so the chip's context menu is
+  // reached by holding. The canvas gesture machine cannot supply that hold here
+  // — labels are outside the tile hit-test (ADR 0031 §4) AND this proxy swallows
+  // the press, so the window-level pointerdown the machine listens on never
+  // fires. Before this a long press on a floating Label produced NOTHING: no
+  // menu, and not even the hold-on-empty auto-lasso fallback.
+  const longPressRef = useRef<ReturnType<typeof createLabelLongPress> | null>(
+    null
+  );
 
   // "Keep labels readable" (ADR 0015): the WebGL chip in LabelsCanvas counter-
   // scales about its centre when zoomed out, so the DOM hit proxy (and inline
@@ -367,6 +377,8 @@ export const LabelHitLayer = ({ labels }: Props) => {
         if (Math.abs(dx) < LABEL_DRAG_SLOP_PX && Math.abs(dy) < LABEL_DRAG_SLOP_PX)
           return;
         d.started = true;
+        // Past slop this is a move, not a hold.
+        longPressRef.current?.cancel();
       }
       e.preventDefault();
       const zoom = uiStoreApi.getState().zoom || 1;
@@ -388,6 +400,8 @@ export const LabelHitLayer = ({ labels }: Props) => {
   const onWindowUp = useCallback(() => {
     const d = dragRef.current;
     dragRef.current = null;
+    longPressRef.current?.cancel();
+    longPressRef.current = null;
     window.removeEventListener('pointermove', onWindowMove);
     window.removeEventListener('pointerup', onWindowUp);
     window.removeEventListener('pointercancel', onWindowUp);
@@ -425,6 +439,24 @@ export const LabelHitLayer = ({ labels }: Props) => {
         started: false,
         last: label.offset ?? { x: 0, y: 0 }
       };
+      // Touch/pen: a stationary hold opens the same item menu a right-click
+      // does (TCH-09). Dropping the drag state first means the lift that follows
+      // commits nothing — the hold replaced the move.
+      const longPress = createLabelLongPress((point) => {
+        dragRef.current = null;
+        const actions = uiStoreApi.getState().actions;
+        actions.setItemControls(
+          { type: 'LABEL', id: label.id },
+          { openPanel: false }
+        );
+        actions.openContextMenu({
+          anchor: point,
+          variant: 'item',
+          target: { type: 'LABEL', id: label.id }
+        });
+      });
+      longPressRef.current = longPress;
+      longPress.start(e);
       window.addEventListener('pointermove', onWindowMove);
       window.addEventListener('pointerup', onWindowUp);
       window.addEventListener('pointercancel', onWindowUp);
