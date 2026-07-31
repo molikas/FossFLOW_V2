@@ -11,6 +11,8 @@ import { useTranslation } from 'src/stores/localeStore';
 
 interface Props {
   id: string;
+  /** View mode (EXPLORABLE_READONLY) — F2/VIEW-11. */
+  readOnly?: boolean;
 }
 
 // Text panel (2026-07-02): a text box's on-canvas content is edited INLINE on the
@@ -19,7 +21,7 @@ interface Props {
 // duplicate. So the deck has NO content editor: it leads with Notes (open), with
 // the identity Name in a collapsed Metadata section. Unified collapsible-section
 // deck (ux-principles §5.1); the top strip is the single styling surface (ADR 0030).
-export const TextBoxControls = ({ id }: Props) => {
+export const TextBoxControls = ({ id, readOnly = false }: Props) => {
   const { t } = useTranslation('textBoxControls');
   const { t: tMenu } = useTranslation('toolMenu');
   const uiStateActions = useUiStateStore((state) => state.actions);
@@ -54,6 +56,7 @@ export const TextBoxControls = ({ id }: Props) => {
         onChange={(notes) => updateTextBox(textBox.id, { notes })}
         open={notesOpen}
         onToggle={() => setNotesOpen((v) => !v)}
+        readOnly={readOnly}
       />
       <MetadataSection
         title={t('metadata')}
@@ -61,6 +64,7 @@ export const TextBoxControls = ({ id }: Props) => {
         name={textBox.name ?? ''}
         placeholder={t('namePlaceholder')}
         onChange={(v) => updateTextBox(textBox.id, { name: v || undefined })}
+        readOnly={readOnly}
       />
     </ControlsContainer>
   );

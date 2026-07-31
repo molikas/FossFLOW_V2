@@ -10,6 +10,8 @@ import { useTranslation } from 'src/stores/localeStore';
 
 interface Props {
   id: string;
+  /** View mode (EXPLORABLE_READONLY) — F2/VIEW-11. */
+  readOnly?: boolean;
 }
 
 // Floating Label panel (ADR 0031). A Label is just on-canvas text: edited INLINE
@@ -17,7 +19,7 @@ interface Props {
 // strip — so the deck carries no content editor, only Notes. Unified
 // collapsible-section deck (ux-principles §5.1). A Label's `text` is both its
 // content and its identity, so there is no Metadata section either.
-export const LabelControls = ({ id }: Props) => {
+export const LabelControls = ({ id, readOnly = false }: Props) => {
   const { t } = useTranslation('textBoxControls');
   const { t: tMenu } = useTranslation('toolMenu');
   const uiStateActions = useUiStateStore((state) => state.actions);
@@ -52,6 +54,7 @@ export const LabelControls = ({ id }: Props) => {
         onChange={(notes) => updateLabel(label.id, { notes })}
         open={notesOpen}
         onToggle={() => setNotesOpen((v) => !v)}
+        readOnly={readOnly}
       />
     </ControlsContainer>
   );

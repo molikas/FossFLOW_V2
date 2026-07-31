@@ -534,55 +534,12 @@ test.describe('CTX-11 / CTX-12 — context menu placement and contents', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// CTX-15 — read-only left-click opens the info popover
-// ---------------------------------------------------------------------------
-test.describe('CTX-15 — left-click in EXPLORABLE_READONLY', () => {
-  test.fail(
-    'BUG: a read-only left-click on a content-bearing node opens nothing',
-    async ({ app }) => {
-    const { page } = app;
-    const canvas = new CanvasPOM(page);
-    await placeIconViaMouse(page, { x: 640, y: 320 });
-    await expect.poll(() => getModelItemCount(page), { timeout: 8_000 }).toBe(1);
-    const [node] = await itemTiles(page);
-
-    // Give it content so ADR 0012 considers it clickable, and PROVE the write
-    // landed — otherwise "no popover" would just mean "no content".
-    await page.evaluate((id) => {
-      const model = (window as any).__axoview__.model.getState();
-      const items = model.items.map((i: any) =>
-        i.id === id ? { ...i, description: 'notes' } : i
-      );
-      model.actions.set({ items });
-    }, node.id);
-    const description = await page.evaluate((id) => {
-      const model = (window as any).__axoview__.model.getState();
-      return model.items.find((i: any) => i.id === id)?.description ?? null;
-    }, node.id);
-    expect(description, 'setup: the node must carry content').toBe('notes');
-    await page.evaluate(() => {
-      const ui = (window as any).__axoview__.ui.getState();
-      ui.actions.setItemControls(null);
-      ui.actions.clearSelection();
-      ui.actions.setEditorMode('EXPLORABLE_READONLY');
-      ui.actions.setMode({ type: 'PAN', showCursor: false });
-    });
-    await page.waitForTimeout(250);
-
-    const p = await absOfTile(canvas, node.tile);
-    await page.mouse.click(p.x, p.y);
-    await page.waitForTimeout(400);
-
-    const controls = await page.evaluate(() => {
-      const c = (window as any).__axoview__.ui.getState().itemControls;
-      return c ? { type: c.type, id: c.id } : null;
-    });
-    // eslint-disable-next-line no-console
-    console.log(`CTX-15 observed — itemControls after a read-only click: ${JSON.stringify(controls)}`);
-    expect(controls?.id).toBe(node.id);
-  });
-});
+// CTX-15 is FIXED (wave 2) and its probe promoted to the main suite —
+// `tests/readonly-enforcement.spec.ts`, alongside the I1/PTR-01..03 and
+// F2/VIEW-11 legs of the same read-only class. The cause was not the pan path
+// swallowing the click: `Pan.mouseup` already had the read-only branch, but a
+// RAF-throttled mousemove arriving after the press wrote `mouse.mousedown` back
+// to null, so the branch's "was this a click?" test never held.
 
 // ---------------------------------------------------------------------------
 // CTX-05 — wheel-zoom during a node icon-resize
@@ -684,7 +641,7 @@ test.describe('CTX-13 — placing via the keyboard', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Characterizations for CTX-06 and CTX-15 (the passing half of each pair)
+// Characterization for CTX-06 (the passing half of the pair)
 // ---------------------------------------------------------------------------
 test('CTX-06 characterization: four resize handles render over a hidden member', async ({
   app
@@ -723,52 +680,4 @@ test('CTX-06 characterization: four resize handles render over a hidden member',
   expect(handles).toBe(4);
 });
 
-test('CTX-15 characterization: the read-only click leaves the canvas inert', async ({
-  app
-}) => {
-  const { page } = app;
-  const canvas = new CanvasPOM(page);
-  await placeIconViaMouse(page, { x: 640, y: 320 });
-  await expect.poll(() => getModelItemCount(page), { timeout: 8_000 }).toBe(1);
-  const [node] = await itemTiles(page);
-
-  await page.evaluate((id) => {
-    const model = (window as any).__axoview__.model.getState();
-    const items = model.items.map((i: any) =>
-      i.id === id ? { ...i, description: 'notes' } : i
-    );
-    model.actions.set({ items });
-  }, node.id);
-  expect(
-    await page.evaluate((id) => {
-      const model = (window as any).__axoview__.model.getState();
-      return model.items.find((i: any) => i.id === id)?.description ?? null;
-    }, node.id)
-  ).toBe('notes');
-
-  await page.evaluate(() => {
-    const ui = (window as any).__axoview__.ui.getState();
-    ui.actions.setItemControls(null);
-    ui.actions.clearSelection();
-    ui.actions.setEditorMode('EXPLORABLE_READONLY');
-    ui.actions.setMode({ type: 'PAN', showCursor: false });
-  });
-  await page.waitForTimeout(250);
-
-  const p = await absOfTile(canvas, node.tile);
-  await page.mouse.click(p.x, p.y);
-  await page.waitForTimeout(400);
-
-  const controls = await page.evaluate(() => {
-    const c = (window as any).__axoview__.ui.getState().itemControls;
-    return c ? { type: c.type, id: c.id } : null;
-  });
-  // eslint-disable-next-line no-console
-  console.log(
-    `CTX-15 characterization — itemControls ${JSON.stringify(controls)}; mode ${await getUiMode(page).then((m) => m?.type)}`
-  );
-  // Nothing is selected and nothing opens: the item is content-bearing, the
-  // mode is PAN, and the click is swallowed by the pan path.
-  expect(controls).toBeNull();
-  expect(await getUiMode(page).then((m) => m?.type)).toBe('PAN');
-});
+// (CTX-15's characterization retired with its probe — see the note above.)

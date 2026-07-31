@@ -1,4 +1,5 @@
 import type { State } from 'src/types';
+import { canMutate, type EditorMode } from './readonlyPolicy';
 
 // Minimal dependency surface the Escape handlers need — a structural subset of
 // useInteractionManager's KeydownDeps, kept here so this module stays runtime
@@ -62,10 +63,15 @@ export const handleConnectorEscape = (
 
 // Escape: abort in-flight connector → clear panel → clear multi-selection.
 // Always consumes the keystroke. Returns true when handled (Escape pressed).
+//
+// `editorMode` gates only the tool-mode exit below. Esc itself is a `viewer`
+// surface (readonlyPolicy) — closing the popover and clearing the selection are
+// the two things a viewer most needs it for.
 export const handleEscapeKey = (
   e: KeyboardEvent,
   uiState: State['uiState'],
-  deps: EscapeDeps
+  deps: EscapeDeps,
+  editorMode: EditorMode = 'EDITABLE'
 ): boolean => {
   if (e.key !== 'Escape') return false;
   e.preventDefault();
@@ -83,7 +89,13 @@ export const handleEscapeKey = (
   // Select. Previously Esc only aborted an *in-progress* connector and then
   // cleared the panel/selection, so an idle tool mode swallowed the keystroke
   // with no visible effect and the user was stranded until they pressed S.
-  if (TOOL_MODES_EXITED_BY_ESCAPE.has(uiState.mode.type)) {
+  //
+  // I1/PTR-01..03: NOT in read-only. PAN is a viewer's resting mode (it is what
+  // `getStartingMode` boots EXPLORABLE_READONLY into), so this branch would take
+  // every Esc and hand the viewer CURSOR — a live editing mode whose drag moves
+  // items. Falling through instead gives Esc its viewer meaning: close the
+  // popover, then clear the selection.
+  if (canMutate(editorMode) && TOOL_MODES_EXITED_BY_ESCAPE.has(uiState.mode.type)) {
     uiState.actions.setMode({
       type: 'CURSOR',
       showCursor: true,

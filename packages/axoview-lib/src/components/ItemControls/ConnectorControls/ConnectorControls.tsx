@@ -32,9 +32,11 @@ import { useTranslation } from 'src/stores/localeStore';
 
 interface Props {
   id: string;
+  /** View mode (EXPLORABLE_READONLY) — F2/VIEW-11. */
+  readOnly?: boolean;
 }
 
-export const ConnectorControls = ({ id }: Props) => {
+export const ConnectorControls = ({ id, readOnly = false }: Props) => {
   const { t } = useTranslation('connectorControls');
   const { t: tMenu } = useTranslation('toolMenu');
   const uiStateActions = useUiStateStore((state) => state.actions);
@@ -164,17 +166,19 @@ export const ConnectorControls = ({ id }: Props) => {
           ) : undefined
         }
       >
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
-          <Button
-            startIcon={<AddIcon />}
-            onClick={handleAddLabel}
-            disabled={labels.length >= 256}
-            size="small"
-            variant="outlined"
-          >
-            {t('addLabel')}
-          </Button>
-        </Box>
+        {!readOnly && (
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+            <Button
+              startIcon={<AddIcon />}
+              onClick={handleAddLabel}
+              disabled={labels.length >= 256}
+              size="small"
+              variant="outlined"
+            >
+              {t('addLabel')}
+            </Button>
+          </Box>
+        )}
 
         {labels.length === 0 && (
           <Typography
@@ -230,16 +234,18 @@ export const ConnectorControls = ({ id }: Props) => {
                 <Typography variant="caption" color="text.secondary">
                   {t('labelN').replace('{count}', String(index + 1))}
                 </Typography>
-                <MUIIconButton
-                  size="small"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteLabel(label.id);
-                  }}
-                  color="error"
-                >
-                  <DeleteIcon fontSize="small" />
-                </MUIIconButton>
+                {!readOnly && (
+                  <MUIIconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteLabel(label.id);
+                    }}
+                    color="error"
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </MUIIconButton>
+                )}
               </Box>
 
               {/* No "Text" sublabel — the field inside a "Label {n}" card is
@@ -247,13 +253,15 @@ export const ConnectorControls = ({ id }: Props) => {
                   section name (owner 2026-07-02, "kill inversions"). */}
               <TextField
                 value={label.text}
-                autoFocus={label.id === justAddedId}
+                autoFocus={!readOnly && label.id === justAddedId}
+                disabled={readOnly}
                 onChange={(e) =>
                   handleUpdateLabel(label.id, { text: e.target.value })
                 }
                 // A label with no text has no reason to exist: clearing it and
                 // blurring removes the label (matches the canvas inline-edit).
                 onBlur={() => {
+                  if (readOnly) return;
                   if (!label.text.trim()) handleDeleteLabel(label.id);
                 }}
                 fullWidth
@@ -268,6 +276,7 @@ export const ConnectorControls = ({ id }: Props) => {
                   </Typography>
                   <Select
                     value={label.line || '1'}
+                    disabled={readOnly}
                     onChange={(e) =>
                       handleUpdateLabel(label.id, {
                         line: e.target.value as '1' | '2'
@@ -295,6 +304,7 @@ export const ConnectorControls = ({ id }: Props) => {
         onChange={(notes) => updateConnector(connector.id, { notes })}
         open={notesOpen}
         onToggle={() => setNotesOpen((v) => !v)}
+        readOnly={readOnly}
       />
 
       <MetadataSection
@@ -303,6 +313,7 @@ export const ConnectorControls = ({ id }: Props) => {
         name={connector.name ?? ''}
         placeholder={t('namePlaceholder')}
         onChange={(v) => updateConnector(connector.id, { name: v || undefined })}
+        readOnly={readOnly}
       />
     </ControlsContainer>
   );

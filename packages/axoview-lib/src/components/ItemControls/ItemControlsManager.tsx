@@ -24,6 +24,12 @@ interface Props {
   readOnly?: boolean;
 }
 
+// F2/VIEW-11: `readOnly` used to reach exactly ONE of the five element panels
+// (`ITEM`). The other four took no such prop, so in view mode they rendered
+// their full editing surface and the edits stuck — typing in the Notes editor
+// wrote `label.notes` on a diagram the viewer was only supposed to be reading.
+// Every branch is threaded now; `readonlyPolicy.ELEMENT_PANEL_SURFACES` is the
+// list the class gate renders in both modes.
 export const ItemControlsManager = ({ readOnly }: Props) => {
   const itemControls = useUiStateStore((state) => state.itemControls);
 
@@ -32,13 +38,37 @@ export const ItemControlsManager = ({ readOnly }: Props) => {
       case 'ITEM':
         return <NodePanelWrapper id={itemControls.id} readOnly={readOnly} />;
       case 'CONNECTOR':
-        return <ConnectorControls key={itemControls.id} id={itemControls.id} />;
+        return (
+          <ConnectorControls
+            key={itemControls.id}
+            id={itemControls.id}
+            readOnly={readOnly}
+          />
+        );
       case 'TEXTBOX':
-        return <TextBoxControls key={itemControls.id} id={itemControls.id} />;
+        return (
+          <TextBoxControls
+            key={itemControls.id}
+            id={itemControls.id}
+            readOnly={readOnly}
+          />
+        );
       case 'LABEL':
-        return <LabelControls key={itemControls.id} id={itemControls.id} />;
+        return (
+          <LabelControls
+            key={itemControls.id}
+            id={itemControls.id}
+            readOnly={readOnly}
+          />
+        );
       case 'RECTANGLE':
-        return <RectangleControls key={itemControls.id} id={itemControls.id} />;
+        return (
+          <RectangleControls
+            key={itemControls.id}
+            id={itemControls.id}
+            readOnly={readOnly}
+          />
+        );
       case 'ADD_ITEM':
         return <IconSelectionControls />;
       default:

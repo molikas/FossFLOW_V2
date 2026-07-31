@@ -24,6 +24,10 @@ import { resolveToolHotkey } from './toolHotkeys';
 import { handleEscapeKey } from './handleEscapeKey';
 import { handleDeleteOrBackspace, isEditableTarget } from './handleDeleteKey';
 import { handleArrowKey } from './handleArrowKey';
+import {
+  canUseKeyboardSurface,
+  type CanvasKeyboardSurface
+} from './readonlyPolicy';
 import type { ScreenToTileFn } from 'src/utils/renderer';
 import { useLayerContext } from 'src/hooks/useLayerContext';
 import { collectSelectableRefs } from 'src/utils/selectableRefs';
@@ -262,16 +266,19 @@ const handleHistoryShortcuts = (
   }
 };
 
-// Clipboard (Ctrl+X / Ctrl+C / Ctrl+V).
+// Clipboard (Ctrl+X / Ctrl+C / Ctrl+V). Copy is a `viewer` surface and cut/paste
+// are `editor` ones (readonlyPolicy), so the two halves are gated separately —
+// a read-only viewer can still lift content out, but cannot write any back.
 const handleClipboardShortcuts = (
   e: KeyboardEvent,
   isCtrlOrCmd: boolean,
   key: string,
-  deps: KeydownDeps
+  deps: KeydownDeps,
+  allowCutPaste: boolean
 ) => {
   if (!isCtrlOrCmd) return;
 
-  if (key === 'x') {
+  if (key === 'x' && allowCutPaste) {
     e.preventDefault();
     deps.handleCut();
   }
@@ -281,7 +288,7 @@ const handleClipboardShortcuts = (
     deps.handleCopy();
   }
 
-  if (key === 'v') {
+  if (key === 'v' && allowCutPaste) {
     e.preventDefault();
     deps.handlePaste();
   }
@@ -290,10 +297,13 @@ const handleClipboardShortcuts = (
 // F1 opens help; F2 hands off to canvas inline-rename — but only when the
 // keystroke originated inside the renderer (MQA #13: F2 from the file-explorer
 // tree row must not steal focus into a selected canvas node's editor).
+// (`help` is a `viewer` surface and `inlineRename` an `editor` one — the caller
+// passes the latter's verdict in, so every editor surface is gated in one place.)
 const handleFunctionKeys = (
   e: KeyboardEvent,
   uiState: State['uiState'],
-  deps: KeydownDeps
+  deps: KeydownDeps,
+  allowInlineRename: boolean
 ) => {
   if (e.key === 'F1') {
     e.preventDefault();
@@ -314,7 +324,7 @@ const handleFunctionKeys = (
       !focusTarget ||
       focusTarget === document.body ||
       (renderer ? renderer.contains(focusTarget) : false);
-    if (uiState.editorMode !== 'EDITABLE' || !cameFromRenderer) return;
+    if (!allowInlineRename || !cameFromRenderer) return;
     if (ctrl?.type === 'LABEL') {
       // Floating Label inline-edit is driven by uiState (LabelHitLayer renders
       // the contentEditable), not the node/connector inlineEditNodeName event.
@@ -580,6 +590,12 @@ export const useInteractionManager = () => {
     // the original sequential `if` blocks did.
     const handleKeyDown = (e: KeyboardEvent) => {
       const uiState = uiStateApi.getState();
+      // I1/PTR-01..03: only `handleFunctionKeys` ever consulted `editorMode`, so
+      // every other shortcut mutated a read-only diagram. Each delegate now asks
+      // the surface table (readonlyPolicy) instead — `viewer` surfaces run in
+      // every mode, `editor` surfaces only in EDITABLE.
+      const allow = (surface: CanvasKeyboardSurface) =>
+        canUseKeyboardSurface(surface, uiState.editorMode);
 
       // E1/HIST-06: a drag bracket is closed by the mouseup, and the mode's exit
       // runs lazily on the NEXT mouse event — so a lost mouseup (release outside
@@ -591,34 +607,43 @@ export const useInteractionManager = () => {
       // `usePanHandlers` and `handleEscapeKey` already make.
       deps.sceneRef.current.commitDragTransaction();
 
-      if (handleEscapeKey(e, uiState, deps)) return;
-      if (handleDeleteOrBackspace(e, uiState, deps)) return;
+      if (handleEscapeKey(e, uiState, deps, uiState.editorMode)) return;
+      if (allow('delete') && handleDeleteOrBackspace(e, uiState, deps)) return;
       if (isEditableTarget(e.target as HTMLElement)) return;
 
       const isCtrlOrCmd = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
 
-      handleHistoryShortcuts(e, isCtrlOrCmd, key, deps);
-      handleClipboardShortcuts(e, isCtrlOrCmd, key, deps);
+      if (allow('history')) handleHistoryShortcuts(e, isCtrlOrCmd, key, deps);
+      handleClipboardShortcuts(e, isCtrlOrCmd, key, deps, allow('cutPaste'));
 
       // Ctrl+A: select all visible + unlocked items in the active view. ADR-0006.
       if (isCtrlOrCmd && key === 'a') {
+        if (!allow('selectAll')) return;
         e.preventDefault();
         handleSelectAll(uiState, deps);
         return;
       }
 
-      handleFunctionKeys(e, uiState, deps);
-      handleToolHotkeys(e, isCtrlOrCmd, uiState, key, deps);
-      handleZOrderShortcut(e, isCtrlOrCmd, uiState, deps);
-      handleArrowKey(e, uiState, {
-        getScene: () => deps.sceneRef.current,
-        beginDragTransaction: deps.sceneRef.current.beginDragTransaction,
-        commitDragTransaction: deps.sceneRef.current.commitDragTransaction,
-        batchUpdateViewItemTiles: deps.sceneRef.current.batchUpdateViewItemTiles,
-        batchUpdateRectangles: deps.sceneRef.current.batchUpdateRectangles,
-        batchUpdateTextBoxTiles: deps.sceneRef.current.batchUpdateTextBoxTiles
-      });
+      handleFunctionKeys(e, uiState, deps, allow('inlineRename'));
+      if (allow('toolHotkeys')) {
+        handleToolHotkeys(e, isCtrlOrCmd, uiState, key, deps);
+      }
+      if (allow('zOrder')) handleZOrderShortcut(e, isCtrlOrCmd, uiState, deps);
+      handleArrowKey(
+        e,
+        uiState,
+        {
+          getScene: () => deps.sceneRef.current,
+          beginDragTransaction: deps.sceneRef.current.beginDragTransaction,
+          commitDragTransaction: deps.sceneRef.current.commitDragTransaction,
+          batchUpdateViewItemTiles:
+            deps.sceneRef.current.batchUpdateViewItemTiles,
+          batchUpdateRectangles: deps.sceneRef.current.batchUpdateRectangles,
+          batchUpdateTextBoxTiles: deps.sceneRef.current.batchUpdateTextBoxTiles
+        },
+        allow('arrowNudge')
+      );
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -751,6 +776,18 @@ export const useInteractionManager = () => {
       // (ADR 0018 D-12), so route non-mouse pointers straight to the dispatcher.
       const isMousePointer = pointerTypeRef.current === 'mouse';
 
+      // I5/CTX-15: a down/up must land AFTER any move still parked in the RAF
+      // throttle. `getMouse` rebuilds `mousedown` from the event type — a
+      // 'mousemove' carries forward the mousedown that was current when it was
+      // SCHEDULED, so a frame arriving after the press wrote `mousedown: null`
+      // back over the press position. Every mode that reads `mouse.mousedown`
+      // then behaves as if no press happened; for `Pan.mouseup` in
+      // EXPLORABLE_READONLY that is the whole read-only click, so a viewer's
+      // click on a content-bearing node opened nothing. Flushing first keeps the
+      // three events in the order the user produced them. (The non-pan path
+      // below already flushed — the early-returning pan branches did not.)
+      if (e.type !== 'mousemove') flushUpdate();
+
       if (isMousePointer && e.type === 'mousedown' && handlePanMouseDown(e)) {
         // Still update mouse state so Pan mode can track mousedown position for drag
         const uiState = uiStateApi.getState();
@@ -793,7 +830,6 @@ export const useInteractionManager = () => {
           processMouseUpdate(update.mouse, update.event);
         });
       } else {
-        flushUpdate();
         processMouseUpdate(nextMouse, e);
       }
     },

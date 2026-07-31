@@ -34,88 +34,11 @@ const activeView = (page: Page) =>
     return (viewId && views.find((v: any) => v.id === viewId)) ?? views[0];
   });
 
-// ---------------------------------------------------------------------------
-// VIEW-11 — the editing dock in view mode
-// ---------------------------------------------------------------------------
-
-test.describe('F2 / view mode vs the editing dock', () => {
-  test('VIEW-11 control: the NODE panel honours readOnly in view mode', async ({
-    page,
-    app
-  }) => {
-    void app;
-    const canvas = new CanvasPOM(page);
-    await placeIconViaMouse(page, await canvas.tileToScreen({ x: 1, y: 1 }));
-    const id = await page.evaluate(() => {
-      const items = (window as any).__axoview__.model.getState().items;
-      return items[items.length - 1]?.id ?? null;
-    });
-    expect(id).not.toBeNull();
-
-    await setViewMode(page);
-    await page.evaluate((nodeId: string) => {
-      const a = (window as any).__axoview__.ui.getState().actions;
-      a.setItemControls({ type: 'ITEM', id: nodeId });
-      a.setRightSidebarOpen(true);
-    }, id!);
-
-    const panel = page.getByTestId('item-controls-panel');
-    await panel.waitFor({ state: 'visible', timeout: 5_000 });
-    // PRECONDITION: the dock really mounted for this node.
-    await expect(panel).toBeVisible();
-    // NodePanel takes the `readOnly` branch: its notes editor is a read-only
-    // Quill (`<RichTextEditor value={…} readOnly />`), so the contenteditable
-    // reports itself non-editable.
-    const editableSurfaces = await panel
-      .locator('.ql-editor[contenteditable="true"]')
-      .count();
-    expect(editableSurfaces).toBe(0);
-  });
-
-  test('VIEW-11: a RECTANGLE / TEXTBOX / LABEL / CONNECTOR panel is fully editable in view mode', async ({
-    page,
-    app
-  }) => {
-    void app;
-    const canvas = new CanvasPOM(page);
-    await canvas.placeLabelAt(await canvas.tileToScreen({ x: 0, y: 0 }));
-    await page.getByTestId('label-inline-editor').waitFor({ timeout: 5_000 });
-    await page.keyboard.press('Escape');
-    const label = (await activeView(page))?.labels?.[0];
-    // PRECONDITION: a Label exists to select.
-    expect(label).toBeTruthy();
-
-    await setViewMode(page);
-    // PRECONDITION: the mode really flipped.
-    expect((await ui(page)).editorMode).toBe('EXPLORABLE_READONLY');
-
-    await page.evaluate((labelId: string) => {
-      const a = (window as any).__axoview__.ui.getState().actions;
-      a.setItemControls({ type: 'LABEL', id: labelId });
-      a.setRightSidebarOpen(true);
-    }, label.id as string);
-
-    const panel = page.getByTestId('item-controls-panel');
-    await panel.waitFor({ state: 'visible', timeout: 5_000 });
-    // `ItemControlsManager` forwards `readOnly` to the ITEM branch only, so the
-    // Label panel renders its EDITABLE notes surface to a viewer.
-    const editor = panel.locator('.ql-editor[contenteditable="true"]').first();
-    await editor.waitFor({ state: 'visible', timeout: 5_000 });
-
-    // …and it really mutates the model from inside a read-only mode.
-    expect((await activeView(page)).labels[0].notes ?? '').toBe('');
-    await editor.click();
-    await page.keyboard.type('EDITEDINVIEWMODE', { delay: 10 });
-    await expect
-      .poll(
-        async () => (await activeView(page)).labels[0].notes ?? '',
-        { timeout: 3_000 }
-      )
-      .toContain('EDITEDINVIEWMODE');
-    // The mode never changed under us.
-    expect((await ui(page)).editorMode).toBe('EXPLORABLE_READONLY');
-  });
-});
+// VIEW-11 is FIXED (wave 2). `ItemControlsManager` threads `readOnly` to all
+// five element branches now, and `RightSidebar` derives it fail-closed from the
+// prop OR the store. Both legs promoted to the main suite —
+// `tests/readonly-enforcement.spec.ts` — with the per-panel enumeration in the
+// class gate `axoview-lib/src/components/ItemControls/__tests__/readonlyPanels.contract.test.tsx`.
 
 // ---------------------------------------------------------------------------
 // VIEW-05 — the ADR 0012 popover has no LABEL branch on the pinned path

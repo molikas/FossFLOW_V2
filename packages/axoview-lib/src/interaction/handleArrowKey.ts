@@ -175,11 +175,17 @@ const nudge = (
 // Returns true when the key was an arrow (and thus consumed). The text-field
 // guard is applied by the caller (the keydown dispatcher returns on
 // isEditableTarget before reaching here), exactly as the pan path always was.
+//
+// The two halves have different read-only access classes (readonlyPolicy):
+// `arrowNudge` is an `editor` surface, `arrowPan` a `viewer` one. With
+// `allowNudge` false the nudge branch is skipped entirely, so a viewer's arrows
+// always pan — which is what they did before B6 made them selection-aware.
 export const handleArrowKey = (
   e: KeyboardEvent,
   uiState: State['uiState'],
-  deps: ArrowKeyDeps
+  deps: ArrowKeyDeps,
+  allowNudge = true
 ): boolean => {
-  if (nudge(e, uiState, deps)) return true;
+  if (allowNudge && nudge(e, uiState, deps)) return true;
   return pan(e, uiState);
 };

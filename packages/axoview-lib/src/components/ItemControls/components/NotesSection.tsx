@@ -15,6 +15,11 @@ interface Props {
   /** Controlled open (used for the context-menu "Add note" focus deep-link). */
   open?: boolean;
   onToggle?: () => void;
+  /**
+   * View mode (EXPLORABLE_READONLY): the notes are still shown — they are the
+   * point of the panel for a viewer — but the editor cannot write. F2/VIEW-11.
+   */
+  readOnly?: boolean;
 }
 
 const hasContent = (v?: string) => !!v && stripHtmlTags(v).trim() !== '';
@@ -31,7 +36,8 @@ export const NotesSection = ({
   height = 200,
   defaultOpen = false,
   open,
-  onToggle
+  onToggle,
+  readOnly = false
 }: Props) => (
   <CollapsibleSection
     title={title}
@@ -58,11 +64,16 @@ export const NotesSection = ({
     <RichTextEditor
       value={value}
       height={height}
-      onChange={(text) => {
-        const empty = !hasContent(text);
-        if (empty && !hasContent(value)) return;
-        if (value !== text) onChange(empty ? undefined : text);
-      }}
+      readOnly={readOnly}
+      onChange={
+        readOnly
+          ? undefined
+          : (text) => {
+              const empty = !hasContent(text);
+              if (empty && !hasContent(value)) return;
+              if (value !== text) onChange(empty ? undefined : text);
+            }
+      }
     />
   </CollapsibleSection>
 );
