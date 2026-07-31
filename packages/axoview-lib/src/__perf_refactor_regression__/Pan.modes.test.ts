@@ -280,7 +280,8 @@ describe('Pan.mouseup', () => {
     Pan.mouseup!({
       uiState,
       scene: makeScene([{ type: 'ITEM', id: 'n1' }]),
-      model
+      model,
+      isRendererInteraction: true
     } as any);
     expect(uiState.actions.setItemControls).toHaveBeenCalledWith({
       type: 'ITEM',
@@ -300,7 +301,7 @@ describe('Pan.mouseup', () => {
     const model = makeModel([
       { id: 'n2', description: '', notes: 'Some notes here' }
     ]);
-    Pan.mouseup!({ uiState, scene: makeScene(), model } as any);
+    Pan.mouseup!({ uiState, scene: makeScene(), model, isRendererInteraction: true } as any);
     expect(uiState.actions.setItemControls).toHaveBeenCalledWith({
       type: 'ITEM',
       id: 'n2'
@@ -319,7 +320,7 @@ describe('Pan.mouseup', () => {
     const model = makeModel([
       { id: 'n5', description: '', notes: '', link: 'other-diagram-id' } as any
     ]);
-    Pan.mouseup!({ uiState, scene: makeScene(), model } as any);
+    Pan.mouseup!({ uiState, scene: makeScene(), model, isRendererInteraction: true } as any);
     expect(uiState.actions.setItemControls).toHaveBeenCalledWith({
       type: 'ITEM',
       id: 'n5'
@@ -336,7 +337,7 @@ describe('Pan.mouseup', () => {
       }
     });
     const model = makeModel([{ id: 'n3', description: '', notes: '' }]);
-    Pan.mouseup!({ uiState, scene: makeScene(), model } as any);
+    Pan.mouseup!({ uiState, scene: makeScene(), model, isRendererInteraction: true } as any);
     expect(uiState.actions.setItemControls).toHaveBeenCalledWith(null);
   });
 
@@ -352,7 +353,7 @@ describe('Pan.mouseup', () => {
     const model = makeModel([
       { id: 'n4', description: '<p></p>', notes: '<br/>' }
     ]);
-    Pan.mouseup!({ uiState, scene: makeScene(), model } as any);
+    Pan.mouseup!({ uiState, scene: makeScene(), model, isRendererInteraction: true } as any);
     expect(uiState.actions.setItemControls).toHaveBeenCalledWith(null);
   });
 
@@ -367,7 +368,7 @@ describe('Pan.mouseup', () => {
       }
     });
     const model = makeModel([{ id: 'n1', description: 'Hello', notes: '' }]);
-    Pan.mouseup!({ uiState, scene: makeScene(), model } as any);
+    Pan.mouseup!({ uiState, scene: makeScene(), model, isRendererInteraction: true } as any);
     // Since tiles differ, the content check block is skipped
     expect(uiState.actions.setItemControls).not.toHaveBeenCalled();
   });
@@ -381,7 +382,12 @@ describe('Pan.mouseup', () => {
         mousedown: { tile: { x: 3, y: 4 } }
       }
     });
-    Pan.mouseup!({ uiState, scene: makeScene(), model: makeModel() } as any);
+    Pan.mouseup!({
+      uiState,
+      scene: makeScene(),
+      model: makeModel(),
+      isRendererInteraction: true
+    } as any);
     expect(uiState.actions.setItemControls).toHaveBeenCalledWith(null);
   });
 
@@ -394,7 +400,41 @@ describe('Pan.mouseup', () => {
         mousedown: { tile: { x: 3, y: 4 } }
       }
     });
-    Pan.mouseup!({ uiState, scene: makeScene(), model: makeModel() } as any);
+    Pan.mouseup!({
+      uiState,
+      scene: makeScene(),
+      model: makeModel(),
+      isRendererInteraction: true
+    } as any);
     expect(uiState.actions.setItemControls).toHaveBeenCalledWith(null);
+  });
+
+  // I5/CTX-15 follow-up (`44b8dda4`). The pointer listener is WINDOW-bound
+  // (ADR 0018), so this handler also sees mouseups over the right sidebar, the
+  // toolbar and every portaled overlay — and a tile resolves for ANY screen
+  // point, so an off-canvas release looks exactly like a click on empty canvas.
+  // It dismissed the read-only panel and unmounted the NodePanel's
+  // linked-diagram link mid-click, so the link's own handler never ran (the
+  // J5.3 journey). `Pan.mousedown` has always had this guard.
+  it('EXPLORABLE_READONLY: ignores a release that did NOT land on the canvas', () => {
+    mockGetItemAtTile.mockReturnValue(null);
+    const uiState = makeUiState({
+      editorMode: 'EXPLORABLE_READONLY',
+      mouse: {
+        position: { tile: { x: 3, y: 4 } },
+        mousedown: { tile: { x: 3, y: 4 } }
+      }
+    });
+    Pan.mouseup!({
+      uiState,
+      scene: makeScene(),
+      model: makeModel(),
+      isRendererInteraction: false
+    } as any);
+    // The panel survives a click on app chrome — nothing was dismissed.
+    expect(uiState.actions.setItemControls).not.toHaveBeenCalled();
+    // …and the cursor reset still runs, so the guard is scoped to the panel
+    // decision rather than short-circuiting the whole handler.
+    expect(mockSetWindowCursor).toHaveBeenCalledWith('default');
   });
 });

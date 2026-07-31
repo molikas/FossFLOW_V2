@@ -5,13 +5,13 @@
 
 | Workspace | Passing | Suites |
 |---|---|---|
-| `axoview-lib` | 1833 (+1 skipped) | 162 |
+| `axoview-lib` | 1834 (+1 skipped) | 162 |
 | `axoview-app` | 423 | 39 |
 | `axoview-backend` | 134 | 9 |
 | `axoview-worker` | 129 | 4 |
-| **Total** | **2519 (+1 skipped)** | **214** |
+| **Total** | **2520 (+1 skipped)** | **214** |
 
-*(Wave 2 of the exploratory remediation, 2026-07-30: lib `+5` / `+1` suite, app
+*(Wave 2 of the exploratory remediation, 2026-07-30: lib `+6` / `+1` suite, app
 `+14` / `+1`, backend `+32` / `+2`, worker `+5`. All of it probes promoted out
 of the quarantined lane under the ADR 0047 §2 flip rule, plus four class gates.
 See "Exploratory remediation wave 2" below.)*

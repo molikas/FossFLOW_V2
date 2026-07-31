@@ -202,7 +202,7 @@ identity. Every probe promoted or retired with its reason recorded in place,
 `npm run test:regression` green.
 
 **Regression gate (final state):** `npm test` per package — lib **162 suites /
-1833** (+1 skipped), app **39 / 423**, backend **9 / 134**, worker **4 / 129** —
+1834** (+1 skipped), app **39 / 423**, backend **9 / 134**, worker **4 / 129** —
 and the full Playwright suite **189 passed (25.3 min), exit 0**. `tsc --noEmit`
 per workspace, `npx knip`, `check-cycles` (47, at baseline) and `lint:docs` all
 clean, and the quarantine re-verified in both directions: zero `__explore__` /
