@@ -311,6 +311,19 @@ const dragItems = (
     scene,
     externalOccupiedCache
   );
+
+  // I3/SEL-04: collision rejection is all-or-nothing across the NODE members —
+  // `computeNodeUpdates` returns null for the whole set when any target tile is
+  // occupied — but the rectangle, text-box, Label and waypoint previews below
+  // kept following the cursor regardless. A MIXED group dragged into a collision
+  // therefore committed a node delta and a rectangle delta that differ, and the
+  // group's relative layout silently changed (measured: node {-2,+2} vs
+  // rectangle {-3,+3}). Node-only groups were always safe, which is why this
+  // hid. A blocked frame blocks the WHOLE group: every preview map keeps its
+  // last good value, so the group holds together at the last legal position and
+  // the commit on release matches what the user was looking at.
+  if (itemRefs.length > 0 && nodeUpdates === null) return;
+
   applyNodePreview(
     nodeUpdates,
     initialTiles,

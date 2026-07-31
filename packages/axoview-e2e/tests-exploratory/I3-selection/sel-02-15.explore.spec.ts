@@ -1,7 +1,14 @@
 /**
  * I3 probes — selection semantics and mode edge cases.
  *
- *  SEL-02  a connector-body drag splices its waypoint outside the transaction
+ * All FALSIFIED (SEL-12 closed by owner decision as intended behaviour); kept
+ * as characterization.
+ *
+ * PROMOTED OUT — wave 3 fixed SEL-02 (the waypoint splice rides the drag's own
+ * transaction, so one gesture is one undo entry) and implemented the SEL-15
+ * ruling (a marquee honours the additive modifier — ADR 0006 §10). Both moved
+ * to `tests/selection-group-rules.spec.ts`.
+ *
  *  SEL-03  `altSpliceConsumed` is module-level and can strand
  *  SEL-05  a panel click inside a live marquee arms a canvas drag
  *  SEL-06  FreehandLasso's screen-space path skews under a mid-draw zoom
@@ -11,7 +18,6 @@
  *  SEL-12  marquee auto-scroll past the viewport edge
  *  SEL-13  Ctrl+A and hidden / locked layers
  *  SEL-14  hover state for an off-grid item within one tile
- *  SEL-15  extending an existing selection with a second marquee
  */
 import {
   exploreTest as test,
@@ -79,116 +85,6 @@ async function twoNodes(page: Page) {
   await expect.poll(() => getModelItemCount(page), { timeout: 10_000 }).toBe(2);
   return itemTiles(page);
 }
-
-// ---------------------------------------------------------------------------
-// SEL-02 — connector-body drag splices its waypoint outside the transaction
-// ---------------------------------------------------------------------------
-test.describe('SEL-02 — abandoning a connector-body drag', () => {
-  test.fail(
-    'BUG: the spliced waypoint survives an abandoned drag AND its own undo',
-    async ({ app }) => {
-      const { page } = app;
-      const canvas = new CanvasPOM(page);
-      const nodes = await twoNodes(page);
-
-      await page.keyboard.press('c');
-      await canvas.clickAt({ x: 520, y: 280 });
-      await page.waitForTimeout(150);
-      await canvas.clickAt({ x: 740, y: 360 });
-      await page.keyboard.press('Escape');
-      await expect
-        .poll(() => getModelConnectorCount(page), { timeout: 5_000 })
-        .toBe(1);
-
-      const anchorsBefore = (
-        (await activeView(page)).connectors[0].anchors ?? []
-      ).length;
-
-      const mid = {
-        x: Math.round((nodes[0].tile.x + nodes[1].tile.x) / 2),
-        y: Math.round((nodes[0].tile.y + nodes[1].tile.y) / 2)
-      };
-      const from = await absOfTile(canvas, mid);
-      await page.mouse.move(from.x, from.y);
-      await page.mouse.down();
-      await page.mouse.move(from.x + 60, from.y - 50, { steps: 8 });
-      await page.keyboard.press('r');
-      await page.mouse.up();
-      await page.waitForTimeout(400);
-
-      await page.keyboard.press('Control+z');
-      await page.waitForTimeout(400);
-      expect(
-        ((await activeView(page)).connectors[0]?.anchors ?? []).length
-      ).toBe(anchorsBefore);
-    }
-  );
-
-  test('characterization: the gesture records TWO history entries and one undo is not enough', async ({
-    app
-  }) => {
-    const { page } = app;
-    const canvas = new CanvasPOM(page);
-    const nodes = await twoNodes(page);
-
-    await page.keyboard.press('c');
-    await canvas.clickAt({ x: 520, y: 280 });
-    await page.waitForTimeout(150);
-    await canvas.clickAt({ x: 740, y: 360 });
-    await page.keyboard.press('Escape');
-    await expect
-      .poll(() => getModelConnectorCount(page), { timeout: 5_000 })
-      .toBe(1);
-
-    const anchorsBefore = ((await activeView(page)).connectors[0].anchors ?? [])
-      .length;
-    const historyBefore = await getModelHistoryLength(page);
-
-    // Grab the connector body midway and start dragging — this splices a new
-    // waypoint — then abandon the gesture with a tool hotkey.
-    const mid = {
-      x: Math.round((nodes[0].tile.x + nodes[1].tile.x) / 2),
-      y: Math.round((nodes[0].tile.y + nodes[1].tile.y) / 2)
-    };
-    const from = await absOfTile(canvas, mid);
-    await page.mouse.move(from.x, from.y);
-    await page.mouse.down();
-    await page.mouse.move(from.x + 60, from.y - 50, { steps: 8 });
-    await page.keyboard.press('r'); // abandon into another tool
-    await page.mouse.up();
-    await page.waitForTimeout(400);
-
-    const anchorsAfter = ((await activeView(page)).connectors[0].anchors ?? [])
-      .length;
-    const historyAfter = await getModelHistoryLength(page);
-    // eslint-disable-next-line no-console
-    console.log(
-      `SEL-02 observed — anchors ${anchorsBefore} -> ${anchorsAfter}; history ${historyBefore} -> ${historyAfter}`
-    );
-
-    // The splice ran OUTSIDE the drag transaction, so it is its own entry:
-    // history grew by two for one gesture, and one Ctrl+Z leaves the waypoint.
-    expect(historyAfter).toBeGreaterThan(historyBefore + 1);
-    expect(anchorsAfter).toBe(anchorsBefore + 1);
-
-    await page.keyboard.press('Control+z');
-    await page.waitForTimeout(400);
-    const anchorsUndone = ((await activeView(page)).connectors[0]?.anchors ?? [])
-      .length;
-    // eslint-disable-next-line no-console
-    console.log(`SEL-02 after one undo — anchors ${anchorsUndone}`);
-    expect(anchorsUndone).toBe(anchorsBefore + 1);
-
-    // A SECOND undo is required to get rid of a waypoint the user never
-    // deliberately created.
-    await page.keyboard.press('Control+z');
-    await page.waitForTimeout(400);
-    expect(
-      ((await activeView(page)).connectors[0]?.anchors ?? []).length
-    ).toBe(anchorsBefore);
-    await expectStoreInvariants(page, 'after undoing the stray splice');
-  });
-});
 
 // ---------------------------------------------------------------------------
 // SEL-03 — module-level altSpliceConsumed
@@ -327,9 +223,12 @@ test.describe('SEL-06 — zooming while drawing a freehand lasso', () => {
 });
 
 // ---------------------------------------------------------------------------
-// SEL-08 / SEL-09 / SEL-15 — additive selection gestures
+// SEL-08 / SEL-09 — additive click selection gestures
 // ---------------------------------------------------------------------------
-test.describe('SEL-08 / SEL-09 / SEL-15 — additive selection', () => {
+// SEL-15 is FIXED (wave 3, owner ruling) and its probe promoted to
+// tests/selection-group-rules.spec.ts — the marquee now honours the same
+// additive modifier the click path does (ADR 0006 §10).
+test.describe('SEL-08 / SEL-09 — additive click selection', () => {
   test('SEL-09: Shift+click adds a second item to the selection', async ({
     app
   }) => {
@@ -380,55 +279,6 @@ test.describe('SEL-08 / SEL-09 / SEL-15 — additive selection', () => {
     expect(sel.map((s) => s.id)).toEqual([nodes[0].id]);
   });
 
-  test('SEL-15: a second marquee with a modifier extends the selection', async ({
-    app
-  }) => {
-    const { page } = app;
-    const canvas = new CanvasPOM(page);
-
-    await placeIconViaMouse(page, { x: 470, y: 250 });
-    await placeIconViaMouse(page, { x: 830, y: 420 });
-    await expect
-      .poll(() => getModelItemCount(page), { timeout: 10_000 })
-      .toBe(2);
-    const nodes = await itemTiles(page);
-
-    // Marquee 1 around node A only.
-    await page.keyboard.press('l');
-    await realDrag(
-      page,
-      await abs(canvas, { x: 400, y: 180 }),
-      await abs(canvas, { x: 620, y: 340 })
-    );
-    await page.waitForTimeout(250);
-    const first = await selectedIds(page);
-    expect(first.length).toBe(1);
-
-    // Marquee 2 around node B, with Shift held (the additive modifier the
-    // click path honours).
-    await page.keyboard.press('l');
-    await page.keyboard.down('Shift');
-    await realDrag(
-      page,
-      await abs(canvas, { x: 700, y: 340 }),
-      await abs(canvas, { x: 940, y: 500 })
-    );
-    await page.keyboard.up('Shift');
-    await page.waitForTimeout(250);
-
-    const sel = await selectedIds(page);
-    // eslint-disable-next-line no-console
-    console.log(
-      `SEL-15 observed — first ${JSON.stringify(first.map((s) => s.id))}; after ${JSON.stringify(sel.map((s) => s.id))}; nodes ${JSON.stringify(nodes.map((n) => n.id))}`
-    );
-    // SUSPECT, not a defect: the marquee REPLACES the selection even with the
-    // additive modifier held — the second marquee's single item is all that is
-    // left. Click-selection honours Shift/Ctrl as additive, so the two gestures
-    // disagree about what the same modifier means. Recorded as a product
-    // question rather than filed.
-    expect(sel.map((s) => s.id)).toEqual([nodes[0].id]);
-    expect(first.map((s) => s.id)).toEqual([nodes[1].id]);
-  });
 });
 
 // ---------------------------------------------------------------------------

@@ -51,10 +51,8 @@ export const deleteItemControlsTarget = (
 };
 
 // Delete/Backspace: lasso selection → multi-selection → single itemControls.
-// Handled before the text-field guard so it always fires when a canvas
-// selection exists (matches how diagram tools like Figma behave), but the
-// multi-selection and single-item branches still respect text-field focus so
-// editing input/panel text isn't hijacked. Returns true when consumed.
+// Every branch respects text-field focus, so typing into an input or a panel's
+// notes editor is never hijacked. Returns true when consumed.
 export const handleDeleteOrBackspace = (
   e: KeyboardEvent,
   uiState: State['uiState'],
@@ -62,8 +60,18 @@ export const handleDeleteOrBackspace = (
 ): boolean => {
   if (e.key !== 'Delete' && e.key !== 'Backspace') return false;
   const mode = uiState.mode;
+  const inTextField = isEditableTarget(e.target as HTMLElement);
 
+  // I3/SEL-07: this branch used to run BEFORE the text-field guard, on the
+  // reasoning that a live canvas selection should always win. It cannot: the
+  // two marquee tools are not siblings — `Lasso.mouseup` drops back to CURSOR,
+  // but `FreehandLasso` stays armed WITH its selection, so the "live lasso"
+  // state outlives the gesture indefinitely. Every Backspace typed into any
+  // text field afterwards silently destroyed the whole freehand selection while
+  // the field kept its text, so the user got no signal at all. A keystroke aimed
+  // at a text field belongs to the text field.
   if (
+    !inTextField &&
     (mode.type === 'LASSO' || mode.type === 'FREEHAND_LASSO') &&
     mode.selection?.items?.length
   ) {
@@ -79,10 +87,7 @@ export const handleDeleteOrBackspace = (
   }
 
   // Multi-selection (CURSOR mode): delete every selected item.
-  if (
-    uiState.selectedIds.length > 1 &&
-    !isEditableTarget(e.target as HTMLElement)
-  ) {
+  if (uiState.selectedIds.length > 1 && !inTextField) {
     e.preventDefault();
     deps.deleteSelectedItems(uiState.selectedIds);
     uiState.actions.clearSelection();
@@ -93,7 +98,7 @@ export const handleDeleteOrBackspace = (
   if (
     uiState.itemControls &&
     uiState.itemControls.type !== 'ADD_ITEM' &&
-    !isEditableTarget(e.target as HTMLElement)
+    !inTextField
   ) {
     e.preventDefault();
     deleteItemControlsTarget(uiState, deps);

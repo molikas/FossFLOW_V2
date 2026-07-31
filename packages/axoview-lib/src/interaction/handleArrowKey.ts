@@ -65,10 +65,17 @@ const NUDGEABLE_TYPES = new Set<ItemReference['type']>([
 // Minimal scene shape the nudge needs to read CURRENT positions (the batch
 // updaters take absolute target tiles). Kept structural so this module stays
 // dependency-free and unit-testable (mirrors selectableRefs' SelectableScene).
+// `offset` is the ADR 0023 sub-tile residual. It must be READ here and written
+// back unchanged: the batch updaters below are the drag commit path, and they
+// write `offset: u.offset` unconditionally — that is deliberate, because a drag
+// that re-snaps an item clears the residual by passing `undefined`. A nudge
+// never re-snaps, so omitting the field erased the residual and slid the item
+// onto the grid (I3/SEL-01 — the ADR 0023 offset-omission class in its keyboard
+// consumer).
 interface NudgeScene {
-  items: { id: string; tile: Coords }[];
-  rectangles: { id: string; from: Coords; to: Coords }[];
-  textBoxes: { id: string; tile: Coords }[];
+  items: { id: string; tile: Coords; offset?: Coords }[];
+  rectangles: { id: string; from: Coords; to: Coords; offset?: Coords }[];
+  textBoxes: { id: string; tile: Coords; offset?: Coords }[];
 }
 
 // Minimal dependency surface for the arrow handler — a structural subset of
@@ -154,17 +161,26 @@ const nudge = (
   // (don't crash on a stale ref) — the batch updaters also no-op on empty input.
   const itemUpdates = scene.items
     .filter((it) => selectedIds.has(it.id))
-    .map((it) => ({ id: it.id, tile: CoordsUtils.add(it.tile, delta) }));
+    .map((it) => ({
+      id: it.id,
+      tile: CoordsUtils.add(it.tile, delta),
+      offset: it.offset
+    }));
   const rectUpdates = scene.rectangles
     .filter((r) => selectedIds.has(r.id))
     .map((r) => ({
       id: r.id,
       from: CoordsUtils.add(r.from, delta),
-      to: CoordsUtils.add(r.to, delta)
+      to: CoordsUtils.add(r.to, delta),
+      offset: r.offset
     }));
   const textBoxUpdates = scene.textBoxes
     .filter((tb) => selectedIds.has(tb.id))
-    .map((tb) => ({ id: tb.id, tile: CoordsUtils.add(tb.tile, delta) }));
+    .map((tb) => ({
+      id: tb.id,
+      tile: CoordsUtils.add(tb.tile, delta),
+      offset: tb.offset
+    }));
 
   if (
     itemUpdates.length === 0 &&

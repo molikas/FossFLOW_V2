@@ -2152,12 +2152,19 @@ the original sweep did not cover.
 
 **Workaround:** re-place the item by dragging instead of nudging.
 
-**Status:** Open. Fix direction: read each item's current `offset` in the nudge
-and pass it through, exactly as `DragItems.mouseup` does. Consider making the
-batch updaters treat `offset: undefined` as "leave unchanged" rather than "clear"
-so the whole class cannot recur — that is a wider decision, since some callers
-may rely on clearing. Repro:
-[`sel-01-04-07-11.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I3-selection/sel-01-04-07-11.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) via the first half: the nudge reads
+each item's current `offset` and passes it through, for nodes, rectangles and
+text boxes alike.
+
+The wider option was **rejected**, and the reason is worth keeping. Making the
+batch updaters treat `offset: undefined` as "leave unchanged" would break the
+caller they exist for: `DragItems.mouseup` clears an item's residual by passing
+`undefined` when a drag re-snaps it (`previewNodeOffsets` stores `undefined`
+for exactly that), so "undefined means clear" is load-bearing on the hot path.
+The class is better closed by the ADR 0023 renderedGeometry contract test, which
+enumerates offset readers, than by making one write site ambiguous. Promoted
+regressions: [`selection-group-rules.spec.ts`](packages/axoview-e2e/tests/selection-group-rules.spec.ts) and the off-grid cases in
+[`handleArrowKey.test.ts`](packages/axoview-lib/src/interaction/__tests__/handleArrowKey.test.ts).
 
 ## A mixed node + rectangle group dragged into a collision tears apart
 
@@ -2181,11 +2188,15 @@ or not at all (SEL-11) — so the bug is specific to MIXED groups.
 
 **Workaround:** undo, and move the group without crossing an occupied tile.
 
-**Status:** Open. Fix direction: make the collision verdict apply to the whole
-group — if `computeNodeUpdates` returns null for a frame, skip the rectangle /
-text-box / label preview accumulation for that frame too, so every member holds
-the last valid position. Repro:
-[`sel-01-04-07-11.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I3-selection/sel-01-04-07-11.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) exactly as directed: `dragItems`
+returns early when the group contains nodes and `computeNodeUpdates` rejected
+the frame, so the rectangle, text-box, Label **and waypoint-anchor** previews are
+all skipped too (the anchor preview had the same hole and no filed entry). Every
+preview map keeps its last good value, so the group holds together at the last
+legal position and the commit on release matches what the user was looking at.
+Promoted regressions: [`selection-group-rules.spec.ts`](packages/axoview-e2e/tests/selection-group-rules.spec.ts), with an
+unobstructed mixed group as the control so the early return cannot silently
+freeze every drag.
 
 ## A live freehand-lasso selection makes Backspace destructive in every text field
 
@@ -2211,12 +2222,22 @@ input, anywhere in the app, is one Backspace away from destroying the selection.
 **Workaround:** press Escape (or click empty canvas) to leave freehand mode
 before typing anywhere.
 
-**Status:** Open. Fix direction: add the `isEditableTarget` guard to the lasso
-branch as well — there is no stated reason for it to be exempt while the other
-two are guarded. Separately, consider making `FreehandLasso.mouseup` return to
-`CURSOR` like `Lasso.mouseup` does, which would close the whole class and remove
-a real behavioural inconsistency between the two marquee tools. Repro:
-[`sel-01-04-07-11.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I3-selection/sel-01-04-07-11.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) via the first direction: all three
+Delete branches now share one `inTextField` verdict, computed once. The comment
+claiming the lasso branch is "handled before the text-field guard so it always
+fires when a canvas selection exists (matches how diagram tools like Figma
+behave)" is gone — Figma does not destroy a canvas selection from a keystroke
+typed into a text field.
+
+The second suggestion — making `FreehandLasso.mouseup` return to CURSOR like
+`Lasso.mouseup` — was **not** taken. It is a behaviour change to the freehand
+tool (its armed-with-selection state is what lets a user redraw without
+re-arming), it is not needed once the guard is right, and it would land with no
+filed entry asking for it. The divergence between the two marquee tools is real
+and is recorded in the I3 area file's carry-forward notes. Promoted regression:
+the lasso-vs-text-field cases in
+[`handleDeleteKey.test.ts`](packages/axoview-lib/src/interaction/__tests__/handleDeleteKey.test.ts),
+which run against BOTH marquee modes.
 
 ## Starting a drag on a connector body splices a waypoint outside the drag transaction
 
@@ -2238,11 +2259,15 @@ outside the bracket that was supposed to make the gesture one undo step.
 
 **Workaround:** press Ctrl+Z twice.
 
-**Status:** Open. Fix direction: open the drag transaction before the splice —
-either move `beginDragTransaction` ahead of the `getAnchor` call in the drag-start
-branch, or perform the splice inside `DragItems.entry` from the pressed
-connector/tile. Repro:
-[`sel-02-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I3-selection/sel-02-15.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) via the first option — one line, in
+`Cursor.mousemove`, immediately before the `getAnchor` call that splices.
+`beginDragTransaction` is idempotent (`if (session.dragInProgress) return`), so
+`DragItems.entry`'s own call is a no-op and the mouseup commit closes the single
+bracket. Doing the splice inside `DragItems.entry` instead was rejected: entry
+receives no pressed-tile context of its own and would have to re-derive the
+anchor from `mouse.mousedown`, duplicating `getAnchor`'s ordering logic in a
+second place. Promoted regression: [`selection-group-rules.spec.ts`](packages/axoview-e2e/tests/selection-group-rules.spec.ts) —
+one gesture, one Ctrl+Z, no waypoint left behind.
 
 ## The endpoint-reconnect mode has no way out — Escape does not cancel it and an off-canvas release does not end it
 

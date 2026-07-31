@@ -610,6 +610,17 @@ export const Cursor: ModeActions = {
     if (!hasDragged) return;
 
     if (item?.type === 'CONNECTOR' && uiState.mouse.mousedown) {
+      // I3/SEL-02: `getAnchor` SPLICES a new waypoint into the connector when
+      // the press wasn't on an existing one — a real model write. It used to run
+      // here, before `setMode(DRAG_ITEMS)` whose `entry` opens the drag bracket,
+      // so one gesture produced two history entries: the splice, then the move.
+      // One Ctrl+Z undid the move and left the waypoint behind, and the second
+      // removed a waypoint the user had never created as its own action (and an
+      // abandoned drag left it there for good). Opening the bracket first folds
+      // the splice into the gesture's single entry; `DragItems.entry`'s own
+      // `beginDragTransaction` is idempotent, and the mouseup commit closes the
+      // one bracket.
+      scene.beginDragTransaction();
       const anchor = getAnchor(item.id, uiState.mouse.mousedown.tile, scene);
 
       item = {

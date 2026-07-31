@@ -148,3 +148,73 @@ describe('isEditableTarget', () => {
     expect(isEditableTarget(document.createElement('div'))).toBe(false);
   });
 });
+
+// Promoted from the exploratory lane (I3/SEL-07). The lasso branch used to run
+// BEFORE the text-field guard, on the reasoning that a live canvas selection
+// should always win. `FreehandLasso` stays armed WITH its selection after the
+// gesture ends (unlike `Lasso`, which drops back to CURSOR), so that state
+// outlives the gesture indefinitely — and every Backspace typed into any text
+// field afterwards silently destroyed the whole freehand selection while the
+// field kept its text.
+describe('handleDeleteOrBackspace — the lasso branch vs a focused text field', () => {
+  const lassoState = (type: 'LASSO' | 'FREEHAND_LASSO') =>
+    makeUiState({
+      mode: {
+        type,
+        showCursor: true,
+        selection: { items: [{ type: 'ITEM', id: 'n1' }] }
+      }
+    });
+
+  const input = () => document.createElement('input');
+
+  it.each(['LASSO', 'FREEHAND_LASSO'] as const)(
+    'Backspace typed into an input does NOT delete a live %s selection',
+    (type) => {
+      const deps = makeDeps();
+      const uiState = lassoState(type);
+
+      const consumed = handleDeleteOrBackspace(
+        keyEvent('Backspace', input()),
+        uiState,
+        deps
+      );
+
+      expect(deps.deleteSelectedItems).not.toHaveBeenCalled();
+      // Not consumed either — the keystroke belongs to the field.
+      expect(consumed).toBe(false);
+      expect(uiState.actions.setMode).not.toHaveBeenCalled();
+    }
+  );
+
+  it('the same Backspace on the canvas still deletes the lasso selection', () => {
+    const deps = makeDeps();
+    const uiState = lassoState('FREEHAND_LASSO');
+
+    expect(handleDeleteOrBackspace(keyEvent('Backspace'), uiState, deps)).toBe(
+      true
+    );
+    expect(deps.deleteSelectedItems).toHaveBeenCalledWith([
+      { type: 'ITEM', id: 'n1' }
+    ]);
+    expect(uiState.actions.clearSelection).toHaveBeenCalled();
+  });
+
+  it('a Quill editor is shielded too, not just <input>', () => {
+    const deps = makeDeps();
+    const host = document.createElement('div');
+    host.className = 'ql-editor';
+    const target = document.createElement('p');
+    host.appendChild(target);
+    document.body.appendChild(host);
+
+    handleDeleteOrBackspace(
+      keyEvent('Backspace', target),
+      lassoState('FREEHAND_LASSO'),
+      deps
+    );
+
+    expect(deps.deleteSelectedItems).not.toHaveBeenCalled();
+    document.body.removeChild(host);
+  });
+});

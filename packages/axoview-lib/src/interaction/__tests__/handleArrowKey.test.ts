@@ -101,6 +101,64 @@ describe('handleArrowKey — selection-aware nudge vs pan (B6)', () => {
   });
 });
 
+// Promoted from the exploratory lane (I3/SEL-01). The batch updaters are the
+// DRAG commit path and write `offset: u.offset` unconditionally — deliberately,
+// so a drag that re-snaps an item clears the residual by passing `undefined`.
+// The nudge passed no offset at all, so every arrow press erased an off-grid
+// item's sub-tile residual and snapped it onto the grid: the ADR 0023
+// offset-omission class, in its keyboard consumer.
+describe('handleArrowKey — the off-grid residual (SEL-01)', () => {
+  const OFFSET = { x: -8.7, y: -12.74 };
+
+  it('carries a nudged item’s offset through unchanged', () => {
+    const uiState = makeUiState({ selectedIds: [{ type: 'ITEM', id: 'n1' }] });
+    const deps = makeDeps({
+      items: [{ id: 'n1', tile: { x: 5, y: 5 }, offset: OFFSET }]
+    });
+
+    handleArrowKey(makeKey('ArrowRight'), uiState, deps);
+
+    expect(deps.batchUpdateViewItemTiles).toHaveBeenCalledWith([
+      { id: 'n1', tile: { x: 6, y: 5 }, offset: OFFSET }
+    ]);
+  });
+
+  it('carries it for rectangles and text boxes too', () => {
+    const uiState = makeUiState({
+      selectedIds: [
+        { type: 'RECTANGLE', id: 'r1' },
+        { type: 'TEXTBOX', id: 't1' }
+      ]
+    });
+    const deps = makeDeps({
+      rectangles: [
+        { id: 'r1', from: { x: 0, y: 0 }, to: { x: 2, y: 2 }, offset: OFFSET }
+      ],
+      textBoxes: [{ id: 't1', tile: { x: 3, y: 3 }, offset: OFFSET }]
+    });
+
+    handleArrowKey(makeKey('ArrowRight'), uiState, deps);
+
+    expect(deps.batchUpdateRectangles).toHaveBeenCalledWith([
+      { id: 'r1', from: { x: 1, y: 0 }, to: { x: 3, y: 2 }, offset: OFFSET }
+    ]);
+    expect(deps.batchUpdateTextBoxTiles).toHaveBeenCalledWith([
+      { id: 't1', tile: { x: 4, y: 3 }, offset: OFFSET }
+    ]);
+  });
+
+  it('leaves a snapped item’s absent offset absent', () => {
+    const uiState = makeUiState({ selectedIds: [{ type: 'ITEM', id: 'n1' }] });
+    const deps = makeDeps({ items: [{ id: 'n1', tile: { x: 5, y: 5 } }] });
+
+    handleArrowKey(makeKey('ArrowRight'), uiState, deps);
+
+    expect(deps.batchUpdateViewItemTiles).toHaveBeenCalledWith([
+      { id: 'n1', tile: { x: 6, y: 5 }, offset: undefined }
+    ]);
+  });
+});
+
 // Promoted from the exploratory lane (I1/PTR-11) — see
 // tests-exploratory/I1-pointer/ptr-04-07-08-11-13.explore.spec.ts in the
 // campaign history. The nudge used to assert in a comment that `selectedIds`

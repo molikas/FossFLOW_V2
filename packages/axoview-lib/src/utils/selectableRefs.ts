@@ -63,3 +63,54 @@ export const collectSelectableRefs = (
   }
   return refs;
 };
+
+// ---------------------------------------------------------------------------
+// Additive marquee (I3/SEL-15, ruled 2026-07-30 — ADR 0006 §2 addendum)
+// ---------------------------------------------------------------------------
+//
+// The CLICK path has treated Shift/Ctrl/Cmd as additive since change #10
+// ("Shift joins Ctrl/Cmd as an additive-selection modifier on canvas"), but a
+// marquee ignored the same modifier and replaced the selection outright — so
+// one gesture taught the user a rule the other broke. The owner adopted the
+// near-universal behaviour (Figma, Miro, Lucid, draw.io, Illustrator, Sketch,
+// Inkscape, Blender all extend on Shift+drag).
+//
+// Both marquee tools call this, so the rectangular and freehand lassos cannot
+// drift the way the two `mouseup` handlers otherwise would.
+
+/** Identity for de-duping refs: type AND id (an anchor id is not an item id). */
+const refKey = (ref: ItemReference): string => `${ref.type}:${ref.id}`;
+
+/**
+ * The selection a completed marquee should produce.
+ *
+ * Non-additive: the marquee's own catch, unchanged. Additive: the existing
+ * selection plus the catch, de-duped, with the existing members kept in their
+ * original order so an extend never reshuffles what was already selected.
+ *
+ * Note this is a UNION, not a toggle. A subtract modifier is a common second
+ * tier in the Adobe family and Blender, but is not baseline and was not ruled.
+ */
+export const mergeMarqueeSelection = (
+  existing: readonly ItemReference[],
+  marquee: readonly ItemReference[],
+  additive: boolean
+): ItemReference[] => {
+  if (!additive) return [...marquee];
+  const seen = new Set(existing.map(refKey));
+  const merged = [...existing];
+  for (const ref of marquee) {
+    if (seen.has(refKey(ref))) continue;
+    seen.add(refKey(ref));
+    merged.push(ref);
+  }
+  return merged;
+};
+
+/**
+ * Was the additive modifier held for this event? The same three keys the click
+ * path honours (`resolveClickSelection`), read from the same place.
+ */
+export const isAdditiveModifier = (
+  modifiers: { ctrl?: boolean; meta?: boolean; shift?: boolean } | undefined
+): boolean => !!(modifiers?.ctrl || modifiers?.meta || modifiers?.shift);
