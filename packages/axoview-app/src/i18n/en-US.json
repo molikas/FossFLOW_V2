@@ -164,8 +164,8 @@
             "mode": "View-Only Mode"
         },
         "localModeShareError": {
-            "headline": "This share link needs a session backend.",
-            "body": "Share links can only be opened from an Axoview instance running with server storage. Deploy via Docker or Cloudflare to view shared diagrams.",
+            "headline": "This link belongs to a different Axoview site.",
+            "body": "Share links only open on the Axoview site that created them. Ask whoever sent it for a link from that site — or, if this site is yours, open it from the address your server runs on.",
             "btnDismiss": "OK"
         },
         "readonlyLoadError": {

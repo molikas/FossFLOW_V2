@@ -27,11 +27,18 @@ app.onError((err, c) => {
   return c.json({ error: 'Internal Server Error' }, 500);
 });
 
+/**
+ * Ceiling on a proxied Drive body. Shared with the `bodyLimit` below so the two
+ * caps cannot drift; the read proxy applies it to Drive's DECLARED size, and
+ * fails closed when Drive declares nothing (S2/SHARE-07).
+ */
+const MAX_PROXY_BYTES = 10 * 1024 * 1024;
+
 app.use('*', secureHeaders());
 app.use(
   '/api/*',
   bodyLimit({
-    maxSize: 10 * 1024 * 1024,
+    maxSize: MAX_PROXY_BYTES,
     onError: (c) => c.json({ error: 'Payload too large' }, 413)
   })
 );
@@ -117,7 +124,21 @@ app.get('/api/public/drive/:fileId', async (c) => {
     // ladder.
     return c.json({ error: 'gone' }, 410);
   }
-  if (Number(meta.size ?? '0') > 10 * 1024 * 1024) {
+  // S2/SHARE-07: fail CLOSED on an unknown size. The gate used to be
+  // `Number(meta.size ?? '0') > cap`, and Drive reports `size` only for files
+  // with binary content stored in Drive — when it is absent the `?? '0'`
+  // default reads as a zero-byte file and an unbounded body streams through the
+  // Worker. A non-numeric value was just as bad: `Number('unknown')` is `NaN`
+  // and `NaN > cap` is `false`. Measured: metadata `{trashed:false}` with a
+  // 30 MB body returned 200 with all 31 457 280 bytes. The neighbouring
+  // `trashed` gate on the same metadata read already fails closed on a missing
+  // field, so the size cap was the outlier — a missing size means "unknown",
+  // not "zero".
+  const declaredSize =
+    typeof meta.size === 'string' && meta.size.trim() !== ''
+      ? Number(meta.size)
+      : Number.NaN;
+  if (!Number.isFinite(declaredSize) || declaredSize > MAX_PROXY_BYTES) {
     return c.json({ error: 'too-large' }, 413);
   }
 
@@ -140,7 +161,15 @@ app.get('/api/public/drive/:fileId', async (c) => {
     status: 200,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'public, max-age=60'
+      // S3/DRV-07: `private`, not `public`. The in-code rationale for caching
+      // was browser-side dedupe of repeat opens, which `private` serves just as
+      // well; `public` additionally authorised SHARED caches, so revoking a
+      // Drive link left the diagram readable from a proxy that could hand it to
+      // other requesters. `must-revalidate` keeps a stale entry from being
+      // served past the window. The 404/410 paths carry no cache header at all,
+      // so only the readable body ever lingered — which is why the window was
+      // specific to an ACL change rather than to deletion.
+      'Cache-Control': 'private, max-age=60, must-revalidate'
     }
   });
 });

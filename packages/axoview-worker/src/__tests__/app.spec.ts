@@ -129,6 +129,43 @@ describe('GET /api/public/drive/:fileId — anonymous read proxy (ADR 0043 #3)',
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  // S2/SHARE-07 (promoted from `__explore__/S2/share-07`). The gate used to be
+  // `Number(meta.size ?? '0') > cap`, and Drive reports `size` only for files
+  // with binary content stored in Drive — so an ABSENT size defaulted to a
+  // zero-byte file and streamed a body of any length through the Worker. A
+  // non-numeric one was as bad: `Number('unknown')` is NaN and `NaN > cap` is
+  // false. The neighbouring `trashed` gate on the same metadata read already
+  // failed closed on a missing field, so the size cap was the outlier.
+  test.each([
+    ['absent', undefined],
+    ['non-numeric', 'unknown'],
+    ['empty', '']
+  ])('413 when Drive declares a %s size — fails closed, never reads the body', async (_label, size) => {
+    const meta: Record<string, unknown> = { trashed: false };
+    if (size !== undefined) meta.size = size;
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(meta), { status: 200 }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const res = await request(`/api/public/drive/${FID}`, {}, KEY_ENV);
+    expect(res.status).toBe(413);
+    expect(res.body).toEqual({ error: 'too-large' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  // S3/DRV-07 (promoted from `__explore__/S3/drv-07`). `public` authorised
+  // SHARED caches, so revoking a Drive link left the diagram readable from a
+  // proxy that could hand it to other requesters. The in-code rationale was
+  // browser-side dedupe of repeat opens, which `private` serves just as well.
+  test('the 200 is cacheable by the viewer only, never by a shared cache', async () => {
+    driveMock({ doc: { title: 'Public' } });
+    const res = await app.request(`http://test/api/public/drive/${FID}`, {}, KEY_ENV);
+    const cacheControl = res.headers.get('cache-control') ?? '';
+    expect(cacheControl).toContain('private');
+    expect(cacheControl).not.toContain('public');
+    expect(cacheControl).toContain('must-revalidate');
+  });
+
   test('forwards ?resourceKey= as the Drive resource-key header on both reads', async () => {
     const fetchMock = driveMock({ doc: {} });
     await app.request(`http://test/api/public/drive/${FID}?resourceKey=rk-9`, {}, KEY_ENV);

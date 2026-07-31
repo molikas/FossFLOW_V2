@@ -72,6 +72,29 @@ app.use(
     }
   })
 );
+
+// S2/SHARE-09: CORS is a RESPONSE-side control. The allowlist above makes the
+// browser withhold the response from an unknown origin — but the request has
+// already executed on the server. Any request the browser classes as
+// CORS-safelisted skips the preflight entirely, including `POST` with
+// `Content-Type: text/plain`, and `POST /api/diagrams/:id/share` needs no body
+// at all. Measured on the default self-host config (AUTH_MODE=none): a
+// cross-origin share POST from `https://evil.example` returned 200 with NO
+// `access-control-allow-origin` header and the diagram was genuinely published.
+// `PUT`/`PATCH`/`DELETE` were already safe (they force a preflight the
+// allowlist refuses), so the exposure was exactly the safelisted-request subset
+// — which the ACAO check the 2026-07-05 security review relied on cannot see.
+//
+// Reject the REQUEST, not just the response: a disallowed Origin never reaches
+// a handler. Requests with no Origin header (same-origin, curl,
+// server-to-server) are unaffected, matching the CORS callback above.
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api/')) return next();
+  const origin = req.headers.origin;
+  if (!origin || ALLOWED_ORIGINS.includes(origin)) return next();
+  return res.status(403).json({ error: 'Origin not allowed' });
+});
+
 app.use(express.json({ limit: '10mb' }));
 
 // ---------------------------------------------------------------------------
@@ -250,8 +273,43 @@ app.put('/api/tree-manifest', adapt(routes.saveTreeManifest));
 
 // Share
 app.post('/api/diagrams/:id/share', adapt(routes.shareDiagram));
-app.delete('/api/diagrams/:id/share', adapt(routes.unshareDiagram));
+// SHARE-10 (owner ruling 2026-07-30): the read stays exempt from
+// ENABLE_SERVER_STORAGE=false — a published artifact surviving an API
+// kill-switch is normal (S3/Pages/publish-to-web) — and REVOCATION becomes
+// exempt alongside it, because "unpublish" must always remain reachable. The
+// pair moves together; documented in docs/deployment.md.
+app.delete('/api/diagrams/:id/share', adapt(routes.unshareDiagram, { requireStorage: false }));
 app.get('/api/public/diagrams/:uuid', adapt(routes.getPublicSnapshot, { requireStorage: false }));
+
+// ---------------------------------------------------------------------------
+// Terminal error middleware (S2/SHARE-08)
+// ---------------------------------------------------------------------------
+// `body-parser` rejections never reach `adapt()`'s wrapper — it only wraps the
+// HANDLER — so they fell through to Express's built-in handler, which answers
+// with an HTML error page containing a Node stack trace. The client's
+// `response.json()` then threw, so instead of the ADR 0011 failure dialog
+// naming the cause the user got a generic error or nothing at all. Measured
+// against the real server: a truncated JSON body returned 400 `text/html`
+// carrying `SyntaxError`, and an 11 MB body returned 413 `text/html` carrying
+// `entity too large` and `at ` stack frames.
+//
+// The worker is the correct sibling: its `bodyLimit` answers
+// `{ error: 'Payload too large' }` as JSON with 413, and its `onError`
+// deliberately logs the stack while keeping it out of the response. Match it.
+// Typed on `err.type` rather than the message, and mounted last so a parser
+// error raised before any route still lands here.
+// eslint-disable-next-line no-unused-vars -- Express identifies error middleware by its arity
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+  if (err?.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Payload too large' });
+  }
+  if (err?.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'Malformed JSON body' });
+  }
+  console.error('[%s %s] unhandled', req.method, req.path, err);
+  return res.status(500).json({ error: 'Internal error' });
+});
 
 // ---------------------------------------------------------------------------
 // Start server
