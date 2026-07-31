@@ -66,7 +66,9 @@ const placeLabel = async (
   tile: { x: number; y: number },
   text: string
 ) => {
-  await canvas.placeLabelAt(await canvas.tileToScreen(tile));
+  await canvas.placeLabelAt(await canvas.tileToScreen(tile), {
+    keepEditing: true
+  });
   const editor = page.getByTestId('label-inline-editor');
   await editor.waitFor({ state: 'visible', timeout: 5_000 });
   await editor.click();

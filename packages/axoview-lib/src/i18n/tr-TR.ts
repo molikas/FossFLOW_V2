@@ -577,6 +577,12 @@ const locale: LocaleProps = {
   },
   // D8 — LayersPanel
   layersPanel: {
+    deleteLayerTitle: 'Katman silinsin mi?',
+    deleteLayerBody: 'Bu katmanda {count} öğe var. Bunlara ne olmalı?',
+    deleteLayerHiddenWarning: 'Bu katman GİZLİ. İçeriği korumak onu yeniden GÖRÜNÜR yapar — katmanı olmayan bir öğe her zaman gösterilir.',
+    deleteLayerCancel: 'İptal',
+    deleteLayerKeep: 'İçeriği koru',
+    deleteLayerDeleteContents: 'İçeriği de sil',
     header: 'Katmanlar',
     addLayer: 'Katman ekle',
     deleteSelectedLayer: 'Seçili katmanı sil',

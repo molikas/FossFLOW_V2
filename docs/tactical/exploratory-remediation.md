@@ -5,7 +5,7 @@
 > - [docs/exploratory/DECISIONS.md](../exploratory/DECISIONS.md) — the 22 owner rulings this plan implements (incl. the ADR amendments each ruling names)
 > - [docs/exploratory/LEDGER.md](../exploratory/LEDGER.md) — per-area bug counts; [known_issues.md](../../known_issues.md) — the 172 filed entries (`Found by: exploratory campaign <ID>`)
 >
-> **Status:** Waves 0, 1, 2 and 3 COMPLETE · **Owner:** molikas · **Last updated:** 2026-07-31
+> **Status:** Waves 0–3 COMPLETE · Wave 4 IN PROGRESS (3 of ~8 clusters) · **Owner:** molikas · **Last updated:** 2026-07-31
 >
 > Wave 4 is next. Read the wave 1–3 sections first — between them they carry the
 > items deliberately routed forward (HIST-03/04 and RND-13/15 to wave 5, CLIP-14
@@ -334,13 +334,92 @@ nobody had asserted.
 `packages/axoview-lib/dist`, so **`npm run build:lib` before every Playwright
 run** — otherwise a green fix reads as seven failing new specs.
 
-### Wave 4 — Consistency & decided UX 🟡 (F-block + E2 remainder + A4/A5 new, ~40 filed bugs)
-- [ ] **Styling cluster (F3):** STYL-01/06 fixes + STYL-02/03/08 rulings (+ ADR 0039 addendum).
-- [ ] **Text/label cluster (F1):** TXT-07 lifecycle parity + remaining TXT entries; **app/lib dual-implementation class gate** (dead lean-save half, ICON-01/02/05).
-- [ ] **Layers/annotation/view cluster (F2/F4/E2):** RED-13 confirm dialog, VIEW-07+VIEW-13 op-log, VIEW-08 session-only viewer toggle, LAY structural entries, ICON remainder.
-- [ ] Wave 0's A4/A5 bugs, slotted by root cause.
+### Wave 4 — Consistency & decided UX 🟡 IN PROGRESS (F-block + E2 remainder + A4/A5 new, ~55 open entries)
+
+> **Resume point (2026-07-31).** Three clusters are done and two of them are
+> committed; the rest is untouched. Read the per-cluster boxes below — each
+> records what landed, what was corrected in the record, and what it learned.
+>
+> **Done:** F3 styling (`3c5c8a30`), F1 text/label + RED-06, F4 layers minus
+> LAY-05. **Not started:** F5 icons, the E2 reducer remainder (RED-01/02/07/08/
+> 14/15), F2 annotation/view, A4 FileExplorer, A5 chrome, OVL-02, the lane rig
+> gate. Lib unit **182 suites / 2141** green throughout; the full Playwright run
+> is the gate that still has to close over the F1/F4 changes.
+>
+> **A tooling trap this wave added to wave 1's:** never start a second
+> Playwright run while a full one is in flight. They share the dev-server port,
+> and the first run hangs indefinitely rather than failing — an hour of wall
+> clock with an empty log and no error. Run the full suite last, or run only
+> targeted specs until you are ready for it.
+
+- [x] **Styling cluster (F3)** — `3c5c8a30`. STYL-01/05/06 + the STYL-02/03/08
+  rulings, all one defect seen from four sides: the strip derived every value
+  from `bulk.ids[0]` while writing to everyone. Now a toggle asks the whole
+  selection (tri-state, `aria-pressed="mixed"`), writes exactly the pressed
+  field, and absolute controls show "Mixed". Two dated ADR addendums (0030 the
+  bulk read contract, 0039 the no-colour representation) and the
+  `bulkStyleFanOut` class gate, verified able to go red.
+- [x] **Text/label cluster (F1)** — TXT-01/02, 04, 05, 06, 07 (ruling), 08, 09,
+  13, 14, 15, **plus E2/RED-06** which turned out to be blocking TXT-04. ADR
+  0034 addendum: the edit session is one history action and one cancel.
+  **Three corrections to the record, all found by re-deriving before
+  implementing:**
+  - **TXT-14's proposed sniff does not fix its own example.** HTML tag names are
+    case-insensitive, so `<T>` matches a `[a-z]` tag-shape regex under `/i` and
+    would still be eaten by DOMPurify. The discriminator has to be the tag NAME.
+  - **TXT-06 had a second cause the entry never named.** Sharing the click-away
+    allow-list was necessary and not sufficient: `useInlineRename` committed on
+    `blur`, and a plain mousedown on a strip control moves focus. *Focus leaving
+    is not the user leaving* — the press-away handler is the authority now.
+  - **TXT-13's second option was rejected** on re-derivation: recording the
+    wrappers would make the fully-plain state unreachable from the strip and
+    make the text box the one type whose toggle is not a toggle.
+  - And **un-deadening struck again** (the wave-2 lesson): making cancel roll
+    element-level writes back exposed that `finish('commit')` fell through to
+    `onCancel()` when the text was untouched — invisible before, silent data
+    loss after.
+- [x] **Layers cluster (F4), 3 of 4** — LAY-01 (the layer stack keys the Label
+  and Rectangle sorts, not `zIndex` alone), LAY-03 (`activeLayerId` in uiState +
+  `activeLayerPatch` at the placement chokepoint, with two guards against a
+  stale id becoming a RED-03 dangling reference), LAY-11 (`ItemReference[]`
+  through to the reducer, which buckets by type — the fixture gives a node, a
+  rectangle and a label the same id).
+- [x] **LAY-05 + the RED-13 ruling — ONE change, because they are one gesture.**
+  Deleting a layer that holds something asks "Keep contents (unassign)" vs
+  "Delete contents too"; an EMPTY layer skips the dialog. LAY-05 is the warning
+  case the ruling already specifies: visibility derives as
+  `!layer || layer.visible`, so unassigning the members of a HIDDEN layer
+  inverts their visibility, and the dialog now says so in an Alert instead of
+  letting the user find out on the canvas. Six locale keys × 13 files.
+  One thing neither entry mentions, which the reducer had to get right:
+  "delete contents" also removes connectors **anchored to** a deleted node, or
+  they would be left as E2/RED-07 anchors pointing at nothing.
+- [ ] **Icon cluster (F5):** ICON-01/02/04/05/06/08 + CLIP-14's icon-reference
+  half + STOR-14's override half; **app/lib dual-implementation class gate**
+  (the dead lean-save half is the root of ICON-01/02).
+- [ ] **E2 reducer remainder:** RED-01, 02, 07, 08, 14, 15. The harness is
+  already promoted to `reducers/__fixtures__/reducerHarness.ts`.
+- [ ] **Annotation/view cluster (F2):** VIEW-01/02, 03, 04, 05, 06, 07, 09 +
+  the VIEW-13 (annotation Clear undoable, rides the VIEW-07 op-log) and VIEW-08
+  (viewer session-only canvas mode) rulings.
+- [ ] Wave 0's A4 (FEX-08..16) and A5 (CHR-01..11) bugs, slotted by root cause.
 - [ ] **OVL-02 (from wave 3 — direction ruled 2026-07-31):** one PR, all three counter-scale consumers move together — per-label factor derived once in `config/labelSettings.ts` (effective-font, `max(1, floor/effective)`), consumed by the GL instance buffer (`i_misc.w`) and both hit layers' `--axoview-label-scale`; contract gate forbids counter-scale math outside the derivation; dated ADR 0015 addendum; **full** Playwright run (rendered output changes for styled labels). "Disable for restyled labels" rejected. Details in the known_issues entry.
-- [ ] **Lane rig gate (ruled 2026-07-31):** main-suite source-scan contract test — no two-argument `expect(value, 'msg')` in any Jest-context test file, **lane included** (scan files as data; the lane stays excluded from execution/tsc/knip). Pinned positive + negative samples; verified red once. Rationale: the lane is *permanent* (ADR 0047 §1), future delta campaigns write new Jest probes, and this class already produced one false CONFIRMED verdict (OVL-14's probe).
+- [x] **Lane rig gate (ruled 2026-07-31)** — [`jestExpectArity.contract.test.ts`](../../packages/axoview-lib/src/__tests__/jestExpectArity.contract.test.ts).
+  Scans every Jest-context test file in all four workspaces, **lane included, as
+  data** (the lane stays excluded from execution/tsc/knip). Playwright specs are
+  deliberately out of scope — the form is legal there and used ~180 times.
+
+  **It had to be a scanner, not a regex.** `expect(keyIn(layers, 'high'))` has a
+  comma and a quote inside its ONE argument; all three hits the naive pattern
+  produced on this repo were that shape. The check finds a comma at paren depth
+  ZERO, outside strings, template-literal `${…}` and comments. Six pinned
+  samples in both directions cover each of those, plus `softExpect(` /
+  `this.expect(` which are different functions.
+
+  Two CONTROLs keep it from going vacuously green (a path typo would otherwise
+  pass): the sweep must find >150 files, must include `__explore__` ones, and
+  must exclude `axoview-e2e`. **Verified red** by planting the trap in
+  `R5/scale-ovl-02.explore.test.ts` — reported by file and line — then restored.
 
 > **Inherited lane state (measured 2026-07-31, end of wave 3).** The jest explore
 > lane is green except for **four** characterizations, all in wave-4 areas and
@@ -356,7 +435,14 @@ run** — otherwise a green fix reads as seven failing new specs.
 - [ ] **GPU-13:** ADR 0038 amendment + design pass for cross-type z-depth (single canvas vs per-entity depth) → owner sign-off → implement.
 
 ### Wave 6 — Program build-out (should-have)
-- [ ] Write `.claude/skills/explore.md`: APPROACH distilled + COLDSTART flow + rig-traps appendix (must include the Jest two-arg-`expect` trap and the wave 2/3 "red for a reason that is not the bug" checklist) + delta-mode area selection (`git diff` vs last campaign end commit); regenerate-baseline step.
+- [ ] Write `.claude/skills/explore.md`: APPROACH distilled + COLDSTART flow + rig-traps appendix + delta-mode area selection (`git diff` vs last campaign end commit); regenerate-baseline step.
+
+  **Rig-traps appendix — queued contents (grow this list, don't rediscover it):**
+  - The Jest two-argument `expect(value, 'msg')` trap (wave 3) — and note that wave 4 lands a *gate* for it, so the appendix should point at the gate rather than rely on memory.
+  - The wave 2/3 "a probe can be red for a reason that is not the bug" checklist (CDP `TouchCancel` protocol error; Jest `expect` arity).
+  - **Wave 4: never run two Playwright invocations at once.** They share the dev-server port and the first HANGS rather than failing — an empty log and no error for as long as you let it.
+  - **Wave 4: `npm run build:lib` over a live dev server poisons it** (`Can't resolve 'axoview'`), and it presents as every test failing at `waitForAppReady`, i.e. exactly like a boot-time product crash. **Precedent:** this is the same desync the perf harness has documented since 2026-06-15 — cross-link [testing.md "Engine performance harness → Gotcha"](../guidelines/testing.md#engine-performance-harness-2026-06-15--adr-0020), whose answer (`npm run perf` owns its server lifecycle) is the shape the explore lane should copy.
+  - **Wave 4: machine speed is a confounder, not a constant.** 2026-07-31 ran ~4× slower than wave 3; a spec racing an internal retry/timeout budget flips red with no code change. Raise the timeout per-run on the CLI, never in the committed config, and check a suspicious red at a raised timeout before diagnosing it.
 - [ ] Headless path: verify `claude -p "/explore"` cold-start on this machine (subscription auth, no API key); document optional Task Scheduler wiring in the skill.
 - [ ] Archive: `git mv` campaign records → `docs/reviews/exploratory-2026-07/`; retire COLDSTART.md; fix inbound links (docs lint green).
 - [ ] Update workflow.md decision table (+ one line in testing.md) so `/explore` is discoverable.

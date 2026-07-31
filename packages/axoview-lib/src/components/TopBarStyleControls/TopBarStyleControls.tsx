@@ -61,6 +61,7 @@ import {
   resolveHomogeneousBulk,
   deriveTriState,
   nextToggleValue,
+  combineTriStates,
   deriveSharedValue,
   formatFieldPatch,
   readFormatFields,
@@ -1093,19 +1094,27 @@ export const TopBarStyleControls = () => {
           strike: liveFormats.strike === true ? 'on' : 'off'
         };
       }
-      return fromMembers(
-        targetIdsFor('TEXTBOX'),
-        (id) => currentView.textBoxes?.find((t) => t.id === id),
-        (m) => {
-          const f = getWholeContentFormats(m.content);
-          return {
-            bold: f.bold,
-            italic: f.italic,
-            underline: f.underline,
-            strike: f.strike
-          };
-        }
-      );
+      // TXT-13: a text box is tri-state on its OWN — one bolded word inside an
+      // otherwise plain box is `mixed`, not `off`. Reading it as `off` is what
+      // made the press that normalises the box to fully-bold look like a no-op,
+      // and put the destructive "remove everywhere" branch one further press
+      // away with no warning. Per-box tri-states then combine across the bulk.
+      const boxStates = targetIdsFor('TEXTBOX')
+        .map((id) => currentView.textBoxes?.find((t) => t.id === id))
+        .filter((t): t is NonNullable<typeof t> => !!t)
+        .map((t) => getWholeContentFormats(t.content));
+      const boxTri = (name: FormatName): TriState =>
+        combineTriStates(
+          boxStates.map((f) =>
+            f[name] ? 'on' : f.partial[name] ? 'mixed' : 'off'
+          )
+        );
+      return {
+        bold: boxTri('bold'),
+        italic: boxTri('italic'),
+        underline: boxTri('underline'),
+        strike: boxTri('strike')
+      };
     }
     return { bold: 'off', italic: 'off', underline: 'off', strike: 'off' };
   }, [

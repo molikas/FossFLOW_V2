@@ -257,8 +257,18 @@ export class CanvasPOM {
    * Floating-Label placement (ADR 0031). The Label has no hotkey — the Common
    * deck arms the LABEL mode — so arm it via the store, then drop on mouseup
    * (mirrors placeTextBoxAt's land → arm → release flow).
+   *
+   * Placement seeds EMPTY text and drops into the inline editor (TXT-07 ruling,
+   * 2026-07-31: the literal "Label" placeholder is gone, and a Label whose
+   * first edit session ends without text is discarded — the text box's
+   * contract). So, exactly like `placeTextBoxAt`, this helper types probe text
+   * and commits by default, leaving a persisted chip; pass `keepEditing: true`
+   * when the spec wants to drive the live session itself.
    */
-  async placeLabelAt(point: CanvasPoint) {
+  async placeLabelAt(
+    point: CanvasPoint,
+    opts?: { keepEditing?: boolean; text?: string }
+  ) {
     await this.dispatchAt(['mousemove'], point);
     await this.page.evaluate(() => {
       (window as any).__axoview__.ui
@@ -266,6 +276,13 @@ export class CanvasPOM {
         .actions.setMode({ type: 'LABEL', showCursor: true, id: null });
     });
     await this.dispatchAt(['mouseup'], point);
+    if (opts?.keepEditing) return;
+    const editor = this.page.getByTestId('label-inline-editor');
+    await editor.waitFor({ state: 'visible', timeout: 5_000 });
+    await editor.click();
+    await this.page.keyboard.type(opts?.text ?? 'Label', { delay: 5 });
+    await this.page.keyboard.press('Enter');
+    await editor.waitFor({ state: 'detached', timeout: 5_000 });
   }
 
   canvasModeToggleButton(): Locator {

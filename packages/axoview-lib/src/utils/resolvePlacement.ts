@@ -110,3 +110,31 @@ export const connectorEndpointVertexDelta = (
     y: 0 - UNPROJECTED_TILE_SIZE * frac.y
   };
 };
+
+/**
+ * F4/LAY-03 — the layer a newly placed entity joins.
+ *
+ * There was no active-layer concept anywhere in the store: `VIEW_ITEM_DEFAULTS`
+ * carries no `layerId`, and `modes/TextBox.ts`, `modes/Label.ts`,
+ * `modes/PlaceIcon.ts` and the rectangle draw all wrote a fixed shape without
+ * one. Selecting a layer row in the panel set the panel's own highlight and
+ * nothing the placement path read, so every new element landed unassigned and
+ * had to be dragged across afterwards.
+ *
+ * Returns a spreadable patch — `{}` when nothing is active, so an unlayered
+ * diagram's entities stay lean exactly as before.
+ *
+ * The `layers` argument is not optional on purpose. A stale `activeLayerId`
+ * (its layer deleted, or a different view active) would otherwise be stamped
+ * onto a new entity as a dangling reference — the E2/RED-03 class, which
+ * `assignLayerToItems` already refuses to create through its own door.
+ */
+export const activeLayerPatch = (
+  activeLayerId: string | null | undefined,
+  layers: { id: string }[] | undefined
+): { layerId?: string } => {
+  if (!activeLayerId) return {};
+  return (layers ?? []).some((l) => l.id === activeLayerId)
+    ? { layerId: activeLayerId }
+    : {};
+};

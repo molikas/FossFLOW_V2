@@ -572,6 +572,12 @@ const locale: LocaleProps = {
   },
   // D8 — LayersPanel
   layersPanel: {
+    deleteLayerTitle: 'লেয়ার মুছে ফেলবেন?',
+    deleteLayerBody: 'এই লেয়ারে {count}টি উপাদান আছে। সেগুলির কী হবে?',
+    deleteLayerHiddenWarning: 'এই লেয়ারটি লুকানো। বিষয়বস্তু রাখলে তা আবার দৃশ্যমান হবে — লেয়ারবিহীন উপাদান সবসময় দেখা যায়।',
+    deleteLayerCancel: 'বাতিল',
+    deleteLayerKeep: 'বিষয়বস্তু রাখুন',
+    deleteLayerDeleteContents: 'বিষয়বস্তুও মুছুন',
     header: 'স্তর',
     addLayer: 'স্তর যোগ করুন',
     deleteSelectedLayer: 'নির্বাচিত স্তর মুছুন',

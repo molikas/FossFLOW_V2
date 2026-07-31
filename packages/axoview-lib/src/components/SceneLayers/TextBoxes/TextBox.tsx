@@ -3,6 +3,7 @@ import { Box, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { toPx, CoordsUtils, getTextBoxDimensions } from 'src/utils';
 import { sanitizeHtml } from 'src/utils/sanitizeHtml';
+import { isHtmlContent } from 'src/utils/richTextTransform';
 import {
   RENDERED_DRAG_TRANSFORM,
   getRenderedDragTransform
@@ -34,13 +35,49 @@ interface Props {
   textBox: ReturnType<typeof useSceneData>['textBoxes'][0];
 }
 
+type TextBoxData = ReturnType<typeof useSceneData>['textBoxes'][0];
+
+// Element-level style fields the strip can write while an on-canvas edit
+// session is open (ADR 0034 §2's non-draft half). Escape restores these, so a
+// cancelled session leaves nothing behind — see the bracket note below (TXT-08).
+const SESSION_STYLE_FIELDS = [
+  'fontSize',
+  'lineHeight',
+  'width',
+  'height',
+  'color',
+  'backgroundColor',
+  'borderColor',
+  'borderWidth',
+  'borderStyle',
+  'borderOpacity',
+  'verticalAlign',
+  'orientation'
+] as const;
+
+type SessionStyleSnapshot = Pick<
+  TextBoxData,
+  (typeof SESSION_STYLE_FIELDS)[number]
+>;
+
+const pickSessionStyleFields = (tb: TextBoxData): SessionStyleSnapshot => {
+  const out = {} as Record<string, unknown>;
+  SESSION_STYLE_FIELDS.forEach((k) => {
+    out[k] = (tb as unknown as Record<string, unknown>)[k];
+  });
+  return out as SessionStyleSnapshot;
+};
+
 export const TextBox = memo(({ textBox }: Props) => {
   const { paddingX, fontProps } = useTextBoxProps(textBox);
   const editorMode = useUiStateStore((s) => s.editorMode);
+  // Always-current box, for callbacks that must not re-create on every edit.
+  const textBoxRefForSession = useRef(textBox);
+  textBoxRefForSession.current = textBox;
+  const isEditable = editorMode === 'EDITABLE';
   // Actions only (not useScene): this textbox sits in the drag hot path and must
   // not re-render on every scene mutation just to hold updateTextBox (perf A-1).
   const { updateTextBox, deleteTextBox } = useSceneActions();
-  const isEditable = editorMode === 'EDITABLE';
   const uiActions = useUiStateStore((s) => s.actions);
   // The on-canvas edit session is store state (ADR 0034): while set, the
   // Renderer promotes this box ABOVE the interactions box (so the editor gets
@@ -102,13 +139,39 @@ export const TextBox = memo(({ textBox }: Props) => {
     [isEditable]
   );
 
+  // TXT-08 — the ONE cancel contract. ADR 0034 §2's dual scope sends a strip
+  // write either into the Quill draft (thrown away by Escape) or straight to
+  // the model (already committed when Escape arrives), so cancelling an edit
+  // used to discard the text and KEEP the styling: one gesture, two opposite
+  // semantics, unpredictable from the UI. Escape now restores the element-level
+  // fields as well, and because the whole session sits inside one history
+  // bracket (`useInlineEditHistoryBracket`) a cancelled session nets to an
+  // empty patch set and leaves no entry at all.
+  const sessionSnapshotRef = useRef<ReturnType<
+    typeof pickSessionStyleFields
+  > | null>(null);
+  useEffect(() => {
+    // Captured when the session opens. The Renderer promotes the editing box
+    // into its own layer, so this component remounts once at session start —
+    // before any strip write, which is exactly when the snapshot is wanted.
+    sessionSnapshotRef.current = isEditing
+      ? pickSessionStyleFields(textBoxRefForSession.current)
+      : null;
+  }, [isEditing]);
+
   // Empty-box lifecycle (ADR 0034 addendum 2026-07-03, Lucid parity): a text
   // box whose edit session ends with no content is DELETED, not committed —
   // covers the fresh place-and-type box abandoned via click-away/Escape AND an
   // existing box the user emptied. Prevents invisible zero-width ghosts.
   const discardEmpty = useCallback(() => {
     uiActions.setEditingTextBoxId(null);
-    uiActions.setItemControls(null);
+    // TXT-15: `setItemControls(null)` is a HALF-deselect — its null branch
+    // deliberately leaves `selectedIds` alone, because a legitimate
+    // multi-selection also has `itemControls === null`. Used as "deselect" it
+    // left every `selectedIds` consumer (Delete, arrow-nudge, the strip's
+    // writers) pointing at an id that no longer resolves. `setSelectedIds([])`
+    // is the real deselect and derives `itemControls` itself.
+    uiActions.setSelectedIds([]);
     deleteTextBox(textBox.id);
   }, [uiActions, deleteTextBox, textBox.id]);
 
@@ -127,12 +190,23 @@ export const TextBox = memo(({ textBox }: Props) => {
   );
 
   const cancel = useCallback(() => {
+    // TXT-08: roll the element-level writes back before closing the bracket, so
+    // the session's net patch set is empty and no entry is pushed at all.
+    const snapshot = sessionSnapshotRef.current;
+    if (snapshot) {
+      const current = pickSessionStyleFields(textBoxRefForSession.current);
+      const changed = (
+        Object.keys(snapshot) as (keyof typeof snapshot)[]
+      ).some((k) => current[k] !== snapshot[k]);
+      if (changed) updateTextBox(textBox.id, snapshot);
+    }
     if ((textBox.content ?? '') === '') {
       discardEmpty();
       return;
     }
     uiActions.setEditingTextBoxId(null);
-  }, [uiActions, textBox.content, discardEmpty]);
+  }, [uiActions, textBox.content, textBox.id, updateTextBox, discardEmpty]);
+
 
   // Measure the live draft with the exact commit pipeline (getTextBoxDimensions
   // over the box's own props) and publish it as the session footprint. A blank
@@ -344,7 +418,10 @@ export const TextBox = memo(({ textBox }: Props) => {
               ...fontProps
             }}
           >
-            {textBox.content?.trim().startsWith('<') ? (
+            {/* TXT-14: the shared tag sniff, not a bare '<' — plain text that
+                opens with an angle bracket (`<T> is a type parameter`) must
+                take the escaped branch, or DOMPurify eats the token. */}
+            {isHtmlContent(textBox.content) ? (
               <span dangerouslySetInnerHTML={{ __html: sanitizedContent }} />
             ) : (
               textBox.content

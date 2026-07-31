@@ -24,8 +24,11 @@ describe('Model item reducers works correctly', () => {
       scene
     });
 
+    // TXT-05: the reducer is now the ONE chokepoint that seeds `label = name`
+    // (ADR 0032 decouple), so a stored item carries the seeded label alongside
+    // everything it was created with.
     expect(newState.model.items[newState.model.items.length - 1]).toStrictEqual(
-      newItem
+      { ...newItem, label: 'newItem' }
     );
   });
 
@@ -71,11 +74,46 @@ describe('createModelItem — no double-write regression', () => {
     expect(matches).toHaveLength(1);
   });
 
-  test('returned item equals the input newModelItem exactly', () => {
+  test('returned item equals the input plus the seeded label, and nothing else', () => {
     const newItem: ModelItem = { id: 'exact-match', name: 'Exact' };
     const newState = createModelItem(newItem, baseState);
     const stored = newState.model.items[newState.model.items.length - 1];
-    expect(stored).toStrictEqual(newItem);
+    expect(stored).toStrictEqual({ ...newItem, label: 'Exact' });
+  });
+
+  // TXT-05 — the ADR 0032 seed runs at CREATION, not only on load. Without it a
+  // never-reloaded node has no `label`, the renderer's `label ?? name` fallback
+  // is live, and renaming the node in Layers moves its canvas text: the same
+  // gesture on the same node behaved differently before and after a reload.
+  test('a created node is seeded out of the name fallback (TXT-05)', () => {
+    const newState = createModelItem(
+      { id: 'seeded', name: 'Untitled' },
+      baseState
+    );
+    const stored = newState.model.items[newState.model.items.length - 1];
+    expect(stored.label).toBe('Untitled');
+  });
+
+  test('an explicit label wins — including an empty one that hides the label', () => {
+    const withLabel = createModelItem(
+      { id: 'explicit', name: 'Identity', label: 'On canvas' },
+      baseState
+    );
+    expect(
+      withLabel.model.items[withLabel.model.items.length - 1].label
+    ).toBe('On canvas');
+
+    const hidden = createModelItem(
+      { id: 'hidden', name: 'Identity', label: '' },
+      baseState
+    );
+    expect(hidden.model.items[hidden.model.items.length - 1].label).toBe('');
+  });
+
+  test('an item with no name is left alone (nothing to seed from)', () => {
+    const newState = createModelItem({ id: 'nameless', name: '' }, baseState);
+    const stored = newState.model.items[newState.model.items.length - 1];
+    expect(stored.label).toBeUndefined();
   });
 
   test('input state is not mutated (immutability)', () => {

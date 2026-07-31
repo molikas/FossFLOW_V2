@@ -572,6 +572,12 @@ const locale: LocaleProps = {
   },
   // D8 — LayersPanel
   layersPanel: {
+    deleteLayerTitle: 'Hapus lapisan?',
+    deleteLayerBody: 'Lapisan ini berisi {count} elemen. Apa yang harus terjadi pada elemen tersebut?',
+    deleteLayerHiddenWarning: 'Lapisan ini TERSEMBUNYI. Mempertahankan isinya membuatnya TERLIHAT lagi — elemen tanpa lapisan selalu ditampilkan.',
+    deleteLayerCancel: 'Batal',
+    deleteLayerKeep: 'Pertahankan isi',
+    deleteLayerDeleteContents: 'Hapus isinya juga',
     header: 'Lapisan',
     addLayer: 'Tambah lapisan',
     deleteSelectedLayer: 'Hapus lapisan terpilih',

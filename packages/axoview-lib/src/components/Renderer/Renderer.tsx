@@ -37,6 +37,7 @@ import { ElementLinkCard } from 'src/components/ElementLinkCard/ElementLinkCard'
 import { Lasso } from 'src/components/Lasso/Lasso';
 import { FreehandLasso } from 'src/components/FreehandLasso/FreehandLasso';
 import { useScene } from 'src/hooks/useScene';
+import { useInlineEditHistoryBracket } from 'src/hooks/useInlineEditHistoryBracket';
 import { getFitToViewParams, CoordsUtils } from 'src/utils';
 import { RendererProps } from 'src/types/rendererProps';
 import { Scroll, Size, ViewItem } from 'src/types';
@@ -344,6 +345,11 @@ export const Renderer = ({ showGrid, backgroundColor }: RendererProps) => {
   // below it "the box ate every press"), so its Quill editor receives pointer
   // events. The lower TextBoxes layer skips it so it isn't drawn twice.
   const editingTextBoxId = useUiStateStore((s) => s.editingTextBoxId);
+  // One history entry per on-canvas edit session (TXT-04/07/08). Owned HERE
+  // because the promotion above unmounts and remounts the edited box, so a
+  // bracket owned by that component would close itself the instant the session
+  // began — see the hook's own note.
+  useInlineEditHistoryBracket();
   const restingTextBoxes = useMemo(
     () =>
       editingTextBoxId

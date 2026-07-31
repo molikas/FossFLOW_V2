@@ -1,5 +1,9 @@
 import { setWindowCursor, generateId } from 'src/utils';
-import { resolvePlacement, cursorTileResidual } from 'src/utils/resolvePlacement';
+import {
+  resolvePlacement,
+  cursorTileResidual,
+  activeLayerPatch
+} from 'src/utils/resolvePlacement';
 import { isCanvasDrop } from 'src/utils/canvasDropTarget';
 import { LABEL_DEFAULTS } from 'src/config';
 import { exceedsTapSlop } from 'src/config/tapGesture';
@@ -57,11 +61,23 @@ export const Label: ModeActions = {
     const placement = resolvePlacement(tile, residual, undefined, globalSnap);
 
     const id = generateId();
+    // TXT-07 — same bracket as the text box (TXT-04): placement + the abandoned
+    // first edit are ONE logical action, so discarding an unnamed Label leaves
+    // no history entry to undo into.
+    scene.beginDragTransaction();
     scene.createLabel({
       ...LABEL_DEFAULTS,
       id,
+      // TXT-07 ruling (owner 2026-07-30): placement seeds EMPTY text, not the
+      // literal word "Label". An abandoned first edit then discards the chip
+      // exactly as an abandoned text box does, instead of leaving a placeholder
+      // the user never typed — and "never committed" needs no extra flag,
+      // because empty IS the signal (LabelHitLayer's LabelInlineEditor).
+      text: '',
       tile: placement.tile,
-      offset: placement.offset
+      offset: placement.offset,
+      // F4/LAY-03: join the layer the panel has selected, if any.
+      ...activeLayerPatch(uiState.activeLayerId, scene.currentView?.layers)
     });
 
     // Place-and-type (owner 2026-07-02): select the label so the top strip targets

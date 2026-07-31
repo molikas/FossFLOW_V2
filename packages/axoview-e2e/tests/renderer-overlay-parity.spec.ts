@@ -513,7 +513,9 @@ test('OVL-06: a node name stays hoverable in present mode, like a floating Label
   const canvas = new CanvasPOM(page);
   const nodeId = await setupNamedNode(page);
 
-  await canvas.placeLabelAt(await canvas.tileToScreen({ x: 3, y: 0 }));
+  await canvas.placeLabelAt(await canvas.tileToScreen({ x: 3, y: 0 }), {
+    keepEditing: true
+  });
   await page.waitForTimeout(500);
   await page.keyboard.type('Legend');
   await page.keyboard.press('Enter');

@@ -264,9 +264,12 @@ test('the LABEL panel renders no editable surface in view mode', async ({
   const { page } = app;
   const canvas = new CanvasPOM(page);
 
+  // Setup only — this test is about the PANEL, not the placement. The POM types
+  // and commits (the placement contract since the TXT-07 ruling: placement
+  // seeds empty text and an uncommitted Label is discarded, so the old
+  // "place, then Escape the seeded placeholder" setup would leave nothing to
+  // select).
   await canvas.placeLabelAt(await canvas.tileToScreen({ x: 0, y: 0 }));
-  await page.getByTestId('label-inline-editor').waitFor({ timeout: 5_000 });
-  await page.keyboard.press('Escape');
   const label = (await activeView(page))?.labels?.[0];
   expect(label, 'setup: a Label must exist to select').toBeTruthy();
 

@@ -27,6 +27,9 @@ jest.mock('src/utils', () => {
 
 function makeScene(overrides: any = {}) {
   return {
+    // F4/LAY-03: the placement modes read the view's layers to validate the
+    // active layer before stamping it onto the new entity.
+    currentView: { layers: [] },
     rectangles: overrides.rectangles ?? [],
     colors: [{ id: 'c1', value: '#000' }],
     beginDragTransaction: jest.fn(),

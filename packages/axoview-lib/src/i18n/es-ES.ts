@@ -583,6 +583,12 @@ const locale: LocaleProps = {
   },
   // D8 — LayersPanel
   layersPanel: {
+    deleteLayerTitle: '¿Eliminar la capa?',
+    deleteLayerBody: 'Esta capa contiene {count} elemento(s). ¿Qué debe ocurrir con ellos?',
+    deleteLayerHiddenWarning: 'Esta capa está OCULTA. Si se conserva su contenido, volverá a ser VISIBLE: un elemento sin capa siempre se muestra.',
+    deleteLayerCancel: 'Cancelar',
+    deleteLayerKeep: 'Conservar el contenido',
+    deleteLayerDeleteContents: 'Eliminar también el contenido',
     header: 'Capas',
     addLayer: 'Añadir capa',
     deleteSelectedLayer: 'Eliminar capa seleccionada',

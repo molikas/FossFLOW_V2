@@ -213,7 +213,7 @@ describe('assignLayerToItems', () => {
   it('assigns layerId to specified items', () => {
     const state = makeState({ layers: LAYERS });
     const result = assignLayerToItems(
-      { layerId: 'layer1', itemIds: ['item1'] },
+      { layerId: 'layer1', refs: [{ type: 'ITEM', id: 'item1' }] },
       ctx(state)
     );
     expect(result.model.views[0].items[0].layerId).toBe('layer1');
@@ -224,7 +224,7 @@ describe('assignLayerToItems', () => {
   it('refuses an id that names no layer in the view', () => {
     const state = makeState({ layers: LAYERS });
     expect(() =>
-      assignLayerToItems({ layerId: 'ghost', itemIds: ['item1'] }, ctx(state))
+      assignLayerToItems({ layerId: 'ghost', refs: [{ type: 'ITEM', id: 'item1' }] }, ctx(state))
     ).toThrow(/no such layer/);
   });
 
@@ -233,7 +233,7 @@ describe('assignLayerToItems', () => {
       items: [{ id: 'item1', tile: { x: 0, y: 0 }, layerId: 'layer1' }]
     });
     const result = assignLayerToItems(
-      { layerId: undefined, itemIds: ['item1'] },
+      { layerId: undefined, refs: [{ type: 'ITEM', id: 'item1' }] },
       ctx(state)
     );
     expect(result.model.views[0].items[0].layerId).toBeUndefined();
@@ -248,7 +248,7 @@ describe('assignLayerToItems', () => {
       ]
     });
     const result = assignLayerToItems(
-      { layerId: 'new-layer', itemIds: ['item1'] },
+      { layerId: 'new-layer', refs: [{ type: 'ITEM', id: 'item1' }] },
       ctx(state)
     );
     expect(result.model.views[0].items[1].layerId).toBe('existing-layer');

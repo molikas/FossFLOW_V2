@@ -81,12 +81,77 @@ export const plainTextToHtml = (text: string): string =>
     .join('');
 
 /**
- * The renderer treats content as HTML only when it starts with `<`
- * (TextBox.tsx). Anything else is plain text and must be escaped before it can
- * be handed to an HTML-based editor or transform.
+ * Does this content open with a tag the sanitizer will actually KEEP? Anything
+ * else is plain text and must be escaped before it can be handed to an
+ * HTML-based editor or transform.
+ *
+ * TXT-14: this used to be `content.trim().startsWith('<')`, so a text box
+ * reading `<T> is a type parameter` answered yes, went to `sanitizeHtml` +
+ * `dangerouslySetInnerHTML`, and DOMPurify dropped the unknown `<T>` element
+ * while keeping its (empty) text content — the token vanished on the canvas and
+ * in the editor. `useInitialDataManager` writes the sanitized string BACK into
+ * the model, so one load made the loss permanent. The escape that was supposed
+ * to protect exactly this input lives in `plainTextToHtml`, reachable only when
+ * this predicate is FALSE, i.e. never for that input: the guard was unreachable
+ * code.
+ *
+ * CORRECTION to the recorded fix direction. The entry proposed sniffing for a
+ * tag SHAPE (`/^\s*<\/?[a-z][a-z0-9]*[\s/>]/i`). That does not fix its own
+ * example: HTML tag names are case-insensitive, so `<T>` matches `[a-z]` under
+ * `/i` and is still routed to the HTML branch, where DOMPurify still drops it.
+ * The discriminator has to be the tag NAME — content is HTML when it opens with
+ * a tag the sanitizer keeps, and plain text otherwise. That is also the
+ * honest predicate: "will this survive the pipeline as markup?"
+ *
+ * The list is the DOMPurify html-profile subset this app can actually produce
+ * or ingest (Quill's own vocabulary plus the block/table shapes that reach us
+ * from imports). A tag outside it would be stripped anyway, so treating its
+ * content as plain text and escaping it PRESERVES the characters instead of
+ * silently eating them.
  */
-export const isHtmlContent = (content: string | undefined): boolean =>
-  !!content && content.trim().startsWith('<');
+const KNOWN_HTML_TAGS = new Set([
+  'a',
+  'b',
+  'blockquote',
+  'br',
+  'code',
+  'div',
+  'em',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'i',
+  'img',
+  'li',
+  'ol',
+  'p',
+  'pre',
+  's',
+  'span',
+  'strike',
+  'strong',
+  'sub',
+  'sup',
+  'table',
+  'tbody',
+  'td',
+  'th',
+  'thead',
+  'tr',
+  'u',
+  'ul'
+]);
+
+const HTML_TAG_START = /^\s*<\/?([a-z][a-z0-9]*)(?:[\s/>]|$)/i;
+
+export const isHtmlContent = (content: string | undefined): boolean => {
+  if (!content) return false;
+  const match = HTML_TAG_START.exec(content);
+  return !!match && KNOWN_HTML_TAGS.has(match[1].toLowerCase());
+};
 
 export const ensureHtmlContent = (content: string | undefined): string => {
   if (!content) return '';
@@ -149,11 +214,43 @@ const leafFullyFormatted = (leaf: Element, format: InlineFormat): boolean => {
   return sawText && covered;
 };
 
+/** SOME non-whitespace text in `leaf` sits under a format-carrying tag. */
+const leafPartiallyFormatted = (
+  leaf: Element,
+  format: InlineFormat
+): boolean => {
+  const tags = INLINE_TAGS[format];
+  const doc = leaf.ownerDocument;
+  const walker = doc.createTreeWalker(leaf, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!(node.textContent ?? '').trim()) continue;
+    let ancestor: Element | null = node.parentElement;
+    while (ancestor && ancestor !== leaf.parentElement) {
+      if (tags.has(ancestor.tagName)) return true;
+      ancestor = ancestor.parentElement;
+    }
+  }
+  return false;
+};
+
 export interface WholeContentFormats {
   bold: boolean;
   italic: boolean;
   underline: boolean;
   strike: boolean;
+  /**
+   * TXT-13: the format covers SOME of the content but not all of it — one
+   * bolded word inside an otherwise plain box. The strip renders this as its
+   * indeterminate state, so the press that normalises the box to fully-bold is
+   * visibly a change rather than a no-op, and the destructive "remove
+   * everywhere" branch is only ever reached from a genuinely all-on box.
+   */
+  partial: {
+    bold: boolean;
+    italic: boolean;
+    underline: boolean;
+    strike: boolean;
+  };
   /** The list type when EVERY line is a list item of that one type. */
   list: ListType | null;
   /** The alignment when EVERY line shares one; null = mixed. */
@@ -178,6 +275,12 @@ export const getWholeContentFormats = (
     italic: false,
     underline: false,
     strike: false,
+    partial: {
+      bold: false,
+      italic: false,
+      underline: false,
+      strike: false
+    },
     list: null,
     align: 'left'
   };
@@ -189,6 +292,9 @@ export const getWholeContentFormats = (
 
   const all = (format: InlineFormat) =>
     leaves.every((leaf) => leafFullyFormatted(leaf, format));
+  const some = (format: InlineFormat) =>
+    leaves.some((leaf) => leafPartiallyFormatted(leaf, format));
+  const partialOf = (format: InlineFormat) => !all(format) && some(format);
 
   const topBlocks = Array.from(body.children).filter((c) =>
     BLOCK_TAGS.has(c.tagName)
@@ -209,6 +315,12 @@ export const getWholeContentFormats = (
     italic: all('italic'),
     underline: all('underline'),
     strike: all('strike'),
+    partial: {
+      bold: partialOf('bold'),
+      italic: partialOf('italic'),
+      underline: partialOf('underline'),
+      strike: partialOf('strike')
+    },
     list,
     align
   };

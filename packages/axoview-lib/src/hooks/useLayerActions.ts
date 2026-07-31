@@ -84,8 +84,12 @@ const useLayerActions = () => {
   );
 
   const deleteLayer = useCallback(
-    (layerId: string) => {
-      dispatch({ action: 'DELETE_LAYER', payload: layerId });
+    (layerId: string, contents: 'unassign' | 'delete' = 'unassign') => {
+      // F4/LAY-05 + the E2/RED-13 ruling: the CALLER decides what happens to
+      // the layer's contents, because both answers are defensible and doing
+      // either one silently is the thing that is not (deleting a hidden layer
+      // used to reveal everything it was hiding).
+      dispatch({ action: 'DELETE_LAYER', payload: { layerId, contents } });
     },
     [dispatch]
   );
@@ -99,10 +103,16 @@ const useLayerActions = () => {
 
   const assignLayerToItems = useCallback(
     (layerId: string | undefined, items: ItemReference[]) => {
-      const itemIds = items.map((i) => i.id);
+      // F4/LAY-11: the TYPE travels to the reducer. This used to drop it
+      // (`items.map(i => i.id)`) and the reducer then applied one id-set filter
+      // across all five entity collections, so assigning a node to a layer also
+      // moved a rectangle that happened to share the node's id. Cross-collection
+      // id uniqueness is not enforced anywhere (E4/CLIP-01 is the filed root),
+      // so this was that bug's newest consumer — and the callers had the typed
+      // form in their hands the whole time.
       dispatch({
         action: 'ASSIGN_LAYER_TO_ITEMS',
-        payload: { layerId, itemIds }
+        payload: { layerId, refs: items }
       });
     },
     [dispatch]

@@ -89,6 +89,7 @@ const initialState = () => {
       iconScaleDrag: null,
       selectedConnectorLabel: null,
       inlineEditLabelId: null,
+      activeLayerId: null,
       viewModeHoveredLabelId: null,
       editingTextBoxId: null,
       editingTextBoxSize: null,
@@ -395,6 +396,13 @@ const initialState = () => {
         },
         setInlineEditLabelId: (id) => {
           set({ inlineEditLabelId: id });
+        },
+        // F4/LAY-03 — the layer new elements are placed onto. There was no
+        // active-layer concept anywhere in the store, so every new element
+        // landed unassigned and had to be dragged across afterwards; on a
+        // diagram organised into layers that pile grew with every edit.
+        setActiveLayerId: (id) => {
+          set({ activeLayerId: id });
         },
         setViewModeHoveredLabelId: (id) => {
           // View-mode chip hover for the info popover (notes parity). Written

@@ -6,11 +6,13 @@ import {
   Connector,
   Rectangle,
   TextBox,
-  Label
+  Label,
+  ItemReference
 } from 'src/types';
 import { getItemByIdOrThrow, generateId } from 'src/utils';
 import { VIEW_DEFAULTS, INITIAL_SCENE_STATE } from 'src/config';
 import type { ViewReducerContext, State, ViewReducerParams } from './types';
+import { isNoOpUpdate } from './noOpUpdate';
 import { syncConnector } from './connector';
 import { syncTextBox } from './textBox';
 import * as viewItemReducers from './viewItem';
@@ -75,6 +77,21 @@ export const updateView = (
   updates: Partial<Pick<View, 'name'>>,
   ctx: ViewReducerContext
 ): State => {
+  // RED-06: ViewTabs' inline rename commits on blur/Enter unconditionally, so
+  // opening the editor and pressing Enter without typing lands here with the
+  // name it already has. Return the state untouched so nothing downstream —
+  // the timestamp stamp, the dirty flag, autosave, history — reacts to it.
+  const current = ctx.state.model.views.find((v) => v.id === ctx.viewId);
+  if (
+    current &&
+    isNoOpUpdate(
+      current as unknown as Record<string, unknown>,
+      updates as Record<string, unknown>
+    )
+  ) {
+    return ctx.state;
+  }
+
   const newState = produce(ctx.state, (draft) => {
     const view = getItemByIdOrThrow(draft.model.views, ctx.viewId);
     Object.assign(view.value, updates);
@@ -141,32 +158,105 @@ export const updateLayer = (
   });
 };
 
+/**
+ * F4/LAY-05 + the E2/RED-13 ruling (owner 2026-07-30): deleting a layer has TWO
+ * defensible meanings and the user picks.
+ *
+ * `contents: 'unassign'` (the historical behaviour) frees the entities into the
+ * unassigned bucket. `contents: 'delete'` removes them with the layer, the
+ * Photoshop reading.
+ *
+ * Why the choice had to be surfaced rather than defaulted: visibility is derived
+ * as `!layer || layer.visible` (`useLayerContext`), so an entity with no layer
+ * is UNCONDITIONALLY visible. Unassigning the members of a HIDDEN layer
+ * therefore inverts their visibility — deleting a hidden layer revealed
+ * everything it was hiding, silently. Axoview layers are tags rather than
+ * owners, so the ruling took the Visio pattern (ask) over AutoCAD's (refuse).
+ *
+ * The reducer stays the mechanism only; the dialog that asks lives in
+ * `LayersPanel`, and the hidden-layer warning is its extra sentence.
+ */
 export const deleteLayer = (
-  layerId: string,
+  payload: string | { layerId: string; contents?: 'unassign' | 'delete' },
   ctx: ViewReducerContext
 ): State => {
+  const layerId = typeof payload === 'string' ? payload : payload.layerId;
+  const contents =
+    typeof payload === 'string' ? 'unassign' : payload.contents ?? 'unassign';
+
   return produce(ctx.state, (draft) => {
     const view = getItemByIdOrThrow(draft.model.views, ctx.viewId);
     if (!view.value.layers) return;
 
     view.value.layers = view.value.layers.filter((l) => l.id !== layerId);
 
-    // Unassign layerId from all entities that referenced this layer
-    const unassign = (
-      entity: ViewItem | Connector | Rectangle | TextBox | Label
-    ) => {
-      if (entity.layerId === layerId) delete entity.layerId;
-    };
-    (view.value.items ?? []).forEach(unassign);
-    (view.value.connectors ?? []).forEach(unassign);
-    (view.value.rectangles ?? []).forEach(unassign);
-    (view.value.textBoxes ?? []).forEach(unassign);
-    (view.value.labels ?? []).forEach(unassign);
+    if (contents === 'delete') {
+      const survives = <T extends { layerId?: string }>(
+        list: T[] | undefined
+      ): T[] | undefined =>
+        list ? list.filter((e) => e.layerId !== layerId) : list;
+      // Connectors first: dropping an ITEM without its connectors would leave
+      // anchors pointing at nothing, which is E2/RED-07's shape.
+      const doomedItemIds = new Set(
+        (view.value.items ?? [])
+          .filter((i) => i.layerId === layerId)
+          .map((i) => i.id)
+      );
+      view.value.connectors = (view.value.connectors ?? []).filter(
+        (c) =>
+          c.layerId !== layerId &&
+          !c.anchors.some((a) => {
+            const ref = a.ref as { item?: string } | undefined;
+            return typeof ref?.item === 'string' && doomedItemIds.has(ref.item);
+          })
+      );
+      view.value.items = survives(view.value.items) ?? [];
+      view.value.rectangles = survives(view.value.rectangles);
+      view.value.textBoxes = survives(view.value.textBoxes);
+      view.value.labels = survives(view.value.labels);
+    } else {
+      // Unassign layerId from all entities that referenced this layer.
+      const unassign = (
+        entity: ViewItem | Connector | Rectangle | TextBox | Label
+      ) => {
+        if (entity.layerId === layerId) delete entity.layerId;
+      };
+      (view.value.items ?? []).forEach(unassign);
+      (view.value.connectors ?? []).forEach(unassign);
+      (view.value.rectangles ?? []).forEach(unassign);
+      (view.value.textBoxes ?? []).forEach(unassign);
+      (view.value.labels ?? []).forEach(unassign);
+    }
 
     // The delete leaves a hole in the order sequence, which the next
     // `createLayer` would then reuse (E2/RED-04).
     normaliseLayerOrder(view.value.layers);
   });
+};
+
+/**
+ * How many entities a layer holds, and whether hiding is in play — everything
+ * the confirm dialog needs to phrase itself (F4/LAY-05, E2/RED-13).
+ */
+export const describeLayerContents = (
+  view: View | undefined,
+  layerId: string
+): { count: number; hidden: boolean } => {
+  if (!view) return { count: 0, hidden: false };
+  const lists = [
+    view.items,
+    view.connectors,
+    view.rectangles,
+    view.textBoxes,
+    view.labels
+  ];
+  const count = lists.reduce(
+    (n, list) =>
+      n + (list ?? []).filter((e) => (e as { layerId?: string }).layerId === layerId).length,
+    0
+  );
+  const layer = (view.layers ?? []).find((l) => l.id === layerId);
+  return { count, hidden: !!layer && layer.visible === false };
 };
 
 export const reorderLayers = (
@@ -198,10 +288,18 @@ export const reorderLayers = (
 };
 
 export const assignLayerToItems = (
-  { layerId, itemIds }: { layerId: string | undefined; itemIds: string[] },
+  { layerId, refs }: { layerId: string | undefined; refs: ItemReference[] },
   ctx: ViewReducerContext
 ): State => {
-  const idSet = new Set(itemIds);
+  // F4/LAY-11 — dispatch PER COLLECTION using the reference's own type. A bare
+  // id-set applied across all five collections moved every entity sharing the
+  // id, and nothing enforces cross-collection id uniqueness (E4/CLIP-01).
+  const idsByType = new Map<string, Set<string>>();
+  refs.forEach((ref) => {
+    const set = idsByType.get(ref.type) ?? new Set<string>();
+    set.add(ref.id);
+    idsByType.set(ref.type, set);
+  });
   return produce(ctx.state, (draft) => {
     const view = getItemByIdOrThrow(draft.model.views, ctx.viewId);
 
@@ -220,21 +318,26 @@ export const assignLayerToItems = (
       }
     }
 
-    const assign = (
-      entity: ViewItem | Connector | Rectangle | TextBox | Label
+    const assignIn = (
+      type: string,
+      entities: (ViewItem | Connector | Rectangle | TextBox | Label)[] | undefined
     ) => {
-      if (!idSet.has(entity.id)) return;
-      if (layerId === undefined) {
-        delete entity.layerId;
-      } else {
-        entity.layerId = layerId;
-      }
+      const ids = idsByType.get(type);
+      if (!ids || !entities) return;
+      entities.forEach((entity) => {
+        if (!ids.has(entity.id)) return;
+        if (layerId === undefined) {
+          delete entity.layerId;
+        } else {
+          entity.layerId = layerId;
+        }
+      });
     };
-    (view.value.items ?? []).forEach(assign);
-    (view.value.connectors ?? []).forEach(assign);
-    (view.value.rectangles ?? []).forEach(assign);
-    (view.value.textBoxes ?? []).forEach(assign);
-    (view.value.labels ?? []).forEach(assign);
+    assignIn('ITEM', view.value.items);
+    assignIn('CONNECTOR', view.value.connectors);
+    assignIn('RECTANGLE', view.value.rectangles);
+    assignIn('TEXTBOX', view.value.textBoxes);
+    assignIn('LABEL', view.value.labels);
   });
 };
 
@@ -378,7 +481,23 @@ export const view = ({ action, payload, ctx }: ViewReducerParams) => {
       throw new Error('Invalid action.');
   }
 
-  if (TIMESTAMPED_ACTIONS.has(action)) {
+  // RED-06 — stamp only when the reducer actually produced a change.
+  //
+  // This used to apply the timestamp on the ACTION NAME alone, discarding the
+  // signal the reducers already give one line above: every one of them either
+  // produces through immer (new `model` reference) or returns the input state
+  // untouched. Stamping regardless minted a fresh model / views array / view
+  // object whose only difference was `lastUpdated`, so a no-op fired
+  // `useDirtyTracker` ("unsaved changes"), woke autosave, and stored a history
+  // entry whose undo produces no visible change — a Ctrl+Z that appears to do
+  // nothing. Confirmed reachable by committing a page rename with the SAME
+  // name, re-writing a property with the value it already has, `UPDATE_LAYER`
+  // with an unknown id, and `REORDER_LAYERS` with an empty list.
+  //
+  // It also made the create-then-discard of an abandoned text box or Label
+  // (TXT-04 / TXT-07) a non-empty patch set, so the session bracket that should
+  // net to nothing still left an entry behind.
+  if (TIMESTAMPED_ACTIONS.has(action) && newState.model !== ctx.state.model) {
     return updateViewTimestamp({ state: newState, viewId: ctx.viewId });
   }
 

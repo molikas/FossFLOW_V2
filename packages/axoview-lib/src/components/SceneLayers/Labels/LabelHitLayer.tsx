@@ -109,23 +109,47 @@ const LabelInlineEditor = ({
   fontSize: number;
   onDone: () => void;
 }) => {
-  const { updateLabel } = useSceneActions();
+  const { updateLabel, deleteLabel } = useSceneActions();
+  const uiActions = useUiStateStore((s) => s.actions);
+  // TXT-07 ruling (owner 2026-07-30) — FULL text-box lifecycle parity. The two
+  // gestures used to do the opposite of what the text box one tool over does:
+  // Escape right after placement left a literal "Label" chip on the canvas, and
+  // clearing an existing Label's text then committing silently restored the old
+  // text with no feedback at all. Now: an emptied Label is DELETED on commit
+  // (undoable, like the empty text box), and a Label abandoned during its FIRST
+  // edit session is discarded (placement seeds `text: ''`, so "never committed"
+  // is exactly "empty" — the same signal the text box uses).
+  const discard = useCallback(() => {
+    uiActions.setSelectedIds([]);
+    deleteLabel(label.id);
+    onDone();
+  }, [uiActions, deleteLabel, label.id, onDone]);
+
   const commit = useCallback(
     (raw: string) => {
       const text = raw.replace(/\n+$/, '');
-      // Empty text has no reason to draw — revert (keep the old text) rather than
-      // leaving a blank chip; the user can delete the label with Delete instead.
-      if (text.trim() && text !== label.text) {
-        updateLabel(label.id, { text });
+      if (!text.trim()) {
+        discard();
+        return;
       }
+      if (text !== label.text) updateLabel(label.id, { text });
       onDone();
     },
-    [updateLabel, label.id, label.text, onDone]
+    [updateLabel, label.id, label.text, onDone, discard]
   );
+  const cancel = useCallback(() => {
+    // A Label that has never held text is a placement in progress, not an
+    // element the user chose to keep — the exact text-box contract.
+    if (!(label.text ?? '').trim()) {
+      discard();
+      return;
+    }
+    onDone();
+  }, [label.text, discard, onDone]);
   const inline = useInlineRename({
     active: true,
     commit,
-    cancel: onDone,
+    cancel,
     multiline: true
   });
   return (

@@ -586,6 +586,12 @@ const locale: LocaleProps = {
   },
   // D8 — LayersPanel
   layersPanel: {
+    deleteLayerTitle: 'Supprimer le calque ?',
+    deleteLayerBody: 'Ce calque contient {count} élément(s). Que faut-il en faire ?',
+    deleteLayerHiddenWarning: 'Ce calque est MASQUÉ. Conserver son contenu le rendra de nouveau VISIBLE — un élément sans calque est toujours affiché.',
+    deleteLayerCancel: 'Annuler',
+    deleteLayerKeep: 'Conserver le contenu',
+    deleteLayerDeleteContents: 'Supprimer aussi le contenu',
     header: 'Calques',
     addLayer: 'Ajouter un calque',
     deleteSelectedLayer: 'Supprimer le calque sélectionné',

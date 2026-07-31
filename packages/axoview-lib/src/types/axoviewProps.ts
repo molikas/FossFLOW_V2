@@ -585,6 +585,13 @@ export interface LocaleProps {
   // Unassigned group header (with a {count} placeholder) + its drop hint, and
   // the default "Layer {count}" name (interpolated, never concatenated).
   layersPanel: {
+    // F4/LAY-05 + E2/RED-13 ruling — the delete-layer confirm.
+    deleteLayerTitle: string;
+    deleteLayerBody: string;
+    deleteLayerHiddenWarning: string;
+    deleteLayerCancel: string;
+    deleteLayerKeep: string;
+    deleteLayerDeleteContents: string;
     header: string;
     addLayer: string;
     deleteSelectedLayer: string;

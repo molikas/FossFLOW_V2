@@ -547,6 +547,12 @@ const locale: LocaleProps = {
   },
   // D8 — LayersPanel
   layersPanel: {
+    deleteLayerTitle: '删除图层？',
+    deleteLayerBody: '该图层包含 {count} 个元素。应如何处理它们？',
+    deleteLayerHiddenWarning: '该图层已隐藏。保留其内容会使其重新可见——没有图层的元素始终显示。',
+    deleteLayerCancel: '取消',
+    deleteLayerKeep: '保留内容',
+    deleteLayerDeleteContents: '同时删除内容',
     header: '图层',
     addLayer: '添加图层',
     deleteSelectedLayer: '删除选定图层',

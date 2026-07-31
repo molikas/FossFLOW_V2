@@ -1,5 +1,9 @@
 import { setWindowCursor, generateId } from 'src/utils';
-import { resolvePlacement, cursorTileResidual } from 'src/utils/resolvePlacement';
+import {
+  resolvePlacement,
+  cursorTileResidual,
+  activeLayerPatch
+} from 'src/utils/resolvePlacement';
 import { isCanvasDrop } from 'src/utils/canvasDropTarget';
 import { TEXTBOX_DEFAULTS } from 'src/config';
 import { exceedsTapSlop } from 'src/config/tapGesture';
@@ -58,11 +62,22 @@ export const TextBox: ModeActions = {
     const placement = resolvePlacement(tile, residual, undefined, globalSnap);
 
     const id = generateId();
+    // TXT-04 — open the session's history bracket BEFORE the create, so
+    // placement and the empty-box discard are one logical action rather than
+    // two. With two entries, a single Ctrl+Z after abandoning a fresh box
+    // landed between them and resurrected an invisible 1×1 ghost that every
+    // save, export, lasso and Ctrl+A then carried. `TextBox.tsx` closes the
+    // bracket on commit / cancel / discard (and on unmount, so a page switch
+    // mid-session cannot leave it open); `beginDragTransaction` is idempotent,
+    // so the component re-opening it for its own session is harmless.
+    scene.beginDragTransaction();
     scene.createTextBox({
       ...TEXTBOX_DEFAULTS,
       id,
       tile: placement.tile,
-      offset: placement.offset
+      offset: placement.offset,
+      // F4/LAY-03: join the layer the panel has selected, if any.
+      ...activeLayerPatch(uiState.activeLayerId, scene.currentView?.layers)
     });
 
     // Place-and-type (owner 2026-07-02): select the box so the top strip targets

@@ -1,6 +1,7 @@
 import { produce } from 'immer';
 import { Rectangle } from 'src/types';
 import { getItemByIdOrThrow } from 'src/utils';
+import { isNoOpUpdate } from './noOpUpdate';
 import { State, ViewReducerContext } from './types';
 
 export const updateRectangle = (
@@ -8,6 +9,21 @@ export const updateRectangle = (
   { viewId, state }: ViewReducerContext
 ): State => {
   const view = getItemByIdOrThrow(state.model.views, viewId);
+
+  // RED-06 — a write that changes nothing leaves the state untouched, so the
+  // dispatcher skips the `lastUpdated` stamp. Very reachable since the ADR 0030
+  // bulk fan-out: every member of a homogeneous selection that already carried
+  // the value being applied used to dirty the diagram on its own.
+  const existing = view.value.rectangles?.find((r) => r.id === id);
+  if (
+    existing &&
+    isNoOpUpdate(
+      existing as unknown as Record<string, unknown>,
+      updates as Record<string, unknown>
+    )
+  ) {
+    return state;
+  }
 
   const newState = produce(state, (draft) => {
     const { rectangles } = draft.model.views[view.index];

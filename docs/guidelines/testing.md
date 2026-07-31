@@ -44,6 +44,35 @@ E2E suite lives at [`packages/axoview-e2e/`](../../packages/axoview-e2e/) (Playw
 
 To scale further, raise the shard count (`SHARD_TOTAL` + the matrix list in the workflow, kept in sync) — diminishing past ~6 shards because a fixed ~3 min setup (npm ci + build:lib + Playwright install + dev-server boot) is paid per shard.
 
+### Exploratory remediation wave 4 — running the e2e gate (rig notes, 2026-07-31)
+
+Three things cost this wave hours of wall clock. All three are rig, not product.
+
+1. **Never start a second Playwright run while a full one is in flight.** They
+   share the dev-server port; the first run does not fail, it **hangs
+   indefinitely** with an empty log and no error. Run targeted specs *or* the
+   full suite, never both at once.
+2. **`npm run build:lib` over a live dev server poisons it.** The rsbuild dev
+   server desyncs from `dist/` and caches `Can't resolve 'axoview'`, which
+   presents as *every* test failing at `waitForAppReady` — indistinguishable
+   from a boot-time product crash until you read the page snapshot. This is the
+   same gotcha the perf harness documents (see "Engine performance harness →
+   Gotcha" below, which is why `npm run perf` owns its own server lifecycle).
+   Kill every stray `node` process, rebuild, *then* start Playwright.
+3. **This machine ran ~4× slower than wave 3's baseline** on 2026-07-31 —
+   `bulk-style.spec.ts` took 42 s against the 30 s default and passed at
+   120 s. The wave-4 gate was therefore run with `--timeout=120000` **on the
+   command line only**. Do NOT commit a raised timeout as a default: a silently
+   raised global timeout masks real regressions the day the machine is healthy
+   again. **Do not compare a wave-4 wall-clock against wave 3's 34.8 min**
+   naively; the per-test cost was anomalous, not the suite.
+
+The one genuine finding underneath the noise is recorded with GPU-01/GPU-03 in
+known_issues.md: `gpu-icon-recovery.spec.ts`'s recovery test was racing the
+layer's own retry cascade (`MAX_ICON_LOAD_ATTEMPTS`), which burns back-to-back
+without any help from `forceRebuilds`. Fixed spec-side; the reconciliation was
+deliberately left alone.
+
 ### Exploratory remediation wave 4 — consistency & decided UX (2026-07-31)
 
 The F-block (text/rich-text, view modes & annotations, styling, layers, icons),
@@ -56,12 +85,46 @@ committed:
 
 - **[`bulkStyleFanOut.contract.test.ts`](../../packages/axoview-lib/src/utils/__tests__/bulkStyleFanOut.contract.test.ts)** · 24 tests · **CLASS GATE** for *"bulk styling is representative-in / everyone-out"* (F3 standing thread F-c). The docked strip read ONE member of a homogeneous bulk (`bulk.ids[0]`) and wrote the derived value to all of them — right for an absolute value, wrong for anything derived, and it produced four filed bugs at once (STYL-01 payload, STYL-02/06 direction, STYL-08 order-dependence). Four sections: the B/I/U/S field maps are complete and every field exists on its zod schema; a source scan proves the strip never hand-writes a format field (the maps live in `utils/bulkStyleTarget.ts`, so a literal `isBold:` means a writer went around them); a sweep proves every derivation is order-independent; and §4 gates the neighbouring sibling-drift class STYL-05 came from — all three text-box Border writers go through one seeded helper. One detail is load-bearing: the connector label's bare `bold`/`italic`/`underline` fields are also the FormatName keys the derivation is written in, so scanning for them by name would flag every read — `strikethrough` is the tell instead, and a quartet revert necessarily names it.
 
+- **[`jestExpectArity.contract.test.ts`](../../packages/axoview-lib/src/__tests__/jestExpectArity.contract.test.ts)** · 9 tests · **CLASS GATE** for *"a probe written in the Playwright `expect(value, 'message')` style is red in Jest whatever the code does"*. Wave 3 lost a verdict to this: an OVL-14 probe read as a confirmed bug and the code was fine — the most expensive kind of rig fault, because it looks like evidence. Scans all four workspaces' Jest-context test files **including the quarantined lane, as data** (reading it breaks no part of the ADR 0047 §1 quarantine, and it is the only way a main-suite gate can protect a tree that is excluded from execution, tsc and knip). Playwright specs are out of scope — the form is legal there. **A regex cannot do this job:** `expect(keyIn(layers, 'high'))` has a comma and a quote inside its single argument, and every false positive the naive pattern produced on this repo was that shape; the gate finds a comma at paren depth zero, outside strings, template `${…}` and comments. Two CONTROLs stop a path typo making it vacuously green.
+
+- **[`TextBoxInlineEditor.commitContract.test.tsx`](../../packages/axoview-lib/src/components/SceneLayers/TextBoxes/__tests__/TextBoxInlineEditor.commitContract.test.tsx)** · 6 tests · **REGRESSION PIN**, own file because the class is silent data loss. `finish('commit')` with no TEXT change fell through to `onCancel()` — dead-equivalent behaviour until TXT-08 gave cancel a real job, at which point a session that changed only styling was discarded by a left-click-away. Verified red against the old `&& changedRef.current`. The durable lesson is in the file header: **when a branch that was previously indistinguishable from its sibling gains behaviour, every caller that fell into it "harmlessly" becomes a live defect.**
+
 Promoted suites — lib:
 
 - **[`bulkStyleDerivation.test.ts`](../../packages/axoview-lib/src/utils/__tests__/bulkStyleDerivation.test.ts)** · the STYL-01/02/06/08 derivations: tri-state, `nextToggleValue`, `deriveSharedValue`, the one-field patch and the three naming schemes.
 - **[`stripSliderRanges.test.ts`](../../packages/axoview-lib/src/utils/__tests__/stripSliderRanges.test.ts)** · the STYL-10 sweep (every strip slider's endpoints against the schema field it writes) and the STYL-12 opacity round trip. Neither was a bug; both are the generalised form of the connector-label 24→40 S1-brick lesson, so they belong in the main suite rather than a lane that only runs on demand. **When you add a slider to the strip, add its row.**
 
 E2E: **[`bulk-format-mixed.spec.ts`](../../packages/axoview-e2e/tests/bulk-format-mixed.spec.ts)** · 5 tests · the strip driven through its real controls — a Bold press over a mixed bulk leaves italic alone (STYL-01), a mixed bulk reads `aria-pressed="mixed"` and one press applies rather than clears (STYL-02), the reversed selection gives the same result (STYL-08), the fan-out stays one undo entry (STYL-07), and clearing a rectangle fill writes an absent colour with the legacy preset cleared alongside it (STYL-03 ruling, ADR 0039 addendum).
+
+The F1 text cluster + the E2 no-op reducer fix (ADR 0034 addendum 2026-07-31):
+
+- **[`textBoxContentVocabulary.test.ts`](../../packages/axoview-lib/src/utils/__tests__/textBoxContentVocabulary.test.ts)** · 14 tests · the gap between the content vocabulary the EDITOR emits (Quill: `<p>`/`<li>` only) and the vocabulary the supported INPUT surfaces can store — plain text with newlines, `<div>` rows, `<br>` breaks. Measurement that models fewer rows than the render paints leaves every row after the first outside its own selection outline, transform box and `getItemAtTile` (TXT-01/02). Also the TXT-14 sniff: **`<T>` is not HTML**, and a tag-SHAPE regex does not say so (tag names are case-insensitive, so `<T>` matches `[a-z]` under `/i`) — the discriminator has to be the tag NAME.
+- **[`noOpUpdate.test.ts`](../../packages/axoview-lib/src/stores/reducers/__tests__/noOpUpdate.test.ts)** · 12 tests · RED-06. The dispatcher honours the "nothing happened" signal, AND the `update*` reducers actually give it for an identical write. The comparison is deliberately primitive-only — an object-valued update counts as a change without inspection, because a deep compare on the drag hot path would cost more than the write it avoids.
+- **[`useInlineRename.test.tsx`](../../packages/axoview-lib/src/hooks/__tests__/useInlineRename.test.tsx)** · +1 test, 3 rewritten · TXT-06 moved the AUTHORITY on ending a rename session from `blur` to the explicit press-away/key handlers. **Focus leaving is not the user leaving:** a plain mousedown on a strip control moves focus, and a hook that reads that blur as "commit" ends the rename however carefully its press-away listener allow-lists the strip.
+- **[`modelItem.test.ts`](../../packages/axoview-lib/src/stores/reducers/__tests__/modelItem.test.ts)** · +3 · TXT-05, the ADR 0032 label seed at the creation chokepoint.
+- App: **[`projectZipEmbeddedLinks.test.ts`](../../packages/axoview-app/src/services/project/__tests__/projectZipEmbeddedLinks.test.ts)** · 8 tests · TXT-09/10. The importer rewrites cross-diagram refs by SENTINEL as well as by key, so an `#diagram:<id>` inside a text box's HTML is covered by construction rather than by someone remembering.
+
+E2E: **[`text-entity-lifecycle.spec.ts`](../../packages/axoview-e2e/tests/text-entity-lifecycle.spec.ts)** · 6 tests · the provisional-entity lifecycle (TXT-04/05/07/15) and **[`inline-edit-session-scope.spec.ts`](../../packages/axoview-e2e/tests/inline-edit-session-scope.spec.ts)** · 4 tests · the session boundary (TXT-06/08). Both carry CONTROL cases — a text-box session for the Label test to be compared against, and a COMMITTED session beside the cancelled one — because the fixes are about a *difference* between two paths and a test of one path alone cannot see it.
+
+**A main-suite POM contract changed with this wave — `CanvasPOM.placeLabelAt`.**
+The TXT-07 ruling removed the `'Label'` placeholder: placement seeds EMPTY text
+and a Label whose first edit session ends without text is discarded. So the
+helper now **types probe text and commits by default**, exactly like
+`placeTextBoxAt`, with a `keepEditing: true` opt-out. Eight specs were adjusted
+for the new contract, and the split is deliberate:
+
+- **`keepEditing: true`** — `bulk-format-mixed`, `inline-edit-session-scope`, `text-entity-lifecycle`, `renderer-overlay-parity`. These drive the placement session themselves (they type, format or cancel inside it), so handing them a committed chip would test something else.
+- **default (commits)** — `label-entity`, `label-edit-and-placement-cancel`, `element-link-card`, `connector-dot-and-label-placement`, `readonly-enforcement`, `touch-gesture-interrupts`. For these a Label is *setup* for a different assertion (z-order, select, delete, the link card, the read-only panel), and the old "place, then Escape the seeded placeholder" idiom would now leave nothing to select.
+
+None of the eight was rewritten away from what it tested; `label-entity`'s
+placement test still counts one Label per placement, and the cancel describe
+never places a Label at all (it arms and cancels the MODE).
+
+The F4 layers cluster:
+
+- **[`layerRenderOrder.test.ts`](../../packages/axoview-lib/src/utils/__tests__/layerRenderOrder.test.ts)** · 5 tests · LAY-01. Only the node layers keyed their sort on `resolveRenderOrder`; `LabelsCanvas` and `Rectangles` sorted on `zIndex` alone, so the Layers panel looked like it controlled paint order for every element type and controlled it for one. Carries the zIndex-only comparator as a **CONTROL**, so the test demonstrably distinguishes the two keys rather than asserting into a vacuum.
+- **[`layerAssignment.test.ts`](../../packages/axoview-lib/src/stores/reducers/__tests__/layerAssignment.test.ts)** · 9 tests · LAY-11 and the LAY-03 placement chokepoint. The fixture deliberately gives a node, a rectangle and a label the **same id** — the shape `assignLayerToItems` used to move all three of, because the caller's `ItemReference` type was dropped on the way in and one id-set was applied across all five collections.
+- **[`deleteLayerContents.test.ts`](../../packages/axoview-lib/src/stores/reducers/__tests__/deleteLayerContents.test.ts)** · 15 tests · LAY-05 implementing the E2/RED-13 ruling — the two are one change because they are one gesture. The last describe **transcribes `useLayerContext`'s visibility derivation** (`!layer || layer.visible`) so the inversion is demonstrated rather than asserted from memory: a member of a hidden layer is hidden before the delete and visible after "keep contents", which is precisely what the dialog's Alert exists to warn about.
 
 ### Exploratory remediation wave 3 — interaction & rendering correctness (2026-07-31)
 

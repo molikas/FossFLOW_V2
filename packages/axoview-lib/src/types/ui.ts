@@ -439,6 +439,14 @@ export interface UiState {
    */
   inlineEditLabelId: string | null;
   /**
+   * The layer new elements are placed onto (F4/LAY-03), or null for the
+   * unassigned bucket. Set by selecting a row in the Layers panel; cleared
+   * when that layer is deleted or the active view changes, so a stale id can
+   * never be stamped onto a new entity (the E2/RED-03 dangling-reference
+   * class). UI-only, never persisted.
+   */
+  activeLayerId: string | null;
+  /**
    * The floating-Label chip hovered in VIEW mode (EXPLORABLE_READONLY), or
    * null. Labels are deliberately absent from the tile hit-test
    * (hitDetection.ts — ADR 0031 §4: the DOM proxy layer owns label hits), so
@@ -633,6 +641,7 @@ export interface UiStateActions {
   ) => void;
   /** Enter / leave inline-edit for a floating Label (double-click / F2). */
   setInlineEditLabelId: (id: string | null) => void;
+  setActiveLayerId: (id: string | null) => void;
   /** Publish / clear the view-mode hovered Label chip (LabelHitLayer →
    *  ViewModeInfoPopover; see `viewModeHoveredLabelId`). */
   setViewModeHoveredLabelId: (id: string | null) => void;

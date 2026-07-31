@@ -437,6 +437,42 @@ const newId = (prefix: 'diagram' | 'folder'): string => {
 const isUrlLike = (v: string): boolean =>
   /^[a-z][a-z0-9+.-]*:/i.test(v) || v.startsWith('//') || v.startsWith('/') || v.startsWith('#');
 
+/**
+ * TXT-09 — cross-diagram references that live INSIDE a string.
+ *
+ * ADR 0001 §1 requires the importer to rewrite every id and every
+ * cross-reference. The key-based walk below rewrites exactly one KEY (`link`),
+ * which covered every cross-diagram reference that existed when it was written.
+ * Since the ADR 0034 addendum (2026-07-04) a reference can also live inside a
+ * text box's Quill content as an `<a href="#diagram:&lt;id&gt;">` run authored
+ * by `TextBoxLinkCard` — a string inside an HTML blob, invisible to a walk that
+ * keys on property names. The old id survived verbatim, so an imported copy's
+ * in-text links dead-ended at diagrams in the project they were imported FROM.
+ *
+ * Rewriting by SENTINEL rather than by key covers any current or future HTML
+ * surface carrying it, by construction. A sentinel whose target is not in this
+ * archive is left alone — `TextBox.onRestingClick` already no-ops on an
+ * unresolvable id, and silently rewriting it to something else would be worse
+ * than a dead link.
+ */
+const DIAGRAM_LINK_SENTINEL = '#diagram:';
+
+export const rewriteEmbeddedDiagramLinks = (
+  value: string,
+  idMap: Map<string, string>
+): string => {
+  if (!value.includes(DIAGRAM_LINK_SENTINEL)) return value;
+  // Ids are opaque tokens; stop at the first character that cannot be part of
+  // one so the surrounding markup (`">`, `&quot;`, …) is preserved verbatim.
+  return value.replace(
+    /#diagram:([A-Za-z0-9_-]+)/g,
+    (whole, oldId: string) => {
+      const next = idMap.get(oldId);
+      return next ? `${DIAGRAM_LINK_SENTINEL}${next}` : whole;
+    }
+  );
+};
+
 const rewriteRefsInModel = (
   model: unknown,
   idMap: Map<string, string>,
@@ -456,6 +492,8 @@ const rewriteRefsInModel = (
       } else {
         out[k] = v;
       }
+    } else if (typeof v === 'string') {
+      out[k] = rewriteEmbeddedDiagramLinks(v, idMap);
     } else {
       out[k] = rewriteRefsInModel(v, idMap, dropped);
     }

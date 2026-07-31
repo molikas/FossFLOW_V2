@@ -183,11 +183,11 @@ describe('class gate — layer identity invariants survive every mutation', () =
   it('no entity can be assigned to a layer that does not exist', () => {
     const state = makeState({ layers: layers(1) });
     expect(() =>
-      assignLayerToItems({ layerId: 'ghost', itemIds: ['item1'] }, ctx(state))
+      assignLayerToItems({ layerId: 'ghost', refs: [{ type: 'ITEM', id: 'item1' }] }, ctx(state))
     ).toThrow(/no such layer/);
     // …while a real one still works, so the guard is not a blanket refusal.
     const ok = assignLayerToItems(
-      { layerId: 'l1', itemIds: ['item1'] },
+      { layerId: 'l1', refs: [{ type: 'ITEM', id: 'item1' }] },
       ctx(state)
     );
     expect(viewOf(ok).items[0].layerId).toBe('l1');

@@ -1,4 +1,4 @@
-import { Model, Scene, Layer } from 'src/types';
+import { Model, Scene, Layer, ItemReference } from 'src/types';
 import type * as viewReducers from './view';
 import type * as viewItemReducers from './viewItem';
 import type * as connectorReducers from './connector';
@@ -107,7 +107,9 @@ type ViewReducerAction =
     }
   | {
       action: 'DELETE_LAYER';
-      payload: string;
+      // F4/LAY-05 + E2/RED-13: the caller says what happens to the contents.
+      // A bare string stays accepted as 'unassign' (the historical meaning).
+      payload: string | { layerId: string; contents?: 'unassign' | 'delete' };
     }
   | {
       action: 'REORDER_LAYERS';
@@ -115,7 +117,7 @@ type ViewReducerAction =
     }
   | {
       action: 'ASSIGN_LAYER_TO_ITEMS';
-      payload: { layerId: string | undefined; itemIds: string[] };
+      payload: { layerId: string | undefined; refs: ItemReference[] };
     }
   | {
       action: 'REORDER_VIEWITEM';

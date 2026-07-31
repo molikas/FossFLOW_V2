@@ -5,7 +5,11 @@ import {
   getItemAtTile,
   findNearestUnoccupiedTile
 } from 'src/utils';
-import { resolvePlacement, cursorTileResidual } from 'src/utils/resolvePlacement';
+import {
+  resolvePlacement,
+  cursorTileResidual,
+  activeLayerPatch
+} from 'src/utils/resolvePlacement';
 import { isCanvasDrop } from 'src/utils/canvasDropTarget';
 import { VIEW_ITEM_DEFAULTS } from 'src/config';
 import { exceedsTapSlop } from 'src/config/tapGesture';
@@ -109,7 +113,12 @@ export const PlaceIcon: ModeActions = {
             ...VIEW_ITEM_DEFAULTS,
             id: modelItemId,
             tile: placement.tile,
-            offset: placement.offset
+            offset: placement.offset,
+            // F4/LAY-03: join the layer the panel has selected, if any.
+            ...activeLayerPatch(
+              uiState.activeLayerId,
+              scene.currentView?.layers
+            )
           }
         });
       }

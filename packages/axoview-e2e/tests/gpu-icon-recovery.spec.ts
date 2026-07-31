@@ -143,6 +143,24 @@ test.describe('a transient icon failure recovers (GPU-03)', () => {
     await page.route(`**${FLAKY}`, (route) => {
       requests += 1;
       if (serving === 'down') {
+        // The server comes back the instant the first request has failed.
+        //
+        // RIG NOTE (wave 4, 2026-07-31): this flip used to live in the test
+        // body, after `expect.poll(() => requests).toBeGreaterThan(0)`. That is
+        // a RACE against the layer's own retry cascade, not against wall clock:
+        // `markFailed` deletes the cache entry and schedules a redraw, so
+        // `MAX_ICON_LOAD_ATTEMPTS` (3) burns back-to-back over a few frames
+        // without any help from `forceRebuilds`. On a fast machine the poll
+        // observed request 1 and flipped before attempts 2–3 fired; on a slow
+        // one the budget was already spent by the time the body resumed, and
+        // `forceRebuilds` then LEGITIMATELY produced no request — the layer had
+        // given up, which is GPU-01's bound working as designed.
+        //
+        // Flipping here makes exhaustion impossible, so the assertion below
+        // tests the thing it names (a failed url is not cached as permanently
+        // dead) rather than the scheduler's speed. The bound itself is covered
+        // by the GPU-01 test above, which never flips.
+        serving = 'up';
         return route.fulfill({
           status: 503,
           contentType: 'text/plain',
@@ -163,10 +181,11 @@ test.describe('a transient icon failure recovers (GPU-03)', () => {
 
     const moved = await repointIcon(page, FLAKY);
     expect(moved.ok, `icon repoint failed: ${JSON.stringify(moved)}`).toBe(true);
+    // PRECONDITION: the url really was requested, and really did fail once —
+    // the flip above is inside the `down` branch, so `serving` proves it.
     await expect.poll(() => requests, { timeout: 15_000 }).toBeGreaterThan(0);
-
-    const requestsWhileDown = requests;
-    serving = 'up';
+    expect(serving).toBe('up');
+    const requestsWhileDown = 1;
 
     // Force geometry rebuilds. Before the fix `iconCacheRef` held the FAILED
     // Image keyed by url, so every later build took the `existing` branch and
@@ -177,5 +196,10 @@ test.describe('a transient icon failure recovers (GPU-03)', () => {
     await expect
       .poll(() => requests, { timeout: 20_000 })
       .toBeGreaterThan(requestsWhileDown);
+    // …and the retry actually RECOVERED the icon, which is the user-visible
+    // half: a transient failure must not hold the readiness flag down forever.
+    await expect
+      .poll(() => allIconsDrawn(page), { timeout: 20_000 })
+      .toBe('true');
   });
 });

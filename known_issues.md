@@ -1025,11 +1025,21 @@ the state untouched, and that signal is discarded one line later.
 
 **Workaround:** none; the phantom dirty flag is harmless to the data, just noisy.
 
-**Status:** Open. Fix direction: stamp only when the reducer returned a different
-model (`newState.model !== ctx.state.model` is already the natural test, since
-every reducer either produces via immer or returns the input) — and, for the
-inline-rename path, skip the dispatch entirely when the text is unchanged. Repro:
-[`red-06-07.explore.test.ts`](packages/axoview-lib/src/__explore__/E2/red-06-07.explore.test.ts).
+**Status:** Fixed in wave 4 (2026-07-31) — both halves, because the first alone
+was not enough. The dispatcher now stamps only when `newState.model !==
+ctx.state.model`, which covers the reducers that already early-return
+(`UPDATE_LAYER` with an unknown id, `REORDER_LAYERS` with an empty list). But an
+`update*` reducer that assigns `{ ...current, ...updates }` produces a new object
+even when every value is identical, so the two MOST reachable cases — a page
+rename committed with the same name, and a property re-written with the value it
+already has — never produced that signal. `isNoOpUpdate` gives it to them.
+
+Deliberately conservative: an object-valued update (`tile`, `offset`, a
+connector's `anchors`) counts as a change without inspecting it. A deep compare
+on the drag hot path would cost more than the write it is avoiding, and a false
+"no change" would drop a real edit. This also made the create-then-discard of an
+abandoned text box or Label a genuinely empty patch set (TXT-04). Promoted
+regression: [`noOpUpdate.test.ts`](packages/axoview-lib/src/stores/reducers/__tests__/noOpUpdate.test.ts).
 
 ## Deleting a node leaves anchor-to-anchor connectors dangling and permanently unroutable
 
@@ -3138,6 +3148,27 @@ stamping a tombstone over a node whose icon is merely late would misreport it.
 The chip and stalk still draw, as they did. Promoted regression:
 [`gpu-icon-recovery.spec.ts`](packages/axoview-e2e/tests/gpu-icon-recovery.spec.ts).
 
+**Addendum (wave 4, 2026-07-31) — the attempt budget is session-scoped, and the
+GPU-03 spec was racing it.** The recovery test went red on a machine running ~4×
+slow, and the cause was the reconciliation above rather than any wave-4 change.
+`markFailed` deletes the cache entry AND schedules a redraw, so the three
+attempts burn back-to-back over a few frames on their own — `forceRebuilds` is
+not what drives them. The spec flipped its fake server from `down` to `up`
+*after* polling for the first request, which is a race against that cascade: on
+a fast machine the flip landed before attempts 2–3, on a slow one the budget was
+already spent and `forceRebuilds` legitimately produced nothing. **The layer had
+given up, which is GPU-01's bound working as designed.** Fixed spec-side — the
+flip now happens inside the `down` branch, on the first request, so exhaustion is
+impossible and the assertion tests what it names.
+
+**The reconciliation was deliberately NOT changed.** Granting fresh attempts on
+an explicit geometry rebuild is defensible — it would mean a user who fixes their
+network mid-session sees the icon return — but it re-opens exactly the tension
+this entry settled, and it would make the bound depend on how often something
+happens to rebuild. If it is revisited, the shape to consider is a user-visible
+"retry icons" affordance (an explicit intent, not an incidental rebuild), which
+keeps GPU-01's bound honest.
+
 ## A long node name is cut mid-glyph on the canvas and wrapped in the DOM
 
 **Found by:** exploratory campaign GPU-09
@@ -4986,12 +5017,18 @@ already stores a plain-text `content`.
 re-serialises the content as `<p>` rows and the next `syncTextBox` measures it
 correctly.
 
-**Status:** Open. Fix direction: give `countHtmlLines` / `splitIntoMeasurableBlocks`
-a non-HTML branch that splits on `\n` (matching `white-space: pre`), and extend
-the block vocabulary to `div` plus a `<br>` count inside each block — or
-normalise legacy content to `<p>` rows in `useInitialDataManager` the way
-`foldTextBoxStyleFlags` already normalises the legacy style flags. Repro:
-[`measure-txt-01-02-11-14.explore.test.ts`](packages/axoview-lib/src/__explore__/F1/measure-txt-01-02-11-14.explore.test.ts).
+**Status:** Fixed in wave 4 (2026-07-31) — the first option, at the measurement
+rather than at load. A non-HTML content splits on `\n` (matching the
+`white-space: pre` the resting render uses for it), `div` joins the block
+vocabulary, and a `<br>` counts as a row wherever it is not the last thing in
+its block — so Quill's own `<p><br></p>` blank line stays ONE row. Both axes
+moved together: `splitIntoMeasurableBlocks` returns one block per row, so a
+multi-line plain-text box is no longer measured with its lines concatenated.
+One consequence worth naming: a single row of plain text now weighs the same as
+a single `<p>` row (the old flat `1` was the bug seen from the other side), and
+the rendered footprint is unchanged for it — both round to one tile. Promoted
+regression:
+[`textBoxContentVocabulary.test.ts`](packages/axoview-lib/src/utils/__tests__/textBoxContentVocabulary.test.ts).
 
 ## A text box whose text starts with '<' silently loses that token
 
@@ -5020,10 +5057,17 @@ meant to protect. The guard is unreachable code.
 **Workaround:** none once loaded. Before loading, wrap the value in `<p>` and
 escape the brackets by hand (`<p>&lt;T&gt; is a type parameter</p>`).
 
-**Status:** Open. Fix direction: sniff on a real tag (e.g.
-`/^\s*<\/?[a-z][a-z0-9]*[\s/>]/i`) rather than a bare `<`, so a
-non-tag angle bracket takes the plain-text branch that already escapes it, and
-apply the same sniff at both consumers. Repro: [`measure-txt-01-02-11-14.explore.test.ts`](packages/axoview-lib/src/__explore__/F1/measure-txt-01-02-11-14.explore.test.ts).
+**Status:** Fixed in wave 4 (2026-07-31), with a **correction to the recorded
+fix direction**. Sniffing for a tag SHAPE does not fix this entry's own example:
+HTML tag names are case-insensitive, so `<T>` matches `[a-z]` under `/i` and
+would still take the HTML branch, where DOMPurify would still drop it. The
+discriminator has to be the tag NAME — `isHtmlContent` now requires an opening
+token naming a tag the sanitizer actually keeps, which is also the honest
+predicate ("will this survive the pipeline as markup?"). Anything else takes the
+plain-text branch that escapes it, so the guard that was written for exactly
+this input is reachable at last. One sniff, three consumers: the renderer, the
+measurement and the editors all import it. Promoted regression:
+[`textBoxContentVocabulary.test.ts`](packages/axoview-lib/src/utils/__tests__/textBoxContentVocabulary.test.ts).
 
 ## Two strip presses flatten a text box's per-word formatting
 
@@ -5055,12 +5099,23 @@ unformatted to begin with, where apply→remove is genuinely the identity.
 editor (double-click the box first) — the live-editing branch routes to Quill
 and is range-scoped, so it does not have this failure mode.
 
-**Status:** Open. Fix direction: either make the whole-content toggle three-state
-(mixed → apply, fully-on → remove, fully-off → apply) so a partly-formatted box
-never reaches the destructive "remove" branch from a single press, or have
-`applyInlineFormat(on)` record the wrappers it added so the matching `off`
-removes only those. Repro:
-[`transforms-txt-10-12-13.explore.test.ts`](packages/axoview-lib/src/__explore__/F1/transforms-txt-10-12-13.explore.test.ts).
+**Status:** Fixed in wave 4 (2026-07-31) — the FIRST option, and deliberately
+not the second. `getWholeContentFormats` now reports `partial` alongside the
+all-or-nothing flags, so a box with one bolded word reads as **mixed** rather
+than as not-bold: the strip renders it indeterminate, the first press is
+visibly "apply to all", and the destructive "unwrap every STRONG" branch is
+only ever reached from a genuinely all-on box. That is also exactly the model
+the STYL-02 ruling locked in for every other element type on the same day, so
+the text box no longer behaves differently from its neighbours.
+
+The second option (record the wrappers `applyInlineFormat(on)` added so the
+matching `off` removes only those) was rejected on re-derivation: it would make
+the fully-plain state UNREACHABLE from the strip for a partly-formatted box —
+press applies, press restores the original mixed state, press applies again —
+and it would make the text box the one type whose toggle is not a toggle. Word,
+Docs, Slides and Figma all normalise a mixed selection and leave recovery to
+undo, which is now one Ctrl+Z away because the whole session is one history
+entry (TXT-04's bracket).
 
 ## An imported project's in-text diagram links point at the diagrams you imported FROM
 
@@ -5090,12 +5145,13 @@ verbatim, and `TextBox.onRestingClick` dispatches
 
 **Workaround:** re-author the link in the imported copy.
 
-**Status:** Open. Fix direction: extend `rewriteRefsInModel` with a content
-pass — for every string value, replace `#diagram:<oldId>` with
-`#diagram:<newId>` for each entry in `idMap` (the prefix is exported as
-`DIAGRAM_LINK_PREFIX`), so any current or future HTML surface carrying the
-sentinel is covered by construction. Repro:
-[`zip-txt-09-10.explore.test.ts`](packages/axoview-app/src/__explore__/F1/zip-txt-09-10.explore.test.ts).
+**Status:** Fixed in wave 4 (2026-07-31) — exactly as directed: `rewriteIds`
+now rewrites by SENTINEL as well as by key, so any current or future HTML
+surface carrying `#diagram:` is covered by construction rather than by someone
+remembering to add it. A sentinel whose target is not in the archive is left
+alone — `TextBox.onRestingClick` already no-ops on an unresolvable id, and
+silently repointing it would be worse than a dead link. Promoted regression:
+[`projectZipEmbeddedLinks.test.ts`](packages/axoview-app/src/services/project/__tests__/projectZipEmbeddedLinks.test.ts).
 
 ## Undo after abandoning a new text box brings back an invisible ghost box
 
@@ -5120,11 +5176,26 @@ floor), so the resurrected entity is invisible rather than zero-sized.
 **Workaround:** press Ctrl+Z a second time, or select the ghost (Ctrl+A shows
 its selection outline) and Delete.
 
-**Status:** Open. Fix direction: make placement + discard ONE logical history
-action — either place with `skipHistory` until the first commit (so an
-abandoned box never enters history at all, the way a cancelled connector draw
-does not), or give the discard the placement's history seq so a single Ctrl+Z
-crosses both. Repro: [`text-txt-03-04-05-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F1-text/text-txt-03-04-05-15.explore.spec.ts).
+**Status:** Fixed in wave 4 (2026-07-31) — the first shape, built out of the
+existing drag-transaction primitive rather than a new one. The whole on-canvas
+edit session is ONE history bracket: the placement mode opens it before the
+create, and `useInlineEditHistoryBracket` closes it when the session ends.
+A session whose net patch set is empty pushes no entry at all, so an abandoned
+box leaves nothing for Ctrl+Z to land on. The floating Label got the same
+bracket with its TXT-07 lifecycle.
+
+**Where the bracket has to live, and why.** The Renderer promotes the edited box
+into its own `TextBoxes` layer so the editor can receive pointer events, which
+unmounts and remounts the component mid-session. A bracket owned by `TextBox`
+therefore closed itself the instant the session began — committing the placement
+as its own entry and leaving the discard as a second, i.e. reproducing this bug
+exactly. It is owned by the Renderer and keyed on the two store flags instead.
+
+**One residual, recorded rather than hidden:** the create and the delete are each
+a real action that stamps the view's `lastUpdated`, and those do not cancel, so
+an abandoned placement can leave one entry carrying only a timestamp. Its undo
+cannot produce a text box, which is what this entry filed. Promoted regression:
+[`text-entity-lifecycle.spec.ts`](packages/axoview-e2e/tests/text-entity-lifecycle.spec.ts).
 
 ## Discarding an empty text box leaves it selected — `setItemControls(null)` is a half-deselect
 
@@ -5160,11 +5231,12 @@ deselect; here the code calls a deselect API that does not deselect.
 
 **Workaround:** click empty canvas after abandoning a text box.
 
-**Status:** Open. Fix direction: call `setSelectedIds([])` in `discardEmpty`
-(it derives `itemControls` itself), and audit the other
-`setItemControls(null)` callers that mean "deselect". Longer term, INV-2 wants
-enforcing centrally — every entity delete should sweep `selectedIds`. Repro:
-[`text-txt-03-04-05-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F1-text/text-txt-03-04-05-15.explore.spec.ts).
+**Status:** Fixed in wave 4 (2026-07-31) — `discardEmpty` calls
+`setSelectedIds([])`, which derives `itemControls` itself, and the floating
+Label's discard (TXT-07) uses the same call rather than repeating the mistake in
+a second place. The central INV-2 enforcement the entry asks for longer term is
+still outstanding and stays with HIST-13. Promoted regression:
+[`text-entity-lifecycle.spec.ts`](packages/axoview-e2e/tests/text-entity-lifecycle.spec.ts).
 
 ## Renaming a node in Layers moves its canvas text — but only until the diagram is reloaded
 
@@ -5196,10 +5268,14 @@ canvas text. `node-label-decouple.spec.ts` covers loaded nodes only.
 **Workaround:** rename on the canvas (F2 / double-click) instead — that writes
 `label`, which pins the node out of the fallback for good.
 
-**Status:** Open. Fix direction: seed at creation as well as at load — have the
-node-creating paths (`PlaceIcon`, quick-add, paste) write `label: name`, or
-run `seedNodeLabel` inside the `createModelItem` reducer so there is one
-chokepoint instead of two. Repro: [`text-txt-03-04-05-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F1-text/text-txt-03-04-05-15.explore.spec.ts).
+**Status:** Fixed in wave 4 (2026-07-31) — the second option. `seedNodeLabel`
+runs inside the `createModelItem` reducer, so every path that creates a model
+item (`PlaceIcon`, quick-add, paste, import) is covered by one chokepoint
+instead of three call sites that each have to remember. It stays idempotent: an
+explicit `label` wins, including an empty one that deliberately hides the
+label, and an item with no `name` has nothing to seed from. Promoted
+regressions: [`modelItem.test.ts`](packages/axoview-lib/src/stores/reducers/__tests__/modelItem.test.ts)
+and [`text-entity-lifecycle.spec.ts`](packages/axoview-e2e/tests/text-entity-lifecycle.spec.ts).
 
 ## Pressing any strip control while renaming a label ends the rename
 
@@ -5230,10 +5306,16 @@ Confirmed with real mouse input against the same control
 **Workaround:** commit the rename first (Enter), then use the strip on the
 selected element — the element stays selected, so the controls still target it.
 
-**Status:** Open. Fix direction: lift the allow-list out of
-`TextBoxInlineEditor` into a shared `isSessionPreservingTarget(target)` helper
-and use it in `useInlineRename` too, so the two editors cannot drift again.
-Repro: [`strip-txt-06-07-08-16.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F1-text/strip-txt-06-07-08-16.explore.spec.ts).
+**Status:** Fixed in wave 4 (2026-07-31) — exactly as directed:
+`isSessionPreservingTarget` is the one allow-list and both editors ask it.
+
+**One more cause the entry did not name.** The allow-list alone was not enough.
+`useInlineRename` committed on `blur`, and a plain mousedown on a strip control
+moves focus — so the rename ended whatever the press-away listener allowed. The
+press-away/key handlers are now the AUTHORITY (an idempotent `finish`), and
+`blur` defers to them unless focus went somewhere outside the session. Promoted
+regressions: [`useInlineRename.test.tsx`](packages/axoview-lib/src/hooks/__tests__/useInlineRename.test.tsx)
+and [`inline-edit-session-scope.spec.ts`](packages/axoview-e2e/tests/inline-edit-session-scope.spec.ts).
 
 ## Escape after a mid-edit style change keeps half of it
 
@@ -5265,12 +5347,43 @@ vertical half calls `applyTextBox(textBox.id, patch)` even while
 **Workaround:** undo (Ctrl+Z) after the cancel to reverse the element-level
 writes — each is its own history entry.
 
-**Status:** Open. Fix direction: pick one contract and apply it to the whole
-strip. Either buffer element-level writes for the duration of a session and
-apply them on commit (so Escape discards everything), or state explicitly that
-element-level styling is immediate and un-cancellable and stop routing the
-range-scoped writes through the draft. The current per-control split is not
-predictable from the UI. Repro: [`strip-txt-06-07-08-16.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F1-text/strip-txt-06-07-08-16.explore.spec.ts).
+**Status:** Fixed in wave 4 (2026-07-31) — the FIRST contract: **everything the
+session did is undone by Escape.** The element-level fields the strip can write
+are snapshotted when the session opens and restored on cancel, and because the
+whole session sits inside one history bracket (TXT-04) a cancelled session's
+net patch set is empty, so it leaves no entry either. Commit keeps everything,
+as before.
+
+**A second defect this exposed, on the commit side — SILENT DATA LOSS, and the
+wave-2 un-deadening lesson is what found it.** `TextBoxInlineEditor.finish`
+treated `commit` with no TEXT change as a cheap "nothing to write" path and fell
+through to `onCancel()`:
+
+```js
+if (kind === 'commit' && changedRef.current) { …onCommit(html)… }
+else onCancel();
+```
+
+That was invisible for as long as cancel merely cleared `editingTextBoxId` — the
+two branches did the same observable thing, so the fallthrough was dead code in
+all but name. **Giving cancel a real job made it reachable**, and it became a
+path where a user who opened a box, changed only its STYLING, and left-clicked
+away lost the change with no message and no undo entry to recover from. Exactly
+the shape of CTX-15's dormant `Pan.mouseup` branch in wave 2: *un-deadening a
+code path is a change to that path*, and here the un-deadening was our own fix
+one function away.
+
+The generalisation, worth carrying forward: **when a branch that was previously
+indistinguishable from its sibling gains behaviour, every caller that fell into
+it "harmlessly" becomes a live defect** — look for those callers before shipping
+the behaviour, not after.
+
+A commit is a commit now; the parent already no-ops on unchanged content, and an
+empty box still round-trips to `''` and hits the discard. Named regression pin
+(its own file, because the class is data loss rather than UX):
+[`TextBoxInlineEditor.commitContract.test.tsx`](packages/axoview-lib/src/components/SceneLayers/TextBoxes/__tests__/TextBoxInlineEditor.commitContract.test.tsx),
+verified to go red against the old `&& changedRef.current`. End-to-end coverage:
+[`inline-edit-session-scope.spec.ts`](packages/axoview-e2e/tests/inline-edit-session-scope.spec.ts).
 
 ## Annotation ink follows you to the next diagram, and to the next page
 
@@ -5638,11 +5751,18 @@ order.
 **Workaround:** use per-element z-order (bring to front / send to back) for
 labels and rectangles.
 
-**Status:** Open. Fix direction: give `LabelsCanvas` / `RectanglesCanvas`
-(and the connector + text-box layers) the same `resolveRenderOrder` key the
-node layers use — the helper and the layer lookup are already shared. Note this
-does not cross entity TYPES, which is a separate open question (GPU-13). Repro:
-[`layers-lay-01-05-07-11.explore.test.ts`](packages/axoview-lib/src/__explore__/F4/layers-lay-01-05-07-11.explore.test.ts).
+**Status:** Fixed in wave 4 (2026-07-31) for the two layers that sorted on
+`zIndex` alone — `LabelsCanvas` and `Rectangles` now key on the shared
+`resolveRenderOrder(layerOrder, zIndex, isoDepth)`, so the layer's stack
+position dominates the per-element z-index exactly as it does for nodes. The
+connector and text-box layers do not sort among themselves at all (they paint in
+model order), so there was nothing to re-key there.
+
+Still does NOT cross entity types — a rectangle keeps painting structurally
+under a node — which is GPU-13, design-gated to wave 5. Promoted regression:
+[`layerRenderOrder.test.ts`](packages/axoview-lib/src/utils/__tests__/layerRenderOrder.test.ts),
+which carries the zIndex-only comparator as a CONTROL so the test can be seen to
+distinguish the two.
 
 ## New elements never join a layer
 
@@ -5668,9 +5788,19 @@ layer row sets the panel's own highlight and nothing the placement path reads.
 
 **Workaround:** place first, then drag the row onto the layer in the panel.
 
-**Status:** Open. Fix direction: add an `activeLayerId` to uiState (set by the
-panel's row selection, cleared when the layer is deleted) and have the one
-`resolvePlacement` chokepoint stamp it onto every created entity. Repro: [`layers.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F4-layers/layers.explore.spec.ts).
+**Status:** Fixed in wave 4 (2026-07-31) — exactly as directed. `activeLayerId`
+lives in uiState (the selected Layers-panel row IS it, rather than component
+state nothing outside the panel could see), and `activeLayerPatch` in the
+`resolvePlacement` chokepoint stamps it onto every entity the four placement
+modes create.
+
+Two guards, because a stale active layer would be an E2/RED-03 dangling
+reference: the panel drops the id as soon as it stops naming a live layer (a
+delete from anywhere, a switch to a page without it), and the patch re-checks
+against the view's layers at the placement site. It returns `{}` when nothing
+is active, so an unlayered diagram's entities stay exactly as lean as before.
+Promoted regression:
+[`layerAssignment.test.ts`](packages/axoview-lib/src/stores/reducers/__tests__/layerAssignment.test.ts).
 
 ## Deleting a hidden layer reveals everything it was hiding
 
@@ -5697,10 +5827,28 @@ visible after.
 **Workaround:** move the elements to another hidden layer, or delete them, before
 deleting the layer.
 
-**Status:** Open — the fix needs a product call on what "delete layer" means.
-Three defensible answers: delete the contents with it (Photoshop), keep them and
-warn that they will become visible, or offer the choice in a confirm dialog. What
-is not defensible is doing the third thing silently. Repro: [`layers-lay-01-05-07-11.explore.test.ts`](packages/axoview-lib/src/__explore__/F4/layers-lay-01-05-07-11.explore.test.ts).
+**Status:** Fixed in wave 4 (2026-07-31) — the product call is the **E2/RED-13
+ruling** (owner 2026-07-30), and the two entries ship as ONE change because they
+are one gesture: RED-13 asks which meaning applies, and LAY-05's harm is what
+makes its "extra warning when the layer is hidden" necessary.
+
+Deleting a layer that HOLDS something now asks: **Keep contents** (unassign, the
+historical behaviour) or **Delete contents too** (the Photoshop reading). An
+EMPTY layer skips the dialog — there is nothing to decide. When the layer is
+hidden the dialog raises an Alert saying in as many words that keeping the
+contents makes them visible again, because an element with no layer is
+unconditionally shown.
+
+Axoview layers are TAGS, not owners, which is why the ruling took the Visio
+pattern (ask) over AutoCAD's (refuse) or Photoshop's (delete silently).
+
+One thing the reducer had to get right that the entry does not mention: "delete
+contents" removes connectors **anchored to** a deleted node as well as those on
+the layer. Leaving them would be E2/RED-07's shape — an anchor pointing at
+nothing, permanently unroutable. Promoted regression:
+[`deleteLayerContents.test.ts`](packages/axoview-lib/src/stores/reducers/__tests__/deleteLayerContents.test.ts),
+which transcribes `useLayerContext`'s visibility derivation to demonstrate the
+inversion directly.
 
 ## Assigning a layer moves every entity that shares the id
 
@@ -5730,10 +5878,13 @@ through a second door.
 
 **Workaround:** none; the collision is invisible until something moves.
 
-**Status:** Open. Fix direction: take `ItemReference[]` (type + id) instead of
-`string[]` and dispatch per collection — the callers already have the typed
-form. Validating `layerId` against the view's layers in the same reducer closes
-the RED-03 door for free. Repro: [`layers-lay-01-05-07-11.explore.test.ts`](packages/axoview-lib/src/__explore__/F4/layers-lay-01-05-07-11.explore.test.ts).
+**Status:** Fixed in wave 4 (2026-07-31) — exactly as directed:
+`ASSIGN_LAYER_TO_ITEMS` carries `ItemReference[]`, and the reducer buckets them
+by type and dispatches per collection. The callers had the typed form in their
+hands the whole time. (The `layerId` validation the entry mentions had already
+landed in wave 1 with RED-03; it is unchanged.) Promoted regression:
+[`layerAssignment.test.ts`](packages/axoview-lib/src/stores/reducers/__tests__/layerAssignment.test.ts),
+whose fixture deliberately gives a node, a rectangle and a label the SAME id.
 
 ## "Export as JSON" writes the entire icon catalog into the file
 

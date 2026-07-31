@@ -3,6 +3,7 @@ import { ViewItem } from 'src/types';
 import { getItemByIdOrThrow, getConnectorsByViewItem } from 'src/utils';
 import { validateView } from 'src/schemas/validation';
 import { State, ViewReducerContext } from './types';
+import { isNoOpUpdate } from './noOpUpdate';
 import * as reducers from './view';
 
 // The schema's hard bounds for `iconScale` (views.ts). ADR 0034 §4's no-dead-
@@ -18,6 +19,22 @@ export const updateViewItem = (
   { id, ...updates }: { id: string } & Partial<ViewItem>,
   { viewId, state }: ViewReducerContext
 ): State => {
+  // RED-06: a write that changes nothing returns the state untouched, so the
+  // dispatcher does not stamp `lastUpdated` and no phantom dirty flag, autosave
+  // run or empty undo entry follows.
+  {
+    const existingView = state.model.views.find((v) => v.id === viewId);
+    const existing = existingView?.items?.find((i) => i.id === id);
+    if (
+      existing &&
+      isNoOpUpdate(
+        existing as unknown as Record<string, unknown>,
+        updates as Record<string, unknown>
+      )
+    ) {
+      return state;
+    }
+  }
   const newState = produce(state, (draft) => {
     const view = getItemByIdOrThrow(draft.model.views, viewId);
     const { items } = view.value;

@@ -31,6 +31,9 @@ function makeUiState(overrides: Record<string, unknown> = {}) {
 
 function makeScene(overrides: Record<string, unknown> = {}) {
   return {
+    // F4/LAY-03: the placement modes read the view's layers to validate the
+    // active layer before stamping it onto the new entity.
+    currentView: { layers: [] },
     colors: [{ id: 'color1', value: '#ff0000' }],
     rectangles: [],
     createRectangle: mockCreateRectangle,

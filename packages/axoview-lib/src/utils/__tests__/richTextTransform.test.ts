@@ -37,12 +37,20 @@ describe('plainTextToHtml / ensureHtmlContent', () => {
 });
 
 describe('getWholeContentFormats', () => {
+  const NO_PARTIAL = {
+    bold: false,
+    italic: false,
+    underline: false,
+    strike: false
+  };
+
   it('reports nothing for plain text and empty content', () => {
     expect(getWholeContentFormats('hello')).toEqual({
       bold: false,
       italic: false,
       underline: false,
       strike: false,
+      partial: NO_PARTIAL,
       list: null,
       align: 'left'
     });
@@ -51,10 +59,38 @@ describe('getWholeContentFormats', () => {
       italic: false,
       underline: false,
       strike: false,
+      partial: NO_PARTIAL,
       list: null,
       align: 'left'
     });
     expect(getWholeContentFormats(undefined).bold).toBe(false);
+  });
+
+  // TXT-13 — the tri-state the strip needs. A box with ONE bolded word used to
+  // report `bold: false` with nothing else to say, so the strip showed it as
+  // plain and one press normalised the whole box; the press after that reached
+  // the destructive "unwrap every STRONG" branch and the user's per-word run
+  // went with it. `partial` makes that first state visible.
+  it('reports partial coverage separately from full coverage', () => {
+    const oneBoldWord = '<p>plain <strong>bold</strong> plain</p>';
+    const formats = getWholeContentFormats(oneBoldWord);
+    expect(formats.bold).toBe(false);
+    expect(formats.partial.bold).toBe(true);
+    expect(formats.partial.italic).toBe(false);
+  });
+
+  it('a fully covered box is on, not partial', () => {
+    const formats = getWholeContentFormats('<p><strong>all bold</strong></p>');
+    expect(formats.bold).toBe(true);
+    expect(formats.partial.bold).toBe(false);
+  });
+
+  it('one bolded line out of two is partial', () => {
+    const formats = getWholeContentFormats(
+      '<p><strong>a</strong></p><p>b</p>'
+    );
+    expect(formats.bold).toBe(false);
+    expect(formats.partial.bold).toBe(true);
   });
 
   it('detects a format only when the ENTIRE content carries it', () => {

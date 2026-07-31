@@ -15,6 +15,7 @@ import { attachContextLossRecovery } from 'src/webgl/contextLoss';
 import { rasterizeLabelChip, CHIP_SUPERSAMPLE } from 'src/webgl/itemRaster';
 import { computeBackingStore } from 'src/utils/renderTarget';
 import { computeLabelCounterScale } from 'src/utils/labelScale';
+import { resolveRenderOrder, findLayer } from 'src/utils/renderOrder';
 import {
   getRenderedTilePosition,
   TilePositionFn
@@ -134,9 +135,22 @@ export const LabelsCanvas = memo(({ labels }: Props) => {
         const filtered = allLabels.filter(
           (l) => layersNow.length === 0 || visible.has(l.id)
         );
-        sorted = [...filtered]
-          .reverse()
-          .sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
+        // F4/LAY-01: the LAYER's stack position dominates the per-chip zIndex,
+        // exactly as it does for nodes. This sorted on `zIndex` alone, so
+        // reordering layers moved the nodes and nothing else.
+        sorted = [...filtered].reverse().sort(
+          (a, b) =>
+            resolveRenderOrder(
+              findLayer(a.layerId, layersNow)?.order ?? 0,
+              a.zIndex ?? 0,
+              0
+            ) -
+            resolveRenderOrder(
+              findLayer(b.layerId, layersNow)?.order ?? 0,
+              b.zIndex ?? 0,
+              0
+            )
+        );
         sortCacheRef.current = {
           labels: allLabels,
           visibleIds: visible,

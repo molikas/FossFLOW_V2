@@ -22,6 +22,8 @@ jest.mock('src/utils', () => ({
 }));
 
 jest.mock('src/utils/resolvePlacement', () => ({
+  // F4/LAY-03 chokepoint — no active layer in these fixtures.
+  activeLayerPatch: () => ({}),
   resolvePlacement: (...args: unknown[]) => mockResolvePlacement(...args),
   cursorTileResidual: (...args: unknown[]) => mockCursorTileResidual(...args)
 }));
@@ -69,8 +71,19 @@ function makeUiState(overrides: Record<string, unknown> = {}) {
   };
 }
 
+// `beginDragTransaction` opens the session's history bracket BEFORE the create,
+// so placement + the empty-box discard are one logical action (TXT-04).
+const mockBeginDragTransaction = jest.fn();
+
 function makeScene(overrides: Record<string, unknown> = {}) {
-  return { createTextBox: mockCreateTextBox, ...overrides };
+  return {
+    // F4/LAY-03: the placement modes read the view's layers to validate the
+    // active layer before stamping it onto the new entity.
+    currentView: { layers: [] },
+    createTextBox: mockCreateTextBox,
+    beginDragTransaction: mockBeginDragTransaction,
+    ...overrides
+  };
 }
 
 beforeEach(() => {

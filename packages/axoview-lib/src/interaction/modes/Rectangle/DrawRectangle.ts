@@ -1,4 +1,5 @@
 import { ModeActions } from 'src/types';
+import { activeLayerPatch } from 'src/utils/resolvePlacement';
 import { produce } from 'immer';
 import { generateId, hasMovedTile, setWindowCursor } from 'src/utils';
 
@@ -52,7 +53,9 @@ export const DrawRectangle: ModeActions = {
       id: newRectangleId,
       color: scene.colors[0].id,
       from: uiState.mouse.position.tile,
-      to: uiState.mouse.position.tile
+      to: uiState.mouse.position.tile,
+      // F4/LAY-03: join the layer the panel has selected, if any.
+      ...activeLayerPatch(uiState.activeLayerId, scene.currentView?.layers)
     });
 
     const newMode = produce(uiState.mode, (draft) => {

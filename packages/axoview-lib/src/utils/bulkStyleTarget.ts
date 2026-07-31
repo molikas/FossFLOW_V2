@@ -55,6 +55,18 @@ export const deriveTriState = (values: boolean[]): TriState => {
 export const nextToggleValue = (state: TriState): boolean => state !== 'on';
 
 /**
+ * Combine per-member tri-states into one. Used where a member is itself
+ * tri-state rather than boolean — a text box whose CONTENT is only partly
+ * formatted (TXT-13) reads `mixed` on its own, before any bulk is involved.
+ */
+export const combineTriStates = (states: TriState[]): TriState => {
+  if (states.length === 0) return 'off';
+  if (states.every((s) => s === 'on')) return 'on';
+  if (states.every((s) => s === 'off')) return 'off';
+  return 'mixed';
+};
+
+/**
  * Shared absolute value across a selection, or `mixed` when the members
  * disagree (STYL-08 ruling). `value` is the shared value when they agree and
  * `undefined` when they do not, so a caller can never accidentally display one
