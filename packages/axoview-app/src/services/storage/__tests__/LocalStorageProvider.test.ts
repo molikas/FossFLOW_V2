@@ -540,3 +540,62 @@ describe('A2/STOR-16 — a failed manifest save is reported, not written locally
     expect(localStorage.getItem('axoview-tree-manifest')).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// S3/DRV-14 — a failed share must say something the user can act on
+// ---------------------------------------------------------------------------
+// `shareDiagram` used to throw ``new Error(`Share failed: ${status}`)``,
+// discarding the backend's own `{ error }` body — and `AppToolbar` surfaces
+// `err.message` verbatim into the share popover. A diagram deleted in another
+// tab between being opened and being shared displayed the literal text
+// `Share failed: 404`. ADR 0011 §1 requires copy the user can act on.
+describe('shareDiagram failures', () => {
+  it('maps 404 to "this diagram no longer exists", not a raw status', async () => {
+    const p = await serverProvider();
+    setFetch(async () => mockResponse({ error: 'Diagram not found' }, 404));
+
+    const err = (await p.shareDiagram!('d1').catch((e: unknown) => e)) as Error & {
+      status?: number;
+      serverMessage?: string;
+    };
+
+    expect(err.name).toBe('ShareRequestError');
+    expect(err.message).toMatch(/no longer exists/i);
+    expect(err.message).not.toMatch(/^Share failed/);
+    expect(err.status).toBe(404);
+    // The backend's own text is carried for diagnostics, just not shown raw.
+    expect(err.serverMessage).toBe(
+      'Diagram not found'
+    );
+  });
+
+  it('maps 5xx to a retryable message', async () => {
+    const p = await serverProvider();
+    setFetch(async () => mockResponse({ error: 'Internal error' }, 503));
+
+    const err = (await p.shareDiagram!('d1').catch((e: unknown) => e)) as Error & {
+      status?: number;
+      serverMessage?: string;
+    };
+
+    expect(err.message).toMatch(/try again/i);
+  });
+
+  it("falls back to the backend's own message for anything else", async () => {
+    const p = await serverProvider();
+    setFetch(async () => mockResponse({ error: 'Origin not allowed' }, 403));
+
+    const err = (await p.shareDiagram!('d1').catch((e: unknown) => e)) as Error & {
+      status?: number;
+      serverMessage?: string;
+    };
+
+    expect(err.message).toBe('Origin not allowed');
+  });
+
+  it('still succeeds normally', async () => {
+    const p = await serverProvider();
+    setFetch(async () => mockResponse({ uuid: 'u1', url: 'x', sharedAt: 't' }));
+    await expect(p.shareDiagram!('d1')).resolves.toMatchObject({ uuid: 'u1' });
+  });
+});

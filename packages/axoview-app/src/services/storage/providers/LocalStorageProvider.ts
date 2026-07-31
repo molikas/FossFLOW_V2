@@ -9,6 +9,56 @@ import {
 import { leanIfModel } from '../leanModel';
 import { apiBaseUrl } from '../../../utils/apiBaseUrl';
 
+/**
+ * A share request that the backend refused, carrying enough for the caller to
+ * say something the user can act on.
+ *
+ * S3/DRV-14: `shareDiagram` used to throw ``new Error(`Share failed: ${status}`)``,
+ * discarding the backend's own `{ error: 'Diagram not found' }` body — and
+ * `AppToolbar.handleShareClick` surfaces `err.message` verbatim into the share
+ * popover, so a diagram deleted in another tab between being opened and being
+ * shared displayed the literal text `Share failed: 404`. ADR 0011 §1 requires a
+ * failure-of-intent to surface copy the user can act on. Modelled on
+ * `DriveShareError`, which already does this for the Drive side.
+ */
+export class ShareRequestError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+    /** The backend's own `error` string, when it sent one. */
+    readonly serverMessage?: string
+  ) {
+    super(message);
+    this.name = 'ShareRequestError';
+    // Downlevelled `extends Error` loses the prototype link — see the same note
+    // on `DriveError`.
+    Object.setPrototypeOf(this, ShareRequestError.prototype);
+  }
+}
+
+/**
+ * Turn a failed share response into a `ShareRequestError` whose message is what
+ * the user should read. 404 is the reachable one (the diagram was deleted in
+ * another tab or from the file tree between opening and sharing); 5xx is
+ * retryable; everything else falls back to the backend's own text.
+ */
+async function shareRequestError(response: Response): Promise<ShareRequestError> {
+  let serverMessage: string | undefined;
+  try {
+    const body = (await response.json()) as { error?: string };
+    serverMessage = typeof body?.error === 'string' ? body.error : undefined;
+  } catch {
+    /* non-JSON body — the status is all we have */
+  }
+  const message =
+    response.status === 404
+      ? 'This diagram no longer exists.'
+      : response.status >= 500
+        ? 'Sharing is temporarily unavailable. Try again in a moment.'
+        : serverMessage || `Could not create a share link (${response.status}).`;
+  return new ShareRequestError(response.status, message, serverMessage);
+}
+
 const SESSION_DIAGRAMS_KEY = 'axoview_diagrams';
 const SESSION_DIAGRAM_PREFIX = 'axoview_diagram_';
 const LOCAL_FOLDERS_KEY = 'axoview-folders';
@@ -643,7 +693,7 @@ export class LocalStorageProvider implements StorageProvider {
       headers: { 'Content-Type': 'application/json' },
       signal: timeoutSignal(10000)
     });
-    if (!response.ok) throw new Error(`Share failed: ${response.status}`);
+    if (!response.ok) throw await shareRequestError(response);
     return response.json();
   }
 

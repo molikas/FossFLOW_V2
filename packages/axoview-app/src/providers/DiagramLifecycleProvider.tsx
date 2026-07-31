@@ -82,8 +82,30 @@ export type DriveDisplayState =
   // Network / rate-limit / 5xx — recoverable; the gate offers a Retry rather
   // than the terminal 'failed' treatment.
   | 'transient'
+  // S3/DRV-02: the causes that used to collapse into 'failed'. Each renders its
+  // own gate copy, because "the owner moved it to the trash", "it is too big to
+  // preview", "that link is not valid" and "the grant has not registered yet"
+  // are four different things for the person reading them — and one of them is
+  // fixed by pressing Retry.
+  | 'gone'
+  | 'too-large'
+  | 'bad-link'
+  | 'grant-not-registered'
   | 'failed'
   | 'loaded';
+
+/** Gate states the DriveDisplayGate renders itself (rather than the terminal
+ *  readonly-load-failed dialog). Kept next to the type so a new state cannot be
+ *  added without deciding which side of that line it falls on. */
+export const GATE_RENDERED_DRIVE_STATES: readonly DriveDisplayState[] = [
+  'needs-signin',
+  'needs-grant',
+  'transient',
+  'gone',
+  'too-large',
+  'bad-link',
+  'grant-not-registered'
+];
 
 interface PendingConfirm {
   message: string;
@@ -681,14 +703,25 @@ export function DiagramLifecycleProvider({
           afterGrant: driveAfterGrantRef.current
         });
         if (cancelled) return;
+        // S3/DRV-01: the post-Picker flag lives exactly as long as the read it
+        // was set for. It used to be cleared in ONE other place — the effect
+        // that fires when `driveFileId` goes falsy, i.e. when the route
+        // unmounts — so once the Picker had been used, EVERY subsequent read on
+        // that route was an `afterGrant` read, and `afterGrant` is precisely
+        // what turns a recoverable answer into a terminal one. Drive grants
+        // take a moment to register (the ladder's own doc comment says
+        // drive.file "hides files until the Picker grant registers"), so the
+        // post-Picker retry routinely saw the pre-Picker answer and mapped it
+        // to a dead end whose only button navigated away from the link.
+        driveAfterGrantRef.current = false;
         if (!result.ok) {
-          // needs-signin / needs-grant / transient render actionable gate rungs;
-          // only 'not-found' (terminal) falls through to 'failed'.
+          // Everything the gate can render itself stays on the gate; only a
+          // genuinely terminal 'not-found' falls through to 'failed'.
           setDriveDisplayState(
-            result.reason === 'needs-signin' ||
-              result.reason === 'needs-grant' ||
-              result.reason === 'transient'
-              ? result.reason
+            (GATE_RENDERED_DRIVE_STATES as readonly string[]).includes(
+              result.reason
+            )
+              ? (result.reason as DriveDisplayState)
               : 'failed'
           );
           return;

@@ -21,14 +21,34 @@ export interface FileShareMeta {
   resourceKey: string | null;
 }
 
-export type AccessSummary = 'anyone-with-link' | 'restricted';
+/**
+ * S3/DRV-04: `'domain'` is one of the four values `DrivePermission` declares,
+ * and it matched NEITHER the summary predicate (`type === 'anyone'`) nor the
+ * people count (`user` / `group`) — so a diagram shared with an entire Google
+ * Workspace domain showed as **Restricted with nobody listed**, and copying its
+ * link warned that "only people with access can open it". The owner was told
+ * the opposite of the truth about who can read their diagram.
+ *
+ * It gets its own summary rather than being folded into `anyone-with-link`,
+ * because the two are not the same promise: a domain grant is link-readable for
+ * everyone at the company, not for everyone with the link.
+ */
+export type AccessSummary = 'anyone-with-link' | 'domain' | 'restricted';
 
 export interface AccessOverview {
   summary: AccessSummary;
-  /** Named people with access — excludes the owner ("you") and the anyone-link
-   *  entry, so it matches the count a user reads as "shared with N people". */
+  /** Named people with access — excludes the owner ("you"), the anyone-link
+   *  entry and any domain grant, so it matches the count a user reads as
+   *  "shared with N people". */
   peopleCount: number;
+  /** The domains the file is shared with, if any (DRV-04). Surfaced as its own
+   *  row rather than counted as people. */
+  domains: string[];
 }
+
+/** Does this overview mean "someone other than the owner can open the link"? */
+export const isShared = (overview: AccessOverview): boolean =>
+  overview.summary !== 'restricted' || overview.peopleCount > 0;
 
 /** The roles the custom share UI can grant. Drive supports more; a read-only
  *  preview product only meaningfully offers viewer / editor. */
@@ -40,6 +60,8 @@ export interface DrivePermission {
   role: 'owner' | 'organizer' | 'fileOrganizer' | 'writer' | 'commenter' | 'reader';
   emailAddress?: string;
   displayName?: string;
+  /** Set on `type: 'domain'` grants — the Workspace domain (DRV-04). */
+  domain?: string;
 }
 
 /**
@@ -137,7 +159,9 @@ export async function listPermissions(fileId: string): Promise<DrivePermission[]
     const url =
       `${DRIVE_API}/files/${encodeURIComponent(fileId)}/permissions` +
       `?fields=${encodeURIComponent(
-        'nextPageToken,permissions(id,type,role,emailAddress,displayName)'
+        // `domain` so a Workspace-wide grant can be named, not just detected
+        // (DRV-04).
+        'nextPageToken,permissions(id,type,role,emailAddress,displayName,domain)'
       )}&pageSize=100` +
       (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '');
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
@@ -167,11 +191,19 @@ export async function getAccessSummary(fileId: string): Promise<AccessSummary> {
  */
 export async function getAccessOverview(fileId: string): Promise<AccessOverview> {
   const perms = await listPermissions(fileId);
+  const domains = perms
+    .filter((p) => p.type === 'domain')
+    .map((p) => p.domain || p.displayName || 'your organisation');
   return {
-    summary: perms.some((p) => p.type === 'anyone') ? 'anyone-with-link' : 'restricted',
+    summary: perms.some((p) => p.type === 'anyone')
+      ? 'anyone-with-link'
+      : domains.length > 0
+        ? 'domain'
+        : 'restricted',
     peopleCount: perms.filter(
       (p) => (p.type === 'user' || p.type === 'group') && p.role !== 'owner'
-    ).length
+    ).length,
+    domains
   };
 }
 
@@ -198,8 +230,30 @@ export async function setAnyoneWithLink(fileId: string, enabled: boolean): Promi
     if (!res.ok) throw await toError(res, `Drive permissions.create(anyone) failed (${res.status})`);
     return;
   }
+  // DRV-05 (owner ruling 2026-07-30): collect PER-PERMISSION outcomes. The loop
+  // used to stop at the first rejection, so with several anyone-permissions on
+  // one file a partial revoke threw — and the caller could not tell "nothing was
+  // revoked" from "some were, and the link may still be live". Delete them all,
+  // then report honestly.
   const anyone = (await listPermissions(fileId)).filter((p) => p.type === 'anyone');
-  for (const p of anyone) await removePermission(fileId, p.id);
+  const failures: unknown[] = [];
+  for (const p of anyone) {
+    try {
+      await removePermission(fileId, p.id);
+    } catch (err) {
+      failures.push(err);
+    }
+  }
+  if (failures.length > 0) {
+    const first = failures[0];
+    throw new DriveShareError(
+      first instanceof DriveShareError ? first.status : 0,
+      failures.length === anyone.length
+        ? 'Could not turn off link sharing.'
+        : 'Link sharing may still be active — one of the sharing permissions could not be removed.',
+      first instanceof DriveShareError ? first.reason : undefined
+    );
+  }
 }
 
 /**

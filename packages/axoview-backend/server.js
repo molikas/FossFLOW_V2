@@ -26,7 +26,10 @@ const routeEnv = {
   STORAGE_ENABLED,
   ENABLE_GIT_BACKUP,
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || null,
-  AUTH_MODE: process.env.AUTH_MODE || 'none'
+  AUTH_MODE: process.env.AUTH_MODE || 'none',
+  // A5/CHR-08: surfaced to the client via /api/config so the app's own link
+  // builders resolve against the operator's canonical base (see routes.js).
+  PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL || null
 };
 
 // ---------------------------------------------------------------------------

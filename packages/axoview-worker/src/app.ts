@@ -11,6 +11,8 @@ interface Env {
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_API_KEY?: string;
   GOOGLE_PROJECT_NUMBER?: string;
+  /** A5/CHR-08 — canonical public base for the links the app mints. */
+  PUBLIC_BASE_URL?: string;
 }
 
 type AppEnv = { Bindings: Env };
@@ -56,7 +58,12 @@ app.get('/api/config', (c) =>
       googleProjectNumber: c.env.GOOGLE_PROJECT_NUMBER || null,
       driveScopes: ['https://www.googleapis.com/auth/drive.file'],
       authMode: c.env.AUTH_MODE || 'none',
-      serverStorage: false
+      serverStorage: false,
+      // A5/CHR-08 (owner ruling 2026-07-30) — the operator's canonical public
+      // base, so a Drive share link minted from a *.pages.dev preview build
+      // still points at the production site. Null → the page origin, which is
+      // the existing behaviour.
+      publicBaseUrl: c.env.PUBLIC_BASE_URL || null
     },
     200
   )

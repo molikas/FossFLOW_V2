@@ -11,7 +11,14 @@ import { authStore } from '../../stores/authStore';
 // OAuth client id — a wrong value fails SILENTLY (the pick "succeeds" but the
 // grant never registers and files.get keeps 404ing).
 
-export type DrivePickerOutcome = 'picked' | 'cancelled';
+/**
+ * S3/DRV-03: `'wrong-file'` used to be folded into `'cancelled'`, so picking the
+ * wrong file in the Picker returned the recipient to exactly the same wall with
+ * no message — indistinguishable from closing the dialog deliberately, which
+ * made "click the button and pick the same wrong file again" the natural next
+ * action. The distinction was already computed here; it just had nowhere to go.
+ */
+export type DrivePickerOutcome = 'picked' | 'cancelled' | 'wrong-file';
 
 export type DrivePickerErrorReason =
   /** googleApiKey / googleProjectNumber not configured (ADR 0042 §5) — the gate hides the button. */
@@ -121,12 +128,12 @@ export async function launchDrivePicker(
           // setFileIds pre-navigates to the single target, but a user can still
           // browse and pick a DIFFERENT file; granting on the wrong file leaves
           // the read 404ing forever. Only a pick that includes the target file
-          // counts as a real grant — anything else keeps the gate up (as if
-          // cancelled) so the recipient can pick the right one. A PICKED with no
-          // docs array (shape drift) is treated leniently as the target.
+          // counts as a real grant — anything else keeps the gate up so the
+          // recipient can pick the right one, and says so (DRV-03). A PICKED
+          // with no docs array (shape drift) is treated leniently as the target.
           const docs = data.docs;
           const grantedTarget = !docs || docs.some((d) => d?.id === opts.fileId);
-          resolve(grantedTarget ? 'picked' : 'cancelled');
+          resolve(grantedTarget ? 'picked' : 'wrong-file');
         } else if (data.action === picker.Action.CANCEL) {
           resolve('cancelled');
         }

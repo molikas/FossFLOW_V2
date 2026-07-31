@@ -254,18 +254,43 @@ export function DriveShareManageDialog({
     }
   };
 
-  // Run a mutation, then re-read the ACL from Drive (never trust local state) and
-  // notify the caller. A single busy flag serialises the dialog's writes.
+  /**
+   * Run a mutation, then re-read the ACL from Drive (never trust local state)
+   * and notify the caller. A single busy flag serialises the dialog's writes.
+   *
+   * Returns whether the action SUCCEEDED. S3/DRV-08: it used to swallow the
+   * failure into `actionError` and resolve either way, so `handleAdd`'s three
+   * trailing statements ran unconditionally — a rejected address was cleared out
+   * of the input (forcing a retype to fix a typo) and added to the autocomplete
+   * history, where it would be suggested as if it had been granted access. The
+   * success and failure end states were indistinguishable in the UI.
+   *
+   * DRV-05 (owner ruling 2026-07-30): the ACL is re-read in the `catch` too.
+   * Cloud UIs re-read authoritative state after ANY mutation attempt, because a
+   * failure does not mean nothing changed — `setAnyoneWithLink(false)` can
+   * remove one permission and fail on the next, and the dialog must show what
+   * is actually true rather than what it hoped for.
+   */
   const runAction = useCallback(
-    async (action: () => Promise<void>) => {
+    async (action: () => Promise<void>): Promise<boolean> => {
       setBusy(true);
       setActionError(null);
       try {
         await action();
         await refresh();
         onAccessChanged?.();
+        return true;
       } catch (err) {
         setActionError(shareErrorCopy(err, tRef.current));
+        // Best-effort: a refresh that also fails must not mask the original
+        // error, which is the one the user needs.
+        try {
+          await refresh();
+          onAccessChanged?.();
+        } catch {
+          /* keep the action's error on screen */
+        }
+        return false;
       } finally {
         setBusy(false);
       }
@@ -294,7 +319,12 @@ export function DriveShareManageDialog({
       url: previewUrl,
       defaultValue: `View this diagram in Axoview: ${previewUrl}`
     });
-    await runAction(() => addPersonPermission(fileId, email, addRole, true, emailMessage));
+    const added = await runAction(() =>
+      addPersonPermission(fileId, email, addRole, true, emailMessage)
+    );
+    // DRV-08: only on success. A rejected address keeps the field populated (so
+    // a typo is one edit away, not a retype) and stays out of the history.
+    if (!added) return;
     // Remember for next time's autocomplete (local history, no new Google scope).
     addRecentShareEmail(email);
     setRecentEmails(getRecentShareEmails());

@@ -11,8 +11,20 @@ describe('getConfig', () => {
       googleProjectNumber: null,
       driveScopes: ['https://www.googleapis.com/auth/drive.file'],
       authMode: 'none',
-      serverStorage: true
+      serverStorage: true,
+      publicBaseUrl: null
     });
+  });
+
+  // A5/CHR-08 (owner ruling 2026-07-30): the client's own link builders resolve
+  // against this when the operator configures one, so a preview/staging/LAN
+  // origin cannot leak into a durable share link. Null keeps the page origin.
+  test('surfaces PUBLIC_BASE_URL so the app can mint canonical links', () => {
+    const result = getConfig(
+      null,
+      makeCtx({ env: { PUBLIC_BASE_URL: 'https://diagrams.example.com' } })
+    );
+    expect(result.body.publicBaseUrl).toBe('https://diagrams.example.com');
   });
 
   test('reflects GOOGLE_CLIENT_ID + AUTH_MODE from env', () => {

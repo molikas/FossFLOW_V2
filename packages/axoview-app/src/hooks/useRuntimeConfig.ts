@@ -1,4 +1,5 @@
 import { apiBaseUrl } from '../utils/apiBaseUrl';
+import { setConfiguredPublicBase } from '../appBase';
 
 export interface RuntimeConfig {
   googleClientId: string | null;
@@ -18,6 +19,21 @@ export interface RuntimeConfig {
   driveScopes: string[];
   authMode: 'none' | 'shared-token' | 'cf-access';
   serverStorage: boolean;
+  /**
+   * A5/CHR-08 (owner ruling 2026-07-30). The canonical, externally reachable
+   * base URL of this deployment, when the operator has configured one
+   * (`PUBLIC_BASE_URL`). Every share link the app mints resolves against it,
+   * falling back to `window.location.origin` otherwise — so a preview, staging
+   * or LAN origin cannot leak into a durable link that outlives the session
+   * that created it, while single-origin deployments are unaffected.
+   *
+   * This is standard for products that mint shareable links (GitLab
+   * `external_url`, Grafana `root_url`, Sentry `system.url-prefix`, Discourse
+   * `hostname`). It KEEPS the page-origin default that made the copied link
+   * openable as copied — the backend-derived host was the earlier bug — and
+   * only lets an operator override it deliberately.
+   */
+  publicBaseUrl: string | null;
 }
 
 // ADR 0035 §4: a pure-local `npm run dev` boot has no backend serving
@@ -41,7 +57,8 @@ const DEFAULT_CONFIG: RuntimeConfig = {
   googleProjectNumber: BUILD_TIME_PROJECT_NUMBER,
   driveScopes: ['https://www.googleapis.com/auth/drive.file'],
   authMode: 'none',
-  serverStorage: false
+  serverStorage: false,
+  publicBaseUrl: null
 };
 
 let cached: RuntimeConfig | null = null;
@@ -98,6 +115,10 @@ export async function fetchRuntimeConfig(): Promise<RuntimeConfig> {
     if (!cached.googleClientId) cached.googleClientId = BUILD_TIME_CLIENT_ID;
     if (!cached.googleApiKey) cached.googleApiKey = BUILD_TIME_API_KEY;
     if (!cached.googleProjectNumber) cached.googleProjectNumber = BUILD_TIME_PROJECT_NUMBER;
+    // CHR-08: publish the configured base to the link builders, which are not
+    // React and cannot read this hook. Normalised here (trailing slashes
+    // stripped, non-strings dropped) so every consumer sees one shape.
+    setConfiguredPublicBase(cached.publicBaseUrl);
     return cached;
   })();
   try {

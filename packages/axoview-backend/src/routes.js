@@ -153,7 +153,15 @@ export function getConfig(_adapter, ctx) {
       googleProjectNumber: env.GOOGLE_PROJECT_NUMBER || null,
       driveScopes: ['https://www.googleapis.com/auth/drive.file'],
       authMode: env.AUTH_MODE || 'none',
-      serverStorage: env.STORAGE_ENABLED !== false
+      serverStorage: env.STORAGE_ENABLED !== false,
+      // A5/CHR-08 (owner ruling 2026-07-30): the operator's canonical public
+      // base, so every share link the CLIENT mints resolves against it instead
+      // of whichever origin the page happens to be on (preview, staging, LAN).
+      // The server has always used `PUBLIC_BASE_URL` for the `url` it returns
+      // from `shareDiagram`; this exposes the same value to the app, which
+      // builds the links the user actually copies. Null → page origin, which is
+      // the existing behaviour.
+      publicBaseUrl: env.PUBLIC_BASE_URL || null
     }
   };
 }

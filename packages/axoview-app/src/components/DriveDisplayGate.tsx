@@ -3,7 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Box, Button, Paper, Typography } from '@mui/material';
 import { useAppStorage } from '../providers/AppStorageContext';
-import { useDiagramLifecycle } from '../providers/DiagramLifecycleProvider';
+import {
+  useDiagramLifecycle,
+  GATE_RENDERED_DRIVE_STATES
+} from '../providers/DiagramLifecycleProvider';
 import { useAuthStore } from '../stores/authStore';
 import { launchDrivePicker } from '../services/drive/drivePicker';
 import { ReadonlyLoadErrorDialog } from './ReadonlyLoadErrorDialog';
@@ -77,13 +80,7 @@ export function DriveDisplayGate() {
     );
   }
 
-  if (
-    driveDisplayState !== 'needs-signin' &&
-    driveDisplayState !== 'needs-grant' &&
-    driveDisplayState !== 'transient'
-  ) {
-    return null;
-  }
+  if (!GATE_RENDERED_DRIVE_STATES.includes(driveDisplayState)) return null;
 
   const handleGrant = async () => {
     if (!driveDisplayFileId) return;
@@ -97,6 +94,21 @@ export function DriveDisplayGate() {
       });
       // 'cancelled' keeps the gate up — the user can pick again.
       if (outcome === 'picked') retryDriveDisplayRead(true);
+      // S3/DRV-03: a pick that landed on the WRONG file used to resolve
+      // 'cancelled' too, so it was indistinguishable from closing the Picker
+      // deliberately — the gate said nothing and the natural next action was to
+      // click the button and pick the same wrong file again. (A pick only
+      // registers a drive.file grant for the file actually picked, which is why
+      // this matters.) It has its own outcome now, surfaced inline next to the
+      // existing pickerError treatment.
+      if (outcome === 'wrong-file') {
+        setPickerError(
+          t(
+            'driveDisplay.pickerWrongFile',
+            "That isn't the diagram this link points to. Pick the file the sender named — Axoview can only open the one the link is for."
+          )
+        );
+      }
     } catch (err) {
       console.error('DriveDisplayGate: Picker launch failed', err);
       setPickerError(
@@ -178,7 +190,60 @@ export function DriveDisplayGate() {
           )}
         </Typography>
 
-        {driveDisplayState === 'transient' ? (
+        {/* S3/DRV-02: the four causes that used to share one sentence. Each
+            says what actually happened, and only the ones a retry can fix
+            offer one. */}
+        {driveDisplayState === 'gone' ? (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            data-axoview-id="drive-display-gate-gone"
+          >
+            {t(
+              'driveDisplay.goneBody',
+              'The owner moved this diagram to their Google Drive trash, so the link no longer opens. If they restore it, the link starts working again.'
+            )}
+          </Typography>
+        ) : driveDisplayState === 'too-large' ? (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            data-axoview-id="drive-display-gate-too-large"
+          >
+            {t(
+              'driveDisplay.tooLargeBody',
+              'This diagram is too large to preview from a link. Ask the sender to share the file with your Google account directly, then reload this page.'
+            )}
+          </Typography>
+        ) : driveDisplayState === 'bad-link' ? (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            data-axoview-id="drive-display-gate-bad-link"
+          >
+            {t(
+              'driveDisplay.badLinkBody',
+              'This link is not valid — it looks like part of it was lost in copying. Ask the sender for the full link.'
+            )}
+          </Typography>
+        ) : driveDisplayState === 'grant-not-registered' ? (
+          <>
+            <Typography variant="body2" color="text.secondary">
+              {t(
+                'driveDisplay.grantNotRegisteredBody',
+                "Google hasn't finished registering your access to this file yet. This usually takes a moment — try again."
+              )}
+            </Typography>
+            <Button
+              variant="contained"
+              onClick={() => retryDriveDisplayRead(false)}
+              data-axoview-id="drive-display-gate-retry"
+              sx={{ textTransform: 'none' }}
+            >
+              {t('driveDisplay.retryButton', 'Try again')}
+            </Button>
+          </>
+        ) : driveDisplayState === 'transient' ? (
           <>
             <Typography variant="body2" color="text.secondary">
               {t(

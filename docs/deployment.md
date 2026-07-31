@@ -211,6 +211,29 @@ The repo-root [wrangler.toml](../wrangler.toml) is set up so the deploy button w
 - Drive OAuth scope is locked to `drive.file` (per-file consent only) — the app sees only files it created ([ADR 0035](adr/0035-google-identity-and-drive-authorization.md)).
 - Runtime config (`GET /api/config`) replaces build-time env injection — the frontend bundle never embeds secrets.
 
+### D.0 `PUBLIC_BASE_URL` — the base every share link resolves against
+
+Optional on every target. When set, it is the canonical, externally reachable
+base URL of the deployment, and **every share link the app mints uses it** —
+the public-snapshot link (`/display/p/:uuid`) and the Drive preview link
+(`/display/drive/:fileId`) alike. Unset, both fall back to the page origin,
+which is the historical behaviour and correct for a single-origin deployment.
+
+```bash
+PUBLIC_BASE_URL=https://diagrams.example.com
+```
+
+Set it whenever the app is reachable on more than one origin — a Cloudflare
+`*.pages.dev` preview build, a staging host, a LAN IP alongside a public
+hostname. Without it, a link copied while on the preview origin embeds that
+origin and keeps pointing there long after the preview is gone. This is
+standard for products that mint shareable links (GitLab `external_url`, Grafana
+`root_url`, Sentry `system.url-prefix`).
+
+The value is surfaced to the browser through `GET /api/config` as
+`publicBaseUrl`. The Express backend has always used the same variable for the
+`url` it returns from `POST /api/diagrams/:id/share`, so the two agree.
+
 ### D.1 `ENABLE_SERVER_STORAGE=false` — the two routes that stay reachable
 
 Turning server storage off makes every `/api/*` route answer

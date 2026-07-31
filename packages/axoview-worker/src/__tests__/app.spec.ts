@@ -18,8 +18,18 @@ describe('GET /api/config', () => {
       googleProjectNumber: null,
       driveScopes: ['https://www.googleapis.com/auth/drive.file'],
       authMode: 'none',
-      serverStorage: false
+      serverStorage: false,
+      publicBaseUrl: null
     });
+  });
+
+  // A5/CHR-08 (owner ruling 2026-07-30): a Drive share link minted from a
+  // *.pages.dev preview build still has to point at the production site.
+  test('surfaces PUBLIC_BASE_URL so the app can mint canonical links', async () => {
+    const res = await request('/api/config', {}, {
+      PUBLIC_BASE_URL: 'https://axoview.app'
+    });
+    expect(res.body.publicBaseUrl).toBe('https://axoview.app');
   });
 
   test('reflects GOOGLE_CLIENT_ID + AUTH_MODE from env', async () => {

@@ -170,6 +170,13 @@ function EditorShell() {
   const [linkedDiagrams, setLinkedDiagrams] = useState<Array<{ id: string; name: string }>>([]);
   const [showImportDialog, setShowImportDialog] = useState(false);
 
+  // The two routes where the viewer is reading SOMEONE ELSE'S diagram: a public
+  // snapshot and a Drive preview. `/display/<id>` is not one — that is the
+  // owner's own read-only view of their own storage. S3/DRV-09.
+  // (`useLocation().pathname` is basename-relative, so these are bare.)
+  const isSharedViewerRoute = (pathname: string): boolean =>
+    pathname.startsWith('/display/p/') || pathname.startsWith('/display/drive/');
+
   // Lib dispatches two custom events for diagram-link affordances:
   // - `axoview-navigate-to-diagram` (from the NodePanel readonly link) →
   //   navigate to /display/<id> (readonly). Propagate the `fromEditor`
@@ -184,12 +191,32 @@ function EditorShell() {
     const handler = (e: Event) => {
       const id = (e as CustomEvent<{ id?: string }>).detail?.id;
       if (!id) return;
+      // S3/DRV-09: `/display/<id>` is the OWNER-readonly loader — it resolves
+      // the id against the storage of whoever is looking. On a shared route
+      // that is the RECIPIENT's storage, which does not contain the sender's
+      // diagram, so the hop dead-ended in the generic "Could not open this
+      // diagram" with nothing explaining that the target lives in the sender's
+      // workspace and was never shared.
+      //
+      // There is no id remapping to do — a share publishes ONE diagram, and the
+      // link inside it points at a sibling the sender did not publish. So the
+      // honest answer is to say that rather than to navigate into a wall. The
+      // affordance itself stays visible: it is content the author put there,
+      // and hiding it would silently change what the shared diagram says.
+      if (isSharedViewerRoute(location.pathname)) {
+        notificationStore.push({
+          severity: 'info',
+          message:
+            'That link points to another diagram in the sender’s workspace, which was not shared with you. Ask them for a link to it.'
+        });
+        return;
+      }
       const fromEditor = (location.state as { fromEditor?: boolean } | null)?.fromEditor;
       navigate(`/display/${id}`, fromEditor ? { state: { fromEditor: true } } : undefined);
     };
     window.addEventListener('axoview-navigate-to-diagram', handler);
     return () => window.removeEventListener('axoview-navigate-to-diagram', handler);
-  }, [navigate, location.state]);
+  }, [navigate, location.state, location.pathname]);
 
   useEffect(() => {
     const handler = (e: Event) => {
