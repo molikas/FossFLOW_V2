@@ -2445,6 +2445,16 @@ read-only class, fixed together. Promoted regression (two legs — the click
 opens the popover, a click on empty canvas dismisses it):
 [`readonly-enforcement.spec.ts`](packages/axoview-e2e/tests/readonly-enforcement.spec.ts).
 
+**Follow-up in `44b8dda4`:** making this branch reachable exposed a second
+defect in it. The pointer listener is window-bound (ADR 0018), so `Pan.mouseup`
+also sees releases over the right sidebar, the toolbar and portaled overlays —
+and a tile resolves for any screen point, so an off-canvas release looked like a
+click on empty canvas and dismissed the panel. It unmounted the read-only
+NodePanel's linked-diagram link mid-click, so the link's own handler never ran
+(caught by the J5.3 journey, not by any unit gate — a window-bound listener
+meeting real app chrome only shows up in the full e2e run). `Pan.mousedown`
+always checked `isRendererInteraction`; the mouseup half does now too.
+
 ## The project bounding box mis-frames the diagram: text boxes extend the wrong way, labels are not counted
 
 **Found by:** exploratory campaign PROJ-01 / PROJ-02 / PROJ-04 (item 4: RND-09)

@@ -12,12 +12,22 @@
 > STOR-14's override half to wave 4), the two CI gates the probe lane had broken,
 > and the four class gates now in place.
 >
-> **One thing wave 2 learned that wave 3 will need.** Three entries' recorded
-> "fix direction" turned out to be wrong about the CAUSE while right about the
-> symptom (I5/CTX-15, S1/AUTH-02, F2/VIEW-11's second source of truth). The
-> campaign's evidence is reliable; its diagnoses are hypotheses. Re-derive the
-> cause before implementing the proposed fix, and correct the entry when they
-> differ — all three corrections are recorded in place.
+> **Two things wave 2 learned that wave 3 will need.**
+>
+> 1. Three entries' recorded "fix direction" turned out to be wrong about the
+>    CAUSE while right about the symptom (I5/CTX-15, S1/AUTH-02, F2/VIEW-11's
+>    second source of truth). The campaign's evidence is reliable; its
+>    diagnoses are hypotheses. Re-derive the cause before implementing the
+>    proposed fix, and correct the entry when they differ — all three
+>    corrections are recorded in place.
+> 2. **Un-deadening a code path is a change to that path.** CTX-15's fix made a
+>    dormant `Pan.mouseup` branch reachable for the first time, and the branch
+>    had its own latent bug (a window-bound listener with no
+>    `isRendererInteraction` check) that nothing had ever been able to expose.
+>    The unit gates and the read-only e2e spec both missed it, because both
+>    click the canvas; only the **full** suite, where a journey clicks real app
+>    chrome, caught it. Budget for the full e2e run when a wave revives dead
+>    code — the targeted specs will not tell you.
 >
 > This is a **short-lived working doc.** Delete it after the work merges; ADRs are the durable record. PLAN.md gets a one-line entry referencing ADR 0047 once shipped — see "Wrap-up" below.
 
@@ -205,7 +215,11 @@ clean.
   pan path swallowing the click — `Pan.mouseup` always had the branch; a
   RAF-throttled mousemove landing after the press wrote `mouse.mousedown` back
   to null, so its "was this a click?" test could never hold. Ships **two**
-  class gates (keyboard + panel), both per-surface opt-in.
+  class gates (keyboard + panel), both per-surface opt-in. Follow-up
+  `44b8dda4`: making that branch reachable exposed a second defect in it — the
+  pointer listener is window-bound, so a release over the sidebar dismissed the
+  panel and unmounted a link mid-click. Caught by the **full e2e run**, not by
+  any unit gate; see the note on wave 3 below.
 - [x] **Auth cluster (S1)** — `ded36c6b`. All twelve AUTH entries + the AUTH-13
   ruling. One correction to the record: AUTH-02's cause is not the status —
   fixing AUTH-01 moves the session out of `REFRESHING` while the superseded GIS
