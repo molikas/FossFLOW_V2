@@ -499,6 +499,25 @@ describe('Connector.mouseup drag mode', () => {
     expect(uiState.actions.setMode).not.toHaveBeenCalled();
   });
 
+  // I4/CONN-07: a drag-mode release only commits when the gesture actually
+  // TRAVELLED and the result has two distinct ends. Before wave 3 this handler
+  // committed whatever `anchors[1]` last resolved to with no tap-slop check, so
+  // a zero-travel press-release on empty canvas committed the start tile twice.
+  // These helpers supply the real drawn connector + travelled gesture the
+  // commit path now requires.
+  const drawnConnector = (overrides: any = {}) => ({
+    id: 'conn-1',
+    anchors: [
+      { id: 'a1', ref: { tile: { x: 1, y: 1 } } },
+      { id: 'a2', ref: { tile: { x: 5, y: 5 } } }
+    ],
+    ...overrides
+  });
+  const travelledMouse = {
+    position: { tile: { x: 5, y: 5 }, screen: { x: 400, y: 400 } },
+    mousedown: { tile: { x: 1, y: 1 }, screen: { x: 100, y: 100 } }
+  };
+
   it('resets id to null in drag mode', () => {
     const uiState = makeUiState({
       mode: {
@@ -507,9 +526,12 @@ describe('Connector.mouseup drag mode', () => {
         id: 'conn-1',
         isConnecting: false
       },
+      mouse: travelledMouse,
       connectorInteractionMode: 'drag'
     });
-    Connector.mouseup!({ uiState, scene: makeScene() } as any);
+    const scene = makeScene({ connectors: [drawnConnector()] });
+    Connector.mouseup!({ uiState, scene } as any);
+    expect(scene.deleteConnector).not.toHaveBeenCalled();
     expect(uiState.actions.setMode).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'CONNECTOR', id: null })
     );
@@ -523,9 +545,13 @@ describe('Connector.mouseup drag mode', () => {
         id: 'conn-1',
         returnToCursor: true
       },
+      mouse: travelledMouse,
       connectorInteractionMode: 'drag'
     });
-    Connector.mouseup!({ uiState, scene: makeScene() } as any);
+    Connector.mouseup!({
+      uiState,
+      scene: makeScene({ connectors: [drawnConnector()] })
+    } as any);
     expect(uiState.actions.setMode).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'CURSOR',
@@ -542,12 +568,66 @@ describe('Connector.mouseup drag mode', () => {
     const resetConnectorDefaults = jest.fn();
     const uiState = makeUiState({
       mode: { type: 'CONNECTOR', showCursor: true, id: 'conn-1' },
+      mouse: travelledMouse,
       connectorInteractionMode: 'drag',
       connectorDefaults: { style: 'DASHED' },
       actions: { setMode: jest.fn(), resetConnectorDefaults }
     });
-    Connector.mouseup!({ uiState, scene: makeScene() } as any);
+    Connector.mouseup!({
+      uiState,
+      scene: makeScene({ connectors: [drawnConnector()] })
+    } as any);
     expect(resetConnectorDefaults).toHaveBeenCalledTimes(1);
+  });
+
+  // Promoted from the exploratory lane (I4/CONN-07 + CONN-10).
+  it('CONN-07: a zero-travel drag-mode release reverts instead of committing', () => {
+    const uiState = makeUiState({
+      mode: { type: 'CONNECTOR', showCursor: true, id: 'conn-1' },
+      // Pressed and released on the same spot — no travel.
+      mouse: {
+        position: { tile: { x: 5, y: 5 }, screen: { x: 100, y: 100 } },
+        mousedown: { tile: { x: 5, y: 5 }, screen: { x: 100, y: 100 } }
+      },
+      connectorInteractionMode: 'drag'
+    });
+    const scene = makeScene({
+      connectors: [
+        drawnConnector({
+          anchors: [
+            { id: 'a1', ref: { tile: { x: 5, y: 5 } } },
+            { id: 'a2', ref: { tile: { x: 5, y: 5 } } }
+          ]
+        })
+      ]
+    });
+
+    Connector.mouseup!({ uiState, scene } as any);
+
+    expect(scene.deleteConnector).toHaveBeenCalledWith('conn-1');
+    expect(scene.commitDragTransaction).toHaveBeenCalled();
+  });
+
+  it('CONN-10: a travelled drag whose ends coincide reverts too (self-loop)', () => {
+    const uiState = makeUiState({
+      mode: { type: 'CONNECTOR', showCursor: true, id: 'conn-1' },
+      mouse: travelledMouse,
+      connectorInteractionMode: 'drag'
+    });
+    const scene = makeScene({
+      connectors: [
+        drawnConnector({
+          anchors: [
+            { id: 'a1', ref: { item: 'node-1' } },
+            { id: 'a2', ref: { item: 'node-1' } }
+          ]
+        })
+      ]
+    });
+
+    Connector.mouseup!({ uiState, scene } as any);
+
+    expect(scene.deleteConnector).toHaveBeenCalledWith('conn-1');
   });
 
   it('click mode, press-DRAG-release (travel past slop): completes the connector on mouseup', () => {

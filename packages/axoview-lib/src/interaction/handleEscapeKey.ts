@@ -7,6 +7,12 @@ import { canMutate, type EditorMode } from './readonlyPolicy';
 export interface EscapeDeps {
   deleteConnector: (id: string) => void;
   commitDragTransaction: () => void;
+  /**
+   * Put a live endpoint-reconnect back where it started, returning true when
+   * there was one (I4/CONN-01). Optional so callers that predate it — and the
+   * unit tests that construct a minimal deps object — keep working.
+   */
+  abortReconnect?: () => boolean;
 }
 
 // Persistent TOOL modes Esc returns to Select (CURSOR) from — the universal
@@ -81,6 +87,23 @@ export const handleEscapeKey = (
   // node selected, so otherwise the selectedIds branch below would consume the
   // first Esc — clearing the selection and stranding the orphan connector.
   if (handleConnectorEscape(uiState, deps)) {
+    return true;
+  }
+
+  // I4/CONN-01: a live endpoint reconnect aborts on the same terms. The mode
+  // was deliberately excluded from TOOL_MODES_EXITED_BY_ESCAPE below on the
+  // grounds that transient modes "own their own abort logic" — but this one had
+  // none, so Escape fell through to the panel-clear branch and did nothing
+  // visible: the anchor stayed wherever the live preview had put it AND the
+  // canvas stayed in RECONNECT_ANCHOR, a mode with no visual signature that the
+  // user could not get out of. Restoring must precede the mode change so the
+  // net patch set is empty and no history entry is left behind.
+  if (uiState.mode.type === 'RECONNECT_ANCHOR' && deps.abortReconnect?.()) {
+    uiState.actions.setMode({
+      type: 'CURSOR',
+      showCursor: true,
+      mousedownItem: null
+    });
     return true;
   }
 

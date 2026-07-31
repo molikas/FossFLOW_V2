@@ -24,26 +24,61 @@ const itemControlsType = (page: Page) =>
   );
 
 test.describe('Single-tile connector renders a dot', () => {
+  // WAVE 3 (I4/CONN-10): this used to build its fixture by clicking the same
+  // node twice in CONNECTOR mode. That route is gone — the connector tool now
+  // REFUSES a connector whose two ends resolve to the same target, from both
+  // the draw path and the reconnect path, because a zero-length self-loop
+  // validated clean, saved, and rendered as nothing useful. The renderer's job
+  // is unchanged: a degenerate connector still arrives from an IMPORTED or
+  // legacy diagram (nothing in `validateView` or `modelSchema` rejects one), and
+  // an SVG polyline with a single point draws nothing, so it must still paint a
+  // visible, selectable dot. The fixture is therefore built the way such a
+  // connector really reaches the app — straight into the model, then routed
+  // into the scene store through the same SYNC_SCENE path diagram-open uses.
   test('a connector with both anchors on one tile paints a dot marker', async ({
     page,
     app
   }) => {
     void app;
-    const canvas = new CanvasPOM(page);
     const P = { x: 440, y: 300 };
     await placeIconViaMouse(page, P);
     await expect.poll(() => getModelItemCount(page), { timeout: 5_000 }).toBe(1);
 
-    // Connector mode; click the SAME node twice → both anchors resolve to its
-    // tile → a single-tile (zero-length) connector.
-    await page.keyboard.press('c');
-    await canvas.clickAt(P);
-    await canvas.clickAt(P);
+    await page.evaluate(() => {
+      const bridge = (window as any).__axoview__;
+      const viewId = bridge.ui.getState().view;
+      const model = bridge.model.getState();
+      const view = model.views.find((v: any) => v.id === viewId);
+      const nodeId = view.items[0].id;
+      const views = model.views.map((v: any) =>
+        v.id !== viewId
+          ? v
+          : {
+              ...v,
+              connectors: [
+                ...(v.connectors ?? []),
+                {
+                  id: 'legacy-degenerate',
+                  color: model.colors[0].id,
+                  anchors: [
+                    { id: 'anchor-a', ref: { item: nodeId } },
+                    { id: 'anchor-b', ref: { item: nodeId } }
+                  ]
+                }
+              ]
+            }
+      );
+      model.actions.set({ views });
+      // `changeView` takes the model to sync FROM — reading the store here
+      // would race the set() above.
+      bridge.changeView(viewId, { ...model, views });
+    });
+
     await expect
       .poll(() => getModelConnectorCount(page), { timeout: 5_000 })
       .toBe(1);
 
-    // The dot marker paints (the invisible-polyline case is now covered).
+    // The dot marker paints (the invisible-polyline case is covered).
     await expect(page.locator('[data-testid="connector-dot"]')).toHaveCount(1);
   });
 });

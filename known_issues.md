@@ -2301,12 +2301,21 @@ branch either, so right-click is not an escape hatch.
 
 **Workaround:** press a tool hotkey (`s`) to force a mode change, then undo.
 
-**Status:** Open. Fix direction: snapshot the original anchor ref in the mode
-state at entry and restore it on Escape (then return to CURSOR); and let
-`mouseup` commit-and-exit regardless of `isRendererInteraction` — the gesture
-began on the canvas, so where it ends should not decide whether it finishes.
-Repro:
-[`conn-01-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I4-connectors/conn-01-15.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31), both halves as directed, with one
+deviation: the snapshot lives at MODULE level in
+[`ReconnectAnchor.ts`](packages/axoview-lib/src/interaction/modes/ReconnectAnchor.ts),
+not in the mode state. `setMode` rebuilds the mode object on entry, so a field
+on it would be clobbered by the very transition that should be capturing it —
+and the single-reconnect-at-a-time invariant matches `mode === 'RECONNECT_ANCHOR'`
+exactly, which is the same argument `DragItems` makes for its preview maps.
+`abortReconnectAnchor` restores BEFORE committing, so the net patch set is empty
+and an aborted reconnect leaves no history entry; `handleEscapeKey` calls it
+through a new optional `abortReconnect` dep. `mouseup` no longer consults
+`isRendererInteraction` at all. Promoted regressions:
+[`connector-integrity.spec.ts`](packages/axoview-e2e/tests/connector-integrity.spec.ts) (Escape restores + an off-canvas release
+still exits) and the inverted case in `ReconnectAnchor.modes.test.ts`, whose
+"does nothing when isRendererInteraction is false" test WAS this bug written
+down as a contract.
 
 ## The connector's end anchor is given a brand-new id on every tile move while drawing
 
@@ -2325,12 +2334,13 @@ exists, and every move is a full `updateConnector` inside the open transaction.
 **Workaround:** none needed for the common flow — the churn is invisible unless
 something holds the id across frames.
 
-**Status:** Open. Fix direction: generate the end-anchor id ONCE at
-`handleClickFirst`/`handleDragStart` and mutate only its `ref` on subsequent
-moves. Low user-visible impact today, but it is a latent trap for any feature
-that keys off anchor identity mid-draw (the ADR 0018 `data-anchor-id` path
-already does for waypoints). Repro:
-[`conn-01-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I4-connectors/conn-01-15.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) exactly as directed — the id is
+allocated once by `createConnectorAt` and `Connector.mousemove` now spreads the
+existing anchor and replaces only its `ref`. It also stopped addressing
+`anchors[1]` by index in favour of the LAST anchor, so the draw keeps working
+if a waypoint is ever seeded ahead of the commit (which CONN-11's fan-out now
+does). Promoted regression: [`connector-integrity.spec.ts`](packages/axoview-e2e/tests/connector-integrity.spec.ts) — three
+pointer moves, one id.
 
 ## A stray click while the connector tool is armed leaves a permanent half-attached or zero-length connector
 
@@ -2360,12 +2370,24 @@ so a zero-travel press-release commits the start tile twice.
 **Workaround:** press Escape instead of clicking away (Escape DOES abort
 correctly — verified as a control).
 
-**Status:** Open. Fix direction: in drag mode, revert instead of committing when
-the gesture never exceeded tap-slop (the `exceedsTapSlop` helper already exists
-for this). In click mode, decide the intended semantics — either implement the
-documented empty-click revert, or drop the claim from the docs and keep
-free-floating endpoints as a feature. Repro:
-[`conn-01-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I4-connectors/conn-01-15.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) — the drag-mode half as directed, the
+click-mode half decided the other way.
+
+**Drag mode (CONN-07):** the release reverts unless the gesture travelled past
+tap-slop, and reverts again if the result is degenerate. Both checks, not one:
+travel alone would still permit a drag that ends where it started.
+
+**Click mode (CONN-13): resolved as by-design, not fixed.** A connector from a
+node to a bare tile is a *deliberate free-floating endpoint* — a documented
+feature (ADR 0022 addendum, and the reason `handleClickFirst` allows an empty
+START), and the user can see it, select it and drag its end. Reverting it would
+trade this entry for the loss of that feature. The claim the probe was testing
+against — "the documented stray-empty-click revert" — is about the connector's
+START, and that revert **does** exist and is unchanged. What was genuinely wrong
+in click mode is the ZERO-LENGTH case, and that is now refused by the same
+degeneracy rule as the drag path (see CONN-10). Promoted regressions:
+[`connector-integrity.spec.ts`](packages/axoview-e2e/tests/connector-integrity.spec.ts) and the drag-mode revert cases in
+`Connector.modes.test.ts`.
 
 ## A node can be connected to itself, producing a zero-length self-loop that validates clean
 
@@ -2385,11 +2407,24 @@ twice" is the default state, not an edge case the code has to construct.
 
 **Workaround:** delete the connector.
 
-**Status:** Open. Fix direction: reject (or revert) a second click that resolves
-to the same item as the first anchor — the same place a "no duplicate connector
-between this pair" check would go. If self-loops are ever wanted as a feature
-they need real routing (a loop path), which does not exist today. Repro:
-[`conn-01-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I4-connectors/conn-01-15.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) as directed, and at BOTH routes the
+entry names. `isDegenerateConnector`
+([`connectorHitTest.ts`](packages/axoview-lib/src/interaction/modes/connectorHitTest.ts))
+is true when the two END anchors resolve to the same node or the same bare tile;
+`handleClickSecond` and the drag-mode release revert instead of committing, and
+`ReconnectAnchor.mouseup` restores instead of committing when a reconnect would
+produce one. It deliberately judges the ENDS and ignores waypoints between them,
+so the CONN-11 fan-out cannot make a legitimate connector look degenerate.
+
+**One existing journey changed with it.** `connector-dot-and-label-placement`
+built its fixture by clicking the same node twice — that route is gone. The
+renderer's contract is unchanged and still covered: a degenerate connector still
+arrives from an IMPORTED or legacy diagram (nothing in `validateView` or
+`modelSchema` rejects one) and an SVG polyline with a single point draws
+nothing, so it must still paint a visible, selectable dot. The fixture is now
+built the way such a connector really reaches the app — into the model, then
+through the same SYNC_SCENE path diagram-open uses. Promoted regressions:
+[`connector-integrity.spec.ts`](packages/axoview-e2e/tests/connector-integrity.spec.ts) and [`connectorHitTest.test.ts`](packages/axoview-lib/src/interaction/modes/__tests__/connectorHitTest.test.ts).
 
 ## Two connectors between the same pair of nodes get byte-identical routes and cannot be told apart
 
@@ -2410,11 +2445,23 @@ offsets parallel edges (the standard fan-out / bundle treatment).
 changes its route and makes both addressable again. Discoverable only by
 accident.
 
-**Status:** Open. Fix direction: offset parallel connectors between the same
-node pair (index-based perpendicular displacement at the midpoint is the usual
-approach), or at minimum make the hit-test disambiguate overlapping paths so
-each is reachable. Repro:
-[`conn-01-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I4-connectors/conn-01-15.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) via the first direction, at the MODEL
+layer rather than the router. On commit, a node→node connector whose pair
+already has one is given a waypoint anchor at the index-based perpendicular
+displacement of the midpoint (`parallelWaypointTile`), with the sign alternating
+so a third fans to the other side. That is the automated form of the workaround
+the campaign found by accident ("add a waypoint by dragging its body"): the
+waypoint is a real anchor the user can drag or delete, it survives save/load,
+and it rides the creation's own history entry.
+
+Scope, stated plainly: this is **not** router-level fan-out. Bundling, curvature
+and re-fanning when a connector is later deleted are not implemented — a pair
+that goes from three connectors to two keeps the displacements it was given.
+Making the hit-test disambiguate coincident paths was rejected as the *minimum*
+option because it would leave the two lines drawn on top of each other, which is
+the half of the report that actually reads as broken. Promoted regressions:
+[`connector-integrity.spec.ts`](packages/axoview-e2e/tests/connector-integrity.spec.ts) and [`connectorHitTest.test.ts`](packages/axoview-lib/src/interaction/modes/__tests__/connectorHitTest.test.ts),
+which pins that the displacement never rounds back onto the direct midpoint.
 
 ## A connector can be anchored to a node on a locked layer
 
@@ -2435,12 +2482,16 @@ something they cannot see.
 
 **Workaround:** unlock the layer before connecting.
 
-**Status:** Open. Fix direction: thread `isItemInteractable` into the connector
-and reconnect hit-tests as the Cursor paths already do, so a locked or hidden
-node reads as empty tile to the connector tool. Note this is the same
-"acquisition paths are gated, this one is not" shape as PTR-11, from the other
-direction. Repro:
-[`conn-01-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I4-connectors/conn-01-15.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) exactly as directed, through one shared
+helper: `connectorItemAtTile`
+([`connectorHitTest.ts`](packages/axoview-lib/src/interaction/modes/connectorHitTest.ts))
+is what `Connector.mousedown`, `Connector.mousemove`, the click-mode drag-release
+and `ReconnectAnchor.mousemove` all call now, so the answer cannot drift between
+drawing a connector and re-anchoring one. It also passes the ADR 0023
+`canvasMode` + cursor `point`, which closes CONN-03's hole in the same move (that
+hypothesis was FALSIFIED — the missing argument did not change the outcome at
+realistic off-grid offsets — but the hole was real). Promoted regressions:
+[`connector-integrity.spec.ts`](packages/axoview-e2e/tests/connector-integrity.spec.ts) and [`connectorHitTest.test.ts`](packages/axoview-lib/src/interaction/modes/__tests__/connectorHitTest.test.ts).
 
 ## A mouse palette drag released over a panel places the element behind the panel
 

@@ -48,7 +48,7 @@ import { TransformNode } from './modes/Node/TransformNode';
 import { Label } from './modes/Label';
 import { Lasso } from './modes/Lasso';
 import { FreehandLasso } from './modes/FreehandLasso';
-import { ReconnectAnchor } from './modes/ReconnectAnchor';
+import { ReconnectAnchor, abortReconnectAnchor } from './modes/ReconnectAnchor';
 import { exceedsTapSlop, LONG_PRESS_MS } from 'src/config/tapGesture';
 import { MIN_ZOOM, MAX_ZOOM } from 'src/config';
 import { usePanHandlers } from './usePanHandlers';
@@ -176,6 +176,8 @@ interface KeydownDeps {
   deleteLabel: SceneApi['deleteLabel'];
   updateViewItem: SceneApi['updateViewItem'];
   commitDragTransaction: SceneApi['commitDragTransaction'];
+  /** I4/CONN-01 — Escape restores a live endpoint reconnect. See EscapeDeps. */
+  abortReconnect: () => boolean;
   // Mode-aware screen→tile (useCanvasMode), used by the keydown helpers' tile
   // resolution.
   screenToTile: ScreenToTileFn;
@@ -606,6 +608,13 @@ export const useInteractionManager = () => {
       deleteLabel,
       updateViewItem,
       commitDragTransaction,
+      // I4/CONN-01: Escape restores a live endpoint reconnect. The mode owns the
+      // snapshot (it is the only thing that knows where the anchor started), so
+      // the dispatcher just hands the delegate the ability to ask for it.
+      abortReconnect: () =>
+        abortReconnectAnchor({
+          scene: sceneRef.current
+        } as unknown as State),
       screenToTile
     };
 
