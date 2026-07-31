@@ -1,23 +1,20 @@
 /**
- * F3 probes — the docked style strip (ADR 0030) driven through its real
- * controls.
+ * bulk-format-mixed.spec.ts — promoted from the F3 explore lane (ADR 0047 flip
+ * rule): STYL-01, STYL-02, STYL-06, STYL-07 and the STYL-03 no-colour ruling,
+ * driven through the REAL strip controls.
  *
- * The strip's writers are bulk-aware shadows (`applyToTargets`) over a
- * representative read (`sel = bulk.ids[0]`), so every probe here selects a
- * REAL multi-selection and presses a REAL control — a store-level shortcut
- * would skip exactly the derivation under test.
+ * The class these pin (F3 standing thread F-c): the docked strip used to read
+ * ONE member of a homogeneous bulk (`bulk.ids[0]`) and write the derived value
+ * to all of them — so a Bold press carried the representative's whole B/I/U/S
+ * quartet (STYL-01) and its direction (STYL-02/06), and the same selection in a
+ * different order produced a different result (STYL-08).
  *
- * RIG NOTES: every test destructures `app` (the fixture is lazy) and asserts
- * its PRECONDITION — the entities exist, the selection is the size it should
- * be, the control is enabled — before concluding.
+ * Every test asserts its PRECONDITION — the entities exist, the selection is
+ * the size it should be, the control is enabled — before concluding.
  */
-import {
-  exploreTest as test,
-  expect
-} from '../../fixtures/explore.fixture';
-import { CanvasPOM } from '../../pom/CanvasPOM';
-import { placeIconViaMouse } from '../../helpers/place';
-import { getModelHistoryLength } from '../../helpers/store';
+import { canvasReadyTest as test, expect } from '../fixtures/app.fixture';
+import { CanvasPOM } from '../pom/CanvasPOM';
+import { getModelHistoryLength } from '../helpers/store';
 
 type Page = import('@playwright/test').Page;
 
@@ -95,16 +92,12 @@ const formatButton = (page: Page, name: 'Bold' | 'Italic') =>
   strip(page).getByRole('button', { name, exact: true });
 
 /** A StripButton carries no accessible name (MUI Tooltip titles the wrapper,
- *  not the button — COLDSTART "DOM selector notes"), so target its MUI icon. */
+ *  not the button), so target its MUI icon. */
 const stripButtonByIcon = (page: Page, icon: string) =>
   strip(page).locator(`button:has(svg[data-testid="${icon}"])`);
 
-// ---------------------------------------------------------------------------
-// STYL-01 / STYL-02 — the format quartet over a bulk
-// ---------------------------------------------------------------------------
-
-test.describe('F3 / bulk text formatting', () => {
-  test('STYL-01: toggling Bold over a bulk overwrites every member\'s italic/underline/strike with the representative\'s', async ({
+test.describe('Bulk text formatting — the whole selection decides', () => {
+  test('STYL-01: a Bold press leaves every other format on every member alone', async ({
     page,
     app
   }) => {
@@ -131,7 +124,6 @@ test.describe('F3 / bulk text formatting', () => {
       b: before.find((l) => l.id === b)!.isItalic
     }).toEqual({ a: false, b: true });
 
-    // Select both with A first, so A is the representative (`bulk.ids[0]`).
     await select(page, [
       { type: 'LABEL', id: a },
       { type: 'LABEL', id: b }
@@ -139,21 +131,26 @@ test.describe('F3 / bulk text formatting', () => {
     const bold = formatButton(page, 'Bold');
     await expect(bold).toBeEnabled();
     await bold.click();
-    await page.waitForTimeout(300);
+    await expect
+      .poll(async () => (await labels(page)).every((l) => l.isBold), {
+        timeout: 3_000
+      })
+      .toBe(true);
 
     const after = await labels(page);
-    // Bold landed on both — that part is the feature working.
+    // Bold landed on both — the feature working…
     expect({
       a: after.find((l) => l.id === a)!.isBold,
       b: after.find((l) => l.id === b)!.isBold
     }).toEqual({ a: true, b: true });
-    // …and B's italic, which nobody touched, is gone: the label branch writes
+    // …and B's italic, which nobody touched, SURVIVES. The pre-fix writer built
     // the whole { bold, italic, strikethrough, underline } quartet from the
-    // representative on every press.
-    expect(after.find((l) => l.id === b)!.isItalic).toBe(false);
+    // representative and fanned it out, wiping it.
+    expect(after.find((l) => l.id === b)!.isItalic).toBe(true);
+    expect(after.find((l) => l.id === a)!.isItalic).toBe(false);
   });
 
-  test('STYL-02: a mixed bulk has no indeterminate state — one press normalises it to the representative\'s opposite', async ({
+  test('STYL-02: a mixed bulk reads indeterminate, and one press applies to all', async ({
     page,
     app
   }) => {
@@ -177,24 +174,56 @@ test.describe('F3 / bulk text formatting', () => {
       b: before.find((l) => l.id === b)!.isBold
     }).toEqual({ a: true, b: false });
 
-    // Select both with the BOLD one first.
+    // Select both with the BOLD one first — the order that used to decide.
     await select(page, [
       { type: 'LABEL', id: a },
       { type: 'LABEL', id: b }
     ]);
     const bold = formatButton(page, 'Bold');
-    // The button reads the representative, so it shows "on" for a mixed set.
-    await expect(bold).toHaveAttribute('aria-pressed', 'true');
+    // Indeterminate, not "on" (ARIA's third pressed value).
+    await expect(bold).toHaveAttribute('aria-pressed', 'mixed');
     await bold.click();
-    await page.waitForTimeout(300);
 
-    // One press on a mixed selection turns bold OFF for everyone — the common
-    // convention (Word/Docs/Figma) is mixed → apply to all.
-    const after = await labels(page);
-    expect({
-      a: after.find((l) => l.id === a)!.isBold,
-      b: after.find((l) => l.id === b)!.isBold
-    }).toEqual({ a: false, b: false });
+    // One press on a mixed selection APPLIES (Word/Docs/Figma), not clears.
+    await expect
+      .poll(async () => (await labels(page)).map((l) => l.isBold), {
+        timeout: 3_000
+      })
+      .toEqual([true, true]);
+    await expect(bold).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('STYL-08: reversing the same selection does not reverse the outcome', async ({
+    page,
+    app
+  }) => {
+    void app;
+    const canvas = new CanvasPOM(page);
+    const a = await placeLabel(page, canvas, { x: -2, y: 0 }, 'AAA');
+    const b = await placeLabel(page, canvas, { x: 3, y: 0 }, 'BBB');
+
+    await select(page, [{ type: 'LABEL', id: a }]);
+    await formatButton(page, 'Bold').click();
+    await expect
+      .poll(async () => (await labels(page)).find((l) => l.id === a)?.isBold, {
+        timeout: 3_000
+      })
+      .toBe(true);
+
+    // PLAIN one first this time — the pre-fix strip bolded everyone here and
+    // un-bolded everyone in the STYL-02 test above, from the same two labels.
+    await select(page, [
+      { type: 'LABEL', id: b },
+      { type: 'LABEL', id: a }
+    ]);
+    const bold = formatButton(page, 'Bold');
+    await expect(bold).toHaveAttribute('aria-pressed', 'mixed');
+    await bold.click();
+    await expect
+      .poll(async () => (await labels(page)).map((l) => l.isBold), {
+        timeout: 3_000
+      })
+      .toEqual([true, true]);
   });
 
   test('STYL-07: a bulk style change is one undo entry, and redo restores it', async ({
@@ -212,27 +241,32 @@ test.describe('F3 / bulk text formatting', () => {
 
     const historyBefore = await getModelHistoryLength(page);
     await formatButton(page, 'Bold').click();
-    await page.waitForTimeout(300);
-    expect((await labels(page)).every((l) => l.isBold)).toBe(true);
+    await expect
+      .poll(async () => (await labels(page)).every((l) => l.isBold), {
+        timeout: 3_000
+      })
+      .toBe(true);
     // PRECONDITION: exactly one history entry for the whole fan-out.
     expect((await getModelHistoryLength(page)) - historyBefore).toBe(1);
 
     await page.keyboard.press('Control+z');
-    await page.waitForTimeout(300);
-    expect((await labels(page)).some((l) => l.isBold)).toBe(false);
+    await expect
+      .poll(async () => (await labels(page)).some((l) => l.isBold), {
+        timeout: 3_000
+      })
+      .toBe(false);
 
     await page.keyboard.press('Control+Shift+z');
-    await page.waitForTimeout(300);
-    expect((await labels(page)).every((l) => l.isBold)).toBe(true);
+    await expect
+      .poll(async () => (await labels(page)).every((l) => l.isBold), {
+        timeout: 3_000
+      })
+      .toBe(true);
   });
 });
 
-// ---------------------------------------------------------------------------
-// STYL-03 / STYL-04 — the two "no colour" representations
-// ---------------------------------------------------------------------------
-
-test.describe('F3 / no-colour representation', () => {
-  test('STYL-03/04: clearing a rectangle fill writes the string "transparent" and leaves the legacy preset id', async ({
+test.describe('No-colour is an absent fill (ADR 0039 addendum — STYL-03)', () => {
+  test('clearing a rectangle fill removes BOTH the custom colour and the legacy preset', async ({
     page,
     app
   }) => {
@@ -253,23 +287,20 @@ test.describe('F3 / no-colour representation', () => {
     expect(rect.customColor).toBeUndefined();
 
     await select(page, [{ type: 'RECTANGLE', id: rect.id }]);
-    // Open the Fill popover and press the no-colour swatch.
     const fill = stripButtonByIcon(page, 'FormatColorFillIcon').first();
     await expect(fill).toBeEnabled();
     await fill.click();
-    // NoColorSwatch has no testid — target its aria-label (the ADR 0039
-    // "Transparent / no colour" swatch).
     const noColor = page.getByRole('button', { name: 'No color' }).first();
     await noColor.waitFor({ state: 'visible', timeout: 5_000 });
     await noColor.click();
-    await page.waitForTimeout(300);
 
-    const after = (await rectangles(page))[0];
-    // CHARACTERIZATION, recorded either way: which of the two "no colour"
-    // representations the rectangle uses, and whether the legacy preset stays.
-    expect({
-      customColor: after.customColor,
-      keptLegacyPreset: after.color === rect.color
-    }).toEqual({ customColor: 'transparent', keptLegacyPreset: true });
+    // Absent, not the 'transparent' sentinel — and the dormant preset goes with
+    // it, or the fill the user just cleared would repaint from `color`.
+    await expect
+      .poll(async () => (await rectangles(page))[0].customColor, {
+        timeout: 3_000
+      })
+      .toBeUndefined();
+    expect((await rectangles(page))[0].color).toBeUndefined();
   });
 });

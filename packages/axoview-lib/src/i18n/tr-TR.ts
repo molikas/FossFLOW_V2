@@ -325,6 +325,7 @@ const locale: LocaleProps = {
     namePlaceholder: 'Eleman adı…'
   },
   topBarStyleControls: {
+    mixed: 'Karışık',
     rotate90: '90° döndür',
     noColor: 'Renk yok',
     pickColorFromScreen: 'Ekrandan renk seç',

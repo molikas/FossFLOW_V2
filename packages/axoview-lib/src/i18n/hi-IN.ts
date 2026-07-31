@@ -320,6 +320,7 @@ const locale: LocaleProps = {
     namePlaceholder: 'तत्व का नाम…'
   },
   topBarStyleControls: {
+    mixed: 'मिश्रित',
     rotate90: '90° घुमाएं',
     noColor: 'कोई रंग नहीं',
     pickColorFromScreen: 'स्क्रीन से रंग चुनें',

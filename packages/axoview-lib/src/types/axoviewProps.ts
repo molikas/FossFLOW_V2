@@ -316,6 +316,9 @@ export interface LocaleProps {
     linkSearchPlaceholder: string;
   };
   topBarStyleControls: {
+    // Readout for an absolute control whose bulk members disagree (STYL-08
+    // ruling — never show `selectedIds[0]`'s value for the whole selection).
+    mixed: string;
     noColor: string;
     pickColorFromScreen: string;
     customColor: string;

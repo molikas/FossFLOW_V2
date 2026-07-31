@@ -5557,12 +5557,19 @@ per-target but the DIRECTION is not.
 
 **Workaround:** style items one at a time.
 
-**Status:** Open. Fix direction: send only the pressed field
-(`{ isBold: next }`) instead of the quartet, and derive `next` from the
-whole selection (`all ? false : true`) rather than from the representative —
-one change fixes the wipe, the missing mixed state and the
-representative-order dependence together. Repro: [`strip.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F3-styling/strip.explore.spec.ts) (labels), [`bulk-styl-08-10-12.explore.test.ts`](packages/axoview-lib/src/__explore__/F3/bulk-styl-08-10-12.explore.test.ts) (text
-boxes).
+**Status:** Fixed in wave 4 (2026-07-31) — together with the STYL-02 and STYL-08
+rulings, which are the same defect seen from the display side. The strip no
+longer derives anything from `bulk.ids[0]`: a toggle reads the whole selection
+as a tri-state (`all`/`none`/`mixed`), one press applies to everyone unless
+everyone already has the format, and the patch carries **exactly** the pressed
+field via `formatFieldPatch` — so italic/underline/strike survive a Bold press
+and the selection ORDER no longer changes the outcome. Absolute controls show
+"Mixed" instead of one member's value. Recorded as the ADR 0030 2026-07-31
+addendum. Probes promoted to
+[`bulk-format-mixed.spec.ts`](packages/axoview-e2e/tests/bulk-format-mixed.spec.ts)
+and [`bulkStyleDerivation.test.ts`](packages/axoview-lib/src/utils/__tests__/bulkStyleDerivation.test.ts),
+with the class gate in
+[`bulkStyleFanOut.contract.test.ts`](packages/axoview-lib/src/utils/__tests__/bulkStyleFanOut.contract.test.ts).
 
 ## The text-box border opacity slider does nothing on a box with no border
 
@@ -5591,9 +5598,13 @@ is absent, so an opacity-only write can never render.
 
 **Workaround:** set a line style or width first, then the opacity.
 
-**Status:** Open. Fix direction: give the opacity writer the same seed as its
-two siblings — or hoist the seed into one `ensureBorderColor()` helper the
-whole popover calls, so a fourth control cannot miss it. Repro: [`bulk-styl-08-10-12.explore.test.ts`](packages/axoview-lib/src/__explore__/F3/bulk-styl-08-10-12.explore.test.ts).
+**Status:** Fixed in wave 4 (2026-07-31) — the second option. All three controls
+in the popover now write through one `updateTextBoxBorder` helper that seeds
+`borderColor` **per target**, so a bulk cannot overwrite the colour of a member
+that already has one. Gated by §4 of
+[`bulkStyleFanOut.contract.test.ts`](packages/axoview-lib/src/utils/__tests__/bulkStyleFanOut.contract.test.ts):
+the helper exists, all three controls call it, and no border field is written
+through the raw text-box writer — so a fourth control cannot miss the seed.
 
 ## Reordering layers moves the nodes and nothing else
 

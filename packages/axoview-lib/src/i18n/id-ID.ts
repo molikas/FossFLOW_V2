@@ -321,6 +321,7 @@ const locale: LocaleProps = {
     namePlaceholder: 'Nama elemen…'
   },
   topBarStyleControls: {
+    mixed: 'Campuran',
     rotate90: 'Putar 90°',
     noColor: 'Tanpa warna',
     pickColorFromScreen: 'Ambil warna dari layar',

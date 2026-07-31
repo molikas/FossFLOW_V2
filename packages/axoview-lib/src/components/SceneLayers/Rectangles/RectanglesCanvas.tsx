@@ -172,8 +172,10 @@ export const RectanglesCanvas = memo(({ rectangles }: Props) => {
         // also means "every rect is on a hidden layer" and must stay hidden.
         if (layersNow.length > 0 && !visibleNow.has(rect.id)) continue;
         const fillValue = rect.customColor || colorsById.get(rect.color ?? '');
-        if (!fillValue) continue;
-        const isTransparent = fillValue === 'transparent';
+        // ADR 0039 addendum (STYL-03): absent IS the "no fill" representation
+        // now — outline-only, exactly like the legacy `'transparent'` sentinel
+        // this still reads. Must agree with the DOM <Rectangle> path.
+        const isTransparent = !fillValue || fillValue === 'transparent';
         // ADR 0023 off-grid: the shared vertex math — the DOM <Rectangle> path
         // and this bulk MUST agree on where a rect is drawn (bug #3 lived in
         // exactly that gap), so the corners come from renderedGeometry.

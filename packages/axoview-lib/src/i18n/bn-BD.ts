@@ -321,6 +321,7 @@ const locale: LocaleProps = {
     namePlaceholder: 'উপাদানের নাম…'
   },
   topBarStyleControls: {
+    mixed: 'মিশ্র',
     rotate90: '90° ঘোরান',
     noColor: 'কোনো রং নেই',
     pickColorFromScreen: 'স্ক্রিন থেকে রং বেছে নিন',

@@ -328,6 +328,7 @@ const locale: LocaleProps = {
     namePlaceholder: 'Elementname…'
   },
   topBarStyleControls: {
+    mixed: 'Gemischt',
     rotate90: 'Um 90° drehen',
     noColor: 'Keine Farbe',
     pickColorFromScreen: 'Farbe vom Bildschirm auswählen',

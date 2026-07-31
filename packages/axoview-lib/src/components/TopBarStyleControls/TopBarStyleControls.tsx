@@ -57,7 +57,19 @@ import { connectorStyleOptions, connectorLineTypeOptions } from 'src/schemas';
 import { TEXTBOX_DEFAULTS, TEXTBOX_LINE_HEIGHT } from 'src/config';
 import { ColorPickerBody } from '../ColorSelector/ColorPickerBody';
 import { QuickIconSelector } from './QuickIconSelector';
-import { resolveHomogeneousBulk } from 'src/utils/bulkStyleTarget';
+import {
+  resolveHomogeneousBulk,
+  deriveTriState,
+  nextToggleValue,
+  deriveSharedValue,
+  formatFieldPatch,
+  readFormatFields,
+  VIEW_ITEM_FORMAT_FIELDS,
+  LABEL_FORMAT_FIELDS,
+  CONNECTOR_LABEL_FORMAT_FIELDS,
+  TriState,
+  FormatName
+} from 'src/utils/bulkStyleTarget';
 import {
   getWholeContentFormats,
   applyInlineFormat,
@@ -157,6 +169,9 @@ interface StripButtonProps {
   icon: React.ReactNode;
   /** Resolved hex shown as a thin underline bar; omit for non-colour controls. */
   colorBar?: string;
+  /** STYL-08: the selection's members carry different colours — the bar shows
+   *  a striped "mixed" swatch rather than one arbitrary member's colour. */
+  colorBarMixed?: boolean;
   popoverWidth?: number;
   /** Optional test hook on the trigger button (e2e). */
   testId?: string;
@@ -180,6 +195,7 @@ const StripButton = ({
   disabled,
   icon,
   colorBar,
+  colorBarMixed,
   popoverWidth = 240,
   testId,
   highlight,
@@ -253,12 +269,22 @@ const StripButton = ({
             </Box>
             {colorBar !== undefined && (
               <Box
+                data-mixed={!disabled && colorBarMixed ? 'true' : undefined}
                 sx={{
                   width: 18,
                   height: 3,
                   borderRadius: 1,
                   mt: '1px',
-                  bgcolor: disabled ? 'action.disabled' : colorBar || '#000000'
+                  ...(!disabled && colorBarMixed
+                    ? {
+                        backgroundImage: (theme) =>
+                          `repeating-linear-gradient(45deg, ${theme.palette.text.secondary} 0 2px, transparent 2px 4px)`
+                      }
+                    : {
+                        bgcolor: disabled
+                          ? 'action.disabled'
+                          : colorBar || '#000000'
+                      })
                 }}
               />
             )}
@@ -322,6 +348,7 @@ const LabeledSlider = ({
   max,
   step,
   marks = true,
+  mixed,
   onChange
 }: {
   label: string;
@@ -333,42 +360,52 @@ const LabeledSlider = ({
   // used by the connector width control, whose stops are deliberately uneven.
   step: number | null;
   marks?: boolean | { value: number }[];
+  /** STYL-08: the bulk's members disagree — show "Mixed", not one member's. */
+  mixed?: boolean;
   onChange: (value: number) => void;
-}) => (
-  <Box>
-    <Box
-      sx={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'baseline',
-        mb: 0.5
-      }}
-    >
-      <Typography variant="caption" color="text.secondary">
-        {label}
-      </Typography>
-      <Typography
-        variant="caption"
-        color="text.primary"
-        sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}
+}) => {
+  const { t } = useTranslation('topBarStyleControls');
+  return (
+    <Box>
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          mb: 0.5
+        }}
       >
-        {displayValue}
-      </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {label}
+        </Typography>
+        <Typography
+          variant="caption"
+          color={mixed ? 'text.secondary' : 'text.primary'}
+          data-mixed={mixed ? 'true' : undefined}
+          sx={{
+            fontVariantNumeric: 'tabular-nums',
+            fontWeight: 600,
+            ...(mixed ? { fontStyle: 'italic' } : {})
+          }}
+        >
+          {mixed ? t('mixed') : displayValue}
+        </Typography>
+      </Box>
+      <Box sx={{ px: 1 }}>
+        <Slider
+          marks={marks}
+          step={step}
+          min={min}
+          max={max}
+          size="small"
+          valueLabelDisplay="auto"
+          value={value}
+          onChange={(_e, v) => onChange(v as number)}
+        />
+      </Box>
     </Box>
-    <Box sx={{ px: 1 }}>
-      <Slider
-        marks={marks}
-        step={step}
-        min={min}
-        max={max}
-        size="small"
-        valueLabelDisplay="auto"
-        value={value}
-        onChange={(_e, v) => onChange(v as number)}
-      />
-    </Box>
-  </Box>
-);
+  );
+};
 
 // Alignment control (ADR 0034 addendum, re-cut 2026-07-04): standard MUI
 // glyphs only — the first cut hand-rolled a 3×3 grid of composite
@@ -445,12 +482,14 @@ const PercentSizeSlider = ({
   min,
   max,
   step,
+  mixed,
   onChange
 }: {
   value: number;
   min: number;
   max: number;
   step: number;
+  mixed?: boolean;
   onChange: (native: number) => void;
 }) => {
   const { t } = useTranslation('topBarStyleControls');
@@ -471,6 +510,7 @@ const PercentSizeSlider = ({
       min={0}
       max={100}
       step={5}
+      mixed={mixed}
       onChange={(p) => onChange(toNative(p))}
     />
   );
@@ -527,21 +567,60 @@ export const TopBarStyleControls = () => {
     [itemControls, bulk]
   );
 
+  // Every id the strip writes to for `type` — the homogeneous selection, or the
+  // single representative. The READ side uses the same list (STYL-02/06/08): a
+  // toggle asks all of them and an absolute control reports "mixed" when they
+  // disagree, so nothing is derived from `ids[0]` any more.
+  const targetIdsFor = useCallback(
+    (type: string): string[] =>
+      bulk && bulk.type === type
+        ? bulk.ids
+        : sel && sel.type === type
+        ? [sel.id]
+        : [],
+    [bulk, sel]
+  );
+
+  // The live objects behind those ids, resolved out of the current view.
+  const membersOf = useCallback(
+    (type: string): Record<string, unknown>[] => {
+      const source: { id: string }[] | undefined =
+        type === 'ITEM'
+          ? currentView.items
+          : type === 'LABEL'
+          ? currentView.labels
+          : type === 'TEXTBOX'
+          ? currentView.textBoxes
+          : type === 'RECTANGLE'
+          ? currentView.rectangles
+          : type === 'CONNECTOR'
+          ? currentView.connectors
+          : undefined;
+      return targetIdsFor(type)
+        .map((id) => source?.find((m) => m.id === id))
+        .filter((m): m is { id: string } => !!m) as Record<string, unknown>[];
+    },
+    [targetIdsFor, currentView]
+  );
+
+  // STYL-08 ruling: an absolute control shows the shared value, or "Mixed" —
+  // never `bulk.ids[0]`'s. `mixed` is false for a single target by definition.
+  const sharedOf = useCallback(
+    <T,>(type: string, pick: (m: Record<string, unknown>) => T) =>
+      deriveSharedValue(membersOf(type).map(pick)),
+    [membersOf]
+  );
+
   // Apply a per-id update to every target of `type` (the homogeneous selection,
   // or the single representative). Multi fans out inside one transaction so the
   // change is a single undo entry — mirrors deleteSelectedItems' pattern.
   const applyToTargets = useCallback(
     (type: string, apply: (id: string) => void) => {
-      const ids =
-        bulk && bulk.type === type
-          ? bulk.ids
-          : sel && sel.type === type
-          ? [sel.id]
-          : [];
+      const ids = targetIdsFor(type);
       if (ids.length <= 1) ids.forEach(apply);
       else transaction(() => ids.forEach(apply));
     },
-    [bulk, sel, transaction]
+    [targetIdsFor, transaction]
   );
 
   // Bulk-aware shadows: every single-target writer below now fans out across a
@@ -567,6 +646,23 @@ export const TopBarStyleControls = () => {
     (_id: string, patch: Parameters<typeof applyConnector>[1]) =>
       applyToTargets('CONNECTOR', (tid) => applyConnector(tid, patch)),
     [applyToTargets, applyConnector]
+  );
+  // STYL-05 — the ONE writer for the text-box Border popover. A text box with
+  // no `borderColor` has no border at all (`TextBox.borderCss` returns
+  // undefined), so every control in that popover must seed a colour or its
+  // change is invisible while still being stored. Two of the three did; the
+  // opacity slider did not. Seeding is per-target so a bulk cannot overwrite
+  // the colour of a member that already has one.
+  const updateTextBoxBorder = useCallback(
+    (patch: Parameters<typeof applyTextBox>[1]) =>
+      applyToTargets('TEXTBOX', (tid) => {
+        const target = currentView.textBoxes?.find((tb) => tb.id === tid);
+        applyTextBox(tid, {
+          ...patch,
+          ...(target?.borderColor ? {} : { borderColor: '#000000' })
+        });
+      }),
+    [applyToTargets, applyTextBox, currentView]
   );
   const updateRectangle = useCallback(
     (_id: string, patch: Parameters<typeof applyRectangle>[1]) =>
@@ -883,59 +979,165 @@ export const TopBarStyleControls = () => {
   // resolved 2026-07-03: underline fields landed for all three label types); a
   // text box formats through its content HTML — the whole content when merely
   // selected (bulk-aware), the live caret/range while being edited on canvas.
+  // --- STYL-08 ruling (owner 2026-07-30): every ABSOLUTE control asks the whole
+  // selection and reports "Mixed" when its members disagree. One place, so a new
+  // control cannot quietly go back to displaying `bulk.ids[0]`'s value.
+  const textColorMixed = node
+    ? sharedOf('ITEM', (m) => m.labelColor).mixed
+    : label
+    ? sharedOf('LABEL', (m) => m.color).mixed
+    : textBox && !liveEditing
+    ? sharedOf('TEXTBOX', (m) => m.color).mixed
+    : false;
+  const textSizeMixed = node
+    ? sharedOf('ITEM', (m) => m.labelFontSize ?? LABEL_BASE_FONT_PX).mixed
+    : label
+    ? sharedOf('LABEL', (m) => m.fontSize ?? LABEL_BASE_FONT_PX).mixed
+    : textBox
+    ? sharedOf('TEXTBOX', (m) => m.fontSize ?? TEXTBOX_DEFAULTS.fontSize).mixed
+    : false;
+  const lineHeightMixed = sharedOf(
+    'TEXTBOX',
+    (m) => m.lineHeight ?? TEXTBOX_LINE_HEIGHT
+  ).mixed;
+  const backgroundMixed = rectangle
+    ? sharedOf('RECTANGLE', (m) => `${m.customColor ?? ''}|${m.color ?? ''}`)
+        .mixed
+    : label
+    ? sharedOf('LABEL', (m) => m.backgroundColor).mixed
+    : textBox
+    ? sharedOf('TEXTBOX', (m) => m.backgroundColor).mixed
+    : false;
+  const backgroundOpacityMixed = rectangle
+    ? sharedOf('RECTANGLE', (m) => m.fillOpacity ?? 1).mixed
+    : label
+    ? sharedOf('LABEL', (m) => m.backgroundOpacity ?? 1).mixed
+    : false;
+  const borderType = rectangle ? 'RECTANGLE' : 'TEXTBOX';
+  const borderColorMixed = sharedOf(borderType, (m) => m.borderColor).mixed;
+  const borderStyleMixed = sharedOf(
+    borderType,
+    (m) => m.borderStyle ?? 'SOLID'
+  ).mixed;
+  const borderWidthMixed = sharedOf(borderType, (m) => m.borderWidth ?? 2).mixed;
+  const borderOpacityMixed = sharedOf(borderType, (m) => m.borderOpacity ?? 1)
+    .mixed;
+
   const formatEnabled = Boolean(node || label || activeLabel || textBox);
-  const formatValue = {
-    bold: node
-      ? !!node.labelBold
-      : label
-      ? !!label.isBold
-      : activeLabel
-      ? !!activeLabel.bold
-      : textBox
-      ? liveEditing
-        ? liveFormats.bold === true
-        : wholeFormats.bold
-      : false,
-    italic: node
-      ? !!node.labelItalic
-      : label
-      ? !!label.isItalic
-      : activeLabel
-      ? !!activeLabel.italic
-      : textBox
-      ? liveEditing
-        ? liveFormats.italic === true
-        : wholeFormats.italic
-      : false,
-    underline: node
-      ? !!node.labelUnderline
-      : label
-      ? !!label.isUnderline
-      : activeLabel
-      ? !!activeLabel.underline
-      : textBox
-      ? liveEditing
-        ? liveFormats.underline === true
-        : wholeFormats.underline
-      : false,
-    strike: node
-      ? !!node.labelStrikethrough
-      : label
-      ? !!label.isStrikethrough
-      : activeLabel
-      ? !!activeLabel.strikethrough
-      : textBox
-      ? liveEditing
-        ? liveFormats.strike === true
-        : wholeFormats.strike
-      : false
-  };
-  // Toggle ONE format. Label types write their whole trio (same fields as
-  // before); the text box routes to the live editor (caret/range) or the
-  // whole-content transform (selected — fans out across a homogeneous bulk).
-  const toggleFormat = (name: 'bold' | 'italic' | 'underline' | 'strike') => {
+
+  // STYL-01/02/06/08 (owner ruling 2026-07-30). The pressed state is derived
+  // from the WHOLE selection — `all` → on, `none` → off, anything else → mixed
+  // — instead of from `bulk.ids[0]`. A press then applies to everyone unless
+  // everyone already has the format (`nextToggleValue`), so the arbitrary
+  // representative no longer decides either the display or the direction.
+  const formatStates: Record<FormatName, TriState> = useMemo(() => {
+    const fromMembers = <T,>(
+      ids: string[],
+      resolve: (id: string) => T | undefined,
+      read: (m: T) => Record<FormatName, boolean>
+    ): Record<FormatName, TriState> => {
+      const members = ids
+        .map(resolve)
+        .filter((m): m is T => m !== undefined && m !== null)
+        .map(read);
+      return {
+        bold: deriveTriState(members.map((m) => m.bold)),
+        italic: deriveTriState(members.map((m) => m.italic)),
+        underline: deriveTriState(members.map((m) => m.underline)),
+        strike: deriveTriState(members.map((m) => m.strike))
+      };
+    };
+    if (node) {
+      return fromMembers(
+        targetIdsFor('ITEM'),
+        (id) => currentView.items?.find((i) => i.id === id),
+        (m) =>
+          readFormatFields(
+            VIEW_ITEM_FORMAT_FIELDS,
+            m as unknown as Record<string, unknown>
+          )
+      );
+    }
+    if (label) {
+      return fromMembers(
+        targetIdsFor('LABEL'),
+        (id) => currentView.labels?.find((l) => l.id === id),
+        (m) =>
+          readFormatFields(
+            LABEL_FORMAT_FIELDS,
+            m as unknown as Record<string, unknown>
+          )
+      );
+    }
+    if (activeLabel) {
+      // One connector label, explicitly clicked on canvas — never a bulk.
+      const read = readFormatFields(
+        CONNECTOR_LABEL_FORMAT_FIELDS,
+        activeLabel as unknown as Record<string, unknown>
+      );
+      return {
+        bold: read.bold ? 'on' : 'off',
+        italic: read.italic ? 'on' : 'off',
+        underline: read.underline ? 'on' : 'off',
+        strike: read.strike ? 'on' : 'off'
+      };
+    }
     if (textBox) {
-      const next = !formatValue[name];
+      if (liveEditing) {
+        // The live caret/range is a single scope — Quill already reports its
+        // own mixed state as "not true", which stays the honest reading.
+        return {
+          bold: liveFormats.bold === true ? 'on' : 'off',
+          italic: liveFormats.italic === true ? 'on' : 'off',
+          underline: liveFormats.underline === true ? 'on' : 'off',
+          strike: liveFormats.strike === true ? 'on' : 'off'
+        };
+      }
+      return fromMembers(
+        targetIdsFor('TEXTBOX'),
+        (id) => currentView.textBoxes?.find((t) => t.id === id),
+        (m) => {
+          const f = getWholeContentFormats(m.content);
+          return {
+            bold: f.bold,
+            italic: f.italic,
+            underline: f.underline,
+            strike: f.strike
+          };
+        }
+      );
+    }
+    return { bold: 'off', italic: 'off', underline: 'off', strike: 'off' };
+  }, [
+    node,
+    label,
+    activeLabel,
+    textBox,
+    liveEditing,
+    liveFormats,
+    currentView,
+    targetIdsFor
+  ]);
+
+  const formatValue: Record<FormatName, boolean> = {
+    bold: formatStates.bold === 'on',
+    italic: formatStates.italic === 'on',
+    underline: formatStates.underline === 'on',
+    strike: formatStates.strike === 'on'
+  };
+  const formatMixed: Record<FormatName, boolean> = {
+    bold: formatStates.bold === 'mixed',
+    italic: formatStates.italic === 'mixed',
+    underline: formatStates.underline === 'mixed',
+    strike: formatStates.strike === 'mixed'
+  };
+
+  // Toggle ONE format. STYL-01: the patch carries exactly the pressed field —
+  // `formatFieldPatch` is the only writer shape, so a press can no longer
+  // overwrite the other three formats on every member of a bulk.
+  const toggleFormat = (name: FormatName) => {
+    const next = nextToggleValue(formatStates[name]);
+    if (textBox) {
       if (liveEditing) {
         const handle = getTextBoxEditor();
         if (handle?.quill) {
@@ -953,34 +1155,28 @@ export const TopBarStyleControls = () => {
       });
       return;
     }
-    const next = {
-      bold: name === 'bold' ? !formatValue.bold : !!formatValue.bold,
-      italic: name === 'italic' ? !formatValue.italic : !!formatValue.italic,
-      underline:
-        name === 'underline' ? !formatValue.underline : !!formatValue.underline,
-      strike: name === 'strike' ? !formatValue.strike : !!formatValue.strike
-    };
     if (node)
-      updateViewItem(node.id, {
-        labelBold: next.bold,
-        labelItalic: next.italic,
-        labelStrikethrough: next.strike,
-        labelUnderline: next.underline
-      });
+      updateViewItem(
+        node.id,
+        formatFieldPatch(VIEW_ITEM_FORMAT_FIELDS, name, next) as Parameters<
+          typeof updateViewItem
+        >[1]
+      );
     else if (label)
-      updateLabel(label.id, {
-        isBold: next.bold,
-        isItalic: next.italic,
-        isStrikethrough: next.strike,
-        isUnderline: next.underline
-      });
+      updateLabel(
+        label.id,
+        formatFieldPatch(LABEL_FORMAT_FIELDS, name, next) as Parameters<
+          typeof updateLabel
+        >[1]
+      );
     else if (activeLabel)
-      updateActiveLabel({
-        bold: next.bold,
-        italic: next.italic,
-        strikethrough: next.strike,
-        underline: next.underline
-      });
+      updateActiveLabel(
+        formatFieldPatch(
+          CONNECTOR_LABEL_FORMAT_FIELDS,
+          name,
+          next
+        ) as Partial<(typeof connectorLabels)[number]>
+      );
   };
 
   // --- Lists (text box only, ADR 0034 §3): whole content when selected, the
@@ -1237,6 +1433,7 @@ export const TopBarStyleControls = () => {
         disabled={!textColorEnabled}
         icon={<TextColorIcon sx={{ fontSize: 18 }} />}
         colorBar={textColorValue || '#000000'}
+        colorBarMixed={textColorMixed}
       >
         {/* Text colour has no Transparent option (text must have a colour).
             Black is the default, stored as absent — so map #000000 → undefined
@@ -1307,6 +1504,7 @@ export const TopBarStyleControls = () => {
               min={textSize.min}
               max={textSize.max}
               step={textSize.step}
+              mixed={textSizeMixed}
               onChange={textSize.onChange}
             />
             {/* Line spacing (text box only — the multi-line rich surface).
@@ -1325,6 +1523,7 @@ export const TopBarStyleControls = () => {
                   min={0.8}
                   max={2.5}
                   step={0.1}
+                  mixed={lineHeightMixed}
                   onChange={(v) =>
                     updateTextBox(textBox.id, {
                       lineHeight: Number(v.toFixed(2))
@@ -1395,46 +1594,42 @@ export const TopBarStyleControls = () => {
               '& .MuiToggleButton-root.Mui-disabled': { color: 'action.disabled' }
             }}
           >
-            <ToggleButton
-              value="bold"
-              disabled={!formatEnabled}
-              selected={formatEnabled && formatValue.bold}
-              onMouseDown={keepEditorSelection}
-              onClick={() => formatEnabled && toggleFormat('bold')}
-              aria-label={t('bold')}
-            >
-              <BoldIcon sx={{ fontSize: 18 }} />
-            </ToggleButton>
-            <ToggleButton
-              value="italic"
-              disabled={!formatEnabled}
-              selected={formatEnabled && formatValue.italic}
-              onMouseDown={keepEditorSelection}
-              onClick={() => formatEnabled && toggleFormat('italic')}
-              aria-label={t('italic')}
-            >
-              <ItalicIcon sx={{ fontSize: 18 }} />
-            </ToggleButton>
-            <ToggleButton
-              value="underline"
-              disabled={!formatEnabled}
-              selected={formatEnabled && formatValue.underline}
-              onMouseDown={keepEditorSelection}
-              onClick={() => formatEnabled && toggleFormat('underline')}
-              aria-label={t('underline')}
-            >
-              <UnderlineIcon sx={{ fontSize: 18 }} />
-            </ToggleButton>
-            <ToggleButton
-              value="strike"
-              disabled={!formatEnabled}
-              selected={formatEnabled && formatValue.strike}
-              onMouseDown={keepEditorSelection}
-              onClick={() => formatEnabled && toggleFormat('strike')}
-              aria-label={t('strikethrough')}
-            >
-              <StrikethroughIcon sx={{ fontSize: 18 }} />
-            </ToggleButton>
+            {(
+              [
+                ['bold', BoldIcon, 'bold'],
+                ['italic', ItalicIcon, 'italic'],
+                ['underline', UnderlineIcon, 'underline'],
+                ['strike', StrikethroughIcon, 'strikethrough']
+              ] as const
+            ).map(([name, Icon, labelKey]) => (
+              <ToggleButton
+                key={name}
+                value={name}
+                disabled={!formatEnabled}
+                selected={formatEnabled && formatValue[name]}
+                onMouseDown={keepEditorSelection}
+                onClick={() => formatEnabled && toggleFormat(name)}
+                aria-label={t(labelKey)}
+                // STYL-02: a mixed bulk is INDETERMINATE, not "on". ARIA has a
+                // third pressed value for exactly this; the dashed outline is
+                // its visual (MUI's ToggleButton has no mixed variant).
+                {...(formatEnabled && formatMixed[name]
+                  ? { 'aria-pressed': 'mixed' as const }
+                  : {})}
+                sx={
+                  formatEnabled && formatMixed[name]
+                    ? {
+                        bgcolor: 'action.hover',
+                        outline: (theme) =>
+                          `1px dashed ${theme.palette.text.secondary}`,
+                        outlineOffset: '-3px'
+                      }
+                    : undefined
+                }
+              >
+                <Icon sx={{ fontSize: 18 }} />
+              </ToggleButton>
+            ))}
           </ToggleButtonGroup>
         </span>
       </Tooltip>
@@ -1581,16 +1776,29 @@ export const TopBarStyleControls = () => {
             ? textBox.backgroundColor || '#ffffff'
             : undefined
         }
+        colorBarMixed={backgroundMixed}
       >
         {rectangle ? (
           <ColorPickerBody
             value={resolveHex(rectangle.color, rectangle.customColor)}
             onChange={(hex) =>
-              updateRectangle(rectangle.id, { customColor: hex })
+              // Clearing the legacy preset alongside the custom colour keeps ONE
+              // source of truth for the fill (ADR 0039 addendum, STYL-03/04).
+              updateRectangle(rectangle.id, {
+                customColor: hex,
+                color: undefined
+              })
             }
             allowNoColor
+            // STYL-03 ruling: "no colour" is an ABSENT fill everywhere,
+            // including the rectangle — the `'transparent'` sentinel stays
+            // READABLE for diagrams already carrying it but is never written
+            // again. Both fields go, or the dormant preset would repaint.
             onNoColor={() =>
-              updateRectangle(rectangle.id, { customColor: TRANSPARENT })
+              updateRectangle(rectangle.id, {
+                customColor: undefined,
+                color: undefined
+              })
             }
           />
         ) : label ? (
@@ -1625,6 +1833,7 @@ export const TopBarStyleControls = () => {
               min={0}
               max={1}
               step={0.1}
+              mixed={backgroundOpacityMixed}
               onChange={(v) =>
                 updateRectangle(rectangle.id, {
                   fillOpacity: v >= 1 ? undefined : v
@@ -1641,6 +1850,7 @@ export const TopBarStyleControls = () => {
               min={0}
               max={1}
               step={0.1}
+              mixed={backgroundOpacityMixed}
               onChange={(v) =>
                 updateLabel(label.id, {
                   backgroundOpacity: v >= 1 ? undefined : v
@@ -1671,6 +1881,7 @@ export const TopBarStyleControls = () => {
             ? textBox.borderColor || undefined
             : undefined
         }
+        colorBarMixed={borderColorMixed}
       >
         {textBox && !rectangle && (
           <Box>
@@ -1682,16 +1893,15 @@ export const TopBarStyleControls = () => {
               {t('lineStyle')}
             </Typography>
             <ToggleButtonGroup
-              value={textBox.borderStyle || 'SOLID'}
+              // STYL-08: a bulk whose members carry different styles selects
+              // nothing rather than lighting up the first member's.
+              value={borderStyleMixed ? null : textBox.borderStyle || 'SOLID'}
               exclusive
               fullWidth
               size="small"
               onChange={(_e, style: LineStyle | null) => {
                 if (!style) return;
-                updateTextBox(textBox.id, {
-                  borderStyle: style,
-                  ...(textBox.borderColor ? {} : { borderColor: '#000000' })
-                });
+                updateTextBoxBorder({ borderStyle: style });
               }}
             >
               {connectorStyleOptions.map((style) => (
@@ -1714,12 +1924,8 @@ export const TopBarStyleControls = () => {
                 min={2}
                 max={30}
                 step={4}
-                onChange={(borderWidth) =>
-                  updateTextBox(textBox.id, {
-                    borderWidth,
-                    ...(textBox.borderColor ? {} : { borderColor: '#000000' })
-                  })
-                }
+                mixed={borderWidthMixed}
+                onChange={(borderWidth) => updateTextBoxBorder({ borderWidth })}
               />
             </Box>
 
@@ -1752,10 +1958,14 @@ export const TopBarStyleControls = () => {
                 min={0}
                 max={1}
                 step={0.1}
+                mixed={borderOpacityMixed}
+                // STYL-05: the third writer in this popover used to skip the
+                // seed its two siblings carry, so the slider moved and nothing
+                // rendered (borderCss needs a colour) while the value was
+                // stored anyway. It goes through the same seeded writer now, so
+                // a fourth control cannot miss it.
                 onChange={(v) =>
-                  updateTextBox(textBox.id, {
-                    borderOpacity: v >= 1 ? undefined : v
-                  })
+                  updateTextBoxBorder({ borderOpacity: v >= 1 ? undefined : v })
                 }
               />
             </Box>
@@ -1771,7 +1981,7 @@ export const TopBarStyleControls = () => {
               {t('lineStyle')}
             </Typography>
             <ToggleButtonGroup
-              value={rectangle.borderStyle || 'SOLID'}
+              value={borderStyleMixed ? null : rectangle.borderStyle || 'SOLID'}
               exclusive
               fullWidth
               size="small"
@@ -1795,6 +2005,7 @@ export const TopBarStyleControls = () => {
                 min={2}
                 max={30}
                 step={4}
+                mixed={borderWidthMixed}
                 onChange={(borderWidth) =>
                   updateRectangle(rectangle.id, { borderWidth })
                 }
@@ -1830,6 +2041,7 @@ export const TopBarStyleControls = () => {
                 min={0}
                 max={1}
                 step={0.1}
+                mixed={borderOpacityMixed}
                 onChange={(v) =>
                   updateRectangle(rectangle.id, {
                     borderOpacity: v >= 1 ? undefined : v

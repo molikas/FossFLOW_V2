@@ -44,6 +44,25 @@ E2E suite lives at [`packages/axoview-e2e/`](../../packages/axoview-e2e/) (Playw
 
 To scale further, raise the shard count (`SHARD_TOTAL` + the matrix list in the workflow, kept in sync) — diminishing past ~6 shards because a fixed ~3 min setup (npm ci + build:lib + Playwright install + dev-server boot) is paid per shard.
 
+### Exploratory remediation wave 4 — consistency & decided UX (2026-07-31)
+
+The F-block (text/rich-text, view modes & annotations, styling, layers, icons),
+the E2 reducer remainder, and the A4/A5 areas the campaign close-out added. Same
+flip rule: each probe was promoted as its bug was fixed and trimmed out of the
+lane.
+
+**Class gates landed** (ADR 0047 §3), each verified able to go red before it was
+committed:
+
+- **[`bulkStyleFanOut.contract.test.ts`](../../packages/axoview-lib/src/utils/__tests__/bulkStyleFanOut.contract.test.ts)** · 24 tests · **CLASS GATE** for *"bulk styling is representative-in / everyone-out"* (F3 standing thread F-c). The docked strip read ONE member of a homogeneous bulk (`bulk.ids[0]`) and wrote the derived value to all of them — right for an absolute value, wrong for anything derived, and it produced four filed bugs at once (STYL-01 payload, STYL-02/06 direction, STYL-08 order-dependence). Four sections: the B/I/U/S field maps are complete and every field exists on its zod schema; a source scan proves the strip never hand-writes a format field (the maps live in `utils/bulkStyleTarget.ts`, so a literal `isBold:` means a writer went around them); a sweep proves every derivation is order-independent; and §4 gates the neighbouring sibling-drift class STYL-05 came from — all three text-box Border writers go through one seeded helper. One detail is load-bearing: the connector label's bare `bold`/`italic`/`underline` fields are also the FormatName keys the derivation is written in, so scanning for them by name would flag every read — `strikethrough` is the tell instead, and a quartet revert necessarily names it.
+
+Promoted suites — lib:
+
+- **[`bulkStyleDerivation.test.ts`](../../packages/axoview-lib/src/utils/__tests__/bulkStyleDerivation.test.ts)** · the STYL-01/02/06/08 derivations: tri-state, `nextToggleValue`, `deriveSharedValue`, the one-field patch and the three naming schemes.
+- **[`stripSliderRanges.test.ts`](../../packages/axoview-lib/src/utils/__tests__/stripSliderRanges.test.ts)** · the STYL-10 sweep (every strip slider's endpoints against the schema field it writes) and the STYL-12 opacity round trip. Neither was a bug; both are the generalised form of the connector-label 24→40 S1-brick lesson, so they belong in the main suite rather than a lane that only runs on demand. **When you add a slider to the strip, add its row.**
+
+E2E: **[`bulk-format-mixed.spec.ts`](../../packages/axoview-e2e/tests/bulk-format-mixed.spec.ts)** · 5 tests · the strip driven through its real controls — a Bold press over a mixed bulk leaves italic alone (STYL-01), a mixed bulk reads `aria-pressed="mixed"` and one press applies rather than clears (STYL-02), the reversed selection gives the same result (STYL-08), the fan-out stays one undo entry (STYL-07), and clearing a rectangle fill writes an absent colour with the legacy preset cleared alongside it (STYL-03 ruling, ADR 0039 addendum).
+
 ### Exploratory remediation wave 3 — interaction & rendering correctness (2026-07-31)
 
 The I-block (pointer, touch, selection, connectors, pan/menu) and the R-block

@@ -309,6 +309,7 @@ const locale: LocaleProps = {
     namePlaceholder: '元素名称…'
   },
   topBarStyleControls: {
+    mixed: '多种',
     rotate90: '旋转90°',
     noColor: '无颜色',
     pickColorFromScreen: '从屏幕拾取颜色',
