@@ -121,6 +121,16 @@ test.describe('Z-order — Track 5e-4', () => {
     // E2 absolute: Ctrl+Shift+[ jumps to back (below all peers → <0), and
     // Ctrl+Shift+] jumps to front (above all peers). With one node the peer set
     // is {this}, so back = min(0, z)-1 and front = max(0, ...)+1.
+    //
+    // NOTE (I1/PTR-14): these two legs were a FALSE GREEN until wave 3.
+    // `page.keyboard.press('Control+Shift+]')` synthesises `e.key === ']'` with
+    // Shift held — an identity no physical keyboard produces; a real US keyboard
+    // sends `'}'`, which the handler's `e.key !== ']'` guard rejected outright.
+    // The chords passed here and were dead in the product. The real key
+    // identities are now driven through CDP `Input.dispatchKeyEvent` in
+    // `canvas-keyboard-scope.spec.ts`; these legs stay as the synthetic control.
+    // Any other suite that drives CHORDED PUNCTUATION through `keyboard.press`
+    // deserves the same audit.
     await page.keyboard.press('Control+Shift+[');
     await expect
       .poll(() => getViewItemZIndex(page, itemId), { timeout: 3_000 })

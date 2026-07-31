@@ -100,3 +100,65 @@ describe('handleArrowKey — selection-aware nudge vs pan (B6)', () => {
     expect(uiState.actions.setScroll).not.toHaveBeenCalled();
   });
 });
+
+// Promoted from the exploratory lane (I1/PTR-11) — see
+// tests-exploratory/I1-pointer/ptr-04-07-08-11-13.explore.spec.ts in the
+// campaign history. The nudge used to assert in a comment that `selectedIds`
+// cannot hold locked/hidden refs; E2/RED-15 falsified that (acquisition is
+// gated, but locking a layer does not re-validate a live selection), so the
+// arrows moved locked items one tile per press while the mouse drag refused.
+describe('handleArrowKey — the layer gate (PTR-11)', () => {
+  const lockedGate = (lockedId: string) => (ref: { id: string }) =>
+    ref.id !== lockedId;
+
+  it('does not nudge a selected item whose layer is locked', () => {
+    const uiState = makeUiState({ selectedIds: [{ type: 'ITEM', id: 'n1' }] });
+    const deps = {
+      ...makeDeps({ items: [{ id: 'n1', tile: { x: 5, y: 5 } }] }),
+      isItemInteractable: lockedGate('n1')
+    };
+
+    handleArrowKey(makeKey('ArrowRight'), uiState, deps);
+
+    expect(deps.batchUpdateViewItemTiles).not.toHaveBeenCalled();
+    expect(deps.beginDragTransaction).not.toHaveBeenCalled();
+    // Nothing nudge-able survived the gate, so the keystroke falls back to pan —
+    // the same fallback a connectors-only selection takes.
+    expect(uiState.actions.setScroll).toHaveBeenCalledTimes(1);
+  });
+
+  it('nudges only the unlocked members of a mixed selection', () => {
+    const uiState = makeUiState({
+      selectedIds: [
+        { type: 'ITEM', id: 'locked' },
+        { type: 'ITEM', id: 'free' }
+      ]
+    });
+    const deps = {
+      ...makeDeps({
+        items: [
+          { id: 'locked', tile: { x: 0, y: 0 } },
+          { id: 'free', tile: { x: 2, y: 2 } }
+        ]
+      }),
+      isItemInteractable: lockedGate('locked')
+    };
+
+    handleArrowKey(makeKey('ArrowRight'), uiState, deps);
+
+    expect(deps.batchUpdateViewItemTiles).toHaveBeenCalledWith([
+      { id: 'free', tile: { x: 3, y: 2 } }
+    ]);
+  });
+
+  it('nudges normally when no gate is supplied (no layers configured)', () => {
+    const uiState = makeUiState({ selectedIds: [{ type: 'ITEM', id: 'n1' }] });
+    const deps = makeDeps({ items: [{ id: 'n1', tile: { x: 5, y: 5 } }] });
+
+    handleArrowKey(makeKey('ArrowRight'), uiState, deps);
+
+    expect(deps.batchUpdateViewItemTiles).toHaveBeenCalledWith([
+      { id: 'n1', tile: { x: 6, y: 5 } }
+    ]);
+  });
+});

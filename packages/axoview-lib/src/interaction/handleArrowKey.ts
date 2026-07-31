@@ -77,6 +77,14 @@ interface NudgeScene {
 // handleSelectAll reads sceneRef.current.
 export interface ArrowKeyDeps {
   getScene: () => NudgeScene;
+  /**
+   * Layer gate — false for a ref whose layer is locked or hidden (I3/PTR-11).
+   * The same predicate every pointer path consults (`State.isItemInteractable`).
+   * Optional so unit tests and callers with no layer context keep working; when
+   * absent every selected ref is treated as nudge-able, which is what a diagram
+   * with no layers configured means anyway.
+   */
+  isItemInteractable?: (ref: ItemReference) => boolean;
   beginDragTransaction: () => void;
   commitDragTransaction: () => void;
   batchUpdateViewItemTiles: (
@@ -122,11 +130,18 @@ const nudge = (
 
   // selectedIds is the persistent multi-selection (a single selected item is
   // len === 1 there). Filter to the nudge-able types; a selection of ONLY
-  // connectors/anchors yields none → fall back to pan. selectedIds already only
-  // holds interactable refs (it can't contain locked/hidden items — ADR 0006
-  // §3), so no extra lock/hide gate is needed here.
-  const selected = uiState.selectedIds.filter((ref) =>
-    NUDGEABLE_TYPES.has(ref.type)
+  // connectors/anchors yields none → fall back to pan.
+  //
+  // I1/PTR-11: this used to carry a comment asserting `selectedIds` cannot hold
+  // locked or hidden refs (ADR 0006 §3) and therefore needed no lock/hide gate.
+  // E2/RED-15 falsified that — ACQUISITION is gated (Ctrl+A, lasso and click all
+  // consult the predicate), but locking or hiding a layer does not re-validate a
+  // selection that is already live. The arrows then moved items on a locked
+  // layer one tile per press, and kept moving them, while a mouse drag on the
+  // same items was refused. Re-check the gate here, per press.
+  const gate = deps.isItemInteractable ?? (() => true);
+  const selected = uiState.selectedIds.filter(
+    (ref) => NUDGEABLE_TYPES.has(ref.type) && gate(ref)
   );
   if (selected.length === 0) return false;
 

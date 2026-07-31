@@ -406,6 +406,37 @@ const dragItems = (
   commitAnchorReconnects(anchorReconnects, tile, scene);
 };
 
+/**
+ * Drop the whole drag preview WITHOUT committing it, and close the transaction.
+ *
+ * This is `exit`'s body minus the renderer chrome, factored out so a keyboard
+ * path can abort a live drag (I1/PTR-10: an undo taken mid-drag was
+ * unrecoverable, because the pending mouseup still committed the preview maps
+ * as a new action and that clears the redo stack). Clearing the maps is the
+ * operative part — the mouseup that arrives afterwards then writes nothing.
+ *
+ * Idempotent: `exit` runs the same clears again on the next mouse event, and
+ * `commitDragTransaction` is a no-op when no bracket is open.
+ */
+export const abortDragItems = (
+  scene: Pick<ReturnType<typeof useScene>, 'commitDragTransaction'>,
+  uiState: { actions: { clearLabelMoves?: () => void } }
+) => {
+  clearAllCssOffsets();
+  previewTiles.clear();
+  previewAnchorTiles.clear();
+  previewRectangles.clear();
+  previewTextBoxes.clear();
+  previewLabels.clear();
+  previewNodeOffsets.clear();
+  previewRectOffsets.clear();
+  previewTextBoxOffsets.clear();
+  previewLabelOffsets.clear();
+  externalOccupiedCache = null;
+  uiState.actions.clearLabelMoves?.();
+  scene.commitDragTransaction();
+};
+
 export const DragItems: ModeActions = {
   entry: ({ uiState, rendererRef, scene }) => {
     if (uiState.mode.type !== 'DRAG_ITEMS' || !uiState.mouse.mousedown) return;
@@ -438,22 +469,10 @@ export const DragItems: ModeActions = {
     rendererRef.style.userSelect = 'auto';
     setWindowCursor('default');
     // Safety net for escape / programmatic mode change. If exit fires without
-    // a normal mouseup, clear the preview without committing.
-    clearAllCssOffsets();
-    previewTiles.clear();
-    previewAnchorTiles.clear();
-    previewRectangles.clear();
-    previewTextBoxes.clear();
-    previewLabels.clear();
-    previewNodeOffsets.clear();
-    previewRectOffsets.clear();
-    previewTextBoxOffsets.clear();
-    previewLabelOffsets.clear();
-    externalOccupiedCache = null;
-    // Drop the canvas label move-preview too, or an escaped group drag leaves the
-    // labels stranded at their (uncommitted) preview position.
-    uiState.actions.clearLabelMoves?.();
-    scene.commitDragTransaction();
+    // a normal mouseup, clear the preview without committing — including the
+    // canvas label move-preview, or an escaped group drag leaves the labels
+    // stranded at their (uncommitted) preview position.
+    abortDragItems(scene, uiState);
   },
   mousemove: ({ uiState, scene }) => {
     if (uiState.mode.type !== 'DRAG_ITEMS' || !uiState.mouse.mousedown) return;

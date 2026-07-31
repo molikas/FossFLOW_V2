@@ -36,3 +36,32 @@ export const resolveToolHotkey = (
   }
   return null;
 };
+
+/**
+ * Which bracket a z-order chord names, across every identity a keyboard gives
+ * it. `null` when the keystroke is not a bracket at all. (I1/PTR-14.)
+ *
+ * `handleZOrderShortcut` used to guard on `e.key !== ']' && e.key !== '['`. A
+ * physical US keyboard emits the SHIFTED character while Shift is held, so the
+ * documented Ctrl+Shift+] / Ctrl+Shift+[ "jump to front / back" chords arrive as
+ * `}` / `{` and were rejected outright — the feature was dead in the product for
+ * as long as it had existed. `z-order.spec.ts` asserted it worked and was a
+ * false green: `page.keyboard.press('Control+Shift+]')` synthesises
+ * `e.key === ']'` with `shiftKey` true, an identity no real keyboard produces.
+ * The campaign caught it by re-driving the same chord through CDP
+ * `Input.dispatchKeyEvent`, which sends what the hardware sends.
+ *
+ * `e.code` is the PHYSICAL key and is the reliable identity for a chord like
+ * this. The character forms stay as a fallback for events carrying no `code`
+ * (synthetic dispatch; layouts that reach a bracket through AltGr).
+ *
+ * Lives here rather than in the dispatcher so it is unit-testable without a
+ * provider stack — the same reason `resolveToolHotkey` does.
+ */
+export const resolveZOrderDirection = (
+  e: Pick<KeyboardEvent, 'key' | 'code'>
+): 'front' | 'back' | null => {
+  if (e.code === 'BracketRight' || e.key === ']' || e.key === '}') return 'front';
+  if (e.code === 'BracketLeft' || e.key === '[' || e.key === '{') return 'back';
+  return null;
+};

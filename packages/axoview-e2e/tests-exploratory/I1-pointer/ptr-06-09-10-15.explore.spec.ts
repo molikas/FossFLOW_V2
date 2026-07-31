@@ -8,8 +8,14 @@
  *
  *  PTR-06  wheel-zoom mid-drag desynchronises the recorded down point
  *  PTR-09  Delete mid-drag deletes the item the pending mouseup will commit
- *  PTR-10  Ctrl+Z mid-drag undoes underneath the open drag transaction
  *  PTR-15  Escape mid-drag does not abort the move
+ *
+ * All three FALSIFIED (PTR-15's behaviour is documented, not defective) — the
+ * probes stay as characterization of the interleaving matrix.
+ *
+ * PROMOTED OUT — wave 3 fixed PTR-10: a history keystroke during a live drag
+ * now aborts the gesture, so the pending mouseup commits nothing and the redo
+ * entry survives. Its leg moved to `tests/canvas-keyboard-scope.spec.ts`.
  */
 import {
   exploreTest as test,
@@ -313,115 +319,6 @@ test.describe('PTR-09 — Delete pressed during a live node drag', () => {
     // setup crash: the delete really removed the item mid-gesture.
     expect(midCount).toBe(0);
     expect(await getUiMode(page).then((m) => m?.type)).toBe('CURSOR');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// PTR-10 — Ctrl+Z mid-drag
-// ---------------------------------------------------------------------------
-test.describe('PTR-10 — Ctrl+Z pressed during a live node drag', () => {
-  test('positive control: without a drag, Ctrl+Z then Ctrl+Y restores the node', async ({
-    app
-  }) => {
-    const { page } = app;
-    const canvas = new CanvasPOM(page);
-    await setupNode(page, canvas);
-
-    await page.keyboard.press('Control+z');
-    await expect.poll(() => getViewItemCount(page), { timeout: 3_000 }).toBe(0);
-    await page.keyboard.press('Control+y');
-    await expect.poll(() => getViewItemCount(page), { timeout: 3_000 }).toBe(1);
-  });
-
-  test.fail(
-    'BUG: an undo taken mid-drag is unrecoverable — the mouseup commit kills redo',
-    async ({ app }) => {
-      const { page } = app;
-      const canvas = new CanvasPOM(page);
-      const node = await setupNode(page, canvas);
-
-      await beginRealDrag(page, node.point, 160, 50);
-      await page.keyboard.press('Control+z');
-      await expect
-        .poll(() => getViewItemCount(page), { timeout: 3_000 })
-        .toBe(0);
-      await page.mouse.up();
-      await page.waitForTimeout(400);
-
-      // Same two keystrokes as the positive control, only interleaved with a
-      // gesture — redo must still bring the node back.
-      await page.keyboard.press('Control+y');
-      await page.waitForTimeout(400);
-      expect(await getViewItemCount(page)).toBe(1);
-    }
-  );
-
-  test('characterization: records what undo-mid-drag actually leaves behind', async ({
-    app
-  }) => {
-    const { page } = app;
-    const canvas = new CanvasPOM(page);
-    const node = await setupNode(page, canvas);
-    const startTile = (await viewItems(page))[0].tile;
-    const historyBefore = await getModelHistoryLength(page);
-
-    await beginRealDrag(page, node.point, 160, 50);
-    await page.keyboard.press('Control+z');
-    await page.waitForTimeout(250);
-    const midCount = await getViewItemCount(page);
-
-    await page.mouse.up();
-    await page.waitForTimeout(400);
-    const after = await viewItems(page);
-    const historyAfter = await getModelHistoryLength(page);
-
-    // eslint-disable-next-line no-console
-    console.log(
-      `PTR-10 observed — mid-drag count: ${midCount}; after mouseup: ${JSON.stringify(after)}; start tile: ${JSON.stringify(startTile)}; history ${historyBefore} -> ${historyAfter}`
-    );
-
-    // Positively pin the observed end state so the failing probe above can
-    // never be read as a setup crash.
-    expect(midCount).toBe(0);
-    expect(after).toEqual([]);
-    expect(await modeType(page)).toBe('CURSOR');
-    await expectStoreInvariants(page, 'after undo mid-drag');
-  });
-
-  test('characterization: redo is dead after a mid-drag undo — the node is gone for good', async ({
-    app
-  }) => {
-    const { page } = app;
-    const canvas = new CanvasPOM(page);
-    const node = await setupNode(page, canvas);
-
-    await beginRealDrag(page, node.point, 160, 50);
-    await page.keyboard.press('Control+z');
-    await expect.poll(() => getViewItemCount(page), { timeout: 3_000 }).toBe(0);
-    await page.mouse.up();
-    await page.waitForTimeout(400);
-
-    // Redo is armed as far as the store is concerned...
-    const canRedo = await page.evaluate(
-      () =>
-        ((window as any).__axoview__.model.getState().history?.future ?? [])
-          .length
-    );
-    await page.keyboard.press('Control+y');
-    await page.waitForTimeout(400);
-    const restored = await viewItems(page);
-    // eslint-disable-next-line no-console
-    console.log(
-      `PTR-10 redo — future length ${canRedo}; restored ${JSON.stringify(restored)}`
-    );
-
-    // ...but nothing comes back. The drag's `commitDragTransaction` on mouseup
-    // is a new action, and a new action clears the redo stack.
-    expect(restored).toEqual([]);
-    // A second Ctrl+Y does not help either — the entry is gone, not deferred.
-    await page.keyboard.press('Control+y');
-    await page.waitForTimeout(300);
-    expect(await getViewItemCount(page)).toBe(0);
   });
 });
 

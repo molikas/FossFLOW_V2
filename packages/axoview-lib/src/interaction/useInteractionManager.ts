@@ -20,19 +20,20 @@ import { useScene } from 'src/hooks/useScene';
 import { useHistory } from 'src/hooks/useHistory';
 import { useCanvasMode } from 'src/contexts/CanvasModeContext';
 import { TOOL_HOTKEYS } from 'src/config/hotkeys';
-import { resolveToolHotkey } from './toolHotkeys';
-import { handleEscapeKey } from './handleEscapeKey';
+import { resolveToolHotkey, resolveZOrderDirection } from './toolHotkeys';
+import { handleEscapeKey, handleConnectorEscape } from './handleEscapeKey';
 import { handleDeleteOrBackspace, isEditableTarget } from './handleDeleteKey';
 import { handleArrowKey } from './handleArrowKey';
 import {
   canUseKeyboardSurface,
   type CanvasKeyboardSurface
 } from './readonlyPolicy';
+import { isModalDialogOpen, hasLiveTextSelection } from './keyboardScope';
 import type { ScreenToTileFn } from 'src/utils/renderer';
 import { useLayerContext } from 'src/hooks/useLayerContext';
 import { collectSelectableRefs } from 'src/utils/selectableRefs';
 import { Cursor } from './modes/Cursor';
-import { DragItems } from './modes/DragItems';
+import { DragItems, abortDragItems } from './modes/DragItems';
 import { DrawRectangle } from './modes/Rectangle/DrawRectangle';
 import { TransformRectangle } from './modes/Rectangle/TransformRectangle';
 import { Connector } from './modes/Connector';
@@ -224,6 +225,22 @@ interface KeydownDeps {
 // multi-selection visual + drag work. Reads scene/layer state via refs so the
 // keydown effect's dep array stays stable (M-1 perf invariant). ADR-0006.
 const handleSelectAll = (uiState: State['uiState'], deps: KeydownDeps) => {
+  // I1/PTR-08: Ctrl+A force-switches to CURSOR, and it used to do so with an
+  // in-flight connector still half-drawn — the provisional connector survived
+  // (both anchors on the same node), a later Escape could no longer clear it
+  // because the mode had moved on, and Ctrl+A then folded the orphan into the
+  // selection. Only Esc and the right-click restore ran the abort. Aborting
+  // first is the same call Esc makes, and it no-ops when nothing is in flight.
+  //
+  // The id is captured BEFORE the abort because `sceneRef.current` is a
+  // render-time snapshot: `collectSelectableRefs` below would still see the
+  // entity `handleConnectorEscape` just deleted and select it anyway.
+  const inFlightConnectorId =
+    uiState.mode.type === 'CONNECTOR' ? uiState.mode.id : null;
+  const abortedConnectorId = handleConnectorEscape(uiState, deps)
+    ? inFlightConnectorId
+    : null;
+
   const { lockedIds, visibleIds, layers } = deps.layerContextRef.current;
   const refs = collectSelectableRefs(
     deps.sceneRef.current,
@@ -239,30 +256,55 @@ const handleSelectAll = (uiState: State['uiState'], deps: KeydownDeps) => {
       mousedownItem: null
     });
   }
-  uiState.actions.setSelectedIds(refs);
+  uiState.actions.setSelectedIds(
+    abortedConnectorId
+      ? refs.filter((ref) => ref.id !== abortedConnectorId)
+      : refs
+  );
 };
 
 // Undo / redo (Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z).
+//
+// I1/PTR-10: an undo taken DURING a live drag used to be unrecoverable. The
+// drag itself writes nothing (the preview is CSS-only), so the undo landed on
+// the action before it — but the gesture's pending mouseup then committed
+// `batchUpdateViewItemTiles` from the preview maps, and that counted as a new
+// action, which clears the redo stack. One Ctrl+Z during a drag and the undone
+// work could never be brought back.
+//
+// The gesture is therefore ABORTED before the undo runs (the convention Figma
+// and friends follow: a history keystroke mid-drag cancels the drag). Clearing
+// the preview maps is what matters — the pending mouseup then has nothing to
+// commit, so redo survives. Dropping back to CURSOR makes the abort visible
+// instead of leaving the canvas in a drag mode with no preview.
 const handleHistoryShortcuts = (
   e: KeyboardEvent,
   isCtrlOrCmd: boolean,
   key: string,
+  uiState: State['uiState'],
   deps: KeydownDeps
 ) => {
   if (!isCtrlOrCmd) return;
 
-  if (key === 'z' && !e.shiftKey) {
-    e.preventDefault();
-    if (deps.canUndo) {
-      deps.undo();
-    }
+  const isUndo = key === 'z' && !e.shiftKey;
+  const isRedo = key === 'y' || (key === 'z' && e.shiftKey);
+  if (!isUndo && !isRedo) return;
+
+  if (uiState.mode.type === 'DRAG_ITEMS') {
+    abortDragItems(deps.sceneRef.current, uiState);
+    uiState.actions.setMode({
+      type: 'CURSOR',
+      showCursor: true,
+      mousedownItem: null
+    });
   }
 
-  if (key === 'y' || (key === 'z' && e.shiftKey)) {
-    e.preventDefault();
-    if (deps.canRedo) {
-      deps.redo();
-    }
+  e.preventDefault();
+  if (isUndo && deps.canUndo) {
+    deps.undo();
+  }
+  if (isRedo && deps.canRedo) {
+    deps.redo();
   }
 };
 
@@ -284,6 +326,12 @@ const handleClipboardShortcuts = (
   }
 
   if (key === 'c') {
+    // I1/PTR-12: Ctrl+C used to preventDefault unconditionally, so a text
+    // selection anywhere the app doesn't own an input — a dialog body, a panel
+    // label, a notes preview — was never copied: no native `copy` event fired,
+    // the canvas copy ran instead, and the user got no feedback either way.
+    // A live selection wins; an idle Ctrl+C still copies the canvas selection.
+    if (hasLiveTextSelection()) return;
     e.preventDefault();
     deps.handleCopy();
   }
@@ -349,11 +397,19 @@ const handleToolHotkeys = (
   isCtrlOrCmd: boolean,
   uiState: State['uiState'],
   key: string,
-  _deps: KeydownDeps
+  deps: KeydownDeps
 ) => {
   const action = resolveToolHotkey(isCtrlOrCmd, key, TOOL_HOTKEYS);
   if (!action) return;
   e.preventDefault();
+
+  // I1/PTR-07: switching tools mid-gesture performed no abort — pressing `r`
+  // during a connector draw just setMode()d, stranding the provisional
+  // connector in the model with BOTH anchors on the same node and no way to
+  // clear it (Escape no longer applies once the mode has moved on). Esc and the
+  // right-click restore were the only paths that aborted. This is that same
+  // call; it no-ops unless a connection is actually in flight.
+  handleConnectorEscape(uiState, deps);
 
   switch (action) {
     case 'select':
@@ -426,13 +482,18 @@ const handleToolHotkeys = (
 // Z-order (E2): Ctrl+] / Ctrl+[ nudge forward / backward; Ctrl+Shift+] /
 // Ctrl+Shift+[ jump to front / back (absolute). Applies to the controlled
 // ITEM, RECTANGLE, or LABEL — each reorders within its own peer collection.
+//
+// I1/PTR-14: the bracket used to be matched as `e.key === ']'`, which no real
+// keyboard produces while Shift is held — `resolveZOrderDirection` (toolHotkeys)
+// owns the key identity now.
 const handleZOrderShortcut = (
   e: KeyboardEvent,
   isCtrlOrCmd: boolean,
   uiState: State['uiState'],
   deps: KeydownDeps
 ) => {
-  if (!isCtrlOrCmd || (e.key !== ']' && e.key !== '[')) return;
+  const direction = isCtrlOrCmd ? resolveZOrderDirection(e) : null;
+  if (!direction) return;
   const ctrl = uiState.itemControls;
   if (
     ctrl?.type !== 'ITEM' &&
@@ -448,7 +509,7 @@ const handleZOrderShortcut = (
     : undefined;
   if (!currentView) return;
 
-  const toFront = e.key === ']';
+  const toFront = direction === 'front';
   const scene = deps.sceneRef.current;
 
   const reorder = (
@@ -607,6 +668,16 @@ export const useInteractionManager = () => {
       // `usePanHandlers` and `handleEscapeKey` already make.
       deps.sceneRef.current.commitDragTransaction();
 
+      // I1/PTR-05: a modal dialog owns the keyboard. The canvas listener is
+      // window-bound, so before this it fired straight through one — F1 opened
+      // Help and the next Delete destroyed the selected node behind the
+      // still-open dialog, invisibly. MUI traps focus, not window keydown, and
+      // only F2 had a "did this come from the renderer" test. Stand down
+      // entirely: Escape belongs to the dialog too, and a tool hotkey armed
+      // under a modal is a mode the user never asked for. The drag-bracket
+      // safety net above runs first so a leaked bracket is still closed.
+      if (isModalDialogOpen()) return;
+
       if (handleEscapeKey(e, uiState, deps, uiState.editorMode)) return;
       if (allow('delete') && handleDeleteOrBackspace(e, uiState, deps)) return;
       if (isEditableTarget(e.target as HTMLElement)) return;
@@ -614,7 +685,9 @@ export const useInteractionManager = () => {
       const isCtrlOrCmd = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
 
-      if (allow('history')) handleHistoryShortcuts(e, isCtrlOrCmd, key, deps);
+      if (allow('history')) {
+        handleHistoryShortcuts(e, isCtrlOrCmd, key, uiState, deps);
+      }
       handleClipboardShortcuts(e, isCtrlOrCmd, key, deps, allow('cutPaste'));
 
       // Ctrl+A: select all visible + unlocked items in the active view. ADR-0006.
@@ -635,6 +708,19 @@ export const useInteractionManager = () => {
         uiState,
         {
           getScene: () => deps.sceneRef.current,
+          // I1/PTR-11: the nudge used to trust an in-code comment claiming
+          // `selectedIds` cannot hold locked or hidden refs — RED-15 falsified
+          // it (locking a layer does not re-validate an existing selection), so
+          // the arrows moved items on a locked layer one tile per press while
+          // the mouse drag, which asks this same predicate, refused them.
+          isItemInteractable: (ref) => {
+            const { lockedIds, visibleIds, layers } =
+              deps.layerContextRef.current;
+            return (
+              !lockedIds.has(ref.id) &&
+              (layers.length === 0 || visibleIds.has(ref.id))
+            );
+          },
           beginDragTransaction: deps.sceneRef.current.beginDragTransaction,
           commitDragTransaction: deps.sceneRef.current.commitDragTransaction,
           batchUpdateViewItemTiles:

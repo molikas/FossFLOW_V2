@@ -1670,11 +1670,23 @@ it. F2 is the one shortcut that guards on where the keystroke came from
 
 **Workaround:** clear the selection before opening a dialog.
 
-**Status:** Open. Fix direction: reuse the F2 `cameFromRenderer` test as a
-dispatcher-wide gate for the *mutating* shortcuts (Delete, clipboard, z-order,
-nudge, tool hotkeys), or gate on `uiState.dialog === null` plus "no MUI modal is
-open" (`document.querySelector('.MuiModal-root')`). Repro:
-[`ptr-05-12-14.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I1-pointer/ptr-05-12-14.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31). Neither of the two directions above was
+taken as written. `cameFromRenderer` generalised is too wide — it would also
+refuse Delete after the user last clicked a toolbar button, which is not what
+this bug is about. `uiState.dialog` is too narrow: it knows only the three
+lib-owned dialogs (Export/Help/Settings), and the app package mounts its own
+(import, share, settings, confirm prompts) with no way to write that field.
+The gate is [`isModalDialogOpen()`](packages/axoview-lib/src/interaction/keyboardScope.ts) —
+`role="dialog"`/`role="alertdialog"` with `aria-modal="true"`, plus native
+`<dialog open>`. That is what MUI v7's `Dialog` puts on its Paper and what the
+ARIA pattern requires of any hand-rolled modal, so a new dialog on either side of
+the package boundary is shielded the day it is added, which is the property that
+failed here. `role="menu"` / `role="presentation"` deliberately do NOT match: the
+canvas context menu is a canvas surface. With a modal up the dispatcher stands
+down entirely (a modal owns Escape and the tool hotkeys too), after the
+HIST-06 drag-bracket safety net has run. Promoted regressions:
+[`canvas-keyboard-scope.spec.ts`](packages/axoview-e2e/tests/canvas-keyboard-scope.spec.ts)
+and [`keyboardScope.test.ts`](packages/axoview-lib/src/interaction/__tests__/keyboardScope.test.ts).
 
 ## Ctrl+C is hijacked everywhere — copying text out of the app silently does nothing
 
@@ -1700,11 +1712,19 @@ command entirely.
 **Workaround:** use the browser's Edit menu, or right-click → Copy (the OS menu
 survives off-canvas — see `contextmenu-scope.spec.ts`).
 
-**Status:** Open. Fix direction: skip the canvas clipboard shortcuts when
-`window.getSelection()` holds a non-collapsed range outside the renderer (and
-don't `preventDefault` in that case). The same reasoning applies to `Ctrl+A`,
-which force-selects the canvas instead of the text under the cursor. Repro:
-[`ptr-05-12-14.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I1-pointer/ptr-05-12-14.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) as directed, scoped to `Ctrl+C`.
+[`hasLiveTextSelection()`](packages/axoview-lib/src/interaction/keyboardScope.ts)
+reports a non-collapsed, non-whitespace range; when one is live the copy branch
+returns before `preventDefault`, so the browser's own copy runs. An idle Ctrl+C
+still copies the canvas selection. `Ctrl+X` and `Ctrl+V` were deliberately left
+alone — neither has a native effect on a read-only range, so letting them through
+would trade a silent failure for a silent no-op. The note about `Ctrl+A` is a
+different surface (it force-selects the canvas rather than the text under the
+cursor) and is NOT fixed here; it was never filed as its own entry, and doing it
+properly means the same selection test on the select-all path. Promoted
+regressions: [`canvas-keyboard-scope.spec.ts`](packages/axoview-e2e/tests/canvas-keyboard-scope.spec.ts)
+(including the "no text selected → the canvas copy still works" control) and
+[`keyboardScope.test.ts`](packages/axoview-lib/src/interaction/__tests__/keyboardScope.test.ts).
 
 ## Ctrl+Shift+] / Ctrl+Shift+[ (bring to front / send to back) do nothing on a real keyboard
 
@@ -1745,11 +1765,18 @@ than the pointer.
 **Workaround:** use the context menu's "Bring to front" / "Send to back" items,
 or press `Ctrl+]` repeatedly.
 
-**Status:** Open. Fix direction: match on `e.code` (`BracketRight` /
-`BracketLeft`) instead of `e.key`, or accept `}` / `{` alongside `]` / `[`. The
-existing `z-order.spec.ts` assertion should move to `e.code` too, or it will keep
-passing over a broken shortcut. Repro:
-[`ptr-05-12-14.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I1-pointer/ptr-05-12-14.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) — both directions, not one.
+[`resolveZOrderDirection`](packages/axoview-lib/src/interaction/toolHotkeys.ts)
+matches `e.code` first (the physical key, and the right identity for a chord like
+this) and falls back to `]`/`}` and `[`/`{` for events that carry no `code`
+(synthetic dispatch; layouts that reach a bracket through AltGr). It lives in
+`toolHotkeys.ts` beside `resolveToolHotkey` so it is unit-testable without a
+provider stack. `z-order.spec.ts`'s two shifted legs were left driving
+`page.keyboard.press` on purpose, now labelled as the *synthetic* control, with
+the real key identities driven through CDP `Input.dispatchKeyEvent` in
+[`canvas-keyboard-scope.spec.ts`](packages/axoview-e2e/tests/canvas-keyboard-scope.spec.ts).
+**Carried forward:** any other suite that drives chorded punctuation through
+`page.keyboard.press` is a candidate for the same false green.
 
 ## An undo taken during a drag is unrecoverable — the gesture's commit destroys the redo entry
 
@@ -1777,12 +1804,18 @@ while `future.length` drops to 0.)
 Escape does NOT abandon a drag (canvas-interaction.md §8 — `DRAG_ITEMS` has no
 abort), so "release, then undo" is the only safe order.
 
-**Status:** Open. Fix direction: ignore undo/redo (and the other mutating
-shortcuts) while `scene.dragInProgress` is true — the same in-flight-gesture
-guard the tool-hotkey and Ctrl+A paths need. Alternatively make
-`commitDragTransaction` a no-op when the transaction produced no patches, so it
-cannot clear the redo stack. Repro:
-[`ptr-06-09-10-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I1-pointer/ptr-06-09-10-15.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31). Neither offered direction was taken.
+*Ignoring* undo while a drag is live leaves the user pressing a dead key with no
+explanation. Making `commitDragTransaction` a no-op on an empty patch set is the
+wrong layer — the patch set here is NOT empty in the general case (drag a node,
+Ctrl+Z an unrelated earlier action, release: the move is real and would still
+land on top of the undo). Instead `handleHistoryShortcuts` ABORTS the gesture
+first, which is what Figma and its peers do: `abortDragItems`
+([DragItems.ts](packages/axoview-lib/src/interaction/modes/DragItems.ts) — `exit`'s
+body, factored out) clears the preview maps so the pending mouseup commits
+nothing at all, and the canvas drops back to CURSOR so the abort is visible.
+Promoted regression: the mid-drag undo→redo round-trip in
+[`canvas-keyboard-scope.spec.ts`](packages/axoview-e2e/tests/canvas-keyboard-scope.spec.ts).
 
 ## A tool hotkey or Ctrl+A during a connector draw strands the half-drawn connector
 
@@ -1818,11 +1851,16 @@ normally. The damage is the stranded entity, not the D-4 / HIST-06 amplifier.
 **Workaround:** press Escape *before* switching tools; or delete the orphan
 connector afterwards (it is selectable).
 
-**Status:** Open. Fix direction: give the programmatic mode switches the same
-abort the Escape path has — factor `handleConnectorEscape`'s
-delete-plus-commit into a shared `abortInFlightGesture(uiState, deps)` and call
-it from `handleToolHotkeys` and `handleSelectAll` before `setMode`. Repro:
-[`ptr-04-07-08-11-13.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I1-pointer/ptr-04-07-08-11-13.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) as directed, without the new wrapper:
+`handleConnectorEscape` was already exported and already no-ops unless a
+connection is in flight, so `handleToolHotkeys` and `handleSelectAll` simply call
+it before their `setMode` — one abort definition, not two. Deliberately kept
+inside the two delegates rather than hoisted into the dispatcher, so the
+read-only class gate (`readonlySurfaces.contract.test.ts`), which scans the
+dispatcher body for delegate calls, keeps enumerating exactly the access-classed
+surfaces. Promoted regression:
+[`canvas-keyboard-scope.spec.ts`](packages/axoview-e2e/tests/canvas-keyboard-scope.spec.ts),
+which also asserts Ctrl+A no longer folds an orphan into the selection.
 
 ## The arrow keys nudge items on a locked layer
 
@@ -1853,13 +1891,19 @@ dragged with the mouse — only with the keyboard.
 **Workaround:** click empty canvas to clear the selection before locking, or
 after.
 
-**Status:** Open. Fix direction: fixing RED-15 (re-validate `selectedIds` on
-every layer state change) fixes this too; independently, `handleArrowKey` should
-take the lock/visibility sets the way `handleSelectAll` already does via
-`layerContextRef`, and the false comment should go. Tracked as a new cross-store
-invariant **INV-11** in the exploratory oracle (`fixtures/explore.fixture.ts`).
-Repro:
-[`ptr-04-07-08-11-13.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I1-pointer/ptr-04-07-08-11-13.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) via the second, independent half of the
+direction: `handleArrowKey` now takes an `isItemInteractable` gate built from
+`layerContextRef` (the same predicate `processMouseUpdate` hands the pointer
+modes) and re-checks it **per press**, and the false comment is gone. A locked
+selection falls through to pan, the fallback a connectors-only selection already
+took. RED-15 itself — re-validating `selectedIds` when a layer's state changes —
+is a separate entry and is NOT fixed here; the per-press gate is deliberately the
+belt rather than the braces, because acquisition-time gating alone is what
+failed. Tracked as cross-store invariant **INV-11** in the exploratory oracle
+(`fixtures/explore.fixture.ts`). Promoted regressions:
+[`canvas-keyboard-scope.spec.ts`](packages/axoview-e2e/tests/canvas-keyboard-scope.spec.ts)
+and the layer-gate cases in
+[`handleArrowKey.test.ts`](packages/axoview-lib/src/interaction/__tests__/handleArrowKey.test.ts).
 
 ## The long-press context menu leaves the press half-open, and cannot be dismissed for 700 ms
 
