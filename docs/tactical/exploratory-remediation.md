@@ -203,9 +203,16 @@ identity. Every probe promoted or retired with its reason recorded in place,
 
 **Regression gate (final state):** `npm test` per package — lib **162 suites /
 1833** (+1 skipped), app **39 / 423**, backend **9 / 134**, worker **4 / 129** —
-and the full Playwright suite (see the run recorded at the end of this section).
-`tsc --noEmit` per workspace, `npx knip`, `check-cycles` and `lint:docs` all
-clean.
+and the full Playwright suite **189 passed (25.3 min), exit 0**. `tsc --noEmit`
+per workspace, `npx knip`, `check-cycles` (47, at baseline) and `lint:docs` all
+clean, and the quarantine re-verified in both directions: zero `__explore__` /
+`tests-exploratory` files discovered by any default config, and the lane itself
+still runs (lib 34 probe files, app 13 — down from 34 as S1/S2/S3/MOP retired,
+e2e 38).
+
+*Run unpiped, per the wave 1 tooling note. The first full run was red on ONE
+journey (J5.3) — see the window-bound-listener note above; that is the run that
+earned its keep.*
 
 - [x] **Readonly enforcement class (F2/I1/I5 subset)** — `72989e3a`.
   `readonlyPolicy.ts` gives every keydown surface an explicit `viewer`/`editor`

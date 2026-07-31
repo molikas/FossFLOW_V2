@@ -70,7 +70,17 @@ check correctly refuses), `driveSharing.test.ts` (+6), `drivePicker.test.ts`
 · 10 tests · the CHR-08 configured-base ruling, including that both link
 builders inherit it and fall back together.
 
-E2E: **[`readonly-enforcement.spec.ts`](../../packages/axoview-e2e/tests/readonly-enforcement.spec.ts)** · 9 tests · the read-only class through the real app — real keystrokes, real mouse, real store. Carries a 60 s per-test timeout because every leg boots a blank diagram and places a node through the real palette before it can reach read-only.
+E2E: **[`readonly-enforcement.spec.ts`](../../packages/axoview-e2e/tests/readonly-enforcement.spec.ts)** · 9 tests · the read-only class through the real app — real keystrokes, real mouse, real store. Carries a 60 s per-test timeout because every leg boots a blank diagram and places a node through the real palette before it can reach read-only. Suite total **189 passed, exit 0**.
+
+**Why the full run still matters, even with the class gates.** Wave 2's CTX-15
+fix made a dormant `Pan.mouseup` branch reachable for the first time — and that
+branch had its own latent bug (a window-bound listener with no
+`isRendererInteraction` check) which nothing had ever been able to expose. Both
+unit gates missed it and so did the new read-only spec, because all of them
+click the canvas. It took a journey that clicks real app chrome (J5.3, the
+linked-diagram link in the read-only NodePanel) to surface it. Un-deadening a
+code path is a change to that path; budget for the full suite when a change
+revives one.
 
 ### Exploratory remediation wave 1 — save path, storage places, layer history (2026-07-30)
 
