@@ -112,3 +112,29 @@ survived. Owner call on whether the multi-entry case justifies more than the ref
 > **CLOSED 2026-07-30 — owner decisions** ([DECISIONS.md](../DECISIONS.md)): DRV-05 — refresh() in runAction's catch too; setAnyoneWithLink(false) collects per-permission outcomes and reports "link may still be active" on partial failure.
 
 **Next:** area closed — nothing outstanding. S track complete (S1, S2, S3).
+
+## Remediation — FIXED 2026-07-30 (wave 2)
+
+All ten bugs plus the DRV-05 ruling shipped in `1c49e6fa`, alongside A5/CHR-08's
+configured-public-base ruling (the two share the link-building surface).
+Per-entry notes are in `known_issues.md`.
+
+**Probes retired** (ADR 0047 §1 flip rule). The four `__explore__/S3` files and
+the worker's `drv-07` probe are gone; their coverage moved into the existing
+`drivePublicRead` / `driveSharing` / `drivePicker` / worker `app` suites, which
+is where the next reader will look. The four FALSIFIED hypotheses (DRV-10, 11,
+13, 15) were not promoted.
+
+**One product question was decided here rather than deferred.** DRV-09's fix
+direction said "decide the product answer first — suppress the affordance, or
+carry the sharing context". Neither, in the end: the hop **explains**. Carrying
+the context is impossible (a share publishes ONE diagram, so the sibling the
+link names was never published and no shareable form of it exists), and
+suppressing the affordance silently changes what the shared diagram says — a
+reader who cannot see the link cannot ask the sender for it.
+
+**A rig note the probes cost.** The `drivePublicRead` suite used `'fid'` as its
+file id. DRV-12's client-side shape check (the same `{10,120}` pattern the
+worker's proxy applies) correctly refuses that, so every ladder test went red on
+a fix that was right. The fixtures are realistic Drive ids now, with the reason
+recorded in the file so they do not drift back.

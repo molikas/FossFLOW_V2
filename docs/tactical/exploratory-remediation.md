@@ -5,12 +5,19 @@
 > - [docs/exploratory/DECISIONS.md](../exploratory/DECISIONS.md) — the 22 owner rulings this plan implements (incl. the ADR amendments each ruling names)
 > - [docs/exploratory/LEDGER.md](../exploratory/LEDGER.md) — per-area bug counts; [known_issues.md](../../known_issues.md) — the 172 filed entries (`Found by: exploratory campaign <ID>`)
 >
-> **Status:** Waves 0 and 1 COMPLETE · **Owner:** molikas · **Last updated:** 2026-07-30
+> **Status:** Waves 0, 1 and 2 COMPLETE · **Owner:** molikas · **Last updated:** 2026-07-30
 >
-> Wave 2 is next. Read the wave 1 section first — it carries the four items
-> deliberately routed forward (HIST-03/04 to wave 5, CLIP-14 and STOR-14's
-> override half to wave 4, MOP-01 to wave 2) and the two CI gates the probe lane
-> had broken.
+> Wave 3 is next. Read the wave 1 and wave 2 sections first — between them they
+> carry the items deliberately routed forward (HIST-03/04 to wave 5, CLIP-14 and
+> STOR-14's override half to wave 4), the two CI gates the probe lane had broken,
+> and the four class gates now in place.
+>
+> **One thing wave 2 learned that wave 3 will need.** Three entries' recorded
+> "fix direction" turned out to be wrong about the CAUSE while right about the
+> symptom (I5/CTX-15, S1/AUTH-02, F2/VIEW-11's second source of truth). The
+> campaign's evidence is reliable; its diagnoses are hypotheses. Re-derive the
+> cause before implementing the proposed fix, and correct the entry when they
+> differ — all three corrections are recorded in place.
 >
 > This is a **short-lived working doc.** Delete it after the work merges; ADRs are the durable record. PLAN.md gets a one-line entry referencing ADR 0047 once shipped — see "Wrap-up" below.
 
@@ -175,11 +182,48 @@ the register — it went straight from A1/LIFE-15 to A3/ZIP-01. All thirteen are
 filed now. **Worth checking the same way for the other areas before trusting the
 campaign's "190 filed entries" total.**
 
-### Wave 2 — Trust & security 🟠 (S1/S2/S3 + readonly class, ~40 filed bugs)
-- [ ] **Readonly enforcement class (F2/I1 subset):** enumerate every mutation surface against the readonly gate (VIEW-11, PTR-01..03, CTX-15); ships the **per-surface-opt-in class gate**.
-- [ ] **Auth cluster (S1):** all AUTH entries + AUTH-13 hint ruling (email required; stop persisting empty-email profiles).
-- [ ] **Share cluster (S2/S3):** all SHARE/DRV entries + SHARE-10 exemption-pair ruling (+ deployment.md) + DRV-05 refresh-in-catch ruling + **A5/CHR-08 public-base ruling** + **MOP-01** (strip `shareUuid`/`sharedAt` in every copy path: duplicate, project-ZIP import, single-JSON import).
-- [ ] **Sanitization edges (F1 subset):** rel=noopener on JSX-built link surfaces outside the sanitizer path.
+### Wave 2 — Trust & security ✅ 2026-07-30
+
+**Closed.** 46 campaign entries annotated `Fixed`, every probe promoted or
+retired with its reason recorded in place, **four** class-gate files landed
+(each verified able to go red), and `npm run test:regression` green. Five owner
+decisions implemented: AUTH-13 (hint needs name AND email), SHARE-10
+(exemption pair + deployment.md), DRV-05 (refresh in catch, partial-revoke
+honesty), CHR-08 (configured public base), plus MOP-01's copy identity.
+
+**Regression gate (final state):** `npm test` per package — lib **162 suites /
+1833** (+1 skipped), app **39 / 423**, backend **9 / 134**, worker **4 / 129** —
+and the full Playwright suite (see the run recorded at the end of this section).
+`tsc --noEmit` per workspace, `npx knip`, `check-cycles` and `lint:docs` all
+clean.
+
+- [x] **Readonly enforcement class (F2/I1/I5 subset)** — `72989e3a`.
+  `readonlyPolicy.ts` gives every keydown surface an explicit `viewer`/`editor`
+  access class and the dispatcher asks it; `ItemControlsManager` threads
+  `readOnly` to all five element panels and `RightSidebar` derives it
+  fail-closed from the prop OR the store. CTX-15 turned out **not** to be the
+  pan path swallowing the click — `Pan.mouseup` always had the branch; a
+  RAF-throttled mousemove landing after the press wrote `mouse.mousedown` back
+  to null, so its "was this a click?" test could never hold. Ships **two**
+  class gates (keyboard + panel), both per-surface opt-in.
+- [x] **Auth cluster (S1)** — `ded36c6b`. All twelve AUTH entries + the AUTH-13
+  ruling. One correction to the record: AUTH-02's cause is not the status —
+  fixing AUTH-01 moves the session out of `REFRESHING` while the superseded GIS
+  request is still outstanding, so the store tracks that separately now
+  (`_silentRequestOutstanding`). The promoted test caught it.
+- [x] **Share backend cluster (S2)** — `6878df1c`. All twelve SHARE entries +
+  the SHARE-10 ruling + `docs/deployment.md` §D.1. Note the SHARE-03/04 mutex
+  is single-process — recorded in the entries rather than left implicit.
+- [x] **Drive sharing cluster (S3)** — `1c49e6fa`. All ten DRV entries + the
+  DRV-05 and CHR-08 rulings. DRV-09's embedded product question was decided
+  (explain, don't suppress — see the S3 area file for why neither offered
+  option was taken).
+- [x] **MOP-01** — `7206d5e2`. One `stripSourceIdentity` helper across
+  duplicate + both import paths, plus a backend-side strip on create.
+- [x] **Sanitization edges (F1 subset)** — `798cae63`. Every JSX-built link
+  surface and every `window.open` was **already** compliant: the campaign
+  finding was a hole in the COVERAGE, not a live defect. Shipped as two class
+  gates (lib + app) rather than a fix, so the next surface cannot omit it.
 
 ### Wave 3 — Interaction & rendering correctness 🟡 (I1–I5, R1–R5, ~67 filed bugs)
 - [ ] **Gesture/mode state machines (I-block):** cancel/interrupt leaks incl. TCH-06+TCH-14 shared `endPointer`; SEL-15 additive marquee (+ ADR 0006 addendum).

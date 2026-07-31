@@ -88,8 +88,6 @@ export const ELEMENT_PANEL_SURFACES = {
   RECTANGLE: 'editor'
 } as const satisfies Record<string, SurfaceAccess>;
 
-export type ElementPanelSurface = keyof typeof ELEMENT_PANEL_SURFACES;
-
 /** The one place the mode → "may write" question is answered. */
 export const canMutate = (editorMode: EditorMode): boolean =>
   editorMode === 'EDITABLE';

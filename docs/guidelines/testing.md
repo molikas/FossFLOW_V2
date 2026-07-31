@@ -1,15 +1,20 @@
 # Regression Test Suite Reference
 
-**Last updated:** 2026-07-30 (exploratory remediation wave 1 — promoted suites; totals re-measured for lib + app)
-**Unit / integration totals** (measured 2026-07-28 via per-workspace `npm test`):
+**Last updated:** 2026-07-30 (exploratory remediation wave 2 — trust & security; totals re-measured for all four workspaces)
+**Unit / integration totals** (measured 2026-07-30 via per-workspace `npm test`):
 
 | Workspace | Passing | Suites |
 |---|---|---|
-| `axoview-lib` | 1780 (+1 skipped) | 159 |
-| `axoview-app` | 356 | 34 |
-| `axoview-backend` | 102 | 7 |
-| `axoview-worker` | 124 | 4 |
-| **Total** | **2362 (+1 skipped)** | **204** |
+| `axoview-lib` | 1833 (+1 skipped) | 162 |
+| `axoview-app` | 423 | 39 |
+| `axoview-backend` | 134 | 9 |
+| `axoview-worker` | 129 | 4 |
+| **Total** | **2519 (+1 skipped)** | **214** |
+
+*(Wave 2 of the exploratory remediation, 2026-07-30: lib `+5` / `+1` suite, app
+`+14` / `+1`, backend `+32` / `+2`, worker `+5`. All of it probes promoted out
+of the quarantined lane under the ADR 0047 §2 flip rule, plus four class gates.
+See "Exploratory remediation wave 2" below.)*
 
 *(lib `+43` / `+4` suites and app `+88` / `+8` suites on 2026-07-30 — wave 1 of the
 exploratory-campaign remediation, all of it probes promoted out of the
@@ -32,6 +37,40 @@ E2E suite lives at [`packages/axoview-e2e/`](../../packages/axoview-e2e/) (Playw
 - **Don't swap the dev server for a precompiled prod bundle to raise `workers`.** A `NODE_ENV=production` build tree-shakes out the `window.__axoview__` debug bridge that ~every spec reads (gated in `Axoview.tsx` by `enableDebugTools || exposeStoreBridge || NODE_ENV !== 'production'`); the whole suite would fail on `waitForDebugBridge`. If that route is ever needed for within-runner parallelism, re-expose the bridge via `exposeStoreBridge` behind a **CI-only build flag** (never the Cloudflare prod build).
 
 To scale further, raise the shard count (`SHARD_TOTAL` + the matrix list in the workflow, kept in sync) — diminishing past ~6 shards because a fixed ~3 min setup (npm ci + build:lib + Playwright install + dev-server boot) is paid per shard.
+
+### Exploratory remediation wave 2 — trust & security (2026-07-30)
+
+The S-track (Google identity, share backend, Drive sharing) plus the read-only
+enforcement class and MOP-01's copy identity. Same flip rule as wave 1: each
+probe was promoted as its bug was fixed, and the lane files retired.
+
+**Four class gates landed** (ADR 0047 §3) — each verified able to go red before
+it was committed, per the 2026-07-29 audit's "a green gate that cannot fail"
+finding:
+
+- **[`readonlySurfaces.contract.test.ts`](../../packages/axoview-lib/src/interaction/__tests__/readonlySurfaces.contract.test.ts)** · 31 tests · **CLASS GATE**, keyboard half, **per-surface opt-in**. `EXPLORABLE_READONLY` was enforced surface-by-surface from memory, so most canvas shortcuts mutated a read-only diagram. Every keydown delegate now carries an explicit `viewer` / `editor` access class in [`readonlyPolicy.ts`](../../packages/axoview-lib/src/interaction/readonlyPolicy.ts), and the gate cross-checks that table against the dispatcher's *source*: a new shortcut with no access class fails, and so does an `editor` surface whose call site does not consult the policy. Verified red by unwrapping the z-order guard. I1/PTR-01/02/03.
+- **[`readonlyPanels.contract.test.tsx`](../../packages/axoview-lib/src/components/ItemControls/__tests__/readonlyPanels.contract.test.tsx)** · 17 tests · **CLASS GATE**, panel half. Renders all five element panels in *both* modes and scans `ItemControlsManager` for the `readOnly` forwarding, so a sixth panel — or a regressed fifth — fails without anyone remembering to write a test. Verified red by dropping the prop from the LABEL branch. F2/VIEW-11.
+- **[`externalLinks.contract.test.ts`](../../packages/axoview-lib/src/__tests__/externalLinks.contract.test.ts)** (lib, 5 tests) and [its app twin](../../packages/axoview-app/src/__tests__/externalLinks.contract.test.ts) (4 tests) · **CLASS GATE** for the blind spot ADR 0029 leaves: the rel-forcing hook lives *inside* `sanitizeHtml`, so React-built link surfaces get `target=_blank` from their own JSX and the sanitizer tests cannot see them. Every surface was already compliant — this pins the property rather than fixing a defect. Two gates so each package fails on its own files. Verified red by removing a `rel` from `AboutTab`. F1 invariant list.
+
+Promoted suites:
+
+- **[`authStore.sessionIntegrity.test.ts`](../../packages/axoview-app/src/stores/__tests__/authStore.sessionIntegrity.test.ts)** · 20 tests · the auth state machine with a SECOND actor arriving mid-request — a Drive 401, a scope-403, a second sign-in click, the safety-net timeout. The existing `authStore.test.ts` drives one request at a time, which is why this area's whole seam was invisible to it. S1/AUTH-01..05, 07, 11, 12, 13, 16.
+- **[`GoogleDriveProvider.authFailures.test.ts`](../../packages/axoview-app/src/services/storage/__tests__/GoogleDriveProvider.authFailures.test.ts)** · 8 tests · `request()` is where an HTTP answer becomes an auth *decision*, and three of the four it made were wrong the same way — a status code treated as if it named the cause. Pins the 403 split (scope vs rate limit vs neither), that a withheld token in `DRIVE_ACCESS_REQUIRED` reads as a scope problem rather than "not signed in", and that sign-out invalidates the per-account Drive root caches. S1/AUTH-06, 08, 09, 16.
+- **[`AuthControl.identity.test.tsx`](../../packages/axoview-app/src/components/__tests__/AuthControl.identity.test.tsx)** · 3 tests · the DOM consequence AUTH-05 was actually about: a session whose one `userinfo` call failed must still render its Sign out control. `AuthControl` had no unit test at all.
+- **[`routes.shareIntegrity.spec.js`](../../packages/axoview-backend/src/__tests__/routes.shareIntegrity.spec.js)** · 25 tests · what the route layer does when "one well-formed request at a time" stops holding: a concurrent second request, a reserved id, a body carrying a server-owned field, a source diagram since trashed. S2/SHARE-01..06, 11, 15.
+- **[`server.wiring.spec.js`](../../packages/axoview-backend/src/__tests__/server.wiring.spec.js)** · 7 tests · boots the real `server.js` as a child process and speaks HTTP to it, because middleware ordering and the `requireStorage` route flags cannot be answered at the handler tier. The CORS leg asserts the diagram is genuinely **not published**, not merely that the response was withheld — the distinction SHARE-09 exists for. S2/SHARE-08, 09, 10.
+
+Existing suites absorbed the rest: `drivePublicRead.test.ts` (+4, and its toy
+`'fid'` fixture replaced with a realistic Drive id, which the new DRV-12 shape
+check correctly refuses), `driveSharing.test.ts` (+6), `drivePicker.test.ts`
+(the wrong-file outcome), `LocalStorageProvider.test.ts` (+4),
+`importedBlob.test.ts` (+6, MOP-01), `app.spec.ts` (worker, +5),
+`routes.config.spec.js` and the worker's config test (the CHR-08 key). New:
+[`appBase.publicBase.test.ts`](../../packages/axoview-app/src/__tests__/appBase.publicBase.test.ts)
+· 10 tests · the CHR-08 configured-base ruling, including that both link
+builders inherit it and fall back together.
+
+E2E: **[`readonly-enforcement.spec.ts`](../../packages/axoview-e2e/tests/readonly-enforcement.spec.ts)** · 9 tests · the read-only class through the real app — real keystrokes, real mouse, real store. Carries a 60 s per-test timeout because every leg boots a blank diagram and places a node through the real palette before it can reach read-only.
 
 ### Exploratory remediation wave 1 — save path, storage places, layer history (2026-07-30)
 

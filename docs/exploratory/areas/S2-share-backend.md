@@ -99,3 +99,33 @@ either way the pair should move together.
 > **CLOSED 2026-07-30 — owner decisions** ([DECISIONS.md](../DECISIONS.md)): SHARE-10 — keep the public read exempt AND exempt DELETE /api/diagrams/:id/share alongside it so revocation is always reachable; document the pair in deployment.md.
 
 **Next:** area closed — nothing outstanding.
+
+## Remediation — FIXED 2026-07-30 (wave 2)
+
+All twelve bugs and the SHARE-10 ruling shipped in `6878df1c`; the CHR-08
+runtime-config key landed with the S3 cluster. Per-entry notes are in
+`known_issues.md`.
+
+**Probes retired** (ADR 0047 §1 flip rule). The five `__explore__/S2` specs are
+gone; their coverage lives in the default suites as
+[`routes.shareIntegrity.spec.js`](../../../packages/axoview-backend/src/__tests__/routes.shareIntegrity.spec.js)
+(handler tier) and
+[`server.wiring.spec.js`](../../../packages/axoview-backend/src/__tests__/server.wiring.spec.js)
+(the real Express server, booted as a child process — the probe's rig, kept
+whole, because middleware ordering cannot be answered below it). SHARE-07's
+worker probe folded into the worker's own `app.spec.ts`. The two FALSIFIED
+hypotheses (SHARE-13, SHARE-14) went with them and were not promoted.
+
+**Two notes worth carrying forward.**
+
+1. The SHARE-03/04 fix is a **single-process** mutex. It closes the window the
+   probes measured, and it is the right fix for the Express/Docker target as
+   deployed — but a multi-worker deployment can still interleave, and the
+   durable answer remains per-folder documents or a CAS-capable adapter. Said
+   plainly in the entries rather than left implicit in the code.
+2. SHARE-11's whitelist was inverted to a **deny-list** rather than extended.
+   The entry asked for "derive it from the model schema"; that would mean
+   importing the lib's zod model into a package that is deliberately
+   dependency-free and shared with the Worker. A deny-list of server-owned
+   fields gets the same "the next schema field is not silently dropped"
+   property without the dependency.

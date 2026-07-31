@@ -4237,12 +4237,13 @@ and no route back to the gate's Picker rung.
 
 **Workaround:** reload the page.
 
-**Status:** Open. Fix direction: two independent fixes, either of which closes it —
-(a) clear `driveAfterGrantRef` after the read it was set for completes, so a second
-attempt is a normal read again; (b) give the terminal state a Retry (and, for the
-post-grant case specifically, a short auto-retry, since propagation is the expected
-cause). Repro:
-[`drv-01-02-03.explore.test.tsx`](packages/axoview-app/src/__explore__/S3/drv-01-02-03.explore.test.tsx).
+**Status:** Fixed in 1c49e6fa (2026-07-30) — option (a), the root cause: `driveAfterGrantRef`
+is cleared by the read it was set for, immediately after that read settles,
+rather than only when the route unmounts. Option (b) landed too but as part of
+DRV-02 rather than as a patch over this one: the post-grant answer is no longer
+`not-found` at all, it is `grant-not-registered`, which the gate renders with a
+Try-again button — because propagation is the expected cause, exactly as this
+entry says. Promoted regression: [`drivePublicRead.test.ts`](packages/axoview-app/src/services/drive/__tests__/drivePublicRead.test.ts).
 
 ## Four different reasons a shared Drive diagram will not open render one message
 
@@ -4268,11 +4269,13 @@ ladder, not at the UI.
 
 **Workaround:** none; the viewer has to ask the owner what happened.
 
-**Status:** Open. Fix direction: widen `DriveDisplayReadFailure` with the causes that
-already exist upstream (`gone`, `too-large`, `grant-not-registered`) and give each its
-own gate copy. The worker already returns distinct statuses for all of them, so no new
-upstream work is needed. Repro:
-[`drv-01-02-03.explore.test.tsx`](packages/axoview-app/src/__explore__/S3/drv-01-02-03.explore.test.tsx).
+**Status:** Fixed in 1c49e6fa (2026-07-30) — as the fix direction proposed, `gone`,
+`too-large` and `grant-not-registered` join the reason union (plus `bad-link`
+from DRV-12), and each gets its own gate copy. No new upstream work was needed:
+the worker already returned distinct statuses for all of them, which is what
+made this a pure information-loss bug at the ladder. `not-found` survives for
+what it always meant — unreadable for a reason none of the others covers.
+Promoted regression: [`drivePublicRead.test.ts`](packages/axoview-app/src/services/drive/__tests__/drivePublicRead.test.ts).
 
 ## Picking the wrong file in the Drive Picker does nothing and says nothing
 
@@ -4296,11 +4299,11 @@ arrive as the same value.
 
 **Workaround:** pick the file named in the link.
 
-**Status:** Open. Fix direction: give `launchDrivePicker` a third outcome
-(`'wrong-file'`) — it already computes the distinction — and have the gate surface
-"that isn't the diagram this link points to" inline, next to the existing
-`pickerError` treatment. Repro:
-[`drv-01-02-03.explore.test.tsx`](packages/axoview-app/src/__explore__/S3/drv-01-02-03.explore.test.tsx).
+**Status:** Fixed in 1c49e6fa (2026-07-30) — exactly as the fix direction proposed:
+`launchDrivePicker` gained a third outcome, `'wrong-file'`, and the gate
+surfaces "that isn't the diagram this link points to" inline next to the
+existing `pickerError` treatment. The distinction was already computed —
+`grantedTarget` — it simply had nowhere to go. Promoted regression: [`drivePicker.test.ts`](packages/axoview-app/src/services/drive/__tests__/drivePicker.test.ts).
 
 ## A domain-shared Drive diagram is reported as "restricted"
 
@@ -4323,11 +4326,16 @@ counted and an `anyone` grant IS detected, so the omission is specific to `domai
 
 **Workaround:** check the file's sharing state in Drive's own UI.
 
-**Status:** Open. Fix direction: treat `type:'domain'` as shared in `summary` (it is
-link-readable for everyone in the domain) and surface it as its own row in the Manage
-dialog rather than folding it into `peopleCount`. `type:'anyone'` with
-`allowFileDiscovery` is worth checking at the same time. Repro:
-[`drv-04-05.explore.test.ts`](packages/axoview-app/src/__explore__/S3/drv-04-05.explore.test.ts).
+**Status:** Fixed in 1c49e6fa (2026-07-30) — both halves. `type:'domain'` counts as shared,
+and it is its own `summary` value rather than being folded into
+`anyone-with-link`: the two are different promises (everyone at the company vs
+everyone with the link), and telling an owner their diagram is public when it is
+company-wide would be the same class of error in the other direction. Domains
+are surfaced as their own list rather than counted as people, and `domain` was
+added to the `permissions.list` field mask so the grant can be named. The
+`allowFileDiscovery` question the entry raises is NOT addressed — it is about
+which `anyone` grants are discoverable, a separate distinction. Promoted
+regression: [`driveSharing.test.ts`](packages/axoview-app/src/services/drive/__tests__/driveSharing.test.ts).
 
 ## Copying a Drive link reports success when the app could not read the access list
 
@@ -4350,10 +4358,12 @@ both agree and warn, so the divergence is precisely the unknown case.
 
 **Workaround:** open the Manage-access dialog to see the real state.
 
-**Status:** Open. Fix direction: make the unknown case its own message in both paths —
-"Link copied. We couldn't check who has access." — rather than picking one of the two
-confident answers. Repro:
-[`drv-06-08-09-10-13-14.explore.test.tsx`](packages/axoview-app/src/__explore__/S3/drv-06-08-09-10-13-14.explore.test.tsx).
+**Status:** Fixed in 1c49e6fa (2026-07-30) — as the fix direction proposed, the unknown case
+is its own message in the toolbar path: "Link copied. We couldn't check who has
+access — open Manage access to be sure." The two surfaces agree now because both
+ask one predicate (`isShared`), so the divergence cannot reopen by one of them
+being edited. Promoted regression: the DRV-04 legs of [`driveSharing.test.ts`](packages/axoview-app/src/services/drive/__tests__/driveSharing.test.ts) cover the predicate;
+the toast selection itself is component code with no separate suite.
 
 ## Revoking a Drive share link leaves the diagram readable from cache
 
@@ -4377,10 +4387,11 @@ than to deletion.
 **Workaround:** trash the diagram instead of un-sharing it if the revocation is
 urgent (the trashed gate is immediate), then restore it.
 
-**Status:** Open. Fix direction: `private, max-age=60` at minimum — same dedupe, no
-shared-cache exposure. If prompt revocation matters, drop to `no-store` and accept the
-extra upstream reads, or move the cache window down to a few seconds. Repro:
-[`drv-07.explore.spec.ts`](packages/axoview-worker/src/__explore__/S3/drv-07.explore.spec.ts).
+**Status:** Fixed in 1c49e6fa (2026-07-30) — `private, max-age=60, must-revalidate`. The
+minimum the fix direction named, plus `must-revalidate` so a stale entry cannot
+be served past the window; `no-store` was not taken, because the dedupe of
+repeat opens is real and a 60 s private window is not a shared-cache exposure.
+Promoted regression: [`app.spec.ts`](packages/axoview-worker/src/__tests__/app.spec.ts).
 
 ## A failed "add person" clears the email field and remembers the address anyway
 
@@ -4403,15 +4414,12 @@ outcomes are indistinguishable in the UI.
 
 **Workaround:** retype the address.
 
-**Status:** Open. Fix direction: have `runAction` return (or rethrow) an outcome and
-guard `handleAdd`'s tail on it — keep the field populated and the history untouched on
-failure.
-
-Rig note for future probes: mocking `driveSharing` without re-exporting the real
-`DriveShareError` makes `shareErrorCopy`'s `err instanceof DriveShareError` throw
-"Right-hand side of 'instanceof' is not an object" — a setup crash that looks exactly
-like the failure path under test. Repro:
-[`drv-06-08-09-10-13-14.explore.test.tsx`](packages/axoview-app/src/__explore__/S3/drv-06-08-09-10-13-14.explore.test.tsx).
+**Status:** Fixed in 1c49e6fa (2026-07-30) — as the fix direction proposed: `runAction`
+returns whether the action succeeded, and `handleAdd` guards its tail on it, so
+a rejected address keeps the field populated and stays out of the local
+history. The rig note about mocking `driveSharing` without re-exporting
+`DriveShareError` is preserved above — it is still live for anyone writing a
+test against this dialog.
 
 ## A link inside a shared diagram dead-ends for the recipient
 
@@ -4435,11 +4443,16 @@ as "sharing a diagram that links to other diagrams (link behavior in shared view
 **Workaround:** ask the sender to share the linked diagram too, and to send its own
 link.
 
-**Status:** Open. Fix direction: decide the product answer first — either suppress
-diagram-link affordances on a shared route (they cannot resolve), or carry the sharing
-context so the hop becomes another `/display/drive/<fileId>` (Drive) link. Either is
-better than a dead link with generic copy. Repro:
-[`drv-06-08-09-10-13-14.explore.test.tsx`](packages/axoview-app/src/__explore__/S3/drv-06-08-09-10-13-14.explore.test.tsx).
+**Status:** Fixed in 1c49e6fa (2026-07-30) — the product answer, decided here rather than
+deferred: **explain, do not suppress.** On a shared route the hop no longer
+navigates; it says the target lives in the sender's workspace and was not shared.
+Suppressing the affordance was rejected because it silently changes what the
+shared diagram says — the link is content its author put there, and a reader who
+cannot see it cannot ask for it. Carrying the sharing context was rejected
+because there is nothing to carry: a share publishes ONE diagram, so the
+sibling the link names was never published and no `/display/drive/<fileId>` or
+share-uuid form of it exists. The coverage gap the baseline lists ("link
+behavior in shared view") is closed by that decision.
 
 ## A malformed Drive link asks the viewer to sign in and then to grant access
 
@@ -4459,11 +4472,13 @@ returns `needs-grant` after two.
 
 **Workaround:** get an intact link.
 
-**Status:** Open. Fix direction: treat a proxy 400 as its own terminal reason
-("this link is not valid") — the client can also apply the same
-`/^[A-Za-z0-9_-]{10,120}$/` check the worker uses before making any request at all.
-Repro:
-[`drv-11-12-15.explore.test.ts`](packages/axoview-app/src/__explore__/S3/drv-11-12-15.explore.test.ts).
+**Status:** Fixed in 1c49e6fa (2026-07-30) — both halves the fix direction named. The proxy's
+400 is its own terminal reason (`bad-link`), and the client applies the same
+`/^[A-Za-z0-9_-]{10,120}$/` check the worker uses BEFORE making any request, so
+a truncated link is named immediately instead of after two round trips. Note the
+existing ladder tests used a toy `'fid'` fixture, which the check now correctly
+refuses — they carry a realistic Drive id, and the reason why, so the fixture
+does not drift back. Promoted regression: [`drivePublicRead.test.ts`](packages/axoview-app/src/services/drive/__tests__/drivePublicRead.test.ts).
 
 ## A failed share shows the raw string "Share failed: 404"
 
@@ -4484,11 +4499,12 @@ act on.
 
 **Workaround:** none; refresh and try again.
 
-**Status:** Open. Fix direction: carry the status (and the backend's `error` string)
-on a typed error the way `DriveShareError` already does, and map 404 → "This diagram
-no longer exists" / 5xx → the retryable treatment `share-error.spec.ts` already covers.
-Repro:
-[`drv-06-08-09-10-13-14.explore.test.tsx`](packages/axoview-app/src/__explore__/S3/drv-06-08-09-10-13-14.explore.test.tsx).
+**Status:** Fixed in 1c49e6fa (2026-07-30) — as the fix direction proposed, modelled on
+`DriveShareError`: `LocalStorageProvider.shareDiagram` throws a typed
+`ShareRequestError` carrying the status and the backend's own `error` string,
+and the message is what the popover should show — 404 → "This diagram no longer
+exists", 5xx → the retryable treatment, anything else → the backend's own text.
+Promoted regression: [`LocalStorageProvider.test.ts`](packages/axoview-app/src/services/storage/__tests__/LocalStorageProvider.test.ts).
 
 ## A multi-row text box whose rows are not `<p>`/`<li>` measures one row tall
 
@@ -7072,8 +7088,20 @@ Measured: duplicating a diagram whose blob carries
 **Workaround:** unshare before duplicating, or unshare the copy immediately —
 noting that unsharing the copy is what takes the original's link down.
 
-**Status:** Open. Fix direction: strip the identity/publication fields
-(`id`, `shareUuid`, `sharedAt`) in one shared helper used by all three copy
-paths, and make `shareDiagram` refuse to adopt a `shareUuid` that another
-document already claims. Repro:
-[`copy-paths-share-identity.explore.test.tsx`](packages/axoview-app/src/__explore__/MOP/copy-paths-share-identity.explore.test.tsx).
+**Status:** Fixed in 7206d5e2 (2026-07-30) — the first half exactly as proposed: one
+`stripSourceIdentity` helper drops `id`, `shareUuid`, `sharedAt` (and `created`),
+used by all three copy paths — duplicate, project-ZIP import, single-JSON import
+— so they cannot drift apart again, which is how this came to differ per path.
+`createDiagram` strips the same server-owned fields backend-side too, so neither
+side of the wire is trusted alone.
+
+The second half — "make `shareDiagram` refuse to adopt a `shareUuid` another
+document already claims" — is covered differently, and better: S2/SHARE-15's
+`deleteOwnedSnapshot` verifies `snapshot.sourceId === id` before any cascade
+touches a snapshot, so a borrowed uuid cannot take down or overwrite another
+diagram's link even if a document written by an older build still carries one.
+A scan across every diagram at share time would be O(n) on every share for the
+same guarantee. Promoted regression:
+[`importedBlob.test.ts`](packages/axoview-app/src/services/storage/__tests__/importedBlob.test.ts)
+and the SHARE-15 legs of
+[`routes.shareIntegrity.spec.js`](packages/axoview-backend/src/__tests__/routes.shareIntegrity.spec.js).
