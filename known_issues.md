@@ -3828,11 +3828,13 @@ the full replace.
 under `<STORAGE_PATH>/public/`. Sharing again immediately before sending the link
 minimises the window.
 
-**Status:** Open. Fix direction: make `saveDiagram` preserve server-owned fields —
-read the existing document and carry `shareUuid` (and `created`) across, the way
-`patchDiagram` already does — or move `shareUuid` out of the diagram document into a
-side index keyed by id. Repro:
-[`share-01-04-15.explore.spec.js`](packages/axoview-backend/src/__explore__/S2/share-01-04-15.explore.spec.js).
+**Status:** Fixed in 6878df1c (2026-07-30) — the first of the two options: `saveDiagram` reads
+the existing document and carries the server-owned fields (`shareUuid`,
+`created`) across, the way `patchDiagram` already did, so the two write paths
+now agree about what a client may overwrite. The side index was rejected as a
+larger storage change for the same outcome. The same `stripServerOwnedFields`
+helper backs SHARE-15's PATCH filter, so "the client cannot write these" is one
+rule rather than two. Promoted regression: [`routes.shareIntegrity.spec.js`](packages/axoview-backend/src/__tests__/routes.shareIntegrity.spec.js).
 
 ## A diagram id can overwrite the folder tree — reserved storage keys are not reserved
 
@@ -3864,11 +3866,13 @@ Only the fs adapter reproduces it.
 **Workaround:** don't import or create a diagram with one of those four ids. There is
 no recovery for the lost folder tree beyond re-creating the folders.
 
-**Status:** Open. Fix direction: reject the reserved names in `assertId` (the write
-side already has the list — `listDiagramMeta` and the memory adapter both hard-code
-it), or give the fs adapter a real `diagrams/` subdirectory so the namespaces cannot
-collide. Repro:
-[`share-02-13.explore.spec.js`](packages/axoview-backend/src/__explore__/S2/share-02-13.explore.spec.js).
+**Status:** Fixed in 6878df1c (2026-07-30) — the first of the two options: `assertId` rejects
+the four reserved names with a 400. Giving the fs adapter a real `diagrams/`
+subdirectory is the more thorough fix, but it changes the on-disk layout every
+existing deployment has, for the same outcome. Documented in
+[deployment.md](docs/deployment.md) §D alongside the id pattern. The probe note
+about the in-memory adapter hiding the collision is why the guard sits in the
+ROUTE layer, above both adapters. Promoted regression: [`routes.shareIntegrity.spec.js`](packages/axoview-backend/src/__tests__/routes.shareIntegrity.spec.js).
 
 ## Concurrent folder writes silently lose one another (folders.json has no locking)
 
@@ -3894,11 +3898,12 @@ help here.
 **Workaround:** avoid concurrent folder edits; re-check the tree after a project
 import.
 
-**Status:** Open. Fix direction: serialise folder mutations behind a per-key async
-mutex in the route layer (cheapest, single-process), or move to per-folder documents
-so two folders are never in one write. The same read-modify-write shape applies to
-`tree-manifest`. Repro:
-[`share-03-05.explore.spec.js`](packages/axoview-backend/src/__explore__/S2/share-03-05.explore.spec.js).
+**Status:** Fixed in 6878df1c (2026-07-30) — the first of the two options: a per-key async
+mutex (`withKeyLock`) that every folder mutation and every per-diagram write
+passes through. Per-folder documents remain the durable fix and are still worth
+doing — **the mutex is single-process only**, so a multi-worker deployment can
+still interleave; the Cloudflare target does not run these routes at all today.
+Recorded here rather than left implicit. Promoted regression: [`routes.shareIntegrity.spec.js`](packages/axoview-backend/src/__tests__/routes.shareIntegrity.spec.js).
 
 ## Two simultaneous shares publish two snapshots and record one
 
@@ -3921,10 +3926,12 @@ consequence — the lost write is a *published* artifact rather than a dropped e
 **Workaround:** don't double-click Share. An orphaned snapshot can only be removed
 from `<STORAGE_PATH>/public/` by hand.
 
-**Status:** Open. Fix direction: serialise per diagram id (same mutex as SHARE-03), or
-derive the uuid deterministically from the diagram id + a stored salt so two
-concurrent shares converge on one snapshot. Repro:
-[`share-01-04-15.explore.spec.js`](packages/axoview-backend/src/__explore__/S2/share-01-04-15.explore.spec.js).
+**Status:** Fixed in 6878df1c (2026-07-30) — the first of the two options: `shareDiagram` runs
+inside the same per-diagram lock, so the read-then-write is atomic and two
+concurrent shares converge on one uuid and one snapshot. The deterministic-uuid
+alternative would have worked too, but it makes the uuid derivable from the
+diagram id + salt, which is a weaker property for an unguessable public link.
+Promoted regression: [`routes.shareIntegrity.spec.js`](packages/axoview-backend/src/__tests__/routes.shareIntegrity.spec.js).
 
 ## A non-recursive folder delete orphans its whole subtree
 
@@ -3949,10 +3956,12 @@ Measured: deleting `parent` non-recursively leaves `child` (dangling parentId) a
 
 **Workaround:** always delete folders recursively.
 
-**Status:** Open. Fix direction: either reject a non-recursive delete of a folder that
-has children (a 409 the UI can turn into "this folder isn't empty"), or re-parent the
-orphans to the deleted folder's parent. Repro:
-[`share-03-05.explore.spec.js`](packages/axoview-backend/src/__explore__/S2/share-03-05.explore.spec.js).
+**Status:** Fixed in 6878df1c (2026-07-30) — the first of the two options: a non-recursive
+delete of a folder that has child folders is a 409 the UI can turn into "this
+folder isn't empty". Re-parenting the orphans was rejected because it invents a
+placement the user never asked for. A LEAF folder still deletes non-recursively
+and still sweeps its diagrams, so the import paths (`projectZip` deletes
+depth-first) are unaffected. Promoted regression: [`routes.shareIntegrity.spec.js`](packages/axoview-backend/src/__tests__/routes.shareIntegrity.spec.js).
 
 ## Trashing a shared diagram leaves its public link live, and unreachable
 
@@ -3988,13 +3997,15 @@ this symptom reachable exactly as described.
 **Workaround:** not needed from the UI today (the explorer's delete cascades); for
 API clients, unshare before soft-deleting.
 
-**Status:** Open. Fix direction: cascade on the soft delete too — either unshare as
-part of the trash transition, or have `getPublicSnapshot` resolve `sourceId` and 410
-when the source is trashed (mirroring the Drive proxy, and restoring the link if the
-diagram is restored). Repro:
-[`share-06-11.explore.spec.js`](packages/axoview-backend/src/__explore__/S2/share-06-11.explore.spec.js)
-and [`copy-paths-share-identity.explore.test.tsx`](packages/axoview-app/src/__explore__/MOP/copy-paths-share-identity.explore.test.tsx)
-(the delete-path reconciliation).
+**Status:** Fixed in 6878df1c (2026-07-30) — the second of the two options, which is also the
+one MOP-02's correction points at: `getPublicSnapshot` resolves `sourceId` and
+answers **410** when the source carries `deletedAt`, mirroring the worker's
+Drive read proxy exactly ("a trashed file must stop resolving here"). Restoring
+the diagram restores the link, which is what a trash implies. Unsharing as part
+of the trash transition was rejected for that reason — it is not reversible.
+Sharing something already trashed is refused (409) too. Snapshots written before
+`sourceId` existed carry no back-reference and are served as before. Promoted
+regression: [`routes.shareIntegrity.spec.js`](packages/axoview-backend/src/__tests__/routes.shareIntegrity.spec.js).
 
 ## The anonymous Drive proxy's 10 MB cap is skipped when Drive reports no file size
 
@@ -4017,10 +4028,12 @@ should mean "unknown", not "zero".
 **Workaround:** none server-side. Axoview's own diagrams always report a size, so
 this needs a hand-crafted or unusual Drive file to hit.
 
-**Status:** Open. Fix direction: fail closed — treat an absent or unparseable `size`
-as over the cap (or stream with a hard byte budget and abort past it, which also
-covers a `size` Drive under-reports). Repro:
-[`share-07.explore.spec.ts`](packages/axoview-worker/src/__explore__/S2/share-07.explore.spec.ts).
+**Status:** Fixed in 6878df1c (2026-07-30) — fail closed, as the fix direction proposed: an
+absent, empty or unparseable `size` is treated as over the cap, so the gate
+matches the `trashed` gate beside it on the same metadata read. A hard byte
+budget on the stream (which would also cover a size Drive UNDER-reports) is the
+stronger version and is not done — the declared-size check is what the proxy
+can enforce without buffering. Promoted regression: [`app.spec.ts`](packages/axoview-worker/src/__tests__/app.spec.ts).
 
 ## A malformed or oversized request body returns an HTML error page with a stack trace
 
@@ -4046,11 +4059,12 @@ the stack while keeping it out of the response.
 
 **Workaround:** none; keep diagrams under 10 MB.
 
-**Status:** Open. Fix direction: add a terminal error middleware to `server.js` that
-maps `err.type === 'entity.too.large'` → 413 and `entity.parse.failed` → 400, both as
-`{ error }` JSON with no stack, matching the worker. Then wire the 413 into the
-save-failure dialog copy. Repro:
-[`share-08-09-10-14.explore.spec.js`](packages/axoview-backend/src/__explore__/S2/share-08-09-10-14.explore.spec.js).
+**Status:** Fixed in 6878df1c (2026-07-30) — a terminal error middleware maps
+`entity.too.large` → 413 and `entity.parse.failed` → 400, both `{ error }` JSON
+with no stack, matching the worker. Mounted last so a parser error raised before
+any route still lands there. The 413's client-side copy is NOT wired into the
+save-failure dialog yet — that is the second half of this entry's fix direction
+and belongs with the wave 4 dialog work. Promoted regression: [`server.wiring.spec.js`](packages/axoview-backend/src/__tests__/server.wiring.spec.js).
 
 ## The CORS allowlist does not stop cross-origin writes — a web page can publish your diagrams
 
@@ -4085,12 +4099,13 @@ orphan snapshot per SHARE-04) rather than a direct exfiltration.
 is not CORS-safelisted, so it forces a preflight on every route and closes this. The
 existing startup `[SECURITY]` warning already recommends this for a different reason.
 
-**Status:** Open. Fix direction: reject the request rather than just the response —
-have the CORS `origin` callback pass an error (or a middleware 403) when an `Origin`
-header is present and not allowlisted, so a disallowed origin never reaches a handler.
-Optionally require `Content-Type: application/json` on state-changing routes, which
-denies the safelisted-request shape outright. Repro:
-[`share-08-09-10-14.explore.spec.js`](packages/axoview-backend/src/__explore__/S2/share-08-09-10-14.explore.spec.js).
+**Status:** Fixed in 6878df1c (2026-07-30) — both halves the fix direction named, the first as
+the load-bearing one: a middleware refuses any `/api/*` request whose `Origin`
+header is present and not allowlisted, with 403, BEFORE a handler runs. Requests
+with no `Origin` (same-origin, curl, server-to-server) are untouched, matching
+the CORS callback. The regression asserts the diagram is genuinely not
+published, not merely that the response was withheld — the distinction this
+entry exists for. Promoted regression: [`server.wiring.spec.js`](packages/axoview-backend/src/__tests__/server.wiring.spec.js).
 
 ## A shared diagram loses its icon packs and its description
 
@@ -4121,13 +4136,15 @@ place the signal is lost.
 **Workaround:** the recipient can turn off lazy icon-pack loading (Settings) so all
 packs load eagerly.
 
-**Status:** Open. Fix direction: carry `requiredPacks` (and `description`/`version`)
-into the snapshot. Better, make the whitelist derive from the model schema rather than
-being hand-maintained, so the next schema field is not silently dropped as well.
-Repro:
-[`share-06-11.explore.spec.js`](packages/axoview-backend/src/__explore__/S2/share-06-11.explore.spec.js)
-and
-[`share-11-consumer.explore.test.ts`](packages/axoview-app/src/__explore__/S2/share-11-consumer.explore.test.ts).
+**Status:** Fixed in 6878df1c (2026-07-30) — the "better" option, inverted: the snapshot is a
+DENY-list of the fields the server owns or that are meaningless to an anonymous
+reader (`id`, `shareUuid`, `folderId`, `deletedAt`, `created`, `lastModified`),
+so `requiredPacks`, `description`, `version` and any future `modelSchema` field
+are carried rather than silently dropped. Deriving the list from the schema
+itself would mean importing the lib's zod model into a package that is
+deliberately dependency-free and shared with the Worker. The array/title
+normalisations the whitelist applied are kept, so a malformed stored document
+still yields a loadable snapshot. Promoted regression: [`routes.shareIntegrity.spec.js`](packages/axoview-backend/src/__tests__/routes.shareIntegrity.spec.js).
 
 ## A share link opened on the wrong deployment tells the recipient to deploy a server
 
@@ -4154,12 +4171,14 @@ you", and never mentions deploying.
 
 **Workaround:** open the link against the Docker/self-host origin that minted it.
 
-**Status:** Open. Fix direction: rewrite the copy for the reader who actually sees it
-— "this link was created by a different Axoview deployment; ask the sender for a link
-from that site" — and drop the Cloudflare claim, which is false. Longer-term this is
-the ADR 0010 D6 public-namespace cutout showing through: a snapshot store on the
-worker would remove the class. Repro:
-[`share-12.explore.test.tsx`](packages/axoview-app/src/__explore__/S2/share-12.explore.test.tsx).
+**Status:** Fixed in 6878df1c (2026-07-30) — the copy is rewritten for the reader who actually
+sees it ("This link belongs to a different Axoview site… ask whoever sent it for
+a link from that site"), and the Cloudflare claim is gone: the worker hardcodes
+`serverStorage: false` and has no `/api/public/diagrams` handler, so that advice
+could never have worked. The route-shape condition is unchanged — it genuinely
+cannot tell a recipient from a mis-deployed operator, so the copy has to serve
+both. The longer-term reading stands: this is the ADR 0010 D6 public-namespace
+cutout showing through.
 
 ## A PATCH can point one diagram at another's share link, or publish over it
 
@@ -4184,10 +4203,13 @@ that reference integrity is checked and *identity* integrity is not (CLIP-01).
 **Workaround:** none at the API level; the app never sends `shareUuid` in a PATCH, so
 this needs a direct API call (or another client) to trigger.
 
-**Status:** Open. Fix direction: strip server-owned keys (`shareUuid`, `created`) from
-the PATCH body the way `id` already is, and have the cascades verify
-`snapshot.sourceId === id` before deleting or overwriting. Repro:
-[`share-01-04-15.explore.spec.js`](packages/axoview-backend/src/__explore__/S2/share-01-04-15.explore.spec.js).
+**Status:** Fixed in 6878df1c (2026-07-30) — both halves the fix direction named. `shareUuid`
+and `created` are stripped from the PATCH body the way `id` always was, and
+every cascade (`deleteDiagram`, `unshareDiagram`, the folder-delete sweep) now
+verifies `snapshot.sourceId === id` before deleting or overwriting. Both,
+because the strip closes the route in while the ownership check also covers a
+document written by an older build that already carries a borrowed uuid.
+Promoted regression: [`routes.shareIntegrity.spec.js`](packages/axoview-backend/src/__tests__/routes.shareIntegrity.spec.js).
 
 ## A slow Drive grant turns the Picker rung into a dead end
 
