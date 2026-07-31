@@ -321,3 +321,30 @@ export const getCanvasModeSwitchScroll = (
 
   return { x: -zoom * newCanvas.x, y: -zoom * newCanvas.y };
 };
+
+/**
+ * The same off-grid residual, expressed in the NEW projection's screen plane.
+ *
+ * R1/PROJ-07, ruled 2026-07-30. `offset` (ADR 0023) is a POST-projection
+ * SceneLayer-px residual, so it does not survive a projection change: a real
+ * drag committed (58, 0) px, which is inside the ISO tile diamond (58/70.75 =
+ * 0.82) but outside the 2D tile square (58 > 50). Carrying it byte-identical
+ * through an iso→2D switch drew an item that had been inside its own cell
+ * mostly over the NEIGHBOURING cell — where tile-based collision will happily
+ * let a second item sit, because the model tile never changed.
+ *
+ * `toScreen_new(fromCanvasPoint_old(o))` is the ruling's formula and the same
+ * map the viewport centre already uses ({@link getCanvasModeSwitchScroll}): read
+ * the residual as a fractional tile under the OLD projection, then re-project it
+ * under the NEW one. Both are linear, and they are an exact inverse pair, so
+ * ISO→2D→ISO restores the original value and repeated toggling cannot drift.
+ */
+export const reprojectOffset = (
+  fromStrategy: CoordinateTransformStrategy,
+  toStrategy: CoordinateTransformStrategy,
+  offset: Coords,
+  tileSize: number = UNPROJECTED_TILE_SIZE
+): Coords => {
+  const asTile = fromStrategy.fromCanvasPoint(offset.x, offset.y, tileSize);
+  return toStrategy.toScreen(asTile.x, asTile.y, tileSize);
+};

@@ -202,6 +202,27 @@ export const ConnectorsCanvas = memo(({ connectors }: Props) => {
       const model = modelApi.getState();
       const scenePaths = sceneApi.getState().connectors;
       const colorsById = new Map(model.colors.map((c) => [c.id, c.value]));
+      // R1/PROJ-12 (ADR 0023 addendum D): an endpoint anchored to an OFF-GRID
+      // node must render at the node's drawn position, not its bare tile. The
+      // DOM `<Connector>` does this through `connectorEndpointVertexDelta`,
+      // which had exactly one caller — this path mapped every tile straight
+      // through the projection and never read a view item's `offset`. Because
+      // `Renderer.connectorHybridIds` promotes a connector to the DOM path the
+      // moment it is SELECTED, selecting a connector attached to an off-grid
+      // node moved its endpoint by the full residual (41.6 px for a (37,−19)
+      // offset) — the wire visibly jumped at the node.
+      //
+      // No conversion is needed here, unlike the DOM path: these points are
+      // already SceneLayer px (`getTilePosition` output) and `offset` is a
+      // SceneLayer-px residual, so composing it is the plain vector add
+      // `renderedGeometry` documents. The map is built only from items that
+      // actually carry a residual, so an all-snapped diagram pays nothing.
+      const activeViewId = uiApi.getState().view;
+      const offsetByItemId = new Map<string, { x: number; y: number }>();
+      for (const it of model.views.find((v) => v.id === activeViewId)?.items ??
+        []) {
+        if (it.offset) offsetByItemId.set(it.id, it.offset);
+      }
       const getTilePos = getTilePosRef.current;
       const visible = visibleIdsRef.current;
       const layersNow = layersRef.current;
@@ -345,6 +366,33 @@ export const ConnectorsCanvas = memo(({ connectors }: Props) => {
             tile: connectorPathTileToGlobal(t, path.rectangle.from)
           })
         );
+
+        // PROJ-12: shift the FIRST/LAST vertex by its anchored node's residual.
+        // Routing stays integer-tile (the path is untouched); only the endpoints
+        // move, exactly as the DOM path does it. `tiles[0] ↔ anchors[0]`,
+        // `tiles[last] ↔ anchors[last]`; non-item endpoints get no shift.
+        if (offsetByItemId.size > 0 && pts.length >= 2) {
+          const anchors = connector.anchors;
+          const startOffset = offsetByItemId.get(
+            anchors[0]?.ref?.item ?? ''
+          );
+          const endOffset = offsetByItemId.get(
+            anchors[anchors.length - 1]?.ref?.item ?? ''
+          );
+          if (startOffset) {
+            pts[0] = {
+              x: pts[0].x + startOffset.x,
+              y: pts[0].y + startOffset.y
+            };
+          }
+          if (endOffset) {
+            const last = pts.length - 1;
+            pts[last] = {
+              x: pts[last].x + endOffset.x,
+              y: pts[last].y + endOffset.y
+            };
+          }
+        }
 
         const colorValue =
           connector.customColor ||

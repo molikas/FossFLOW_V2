@@ -16,13 +16,42 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import { useUiStateStore, useUiStateStoreApi } from 'src/stores/uiStateStore';
+import { useModelStoreApi } from 'src/stores/modelStore';
 import {
   isometricStrategy,
   cartesian2DStrategy,
-  getCanvasModeSwitchScroll
+  getCanvasModeSwitchScroll,
+  reprojectOffset
 } from 'src/utils/coordinateTransforms';
 import { CoordsUtils } from 'src/utils';
 import type { CanvasMode } from 'src/types/ui';
+import type { CoordinateTransformStrategy } from 'src/utils/coordinateTransforms';
+import type { Coords, View } from 'src/types';
+
+/**
+ * Re-project every off-grid residual in a view (R1/PROJ-07). Returns the SAME
+ * view object when nothing is off-grid, so the caller can skip the write.
+ */
+const reprojectViewOffsets = (
+  view: View,
+  from: CoordinateTransformStrategy,
+  to: CoordinateTransformStrategy
+): View => {
+  let touched = false;
+  const map = <T extends { offset?: Coords }>(entity: T): T => {
+    if (!entity.offset) return entity;
+    touched = true;
+    return { ...entity, offset: reprojectOffset(from, to, entity.offset) };
+  };
+  const next: View = {
+    ...view,
+    items: (view.items ?? []).map(map),
+    rectangles: (view.rectangles ?? []).map(map),
+    textBoxes: (view.textBoxes ?? []).map(map),
+    labels: (view.labels ?? []).map(map)
+  };
+  return touched ? next : view;
+};
 
 export const useCanvasModeToggle = (): {
   canvasMode: CanvasMode;
@@ -31,6 +60,7 @@ export const useCanvasModeToggle = (): {
   const canvasMode = useUiStateStore((state) => state.canvasMode);
   const uiStateStoreActions = useUiStateStore((state) => state.actions);
   const uiStateApi = useUiStateStoreApi();
+  const modelApi = useModelStoreApi();
 
   // Iso↔2D switch preserves the user's zoom and viewport center (ADR locked
   // decision #6): re-project the tile under the viewport center and recompute
@@ -52,7 +82,37 @@ export const useCanvasModeToggle = (): {
       position: getCanvasModeSwitchScroll(fromStrategy, toStrategy, zoom, scroll),
       offset: CoordsUtils.zero()
     });
-  }, [canvasMode, uiStateApi]);
+
+    // R1/PROJ-07 (ruled 2026-07-30, ADR 0023 addendum E): `offset` is a
+    // POST-projection residual, so it does not survive a projection change —
+    // carrying it byte-identical drew an item that had been inside its own ISO
+    // cell mostly over the neighbouring 2D one, where tile-based collision will
+    // let a second item sit. Re-project it with the same map the scroll
+    // correction above uses.
+    //
+    // EDITABLE only, and that is a deliberate contract collision, resolved the
+    // way the two rulings rank: this is a MODEL write, and VIEW-08 (ruled the
+    // same day) says a viewer's projection toggle may neither dirty nor save the
+    // diagram. A viewer therefore keeps the un-re-projected residual — a
+    // sub-tile visual imprecision on a read-only rendering — rather than a
+    // viewer silently editing someone else's document. Recorded in the entry
+    // and in the ADR addendum.
+    const { editorMode } = uiStateApi.getState();
+    if (editorMode !== 'EDITABLE') return;
+
+    const model = modelApi.getState();
+    const activeViewId = uiStateApi.getState().view;
+    const views = model.views.map((v) =>
+      v.id === activeViewId
+        ? reprojectViewOffsets(v, fromStrategy, toStrategy)
+        : v
+    );
+    // Untouched view objects come back by reference, so an all-snapped diagram
+    // writes nothing at all — no history entry, no dirty flag, no autosave.
+    if (views.some((v, i) => v !== model.views[i])) {
+      model.actions.set({ views });
+    }
+  }, [canvasMode, uiStateApi, modelApi]);
 
   const toggleCanvasMode = useCallback(() => {
     uiStateStoreActions.setCanvasMode(

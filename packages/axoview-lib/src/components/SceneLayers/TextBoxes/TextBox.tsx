@@ -189,20 +189,32 @@ export const TextBox = memo(({ textBox }: Props) => {
 
   // 2D-Y orientation renders as a wide-and-short rectangle that
   // useIsoProjection then rotates 90° (see MQA #11 in useIsoProjection.ts).
-  // The wrapper bounds must match the dashed selection box, which for Y
-  // orientation is 1 tile wide × size.width tall — so `from = tile` (no y
-  // offset) and `to = tile + {size.width, 0}` (same shape as the X-mode
-  // single-line rect, just at the tile itself).
+  //
+  // R1/PROJ-05: the `from` override for this branch used to be `textBox.tile`,
+  // on the reasoning — recorded here — that "the dashed selection box for Y
+  // orientation is 1 tile wide × size.width tall". That was true when text
+  // boxes were single-row and stopped being true when they grew a row count.
+  // Dropping `size.height` made the drawn wrapper ALWAYS one tile thick after
+  // the rotate, while `getTextBoxEndTile` — the authority the hit test and the
+  // selection outline both read — gives Y orientation `size.height` tiles of
+  // thickness. For a 4-line box the tile range claimed four tiles where one was
+  // drawn: a click two tiles beside the visible text still selected it, and rows
+  // 2..N painted outside the wrapper.
+  //
+  // The pre-rotation rect is the SAME rect the X branch builds — `size.width`
+  // along the run by `size.height` across the rows. The 90° rotate is what maps
+  // that thickness onto the world axis `getTextBoxEndTile` measures it on, so
+  // the special case was removing the very extent the rotation needed. Only the
+  // `originOverride` below stays orientation-specific.
   const isTwoDY =
     strategy.projectionName === '2D' && textBox.orientation === 'Y';
 
   const from = useMemo(() => {
-    if (isTwoDY) return textBox.tile;
     return CoordsUtils.add(textBox.tile, {
       x: 0,
       y: -(size.height - 1)
     });
-  }, [textBox.tile, size.height, isTwoDY]);
+  }, [textBox.tile, size.height]);
 
   const to = useMemo(() => {
     return CoordsUtils.add(textBox.tile, {

@@ -41,7 +41,11 @@
 // projection accessor (`getTilePosition` from `useCanvasMode()`, or
 // `makeTilePositionFn(getStrategy(canvasMode))` off the render path).
 
-import { PROJECTED_TILE_SIZE, UNPROJECTED_TILE_SIZE } from 'src/config';
+import {
+  PROJECTED_TILE_SIZE,
+  UNPROJECTED_TILE_SIZE,
+  TILE_PROJECTION_MULTIPLIERS
+} from 'src/config';
 import type { CanvasMode, Coords, TileOrigin } from 'src/types';
 
 /** The projection accessor every consumer already has (`useCanvasMode()`). */
@@ -69,14 +73,26 @@ export interface RenderedFootprint {
 const NO_OFFSET: Coords = { x: 0, y: 0 };
 
 // X-orientation iso matrix (a,b,c,d) for area quads; e,f translation is
-// sub-pixel and ignored. Kept at the WebGL bulk path's original 3-decimal
-// precision (moved verbatim from RectanglesCanvas) so extraction changed no
-// rendered pixel: the exact projection is ±(0.7075, 0.4095) per tile, so this
-// drifts ~0.05 px per tile of extent.
-const ISO_A = 0.707;
-const ISO_B = -0.409;
-const ISO_C = 0.707;
-const ISO_D = 0.409;
+// sub-pixel and ignored.
+//
+// R1/PROJ-06, ruled 2026-07-30: DERIVED from the projection constants, not
+// hardcoded. These were 3-decimal literals (0.707 / 0.409), moved verbatim from
+// `RectanglesCanvas` when this module was extracted, deliberately, so that the
+// extraction changed no rendered pixel. But the exact ratio `getTilePosition`
+// uses is ±(0.7075, 0.4095) — half of `TILE_PROJECTION_MULTIPLIERS` — so an
+// area quad drifted hypot(0.05, 0.05) px per tile of extent against a node drawn
+// on the same tile: 1.41 px at 20 tiles, 2.83 px at 40. It never flipped a
+// one-tile hit test and it shrinks with fit-to-view zoom, which is why it
+// survived; the owner's call was that a frozen-wrong constant is drift, not a
+// contract, and that the one-time pixel movement is worth paying (CI is
+// pixel-blind, so it costs nothing there).
+//
+// Deriving rather than re-typing 0.7075/0.4095 is the point: the two paths now
+// have ONE source, so a future change to the projection ratio moves both.
+const ISO_A = TILE_PROJECTION_MULTIPLIERS.width / 2;
+const ISO_B = -TILE_PROJECTION_MULTIPLIERS.height / 2;
+const ISO_C = TILE_PROJECTION_MULTIPLIERS.width / 2;
+const ISO_D = TILE_PROJECTION_MULTIPLIERS.height / 2;
 
 /**
  * The post-projection px translate an item adds on top of its tile position.

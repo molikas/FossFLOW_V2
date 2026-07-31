@@ -17,13 +17,17 @@ import {
   getRenderedAreaFootprint,
   getRenderedTileFootprint
 } from 'src/utils/renderedGeometry';
+import { resolveRenderOrder } from 'src/utils/renderOrder';
 
 // Explicit scene shape — avoids importing the full useScene hook type here.
 export interface HitTestScene {
   // `offset` (ADR 0023, SceneLayer px — see renderedGeometry.ts for the
   // coordinate spaces) is optional: present on off-grid items so hit-testing can
   // resolve them under their rendered position.
-  items: Array<{ id: string; tile: Coords; offset?: Coords }>;
+  // `zIndex` (PROJ-10) puts the hit test in the same paint order the canvas
+  // draws in. Optional because most callers pass a partial scene; absent reads
+  // as 0, which is the renderer's own default.
+  items: Array<{ id: string; tile: Coords; offset?: Coords; zIndex?: number }>;
   textBoxes: Array<TextBox & { size: Size }>;
   hitConnectors: Array<{
     id: string;
@@ -49,32 +53,69 @@ const getItemTileIndex = (
   items: HitTestScene['items']
 ): Map<string, string> => {
   if (!itemTileIndexCache.has(items)) {
+    // PROJ-10: built in PAINT order, so the last write for a shared tile is the
+    // entity actually drawn on top. It used to build in array order, which made
+    // the raw-tile path disagree with the canvas the same way the pixel path did
+    // — and with the two consulted from different call sites, they could
+    // disagree with each OTHER as well.
     itemTileIndexCache.set(
       items,
-      new Map(items.map((item) => [`${item.tile.x},${item.tile.y}`, item.id]))
+      new Map(
+        itemsInPaintOrder(items).map((item) => [
+          `${item.tile.x},${item.tile.y}`,
+          item.id
+        ])
+      )
     );
   }
   return itemTileIndexCache.get(items)!;
 };
+
+// Items in PAINT order, bottom-first — the order `NodesCanvas` draws them in.
+//
+// R1/PROJ-10: the hit test used to scan `scene.items` backwards and return the
+// last ARRAY entry, while the canvas paints in
+// `resolveRenderOrder(layerOrder, zIndex, isoDepth)` order. Two items sharing a
+// tile (reachable with `collides: false`) therefore disagreed: the one with
+// `zIndex: 5` was drawn on top and the click selected the `zIndex: 0` one
+// underneath, and swapping the array order flipped the verdict. Sibling drift
+// inside one function — the RECTANGLE branch below already re-sorts into paint
+// order for exactly this reason.
+//
+// `layerOrder` is 0 for every item here: this module is handed a flat scene with
+// no `layers` array, so the layer BUCKET cannot be resolved. That is not a gap
+// in practice — hidden-layer entities are excluded from interaction by
+// `isItemInteractable` upstream, and two items on different visible layers do
+// not share a tile without also colliding — but it is why this is a paint-order
+// approximation rather than the paint order itself, and it is stated here so a
+// future reader does not assume the layer bucket is being honoured.
+const itemsInPaintOrder = (items: HitTestScene['items']) =>
+  [...items].sort(
+    (a, b) =>
+      resolveRenderOrder(0, a.zIndex ?? 0, -a.tile.x - a.tile.y) -
+      resolveRenderOrder(0, b.zIndex ?? 0, -b.tile.x - b.tile.y)
+  );
 
 // Pixel-accurate ITEM hit test (ADR 0023). An off-grid item renders at its tile
 // projection + a px offset, and that offset is SUB-TILE — snapping the cursor to
 // an integer tile and comparing tile keys throws away up to half a tile, so
 // hovering the visible item lands on a neighbour. Instead we test the cursor's
 // SceneLayer point directly against each item's RENDERED footprint (the iso
-// diamond / 2D square from `renderedGeometry`). Topmost (last painted) wins,
-// matching the raw index's last-write-wins + the node paint order.
+// diamond / 2D square from `renderedGeometry`). Topmost wins — scanned from the
+// top of the PAINT order down (PROJ-10), not from the end of the array.
 //
-// O(N) per call, but only on gesture paths that pass a `point` (hover fires once
-// per tile crossing, click once, drag-over once per move) — never the render loop.
+// O(N log N) per call, but only on gesture paths that pass a `point` (hover
+// fires once per tile crossing, click once, drag-over once per move) — never the
+// render loop.
 const itemAtPoint = (
   items: HitTestScene['items'],
   point: Coords,
   canvasMode: CanvasMode
 ): string | null => {
   const getTilePosition = makeTilePositionFn(getStrategy(canvasMode));
-  for (let i = items.length - 1; i >= 0; i -= 1) {
-    const it = items[i];
+  const painted = itemsInPaintOrder(items);
+  for (let i = painted.length - 1; i >= 0; i -= 1) {
+    const it = painted[i];
     const footprint = getRenderedTileFootprint(it, getTilePosition, canvasMode);
     if (footprintContainsPoint(footprint, point)) return it.id;
   }

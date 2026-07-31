@@ -1,5 +1,5 @@
 /**
- * R1 / PROJ-06, PROJ-13, PROJ-14, PROJ-15 — the pure transform math.
+ * R1 / PROJ-13, PROJ-14, PROJ-15 — the pure transform math. All FALSIFIED.
  *
  * These four are sweeps over the strategies themselves, so they need no React
  * tree and no canvas. Each block states the observed behaviour in a passing
@@ -45,68 +45,10 @@ const zoomLadder = (): number[] => {
   return out;
 };
 
-// ---------------------------------------------------------------------------
-// PROJ-06 — the 3-decimal ISO matrix vs the exact projection ratio
-// ---------------------------------------------------------------------------
-
-describe('PROJ-06 — area quads drift from tile projection in ISOMETRIC', () => {
-  /**
-   * SceneLayer-px distance between a rectangle's drawn far corner and the
-   * EXACT projection of the same displacement. A rectangle spanning tiles
-   * [0..E] on the x axis is W = (E+1) tiles wide, so its far corner is the
-   * origin corner advanced by (E+1) tiles along the tile-x direction — which
-   * `getTilePosition` places exactly at tile (E+1, 0) with origin LEFT.
-   */
-  const farCornerDrift = (extent: number): number => {
-    const corners = getRenderedAreaCorners(
-      { x: 0, y: 0 },
-      { x: extent, y: 0 },
-      undefined,
-      isoTilePos,
-      'ISOMETRIC'
-    );
-    const exactFar = isoTilePos({
-      tile: { x: extent + 1, y: 0 },
-      origin: 'LEFT'
-    });
-    return Math.hypot(corners[1].x - exactFar.x, corners[1].y - exactFar.y);
-  };
-
-  it('PRECONDITION: the two constant sets really do differ', () => {
-    expect(PROJECTED_TILE_SIZE.width / 2 / UNPROJECTED_TILE_SIZE).toBeCloseTo(
-      0.7075,
-      10
-    );
-    // renderedGeometry's ISO_A is 0.707 — 0.0005 per unit, 0.05 px per tile.
-    expect(0.7075).not.toBe(0.707);
-  });
-
-  it('characterization: drift is exactly hypot(0.05,0.05) px per tile of width', () => {
-    const per = Math.hypot(0.05, 0.05);
-    expect(farCornerDrift(0)).toBeCloseTo(per * 1, 9);
-    expect(farCornerDrift(19)).toBeCloseTo(per * 20, 9);
-    expect(farCornerDrift(39)).toBeCloseTo(per * 40, 9);
-  });
-
-  it('a 20-tile rectangle is >1 px off the tile it claims as its far edge', () => {
-    expect(farCornerDrift(19)).toBeGreaterThan(1);
-  });
-
-  it('VERDICT EVIDENCE: even a 40-tile rectangle stays under 3 px of drift', () => {
-    // 3 px at zoom 1, and fit-to-view shrinks a 40-tile-wide diagram well below
-    // zoom 1 — the on-screen error is sub-pixel for any diagram that fits.
-    expect(farCornerDrift(39)).toBeLessThan(3);
-  });
-
-  it('and the drift never flips a one-tile hit-test', () => {
-    // The smallest feature the drift could corrupt is a one-tile footprint
-    // (141 x 82 px). 3 px of drift is comfortably inside it.
-    const fp = tileFootprintAt({ x: 0, y: 0 }, 'ISOMETRIC');
-    expect(footprintContainsPoint(fp, { x: farCornerDrift(39), y: 0 })).toBe(
-      true
-    );
-  });
-});
+// PROJ-06 is FIXED (wave 3, owner ruling) and its probe promoted to
+// utils/__tests__/reprojectOffset.test.ts — the area-quad matrix is DERIVED
+// from TILE_PROJECTION_MULTIPLIERS now, so the drift is exactly zero
+// (ADR 0023 addendum, 2026-07-31).
 
 // ---------------------------------------------------------------------------
 // PROJ-13 — toScreen -> fromScreen across the real zoom ladder

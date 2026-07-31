@@ -129,6 +129,59 @@ were invisible to them. The acceptance surface for off-grid geometry is now
 zone, parametrized over element kind × offset corpus × canvas mode) plus the
 sub-tile e2e specs. See [testing.md](../guidelines/testing.md).
 
+### 2026-07-31 addendum — the residual is re-projected on an iso↔2D switch (PROJ-07)
+
+**Corrects §1's "offset in unprojected px works in both projections"**, which the
+2026-07-23 addendum had already narrowed (the residual is a POST-projection
+SceneLayer-px value, not an unprojected one) without following the correction
+through to the projection SWITCH.
+
+**The defect (R1/PROJ-07, ruled 2026-07-30).** Because `offset` lives in the
+screen plane, it does not survive a change of projection. A real drag committed a
+residual of `(58, 0)` px: inside the ISO tile diamond (58 / 70.75 = 0.82) and
+*outside* the 2D tile square (58 > 50). The iso→2D switch carried it
+byte-identical with the tile unchanged, so an item drawn inside its own cell in
+ISO was drawn mostly over the **neighbouring** cell in 2D — where tile-based
+collision (§4, which keys off the integer tile) will happily let a second item
+sit. Nothing in this ADR specified projection-switch semantics, which is why the
+campaign raised it as a product question rather than filing it.
+
+**The rule.** On an iso↔2D switch, every off-grid residual in the active view is
+re-projected as `toScreen_new(fromCanvasPoint_old(offset))` —
+[`reprojectOffset`](../../packages/axoview-lib/src/utils/coordinateTransforms.ts),
+applied by [`useCanvasModeToggle`](../../packages/axoview-lib/src/hooks/useCanvasModeToggle.ts).
+This is the same principle and the same map the viewport centre already uses
+(`getCanvasModeSwitchScroll`), so the item keeps its *logical* sub-tile position.
+Both maps are linear and an exact inverse pair, so ISO→2D→ISO restores the
+original values and repeated toggling cannot drift.
+
+**Two consequences, stated because neither is obvious:**
+
+- **A projection toggle is now a model edit** when any entity in the view is
+  off-grid — it dirties the document and rides autosave. That is unavoidable
+  once the residual is projection-dependent AND must persist: writing nothing
+  would leave the saved file holding ISO residuals that a later 2D load renders
+  at the wrong sub-tile position. An all-snapped diagram writes nothing at all
+  (untouched views are returned by reference, so the store is never called).
+- **Viewers are exempt.** The rewrite runs only in `EDITABLE`. This is a
+  deliberate collision with the ruling above, resolved the way the two rank:
+  VIEW-08 (ruled the same day) says a viewer's projection toggle may neither
+  dirty nor save the diagram, and a viewer silently editing someone else's
+  document is worse than a sub-tile imprecision on a read-only rendering.
+
+### 2026-07-31 addendum — one projection ratio (PROJ-06)
+
+`renderedGeometry`'s area-quad matrix was four 3-decimal literals (0.707 /
+0.409), moved verbatim from `RectanglesCanvas` when the module was extracted,
+deliberately, so the extraction changed no rendered pixel. The exact ratio
+`getTilePosition` uses is half of `TILE_PROJECTION_MULTIPLIERS` — ±(0.7075,
+0.4095) — so an area quad drifted `hypot(0.05, 0.05)` px per tile of extent
+against a node drawn on the same tile: 1.41 px at 20 tiles, 2.83 px at 40. It
+never flipped a one-tile hit test and it shrinks with fit-to-view zoom, which is
+why it survived. Owner ruling 2026-07-30: a frozen-wrong constant is drift, not a
+contract — take the one-time pixel movement. The constants are now DERIVED from
+`TILE_PROJECTION_MULTIPLIERS`, so the two paths have one source.
+
 ## Consequences
 
 **Positive:** minimal blast radius — the integer-tile invariant the whole engine relies on is preserved; per-item granularity matches the cherry-pick workflow; offset in unprojected px works in both projections.

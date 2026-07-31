@@ -2721,15 +2721,24 @@ error, so a future consumer inherits it.
 add a spacer element below a tall text box (or beyond a stray Label) so the
 bounds stretch to cover the real content.
 
-**Status:** Open. Fix direction: replace the text-box term with
-`getTextBoxEndTile(textBox, getTextBoxDimensions(textBox))` (which already
-handles both orientations), add a `view.labels` term, and size
-`getUnprojectedBounds` with a plain `high - low` rather than `getBoundingBoxSize`.
-Note the ADR-0023 `offset` is also not composed into these bounds; that one is
-currently harmless because `PROJECT_BOUNDING_BOX_PADDING` is 3 tiles per side —
-worth folding into the same fix so a padding change cannot re-open it
-(campaign PROJ-03, verdict FALSIFIED-but-latent). Repro:
-[`bounds-proj-01-02-03-04.explore.test.ts`](packages/axoview-lib/src/__explore__/R1/bounds-proj-01-02-03-04.explore.test.ts).
+**Status:** Fixed in wave 3 (2026-07-31) — all three as directed.
+`getProjectBounds` reads `getTextBoxEndTile` (so it can no longer disagree with
+the hit test and the selection outline, which read the same helper) and
+enumerates `view.labels`; `getUnprojectedBounds` computes `high − low` because
+its inputs are PIXELS and `getBoundingBoxSize` adds the inclusive TILE-count +1.
+
+The PROJ-03 note was **not** folded in, deliberately. Composing `offset` into
+these bounds is a real latent gap, but it is not this entry's defect, it has no
+reachable symptom (the 3-tile padding absorbs the largest possible half-tile
+residual with >2× margin), and adding an unasserted term to a function that had
+zero tests would have shipped in the same change as three that DO have symptoms.
+It belongs with the ADR 0023 offset-consumer audit, not here.
+
+The PROJ-04 fix is visible outside its own tests: `SizeIndicator`'s snapshot
+moved 850→849 px and 492.4→491.4 px, which is the off-by-one this entry names,
+observed somewhere nobody wrote an assertion. Promoted regressions:
+[`projectBounds.test.ts`](packages/axoview-lib/src/utils/__tests__/projectBounds.test.ts)
+— the first tests `getProjectBounds`/`getUnprojectedBounds` have ever had.
 
 ## A 2D Y-orientation text box draws one tile thick but claims its full row count
 
@@ -2758,11 +2767,21 @@ every existing test uses. The X orientation is unaffected: the branch is Y-only.
 orientation (the iso Y path has its own `originOverride` correction and is
 consistent).
 
-**Status:** Open. Fix direction: give the 2D-Y branch the row count too —
-`from = tile`, `to = tile + { x: size.width, y: 0 }` is only correct when
-`size.height === 1`; the rotated wrapper needs `pxSize.height = size.height` tiles
-so the post-rotation thickness matches `getTextBoxEndTile`. Repro:
-[`geometry-proj-05-10-11-12.explore.test.tsx`](packages/axoview-lib/src/__explore__/R1/geometry-proj-05-10-11-12.explore.test.tsx).
+**Status:** Fixed in wave 3 (2026-07-31), and the fix is smaller than the
+direction: the 2D-Y `from` override is simply DELETED. The pre-rotation rect is
+the same rect the X branch builds — `size.width` along the run by `size.height`
+across the rows — and the 90° rotate is what maps that thickness onto the world
+axis `getTextBoxEndTile` measures it on. The special case was removing the very
+extent the rotation needed. Only the `originOverride` below it stays
+orientation-specific.
+
+**Verified visually, not just by assertion.** This is renderer geometry and CI is
+pixel-blind, so it was checked by screenshotting a four-row Y-orientation box in
+2D before and after: the drawn text moves onto the tiles the hit range claims,
+instead of sitting ~2 tiles beside them. Promoted regression:
+[`projection-geometry.spec.ts`](packages/axoview-e2e/tests/projection-geometry.spec.ts) — note the fixture types its rows
+through the real editor, because a direct model write of multi-line content does
+NOT re-measure the scene's row count and the assertion would be vacuous.
 
 ## Clicking two stacked nodes selects the one drawn underneath (item hit-testing ignores z-order)
 
@@ -2791,10 +2810,23 @@ the ITEM branch never got the same treatment.
 **Workaround:** move one of the overlapping items apart, select the intended one
 from the Layers panel, or re-order the items so the one you want is last.
 
-**Status:** Open. Fix direction: sort the candidate items by
-`resolveRenderOrder` before the backwards scan, exactly as the rectangle branch
-does — the layer order is already available to the hit-test callers. Repro:
-[`geometry-proj-05-10-11-12.explore.test.tsx`](packages/axoview-lib/src/__explore__/R1/geometry-proj-05-10-11-12.explore.test.tsx).
+**Status:** Fixed in wave 3 (2026-07-31) as directed, at BOTH item paths — the
+pixel-accurate `itemAtPoint` and the raw-tile index, which built its
+`"x,y" → id` Map in array order and so had the identical last-write-wins bug.
+With the two consulted from different call sites they could disagree with each
+OTHER as well, not just with the canvas.
+
+One correction to the direction: **the layer order is NOT available here.**
+`hitDetection` is handed a flat `HitTestScene` with no `layers` array, so
+`resolveRenderOrder` is called with `layerOrder: 0` — zIndex and iso-depth are
+honoured, the layer bucket is not. That is not a gap in practice (hidden-layer
+entities are excluded upstream by `isItemInteractable`, and two items on
+different visible layers do not share a tile without also colliding), and it is
+stated in the code so a later reader does not assume otherwise. Promoted
+regression:
+[`hitPaintOrder.test.ts`](packages/axoview-lib/src/utils/__tests__/hitPaintOrder.test.ts),
+which runs the same case with the array order BOTH ways — the flip is the bug —
+and was verified to go red without the fix.
 
 ## Selecting a connector attached to an off-grid node makes the wire jump at that node
 
@@ -2824,11 +2856,23 @@ were never covered.
 
 **Workaround:** keep nodes with connectors snapped to the grid.
 
-**Status:** Open. Fix direction: apply the same endpoint delta in
-`ConnectorsCanvas`'s vertex build (it already has the projection and the view
-items in scope), and extend `renderedGeometry.invariant.test.tsx` with a
-connector-endpoint parity case so the two paths cannot drift again. Repro:
-[`geometry-proj-05-10-11-12.explore.test.tsx`](packages/axoview-lib/src/__explore__/R1/geometry-proj-05-10-11-12.explore.test.tsx).
+**Status:** Fixed in wave 3 (2026-07-31). `ConnectorsCanvas` shifts the first
+and last vertex by the anchored node's residual — but NOT by "the same endpoint
+delta": `connectorEndpointVertexDelta` exists because the DOM path draws
+vertices in tile-space and then projects them, so a screen-plane offset has to be
+inverted through the projection first. The WebGL path's points are already
+SceneLayer px (`getTilePosition` output) and `offset` is a SceneLayer-px
+residual, so composing it is the plain vector add `renderedGeometry` documents.
+Using the DOM helper here would have applied the inverse projection twice.
+The lookup map is built only from items that carry a residual, so an all-snapped
+diagram pays nothing on the render path.
+
+The suggested `renderedGeometry.invariant.test.tsx` case was not added: that
+suite is a jsdom render/hit-zone corpus and the defect is in a WebGL vertex
+buffer, which it cannot observe. The promoted regression is
+[`projection-geometry.spec.ts`](packages/axoview-e2e/tests/projection-geometry.spec.ts) instead, which drives the real thing —
+select the connector so `Renderer.connectorHybridIds` PROMOTES it to the DOM
+path, which is the swap that made the wire jump.
 
 ## The chip atlas has no eviction — renaming nodes leaks slots until labels stop drawing
 
