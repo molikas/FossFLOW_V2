@@ -73,99 +73,15 @@ const rightClickAt = async (page: Page, p: CanvasPoint) => {
   await page.waitForTimeout(350);
 };
 
+// CTX-03/04 are FIXED (wave 3) and their probes promoted to
+// `usePanHandlers.test.ts` — every persistent tool mode survives a pan, from
+// both the right-drag and the middle-drag gesture. CTX-06 likewise, to
+// `TransformControlsManager.layerGate.test.tsx` — the transform chrome consults
+// `visibleIds` as well as `lockedIds` now.
+//
 // CTX-01 is FIXED (wave 3) and its probe promoted — the mouse placement modes
 // now hit-test the release point (`isCanvasDrop`). See PlaceIcon/TextBox/Label
 // unit tests and utils/__tests__/canvasDropTarget.test.ts.
-
-// ---------------------------------------------------------------------------
-// CTX-03 / CTX-04 — mode restore after a pan
-// ---------------------------------------------------------------------------
-test.describe('CTX-03 / CTX-04 — the armed tool across a pan', () => {
-  async function panWith(page: Page, button: 'right' | 'middle') {
-    const canvas = new CanvasPOM(page);
-    const start = await absOfTile(canvas, { x: 0, y: 0 });
-    await page.mouse.move(start.x, start.y);
-    await page.mouse.down({ button });
-    await page.mouse.move(start.x - 140, start.y + 90, { steps: 10 });
-    await page.mouse.up({ button });
-    await page.waitForTimeout(350);
-  }
-
-  test('control: a right-drag pan restores an armed LASSO', async ({ app }) => {
-    const { page } = app;
-    await placeIconViaMouse(page, { x: 620, y: 320 });
-    await expect.poll(() => getModelItemCount(page), { timeout: 8_000 }).toBe(1);
-
-    await page.keyboard.press('l');
-    await expect.poll(() => modeType(page), { timeout: 3_000 }).toBe('LASSO');
-    await panWith(page, 'right');
-    expect(await modeType(page)).toBe('LASSO');
-  });
-
-  test.fail(
-    'CTX-03 BUG: a right-drag pan silently drops an armed TEXTBOX tool',
-    async ({ app }) => {
-      const { page } = app;
-      await placeIconViaMouse(page, { x: 620, y: 320 });
-      await expect
-        .poll(() => getModelItemCount(page), { timeout: 8_000 })
-        .toBe(1);
-
-      await page.keyboard.press('t');
-      await expect.poll(() => modeType(page), { timeout: 3_000 }).toBe('TEXTBOX');
-      await panWith(page, 'right');
-      expect(await modeType(page)).toBe('TEXTBOX');
-    }
-  );
-
-  test('CTX-03 characterization: the mode falls back to CURSOR', async ({
-    app
-  }) => {
-    const { page } = app;
-    await placeIconViaMouse(page, { x: 620, y: 320 });
-    await expect.poll(() => getModelItemCount(page), { timeout: 8_000 }).toBe(1);
-
-    await page.keyboard.press('t');
-    await expect.poll(() => modeType(page), { timeout: 3_000 }).toBe('TEXTBOX');
-    await panWith(page, 'right');
-    const after = await modeType(page);
-    // eslint-disable-next-line no-console
-    console.log(`CTX-03 observed — TEXTBOX -> ${after} after a right-drag pan`);
-    expect(after).toBe('CURSOR');
-  });
-
-  test.fail(
-    'CTX-04 BUG: a MIDDLE-drag pan drops even the tools right-drag restores',
-    async ({ app }) => {
-      const { page } = app;
-      await placeIconViaMouse(page, { x: 620, y: 320 });
-      await expect
-        .poll(() => getModelItemCount(page), { timeout: 8_000 })
-        .toBe(1);
-
-      await page.keyboard.press('l');
-      await expect.poll(() => modeType(page), { timeout: 3_000 }).toBe('LASSO');
-      await panWith(page, 'middle');
-      expect(await modeType(page)).toBe('LASSO');
-    }
-  );
-
-  test('CTX-04 characterization: middle-drag always lands on CURSOR', async ({
-    app
-  }) => {
-    const { page } = app;
-    await placeIconViaMouse(page, { x: 620, y: 320 });
-    await expect.poll(() => getModelItemCount(page), { timeout: 8_000 }).toBe(1);
-
-    await page.keyboard.press('l');
-    await expect.poll(() => modeType(page), { timeout: 3_000 }).toBe('LASSO');
-    await panWith(page, 'middle');
-    const after = await modeType(page);
-    // eslint-disable-next-line no-console
-    console.log(`CTX-04 observed — LASSO -> ${after} after a middle-drag pan`);
-    expect(after).toBe('CURSOR');
-  });
-});
 
 // ---------------------------------------------------------------------------
 // CTX-02 — right-tap target after a keyboard pan
@@ -366,50 +282,6 @@ test.describe('CTX-08 / CTX-09 / CTX-10 — rectangle geometry', () => {
     // A rectangle must stay a rectangle: normalised bounds, non-negative size.
     expect(Math.abs(after.to.x - after.from.x)).toBeGreaterThanOrEqual(0);
     await expectStoreInvariants(page, 'after an inverted rectangle resize');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// CTX-06 — transform chrome vs a hidden-layer group member
-// ---------------------------------------------------------------------------
-test.describe('CTX-06 — transform chrome for a group with a hidden member', () => {
-  test.fail(
-    'BUG: the group resize box IS offered for a hidden-layer member',
-    async ({ app }) => {
-    const { page } = app;
-    await placeIconViaMouse(page, { x: 520, y: 280 });
-    await placeIconViaMouse(page, { x: 760, y: 380 });
-    await expect.poll(() => getModelItemCount(page), { timeout: 10_000 }).toBe(2);
-    const tiles = await itemTiles(page);
-
-    const layers = new LayersPanelPOM(page);
-    await layers.open();
-    await layers.addLayer();
-    const layerName = (await activeView(page)).layers[0].name as string;
-    await layers.dragItemToLayer(tiles[1].id, layerName);
-    await layers.toggleVisibility(layerName);
-    await page.waitForTimeout(300);
-
-    // Select BOTH (the hidden one included — RED-15 shows a stale selection can
-    // hold it; here we set it explicitly, which is the same state).
-    await page.evaluate((refs) => {
-      (window as any).__axoview__.ui.getState().actions.setSelectedIds(refs);
-    }, tiles.map((t: { id: string }) => ({ type: 'ITEM', id: t.id })));
-    await page.waitForTimeout(400);
-
-    const handles = await page
-      .locator('[data-axoview-id="canvas-transform-anchor"]')
-      .count()
-      .catch(() => 0);
-    const anyChrome = await page
-      .locator('[class*="TransformControls"], [data-testid*="transform"]')
-      .count()
-      .catch(() => 0);
-    // eslint-disable-next-line no-console
-    console.log(
-      `CTX-06 observed — hidden ${tiles[1].id}; transform anchors ${handles}; chrome nodes ${anyChrome}`
-    );
-    expect(handles).toBe(0);
   });
 });
 

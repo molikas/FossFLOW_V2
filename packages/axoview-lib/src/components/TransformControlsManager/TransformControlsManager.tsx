@@ -18,7 +18,21 @@ export const TransformControlsManager = () => {
   // usePanHandlers) and industry behaviour (draw.io / PowerPoint / Canva show an
   // inert locked selection, never live handles). The canvas body-drag + inline
   // edit are already blocked for locked; handles were the remaining leak.
-  const { lockedIds } = useLayerContext();
+  // I5/CTX-06: `visibleIds` was missing entirely. Locked and hidden are two
+  // different verdicts and the chrome owes them different answers:
+  //
+  //   LOCKED  → the entity is on screen and selectable, so it keeps its ring;
+  //             only the resize/rotate handles go (the rule above).
+  //   HIDDEN  → the entity is not drawn at all, so NO chrome belongs to it, and
+  //             a group box spanning it would resize something the user cannot
+  //             see. Measured before the fix: four live resize handles around a
+  //             group whose bounds included a hidden-layer node.
+  //
+  // `layers.length === 0` is the "no layers configured" fallback every other
+  // consumer uses — NOT `visibleIds.size`, which is also empty when every
+  // entity is on a hidden layer (the layer-visibility regression).
+  const { lockedIds, visibleIds, layers } = useLayerContext();
+  const isVisible = (id: string) => layers.length === 0 || visibleIds.has(id);
 
   // Hide selection chrome while a move is in flight (owner 2026-07-04): the
   // drag is a CSS-only preview (DragItems, RECT-1) — the model tile doesn't
@@ -37,21 +51,25 @@ export const TransformControlsManager = () => {
     // NOT its own handles, so it reads as "grab the group, not one node").
     // Suppress the group resize box if ANY member sits on a locked layer —
     // group-resizing would move a locked node. Members still show their rings.
+    // Same for a HIDDEN member (CTX-06): the box would resize an entity that is
+    // not on screen, and its bounds would extend to a place with nothing in it.
     const anyLocked = selectedIds.some((ref) => lockedIds.has(ref.id));
+    const shown = selectedIds.filter((ref) => isVisible(ref.id));
+    const anyHidden = shown.length !== selectedIds.length;
     const allNodes = selectedIds.every((ref) => ref.type === 'ITEM');
     if (allNodes) {
       return (
         <>
-          {selectedIds.map((ref) => (
+          {shown.map((ref) => (
             <NodeTransformControls
               key={`item-${ref.id}`}
               id={ref.id}
               showHandles={false}
             />
           ))}
-          {!anyLocked && (
+          {!anyLocked && !anyHidden && (
             <NodeGroupTransformControls
-              ids={selectedIds.map((ref) => ref.id)}
+              ids={shown.map((ref) => ref.id)}
             />
           )}
         </>
@@ -63,7 +81,7 @@ export const TransformControlsManager = () => {
     // homogeneous-only bulk rule, ADR 0030).
     return (
       <>
-        {selectedIds.map((ref) => {
+        {shown.map((ref) => {
           switch (ref.type) {
             case 'ITEM':
               return (
@@ -100,6 +118,17 @@ export const TransformControlsManager = () => {
         })}
       </>
     );
+  }
+
+  // A single selected entity on a HIDDEN layer gets no chrome either — the ring
+  // would be the only thing drawn at that tile (CTX-06). `ADD_ITEM` is the icon
+  // picker, not an entity, so it has no id to check.
+  if (
+    itemControls &&
+    itemControls.type !== 'ADD_ITEM' &&
+    !isVisible(itemControls.id)
+  ) {
+    return null;
   }
 
   switch (itemControls?.type) {

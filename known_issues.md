@@ -2557,12 +2557,30 @@ change — neither path should alter the armed tool.
 
 **Workaround:** re-press the tool hotkey after panning.
 
-**Status:** Open. Fix direction: call `restorePreviousMode()` from both pan
-methods, and replace the switch with "save the whole previous mode object and
-put it back", falling back to a clean reconstruction only for modes carrying
-in-flight state (CONNECTOR's abort is the one case that genuinely needs
-special handling). Repro:
-[`ctx-01-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I5-pan-menu/ctx-01-15.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) — the first half as directed, the
+second half deliberately not.
+
+**CTX-04** is exactly the direction: `endPan` calls `restorePreviousMode()` for
+both gestures, and the middle-button branch of `handleMouseDown` records the
+armed mode the way the right-button branch always did (without that capture the
+shared call would still land on the `default` branch). The only remaining
+difference between the two pan gestures is the stale-`mousedown` cleanup, which
+is a consequence of the right mouseup being consumed, not a policy difference.
+
+**CTX-03** adds TEXTBOX and LABEL to the switch rather than replacing it with
+"put the whole previous mode object back". Restoring the object verbatim would
+restore mid-action state too — a `LASSO` with a live `selection`, a
+`RECTANGLE.DRAW` holding the id of a shape the pan interrupted, a `PLACE_ICON`
+with a stale preview — which is precisely what the reconstruction exists to
+avoid; CONNECTOR is not the only mode carrying in-flight fields, it is only the
+one that also needs a model-level abort. The switch is now the same set
+`handleEscapeKey` returns to Select from, for the same reason: those are the
+modes a user deliberately ARMS. Transient modes (DRAG_ITEMS, the transforms,
+RECONNECT_ANCHOR) describe a gesture the pan interrupted and still land on
+CURSOR. Promoted regressions: the restore matrix in
+[`usePanHandlers.test.ts`](packages/axoview-lib/src/interaction/__tests__/usePanHandlers.test.ts),
+run for BOTH pan buttons across all seven tool modes plus a transient control,
+and verified to go red (7 failures) without the middle-button capture.
 
 ## The group resize box is drawn around items on a hidden layer
 
@@ -2580,12 +2598,24 @@ a live selection is not re-validated when a layer is hidden.
 
 **Workaround:** clear the selection after hiding a layer.
 
-**Status:** Open. Fix direction: use the same `isItemInteractable` predicate the
-gesture paths use — hidden-layer members should be excluded from the chrome's
-bounds and from the resize, or the chrome suppressed entirely. Fixing RED-15
-(re-validate the selection on a layer-state change) removes the common route in.
-Repro:
-[`ctx-01-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/I5-pan-menu/ctx-01-15.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31). `TransformControlsManager` reads
+`visibleIds` and `layers` alongside `lockedIds` now — but NOT through the
+combined `isItemInteractable` predicate, because locked and hidden owe the
+chrome different answers and that predicate collapses them into one:
+
+- **locked** → the entity is on screen and selectable (from the Layers list, to
+  inspect, re-layer or unlock), so it keeps its selection ring and loses only the
+  handles. That rule already existed and is unchanged.
+- **hidden** → the entity is not drawn at all, so it gets NO chrome, and a group
+  box spanning it is suppressed exactly as for a locked member.
+
+The fallback is `layers.length === 0`, not `visibleIds.size` — an empty set also
+means "every entity is on a hidden layer", which must stay hidden (the
+layer-visibility regression that rule exists for). RED-15 is a separate entry and
+is NOT fixed here; the chrome gate is deliberately the belt rather than the
+braces, because a layer can be hidden at any moment and a selection made before
+that is still live. Promoted regression:
+[`TransformControlsManager.layerGate.test.tsx`](packages/axoview-lib/src/components/TransformControlsManager/__tests__/TransformControlsManager.layerGate.test.tsx).
 
 ## In view-only mode a left-click on a content-bearing item opens nothing
 

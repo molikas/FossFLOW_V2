@@ -462,6 +462,70 @@ describe('usePanHandlers.handleMouseUp', () => {
     );
   });
 
+  // Promoted from the exploratory lane (I5/CTX-03 + CTX-04). A pan is a
+  // NAVIGATION gesture — it must not disarm the tool the user chose.
+  //
+  // CTX-03: `restorePreviousMode` reconstructed five hardcoded mode types and
+  // dropped every other armed tool to CURSOR. The five that WERE listed worked,
+  // which is exactly why the gap stayed invisible — the existing coverage above
+  // is CURSOR and CONNECTOR.
+  //
+  // CTX-04: the middle-drag branch hardcoded CURSOR and never called
+  // `restorePreviousMode` at all, so it dropped even the tools right-drag
+  // restored correctly.
+  describe.each([
+    ['right', 2],
+    ['middle', 1]
+  ])('a %s-drag pan restores the armed tool (CTX-03/04)', (_label, button) => {
+    const panThen = (
+      result: { current: ReturnType<typeof usePanHandlers> },
+      btn: number
+    ) => {
+      act(() => {
+        result.current.handleMouseDown(
+          makeEvent({ button: btn, clientX: 100, clientY: 100 })
+        );
+      });
+      act(() => {
+        result.current.handleMouseMove(
+          makeEvent({ clientX: 140, clientY: 100 })
+        );
+      });
+      mockSetMode.mockClear();
+      act(() => {
+        result.current.handleMouseUp(makeEvent({ button: btn }));
+      });
+    };
+
+    test.each([
+      'TEXTBOX',
+      'LABEL',
+      'LASSO',
+      'FREEHAND_LASSO',
+      'RECTANGLE.DRAW',
+      'PLACE_ICON',
+      'CONNECTOR'
+    ])('%s survives the pan', (armed) => {
+      mockUiState.mode = { type: armed, selection: null } as never;
+      const { result } = setup();
+      panThen(result, button);
+      expect(mockSetMode).toHaveBeenCalledWith(
+        expect.objectContaining({ type: armed })
+      );
+    });
+
+    test('a TRANSIENT mode is not restored — the pan interrupted a gesture', () => {
+      // DRAG_ITEMS / the transforms / RECONNECT_ANCHOR describe a gesture in
+      // flight, not a tool the user armed. CURSOR is the right landing.
+      mockUiState.mode = { type: 'DRAG_ITEMS', selection: null } as never;
+      const { result } = setup();
+      panThen(result, button);
+      expect(mockSetMode).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'CURSOR' })
+      );
+    });
+  });
+
   test('right-click without drag on LASSO mode → clears lasso selection', () => {
     mockUiState.mode = {
       type: 'LASSO',
