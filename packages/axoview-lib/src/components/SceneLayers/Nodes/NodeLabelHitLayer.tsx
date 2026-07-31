@@ -1,7 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { ViewItem } from 'src/types';
 import { DEFAULT_LABEL_HEIGHT, DEFAULT_FONT_FAMILY } from 'src/config';
-import { LABEL_BASE_FONT_PX } from 'src/config/labelSettings';
+import {
+  LABEL_BASE_FONT_PX,
+  isNodeLabelDrawn
+} from 'src/config/labelSettings';
 import { useCanvasMode } from 'src/contexts/CanvasModeContext';
 import { useLayerContext } from 'src/hooks/useLayerContext';
 import { useModelStore } from 'src/stores/modelStore';
@@ -40,9 +43,12 @@ import {
 // canvas node per frame (~10 fps at 1000 visible nodes; perf-results/decision-log
 // Track P) — the regression this fix removes.
 
-// Below this zoom labels are too small to grab precisely; skip the layer (also
-// bounds the div count — at very low zoom the whole diagram can be on screen).
-const HIT_MIN_ZOOM = 0.4;
+// R3/GPU-05: this used to be a fixed 0.4 while the CHIP draws below
+// LABEL_LOD_ZOOM (0.25) whenever "keep labels readable" is on — so the
+// accessibility setting whose purpose is keeping labels legible when zoomed out
+// was the one manufacturing visible-but-inert ones. The gate follows the DRAW
+// decision now, from the shared predicate. Nothing may be painted at a zoom
+// where it cannot be hit.
 // Mirror Label/NodesCanvas chip padding (theme.spacing(1.5) / spacing(1)) and
 // the 250px max chip width, so the hit box matches the drawn name chip.
 const CHIP_PAD_X = 12;
@@ -99,7 +105,8 @@ export const NodeLabelHitLayer = ({ nodes }: Props) => {
   // Coarse zoom + mode gates — boolean selectors so this only re-renders when
   // the gate flips, not on every zoom tick.
   const active = useUiStateStore(
-    (s) => s.editorMode === 'EDITABLE' && s.zoom >= HIT_MIN_ZOOM
+    (s) =>
+      s.editorMode === 'EDITABLE' && isNodeLabelDrawn(s.zoom, s.readableLabels)
   );
   const modelItems = useModelStore((s) => s.items);
   // Layer visibility: a node on a hidden layer is not drawn (NodesCanvas), so it

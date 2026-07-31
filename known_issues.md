@@ -2934,16 +2934,38 @@ at an unremarkable diagram size.
 **Workaround:** any edit that changes geometry (move a node, place or delete
 anything) triggers the compaction and the missing names come back.
 
-**Status:** Open. Fix direction: (a) give `putCanvas` a free-list or a
-generation-tagged LRU so a superseded key's slot is reclaimed immediately, or at
-minimum evict the previous slot when a key's content changes; (b) expose an
-overflow signal on `SpriteBatch` (a counter or an `onAtlasFull` callback) so the
-layer can schedule one follow-up rebuild instead of waiting for a geometry
-change; (c) log once when `MAX_TEXTURE_SIZE` clamps the requested atlas, so a
-small-cap device is diagnosable. Repro:
-[`atlas-gl-01-02-03-04-05.explore.test.ts`](packages/axoview-lib/src/__explore__/R2/atlas-gl-01-02-03-04-05.explore.test.ts)
-(the probe drives the real `createSpriteBatch` through a recording WebGL2 stub —
-that harness is reusable for any future `glSpriteBatch` work).
+**Status:** Fixed in wave 3 (2026-07-31), all three, with one correction to (a).
+
+**(a) — generation-tagged, not a free-list, and NOT "evict when a key's content
+changes".** That last variant cannot work here: the leak is KEY CHURN, so there
+is no "same key, new content" to detect — `texKey` interpolates the node name
+and every style token, so a rename mints a wholly new key. A free-list is also
+the wrong shape for a SHELF packer (reclaiming an interior slot is what a shelf
+packer specifically cannot do). Instead every key touched during a build is
+recorded, and a build that leaves more dead keys than live ones marks the atlas
+stale so the next `beginInstances` compacts through the reset machinery that
+already existed. The threshold is RELATIVE (`dead > 8 && dead > live`) because a
+256 atlas holds ~15 chips — any fixed threshold quiet enough for a big atlas is
+never reached on a small one, and an absolute one would also fire on a
+viewport-culled pan, where compacting re-rasterises the whole visible set every
+frame.
+
+**(b) — `SpriteBatch.atlasOverflowed()`**, true at most once per overflow
+episode and re-arming after any build that packs everything, so `NodesCanvas`
+and `LabelsCanvas` schedule exactly one follow-up rebuild and a scene that
+genuinely does not fit degrades instead of spinning. This is what closes
+**R3/GPU-14** as well: the layer reported a completed build while painting an
+incomplete frame (276 of 300 chips), and nothing asked for another.
+
+**(c)** one `console.warn` per context when `MAX_TEXTURE_SIZE` clamps.
+
+The recording WebGL2 stub was promoted out of the lane to
+[`src/webgl/glStub.ts`](packages/axoview-lib/src/webgl/glStub.ts) — `glSpriteBatch`
+had ZERO tests and this is the only way to reach the real packer from jsdom.
+Promoted regressions: [`glSpriteBatch.atlas.test.ts`](packages/axoview-lib/src/webgl/__tests__/glSpriteBatch.atlas.test.ts). Note what the
+churn test asserts: not "never misses" but "never STAYS unpacked" — a build that
+overflows drops the chip for one frame and the next compacts. One dropped frame,
+not a dead layer.
 
 ## A GPU layer that fails to build renders nothing, silently
 
@@ -2972,13 +2994,23 @@ fails shader compilation — it returns `null`, exactly as it would in the field
 
 **Workaround:** reload the tab; a fresh context usually builds.
 
-**Status:** Open. Fix direction: make the gate agree with the substrate — have
-`isWebGL2Supported` (or a one-shot sibling) actually attempt a minimal
-`createSpriteBatch` and cache that result, so a failure routes to the existing
-`WebGLUnsupportedScreen` instead of a blank canvas; and give the per-layer
-failure path a user-visible notification plus one retry rather than a console
-line. Repro:
-[`atlas-gl-01-02-03-04-05.explore.test.ts`](packages/axoview-lib/src/__explore__/R2/atlas-gl-01-02-03-04-05.explore.test.ts).
+**Status:** Fixed in wave 3 (2026-07-31) via the first half: `isWebGL2Supported`
+builds a real `createSpriteBatch` on a 64px atlas and destroys it, so a shader
+compile or link failure now routes to `WebGLUnsupportedScreen` — an actual
+explanation — instead of a silently blank canvas. It costs one shader compile
+once per tab (memoised for the tab's life) and the probe context is released
+either way. The in-code NOTE that recorded this as a known weakness ("strictly
+WEAKER than what createSpriteBatch needs … the layers surface that with a
+console.warn and a blank layer") is gone; it was the bug written down as a
+caveat.
+
+**The per-layer notification + retry was NOT added**, deliberately. With the gate
+agreeing with the substrate, the per-layer path is only reachable for a failure
+that appears mid-session — and mid-session context LOSS already has a real
+recovery path (`attachContextLossRecovery`). Adding a notification surface for
+the residue would be speculative UI with no entry asking for it. Promoted
+regressions: [`glSpriteBatch.atlas.test.ts`](packages/axoview-lib/src/webgl/__tests__/glSpriteBatch.atlas.test.ts), including the control
+that the gate is not simply always-false now.
 
 ## A floating Label is visible but inert below zoom 0.4
 
@@ -3016,13 +3048,24 @@ is precisely the setting that manufactures inert ones.
 
 **Workaround:** zoom to 40% or more before interacting with a Label.
 
-**Status:** Open. Fix direction: make the hit layer's threshold follow the draw
-threshold rather than lead it — either drop `HIT_MIN_ZOOM` to match the chip LOD
-(and let the proxy boxes shrink with zoom), or gate the CHIP on the same value so
-an inert Label is at least not drawn. The underlying rule is worth stating once
-in the rendering guidelines: nothing may be painted at a zoom where it cannot be
-hit. Repro:
-[`gpu-04-06-07-08-13.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R3-gpu-layers/gpu-04-06-07-08-13.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) via the first direction — the hit
+threshold FOLLOWS the draw threshold, for both label kinds:
+
+- **Floating Labels (GPU-04).** `LabelsCanvas` has no zoom gate, so
+  `LabelHitLayer` no longer has one either. Its `HIT_MIN_ZOOM` is gone.
+- **Node names (GPU-05).** The chip draws below `LABEL_LOD_ZOOM` whenever "keep
+  labels readable" is on, so `NodeLabelHitLayer` asks the same question the
+  renderer asks: `isNodeLabelDrawn(zoom, readableLabels)`.
+
+The rule is stated where both sides read it —
+[`config/labelSettings.ts`](packages/axoview-lib/src/config/labelSettings.ts),
+which is also where `LABEL_LOD_ZOOM` now lives (it was module-private to
+`NodesCanvas`, which is how the two thresholds came to be authored
+independently). The div-count concern the old comment gave as the reason for the
+0.4 floor is real but unchanged in shape — one proxy per VISIBLE label — and
+"hard to grab" beats "impossible to grab while visible". Promoted regressions:
+[`itemRaster.ellipsize.test.ts`](packages/axoview-lib/src/webgl/__tests__/itemRaster.ellipsize.test.ts), which includes the case that pins
+the old fixed 0.4 as disagreeing with the draw decision.
 
 ## One unreachable icon url disables the icon layer's readiness flag for the session
 
@@ -3073,13 +3116,27 @@ without re-requesting — a transient failure is cached as a permanent one.
 still succeed (the gate is bounded, not a hang); they are just slower and omit
 the icon.
 
-**Status:** Open. Fix direction: give the decode fallback a real failure branch —
-`img.onerror` (and the already-failed case `complete && naturalWidth === 0`)
-should drop the url from `iconCacheRef` so the next build retries, and mark the
-icon *resolved-as-unavailable* so the readiness flag can still flip (draw the
-tombstone icon rather than nothing, which is what an unknown icon *ref* already
-does). Both halves are ~10 lines inside `getImage`. Repro:
-[`gpu-01-03-icons.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R3-gpu-layers/gpu-01-03-icons.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) as directed, plus one thing the
+direction did not resolve. `getImage` gained `img.onerror` and the
+already-failed `complete && naturalWidth === 0` branch; both drop the url from
+`iconCacheRef` (so the next build re-requests — GPU-03's transient 503 recovers)
+and record it as resolved-as-unavailable (so it stops holding
+`data-all-icons-drawn` down — GPU-01).
+
+Those two pull against each other: "retry on the next build" and "stop treating
+it as pending" would, together, re-request a permanently dead url on every
+geometry rebuild forever. The failure record is therefore an attempt COUNT with
+a cap (`MAX_ICON_LOAD_ATTEMPTS = 3`) rather than a boolean — bounded on both
+sides, because zero retries is what cached a transient failure as permanent and
+unbounded retries is a request storm.
+
+**The tombstone was NOT drawn.** The suggestion mirrors what an unknown icon
+*ref* does, but the two cases differ: an unknown ref means "this diagram names an
+icon that does not exist", where a tombstone is informative, while a failed
+*load* is usually transient (offline, a slow CDN, a 503) and permanently
+stamping a tombstone over a node whose icon is merely late would misreport it.
+The chip and stalk still draw, as they did. Promoted regression:
+[`gpu-icon-recovery.spec.ts`](packages/axoview-e2e/tests/gpu-icon-recovery.spec.ts).
 
 ## A long node name is cut mid-glyph on the canvas and wrapped in the DOM
 
@@ -3115,13 +3172,21 @@ for text layout.
 
 **Workaround:** keep node names short, or select the node to read the rest.
 
-**Status:** Open. Fix direction: make the bulk chip agree with the DOM on *one*
-rule. Cheapest is `fillText(name, x, y, innerW)` (squeezes to fit — ugly) or a
-measured ellipsis (`…`) in `rasterizeNodeChip`; the faithful option is to wrap the
-bulk chip the way the DOM does, which means `measureNodeLabel` returning a line
-list and `chipH` growing per line. Either way the two paths should share the
-line-breaking decision rather than each inventing one. Repro:
-[`gpu-05-09-12.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R3-gpu-layers/gpu-05-09-12.explore.spec.ts).
+**Status:** Fixed in wave 3 (2026-07-31) with the MEASURED ELLIPSIS, and the
+non-parity is deliberate and stated rather than closed.
+
+`rasterizeNodeChip` truncates the name to the chip's inner width with a binary
+search over an appended `…`. What it does NOT do is match the DOM, which wraps.
+Wrapping the bulk chip means `measureNodeLabel` returning a line list and
+`chipH` growing per line — which changes chip geometry for every node in the
+diagram AND for `NodeLabelHitLayer`, whose proxy mirrors that measurement. That
+is a layout change to the whole node layer, verifiable only by eye, and it is
+not what this entry's headline asks for. Truncated-with-an-ellipsis and wrapped
+are both legible; cut mid-glyph at the texture edge is not, and that is what has
+gone. **The shared line-breaking decision the direction asks for is still
+unbuilt** — recorded here so the next reader knows the two paths still each
+decide, they just no longer produce a rendering defect. Promoted regression:
+[`itemRaster.ellipsize.test.ts`](packages/axoview-lib/src/webgl/__tests__/itemRaster.ellipsize.test.ts).
 
 ## A grouping rectangle changes shape from rounded to square when you grab it
 
@@ -3152,12 +3217,24 @@ survived: nothing compares them.
 
 **Workaround:** none needed; cosmetic.
 
-**Status:** Open, cosmetic. Known and deliberate as an approximation, but the
-user-visible consequence (a shape change on grab) was never recorded. Fix
-direction: either round the bulk corners for real (an analytic rounded-rect
-`shapeMode` in the sprite shader — the SDF is cheap and the layer already has
-analytic line and disc modes), or drop the DOM rect's `cornerRadius` to 0 so both
-paths draw the square the bulk already draws. Repro:
+**Status:** Open, cosmetic. **Deliberately NOT fixed in wave 3** — the one R2/R3
+entry left open, with the analysis sharpened so the decision it needs is properly
+framed.
+
+Neither offered direction is the small change it looks like:
+
+- **"an analytic rounded-rect `shapeMode`"** would cover the FILL quad only.
+  `RectanglesCanvas` does not draw a rectangle as one quad: the border is four
+  analytic-AA line quads plus discs at the corners for the joins. A rounded fill
+  under square-cornered edges is worse than what is there now, so this option
+  is really "restructure the bulk rectangle border path", not "add an SDF mode".
+  (The instance layout would accommodate it — `i_misc.w` is spare and the edge
+  lengths are derivable from `i_basis` — so the shader is not the obstacle.)
+- **"drop the DOM rect's `cornerRadius` to 0"** is one line, but it changes the
+  look of every grouping rectangle in the product, permanently, to fix a
+  momentary shape change on grab. That is a product decision, not a bug fix.
+
+Repro:
 [`gpu-14-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R3-gpu-layers/gpu-14-15.explore.spec.ts).
 
 ## Fit-to-view can zoom below the floor every other zoom path enforces

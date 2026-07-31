@@ -57,6 +57,10 @@ const makeStubBatch = () =>
     beginInstances: jest.fn(),
     addSprite: jest.fn(),
     commitInstances: jest.fn(),
+    // R2/GL-02: the layer asks after every build whether the atlas dropped a
+    // chip, so it can schedule the one follow-up rebuild that compacts. A stub
+    // that omits it throws where the real batch would answer "no".
+    atlasOverflowed: jest.fn(() => false),
     instanceCount: jest.fn(() => 0),
     render: jest.fn(),
     destroy: jest.fn()

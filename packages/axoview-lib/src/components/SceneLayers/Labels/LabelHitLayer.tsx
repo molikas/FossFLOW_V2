@@ -53,9 +53,18 @@ import {
 // No press handlers and no stopPropagation there, so pan-over-chip still works.
 // ---------------------------------------------------------------------------
 
-// Below this zoom chips are too small to grab precisely; skip the layer (also
-// bounds the div count at low zoom). Mirrors NodeLabelHitLayer.
-const HIT_MIN_ZOOM = 0.4;
+// R3/GPU-04: there used to be a `HIT_MIN_ZOOM = 0.4` gate here — "below this
+// zoom chips are too small to grab precisely; also bounds the div count". But
+// `LabelsCanvas` paints floating Label chips with NO zoom gate at all, so below
+// 0.4 a Label was visible and completely inert: not selectable, not draggable,
+// no context menu, with nothing on screen to say why. Draw visibility and hit
+// visibility were decided in two files with two different thresholds.
+//
+// The rule (config/labelSettings): nothing may be painted at a zoom where it
+// cannot be hit. The draw side has no threshold, so neither does this one. The
+// div-count concern the old comment names is real but bounded the same way it
+// always was — one proxy per VISIBLE label — and "hard to grab" beats
+// "impossible to grab while visible".
 
 // Module-level offscreen 2D context for chip measurement (matches the canvas
 // renderer's measureText). One per module; never attached to the DOM.
@@ -228,19 +237,15 @@ export const LabelHitLayer = ({ labels }: Props) => {
   // Coarse zoom gate — boolean selector so this only re-renders when the gate
   // flips, not on every zoom tick. editorMode is a rarely-changing string, so
   // subscribing to it directly keeps the same re-render profile.
-  const zoomActive = useUiStateStore((s) => s.zoom >= HIT_MIN_ZOOM);
   const editorMode = useUiStateStore((s) => s.editorMode);
-  // The inline editor must mount even below HIT_MIN_ZOOM — place-and-type, F2
-  // and double-click all set inlineEditLabelId, but the whole layer used to
-  // return null at low zoom, so those silently no-op'd. Gate the editor on edit
-  // mode only; the hit proxies still gate on `active` (zoom) to bound div count.
   const editable = editorMode === 'EDITABLE';
   // View mode (EXPLORABLE_READONLY) mounts HOVER-ONLY proxies: labels are
   // deliberately out of the tile hit-test (ADR 0031 §4), so without a proxy a
   // chip with notes could never hover-show the info popover (notes parity,
   // 2026-07-13). Select / drag / inline-edit / context-menu stay edit-only.
   const viewMode = editorMode === 'EXPLORABLE_READONLY';
-  const active = (editable || viewMode) && zoomActive;
+  // GPU-04: no zoom term — the chips this layer proxies have none either.
+  const active = editable || viewMode;
   const inlineEditLabelId = useUiStateStore((s) => s.inlineEditLabelId);
 
   const dragRef = useRef<DragState | null>(null);
@@ -285,7 +290,7 @@ export const LabelHitLayer = ({ labels }: Props) => {
     });
   }, [uiStoreApi, applyCounterScale]);
   // Re-apply after every commit so a wrapper that just mounted (this layer is
-  // null below HIT_MIN_ZOOM, so crossing that gate remounts it) carries the
+  // null when the layer is inactive, so crossing that gate remounts it) carries the
   // current scale immediately, not one zoom tick late.
   useEffect(() => {
     applyCounterScale();
@@ -318,7 +323,7 @@ export const LabelHitLayer = ({ labels }: Props) => {
     [uiStoreApi]
   );
   // If the proxies stop rendering while a chip is hovered (zoom crosses
-  // HIT_MIN_ZOOM under the cursor, editor-mode switch), no pointerleave fires —
+  // editor-mode switch), no pointerleave fires —
   // clear the published hover so the popover can't stick to a vanished chip.
   const viewProxiesLive = viewMode && active;
   useEffect(() => {
@@ -480,9 +485,7 @@ export const LabelHitLayer = ({ labels }: Props) => {
 
   // EDITABLE gets the full gesture surface; EXPLORABLE_READONLY gets hover-only
   // proxies (see `viewMode` above). NON_INTERACTIVE renders nothing.
-  if (!editable && !viewMode) return null;
-  // Low zoom with nothing being edited → render nothing (proxies are zoom-gated).
-  if (!active && inlineEditLabelId == null) return null;
+  if (!active) return null;
 
   return (
     <div ref={counterScaleRef} style={{ display: 'contents' }}>
@@ -490,9 +493,6 @@ export const LabelHitLayer = ({ labels }: Props) => {
         // The inline editor is edit-mode chrome: a stale inlineEditLabelId
         // (mode switched mid-edit) must never mount a contentEditable in view.
         const editing = editable && label.id === inlineEditLabelId;
-        // Below HIT_MIN_ZOOM only the label being edited mounts (its inline
-        // editor); the pixel-accurate hit proxies stay gated on zoom.
-        if (!active && !editing) return null;
         if (!editing) {
           if (layers.length > 0 && !visibleIds.has(label.id)) return null;
           // Locked layers gate EDIT gestures only — the view-mode proxy is a

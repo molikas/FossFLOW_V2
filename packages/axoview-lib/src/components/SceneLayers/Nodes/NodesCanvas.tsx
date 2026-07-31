@@ -11,7 +11,8 @@ import {
 import {
   LABEL_BASE_FONT_PX,
   LABEL_MIN_READABLE_PX,
-  LABEL_MAX_COUNTER_SCALE
+  LABEL_MAX_COUNTER_SCALE,
+  isNodeLabelDrawn
 } from 'src/config/labelSettings';
 import { computeLabelCounterScale } from 'src/utils/labelScale';
 import { useUiStateStoreApi } from 'src/stores/uiStateStore';
@@ -92,12 +93,15 @@ interface ChipStyle {
 // 2·padX). Option A: the on-canvas label is the node's `name` only.
 const LABEL_CHIP_MAX_W = 250;
 const PROJ_W = PROJECTED_TILE_SIZE.width;
-// D3-3: below this zoom, labels are too small to read — draw icons only.
-const LABEL_LOD_ZOOM = 0.25;
 // Icons are downscaled to this max atlas dimension (px) so a large source SVG
 // can't blow the atlas; the on-screen icon quad is sized from PROJ_W regardless,
 // so this only caps the sampled texture resolution (icons are small on screen).
 const ICON_ATLAS_CAP = 256;
+// R3/GPU-01/03: how many times a failing icon url is re-requested before the
+// layer gives up on it. Bounded on both sides deliberately — zero retries cached
+// a TRANSIENT failure (one 503) as permanent for the session, and unbounded
+// retries would re-request a dead reference on every geometry rebuild.
+const MAX_ICON_LOAD_ATTEMPTS = 3;
 
 // D3-2: per-node label layout, measured once and reused across pan/zoom redraws.
 interface LabelLayout {
@@ -204,6 +208,15 @@ export const NodesCanvas = memo(({ nodes, skipNodes }: Props) => {
   // black tile is then cached by url forever, so the gate must be `decode()`.
   const iconCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
   const decodedRef = useRef<Set<string>>(new Set());
+  // Failed icon loads, url → attempt count (R3/GPU-01, GPU-03).
+  //
+  // "Failed" is a THIRD state, distinct from decoded and from pending: a pending
+  // url holds the readiness flag down, a failed one does not — that is the half
+  // that stops one dangling reference disabling `data-all-icons-drawn` for the
+  // session. The count bounds the retry: `markFailed` drops the cache entry so
+  // the next geometry rebuild re-requests (GPU-03's transient 503 recovers),
+  // but a permanently dead url is not re-requested on every rebuild forever.
+  const failedRef = useRef<Map<string, number>>(new Map());
   const pendingRef = useRef(false);
   const rafIdRef = useRef(0);
   const destroyedRef = useRef(false);
@@ -283,6 +296,13 @@ export const NodesCanvas = memo(({ nodes, skipNodes }: Props) => {
       if (!url) return null;
       const cache = iconCacheRef.current;
       const decoded = decodedRef.current;
+      // Given up on: draws nothing (the chip and stalk still paint) and — the
+      // load-bearing half — no longer holds the readiness flag down, so
+      // `waitForIconsDrawn` and every export gating on it stop waiting for a
+      // bitmap that is never coming.
+      if ((failedRef.current.get(url) ?? 0) >= MAX_ICON_LOAD_ATTEMPTS) {
+        return null;
+      }
       const existing = cache.get(url);
       // Only hand back an image whose bitmap is fully DECODED — see decodedRef.
       if (existing) return decoded.has(url) ? existing : null;
@@ -298,6 +318,30 @@ export const NodesCanvas = memo(({ nodes, skipNodes }: Props) => {
           scheduleDrawRef.current();
         }
       };
+      // R3/GPU-01 + GPU-03: the failure branch that did not exist.
+      //
+      // GPU-01 — the `catch` below used to end at `img.onload = markReady`, a
+      // handler that can NEVER fire when the load has already errored: there was
+      // no `onerror` path at all, so `decodedRef` never gained the url,
+      // `getImage` returned null for the rest of the session, and
+      // `data-all-icons-drawn` stayed "false" permanently. One dangling icon
+      // reference disabled the readiness flag for the whole session.
+      //
+      // GPU-03 — and because the `Image` was inserted into the cache BEFORE the
+      // decode resolved, a TRANSIENT failure (one 503) was cached as a permanent
+      // one: the url was served correctly seconds later and four further
+      // geometry rebuilds went past, and the request count stayed at 1 because
+      // every build took the `existing` branch. Dropping the cache entry is what
+      // lets the next build retry the network.
+      const markFailed = () => {
+        cache.delete(url);
+        failedRef.current.set(url, (failedRef.current.get(url) ?? 0) + 1);
+        if (!destroyedRef.current) {
+          geomDirtyRef.current = true;
+          scheduleDrawRef.current();
+        }
+      };
+      img.onerror = markFailed;
       img.src = url;
       // decode() resolves only when the bitmap is ready for texSubImage2D — the
       // gate that prevents a black atlas upload. It can reject (some SVG data
@@ -307,6 +351,10 @@ export const NodesCanvas = memo(({ nodes, skipNodes }: Props) => {
         .then(markReady)
         .catch(() => {
           if (img.complete && img.naturalWidth > 0) markReady();
+          // `complete` with a zero natural width IS the already-failed case —
+          // the load finished and produced no bitmap. Waiting for `onload` here
+          // was the bug.
+          else if (img.complete) markFailed();
           else img.onload = markReady;
         });
       return decoded.has(url) ? img : null;
@@ -347,7 +395,7 @@ export const NodesCanvas = memo(({ nodes, skipNodes }: Props) => {
         minReadablePx: LABEL_MIN_READABLE_PX,
         maxCounterScale: LABEL_MAX_COUNTER_SCALE
       });
-      const drawLabels = readableLabels || zoom >= LABEL_LOD_ZOOM;
+      const drawLabels = isNodeLabelDrawn(zoom, readableLabels);
       const skipIds = skipIdsRef.current;
 
       // Painter's order (ST-4 cache).
@@ -500,7 +548,18 @@ export const NodesCanvas = memo(({ nodes, skipNodes }: Props) => {
         // ----- icon -----
         const icon = resolveIcon(modelItem.icon, f.iconsById);
         const img = getImage(icon.url);
-        if (icon.url && !img) allIconsDrawn = false;
+        // R3/GPU-01: a url that has been given up on is RESOLVED, not pending —
+        // it must not hold the readiness flag down. Without this one dangling
+        // reference kept `data-all-icons-drawn` at "false" for the whole
+        // session, so every consumer that gates on it waited for a bitmap that
+        // was never coming.
+        if (
+          icon.url &&
+          !img &&
+          (failedRef.current.get(icon.url) ?? 0) < MAX_ICON_LOAD_ATTEMPTS
+        ) {
+          allIconsDrawn = false;
+        }
         if (img) {
           const uv = putIcon(b, icon.url, img);
           if (uv) {
@@ -670,6 +729,19 @@ export const NodesCanvas = memo(({ nodes, skipNodes }: Props) => {
 
       b.commitInstances();
 
+      // R2/GL-02: an overflowing chip is SKIPPED for this build and the atlas
+      // compacts on the next `beginInstances` — but the compaction only happens
+      // when a next build occurs, and nothing scheduled one. If no geometry
+      // change followed, the missing chips stayed missing on screen indefinitely
+      // (R3/GPU-14 measured 276 of 300 label chips drawn while `data-build-count`
+      // reported a completed build). Ask for exactly one follow-up; the batch
+      // refuses to offer a second until a build packs everything, so a scene that
+      // genuinely does not fit degrades instead of spinning.
+      if (b.atlasOverflowed()) {
+        geomDirtyRef.current = true;
+        scheduleDrawRef.current();
+      }
+
       canvas.dataset.drawCount = String(drawn);
       canvas.dataset.labelsDrawn = String(labelsDrawn);
       canvas.dataset.linkedLabelsDrawn = String(linkedLabelsDrawn);
@@ -698,7 +770,7 @@ export const NodesCanvas = memo(({ nodes, skipNodes }: Props) => {
         minReadablePx: LABEL_MIN_READABLE_PX,
         maxCounterScale: LABEL_MAX_COUNTER_SCALE
       });
-      const drawLabels = readableLabels || zoom >= LABEL_LOD_ZOOM ? 1 : 0;
+      const drawLabels = isNodeLabelDrawn(zoom, readableLabels) ? 1 : 0;
 
       // Rebuild geometry only on a scene change or a label-LOD-band crossing.
       if (geomDirtyRef.current || drawLabels !== lastBuiltDrawLabels) {

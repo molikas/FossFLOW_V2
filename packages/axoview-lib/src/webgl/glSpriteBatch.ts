@@ -111,21 +111,36 @@ const ATTR_STRIDE = FLOATS_PER_INSTANCE * 4;
 // (ADR 0038): the Renderer calls this once and shows the WebGLUnsupportedScreen
 // gate when it is false — there is no Canvas2D/DOM bulk fallback in any layer.
 // Memoised (and the probe context is released below); safe to call every render.
-// NOTE: this is strictly WEAKER than what createSpriteBatch needs (it does not
-// compile the shaders or allocate the atlas), so a browser that advertises
-// WebGL2 but fails those can still slip past the gate — the layers surface that
-// with a console.warn and a blank layer rather than a crash.
+// R2/GL-07: this NOTE used to read "strictly WEAKER than what createSpriteBatch
+// needs … a browser that advertises WebGL2 but fails those can still slip past
+// the gate — the layers surface that with a console.warn and a blank layer".
+// That was the bug written down as a caveat. The gate builds a real batch now.
 let _webgl2Supported: boolean | null = null;
 export const isWebGL2Supported = (): boolean => {
   if (_webgl2Supported !== null) return _webgl2Supported;
   try {
     const c = document.createElement('canvas');
-    const gl = c.getContext('webgl2') as WebGL2RenderingContext | null;
-    _webgl2Supported = !!gl && typeof gl.createVertexArray === 'function';
+    // R2/GL-07: this gate used to check only that a `webgl2` context exists and
+    // exposes `createVertexArray` — strictly WEAKER than what the layers
+    // actually need. A context that passed it could still fail
+    // `createSpriteBatch` on a shader compile or link, and the layer's response
+    // was a `console.warn` and a return: the node layer rendered nothing,
+    // permanently, with no retry and nothing user-visible, while
+    // `WebGLUnsupportedScreen` had already been waved through. The diagram
+    // simply appeared empty.
+    //
+    // The gate now attempts the real thing on a small atlas, so a substrate
+    // failure routes to that screen instead of a blank canvas. It costs one
+    // shader compile once per tab (the result is memoised for the tab's life)
+    // and the probe context is released immediately either way.
+    const batch = createSpriteBatch(c, 64);
+    _webgl2Supported = batch !== null;
+    batch?.destroy();
     // Release the probe's context immediately — otherwise it holds one of the
     // browser's ~16 live WebGL-context slots for the tab's life (each Renderer
     // opens 4, and image-export mounts a second Renderer), pushing a busy
     // session toward the cap where the oldest context gets force-lost.
+    const gl = c.getContext('webgl2') as WebGL2RenderingContext | null;
     gl?.getExtension('WEBGL_lose_context')?.loseContext();
   } catch {
     _webgl2Supported = false;
@@ -181,6 +196,22 @@ export interface SpriteBatch {
   readonly dot: UVRect;
   /** A solid white texel (zero-size UV at its centre) for tinted solid quads / lines. */
   readonly white: UVRect;
+  /**
+   * Did the LAST completed build skip at least one sprite because the atlas was
+   * full — and is a follow-up rebuild worth scheduling? (R2/GL-02.)
+   *
+   * A skipped chip simply does not draw for that build, and the compaction only
+   * happens inside the NEXT `beginInstances`; before this there was no flag,
+   * counter or callback on this surface at all, so the caller could not know a
+   * chip was missing and could not schedule the rebuild that would compact.
+   * If no geometry change followed, the missing chips stayed missing on screen
+   * indefinitely.
+   *
+   * True at most ONCE per overflow episode: if the retry build overflows again
+   * the scene genuinely does not fit, and repeating would spin. It re-arms after
+   * any build that packs everything.
+   */
+  atlasOverflowed(): boolean;
 
   // --- instance staging (rebuilt only on a geometry change) ---
   beginInstances(): void;
@@ -308,6 +339,18 @@ export const createSpriteBatch = (
   // N=1000 with LOD labels on) degrades gracefully via atlasFull, never a
   // stale/broken render.
   const ATLAS = Math.min(atlasSize, MAX);
+  // R2/GL-12: on a device whose MAX_TEXTURE_SIZE is 2048 the requested 8192
+  // atlas silently shrinks to a quarter of its slot budget — measured at fewer
+  // than a third of the 85px chips a 4096 atlas holds — so the overflow above
+  // becomes reachable at ordinary diagram sizes with no diagnostic anywhere.
+  // One line, once per context, so a small-cap device is at least diagnosable.
+  if (ATLAS < atlasSize) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[Axoview] Sprite atlas clamped from ${atlasSize} to ${ATLAS} by this ` +
+        `device's MAX_TEXTURE_SIZE. Large diagrams may drop label chips.`
+    );
+  }
   const GUTTER = 2; // transparent px between sub-rects so mip levels don't bleed
   const atlasTex = gl.createTexture();
   if (!atlasTex) return null;
@@ -369,6 +412,24 @@ export const createSpriteBatch = (
   let atlasFull = false;
   let mipDirty = false;
   const uvCache = new Map<string, { uv: UVRect; version: number }>();
+  // R2/GL-05: the atlas had no eviction at all, only the full reset — and the
+  // leak is KEY CHURN, not stale content. `texKey` interpolates the node name
+  // and every style token, so each rename or restyle mints a NEW key, packs a
+  // NEW slot, and the old one is never reclaimed: one logical chip restyled
+  // repeatedly fills a 256 atlas on its own, and six bumps occupy six slots.
+  // That feeds straight into GL-02.
+  //
+  // Rather than a free-list (which a shelf packer cannot use without becoming a
+  // different packer), keys are GENERATION-TAGGED: every key touched during a
+  // build is recorded, and a build that leaves too many untouched marks the
+  // atlas stale so the next `beginInstances` compacts through the machinery
+  // that already exists. Dead slots therefore cost one extra build, not a
+  // session.
+  const usedThisBuild = new Set<string>();
+  let atlasStale = false;
+  // Overflow episode bookkeeping — see `atlasOverflowed`.
+  let overflowRetryOffered = false;
+  let lastBuildOverflowed = false;
 
   const resetAtlas = () => {
     // Restore to just past the reserved dot region; drop the (stale) chip cache.
@@ -377,7 +438,22 @@ export const createSpriteBatch = (
     shelfH = dotShelfH;
     uvCache.clear();
     atlasFull = false;
+    atlasStale = false;
   };
+
+  /**
+   * Compact when the dead keys OUTNUMBER the live ones and there are more than a
+   * handful of them.
+   *
+   * Relative, not absolute: a 256 atlas holds ~15 chips, so any fixed threshold
+   * large enough to be quiet on a big atlas is never reached on a small one — the
+   * churn would still overflow first. And it must not fire for a viewport-culled
+   * pan, which legitimately leaves many off-screen chips cached while using many
+   * (dead ≈ live), because compacting there re-rasterises the whole visible set
+   * every frame. Key churn is the opposite shape: ONE key live, every previous
+   * one dead.
+   */
+  const shouldCompact = (dead: number, live: number) => dead > 8 && dead > live;
 
   // Reserve a (w×h device-px) slot; returns its top-left, or null (→ atlasFull;
   // the item is skipped this build, the atlas is compacted next build). NEVER
@@ -409,6 +485,7 @@ export const createSpriteBatch = (
     version: number,
     make: () => HTMLCanvasElement
   ): UVRect | null => {
+    usedThisBuild.add(key);
     const hit = uvCache.get(key);
     if (hit && hit.version === version) return hit.uv;
     const cnv = make();
@@ -438,6 +515,7 @@ export const createSpriteBatch = (
     w: number,
     h: number
   ): UVRect | null => {
+    usedThisBuild.add(key);
     const hit = uvCache.get(key);
     if (hit) return hit.uv;
     const slot = packSlot(w, h);
@@ -544,7 +622,10 @@ export const createSpriteBatch = (
     putImage,
     beginInstances() {
       // Compact a full atlas here (between builds), never mid-build — see packSlot.
-      if (atlasFull) resetAtlas();
+      // `atlasStale` is the churn case (GL-05): the previous build left enough
+      // dead keys that repacking is worth one rasterise pass.
+      if (atlasFull || atlasStale) resetAtlas();
+      usedThisBuild.clear();
       floatCount = 0;
     },
     addSprite(
@@ -593,6 +674,18 @@ export const createSpriteBatch = (
     commitInstances() {
       instCount = (floatCount / FLOATS_PER_INSTANCE) | 0;
       instDirty = true;
+      // End of build: decide what the NEXT one has to do about the atlas.
+      lastBuildOverflowed = atlasFull;
+      if (!atlasFull) {
+        overflowRetryOffered = false;
+        const live = usedThisBuild.size;
+        if (shouldCompact(uvCache.size - live, live)) atlasStale = true;
+      }
+    },
+    atlasOverflowed() {
+      if (!lastBuildOverflowed || overflowRetryOffered) return false;
+      overflowRetryOffered = true;
+      return true;
     },
     instanceCount: () => instCount,
     render(bw, bh, zoomDpr, originXDev, originYDev, counterScale) {

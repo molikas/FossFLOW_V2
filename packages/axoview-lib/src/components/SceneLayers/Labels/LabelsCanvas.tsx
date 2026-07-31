@@ -245,6 +245,19 @@ export const LabelsCanvas = memo(({ labels }: Props) => {
           }
         }
         b.commitInstances();
+
+        // R2/GL-02: an overflowing chip is SKIPPED for this build and the atlas
+        // compacts on the next `beginInstances` — but the compaction only happens
+        // when a next build occurs, and nothing scheduled one. If no geometry
+        // change followed, the missing chips stayed missing on screen indefinitely
+        // (R3/GPU-14 measured 276 of 300 label chips drawn while `data-build-count`
+        // reported a completed build). Ask for exactly one follow-up; the batch
+        // refuses to offer a second until a build packs everything, so a scene that
+        // genuinely does not fit degrades instead of spinning.
+        if (b.atlasOverflowed()) {
+          geomDirtyRef.current = true;
+          scheduleDrawRef.current();
+        }
       }
       canvas.dataset.drawCount = String(drawn);
       canvas.dataset.buildCount = String(++buildCount);

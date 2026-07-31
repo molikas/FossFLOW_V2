@@ -1,5 +1,5 @@
 /**
- * A recording WebGL2 stub for area R2 (docs/exploratory/areas/R2-webgl-substrate.md).
+ * A recording WebGL2 stub for `glSpriteBatch`.
  *
  * `glSpriteBatch.ts` has ZERO tests because jsdom has no WebGL2 — and the module
  * feature-checks `createVertexArray` / `vertexAttribDivisor` / `getParameter`
@@ -12,7 +12,12 @@
  * depends on actual pixels (blending, mip generation, shader output) belongs in
  * the e2e probes, where Chromium supplies a real context.
  *
- * Not a spec file — `jest.explore.config.js` only matches `*.explore.test.ts`.
+ * Promoted out of the exploratory lane with the wave 3 atlas fixes (R2/GL-02,
+ * GL-05, GL-07, GL-12): those behaviours needed main-suite coverage, and this is
+ * the only way to reach the real packer from jsdom. ADR 0047's implementation
+ * notes name it as one of the campaign rigs worth keeping.
+ *
+ * Not a spec file — it exports helpers, no tests.
  */
 
 /**
@@ -21,7 +26,7 @@
  * rasterises its built-in dot and white texel through a real 2D context, so it
  * needs the drawing calls too — without them construction throws
  * `dctx.clearRect is not a function`, which under `it.failing` would read as a
- * confirmed bug. Install this in every R2 probe.
+ * confirmed bug. Install this in every suite that builds a batch.
  */
 let drawingStubInstalled = false;
 export function installDrawing2DStub() {

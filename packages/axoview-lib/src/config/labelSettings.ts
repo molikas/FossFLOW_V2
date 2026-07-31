@@ -23,3 +23,33 @@ export const LABEL_MAX_COUNTER_SCALE = 4;
  * labels are unaffected.
  */
 export const LABEL_BASE_FONT_PX = 18;
+
+// ---------------------------------------------------------------------------
+// Label LOD — the draw threshold, and the rule the hit layers must follow
+// ---------------------------------------------------------------------------
+//
+// R3/GPU-04 + GPU-05: draw visibility and HIT visibility were decided in
+// different files with different thresholds, so a label could be painted at a
+// zoom where nothing could grab it. Floating Label chips paint from
+// `LabelsCanvas` with no zoom gate at all while `LabelHitLayer` mounted its
+// proxies only at `zoom >= 0.4`; node name chips draw below `LABEL_LOD_ZOOM`
+// whenever the "keep labels readable" setting is on, while `NodeLabelHitLayer`
+// gated at the same 0.4 — so the accessibility setting whose whole purpose is
+// keeping labels legible when zoomed out was the one MANUFACTURING inert ones.
+//
+// The rule, stated once: **nothing may be painted at a zoom where it cannot be
+// hit.** These predicates are the shared source both sides read, so the two
+// halves cannot drift apart again.
+
+/** D3-3: below this zoom, node labels are too small to read — icons only. */
+export const LABEL_LOD_ZOOM = 0.25;
+
+/**
+ * Is a node's name chip drawn at this zoom? `readableLabels` forces it below the
+ * LOD floor, counter-scaled up to a legible size (ADR 0015), which is exactly
+ * why the hit layer cannot use a fixed threshold of its own.
+ */
+export const isNodeLabelDrawn = (
+  zoom: number,
+  readableLabels: boolean
+): boolean => readableLabels || zoom >= LABEL_LOD_ZOOM;
