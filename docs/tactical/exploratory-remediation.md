@@ -184,12 +184,12 @@ campaign's "190 filed entries" total.**
 
 ### Wave 2 — Trust & security ✅ 2026-07-30
 
-**Closed.** 46 campaign entries annotated `Fixed`, every probe promoted or
-retired with its reason recorded in place, **four** class-gate files landed
-(each verified able to go red), and `npm run test:regression` green. Five owner
-decisions implemented: AUTH-13 (hint needs name AND email), SHARE-10
-(exemption pair + deployment.md), DRV-05 (refresh in catch, partial-revoke
-honesty), CHR-08 (configured public base), plus MOP-01's copy identity.
+**Closed.** **38 filed known_issues entries** annotated `Fixed` — 40 campaign
+bug IDs, since the read-only keyboard entry covers PTR-01/02/03 as one — plus
+**four owner rulings** (AUTH-13, SHARE-10, DRV-05, CHR-08) and MOP-01's copy
+identity. Every probe promoted or retired with its reason recorded in place,
+**four** class-gate files landed (each verified able to go red), and
+`npm run test:regression` green.
 
 **Regression gate (final state):** `npm test` per package — lib **162 suites /
 1833** (+1 skipped), app **39 / 423**, backend **9 / 134**, worker **4 / 129** —
