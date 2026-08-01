@@ -52,11 +52,26 @@ export async function scanIconUsage(args: ScanArgs): Promise<IconUsageReport[]> 
     return results;
   }
 
-  const visible = metas.filter((m) => !m.deletedAt && m.id !== currentDiagramId);
+  // F5/ICON-06 — the TRASH is scanned too.
+  //
+  // This used to be `!m.deletedAt && m.id !== currentDiagramId`, with a comment
+  // explaining that surfacing a trashed diagram's counts "would only confuse the
+  // warning". That is right for a usage REPORT and wrong for a DELETE GATE: a
+  // trashed diagram is restorable, so its reference is live, and deleting the
+  // icon left it resolving to nothing on restore — which nothing downstream
+  // catches, because an unknown icon reference passes both the schema and
+  // `validateView` (E4/CLIP-14).
+  //
+  // Same shape as S2/SHARE-06 (trashing a shared diagram left its public link
+  // live): a soft delete hides a row from one query and the row keeps mattering
+  // somewhere else. The answer is not to hide it from this one too — it is to
+  // return it LABELLED, so the count is honest and the dialog can say where the
+  // use is.
+  const candidates = metas.filter((m) => m.id !== currentDiagramId);
 
   // Sequential loads keep memory bounded and avoid hammering storage. For the
   // typical session (~tens of diagrams) this is well under a second.
-  for (const meta of visible) {
+  for (const meta of candidates) {
     try {
       const raw = (await storage.loadDiagram(meta.id)) as
         | { items?: Array<{ icon?: string }> }
@@ -66,7 +81,12 @@ export async function scanIconUsage(args: ScanArgs): Promise<IconUsageReport[]> 
       if (!Array.isArray(items)) continue;
       const count = countRefs(items, iconId);
       if (count > 0) {
-        results.push({ diagramId: meta.id, diagramName: meta.name, count });
+        results.push({
+          diagramId: meta.id,
+          diagramName: meta.name,
+          count,
+          ...(meta.deletedAt ? { inTrash: true } : {})
+        });
       }
     } catch (e) {
       console.warn(`[scanIconUsage] failed to load diagram ${meta.id}:`, e);

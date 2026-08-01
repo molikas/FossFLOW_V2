@@ -28,7 +28,7 @@ sideDockCatalog = bundledFixtures ∪ model.icons
 
 Where:
 
-- `bundledFixtures` is the static array exported from [packages/axoview-lib/src/fixtures/icons.ts](../../packages/axoview-lib/src/fixtures/icons.ts). **As of 2026-05-01 this array is empty by design** — the real catalog is supplied by the consuming app (the Axoview PWA injects `@isoflow/isopacks` into the model at create-time). The merge contract still holds: an empty `bundledFixtures` makes the union `≡ model.icons`, and any future library-bundled defaults can be added to the file without changing call sites.
+- `bundledFixtures` was a static array exported from `packages/axoview-lib/src/fixtures/icons.ts`. **As of 2026-05-01 that array was empty by design**, and **as of the [ADR 0003 addendum 2026-08-01](0003-session-storage-lean-icon-save.md) the module is RETIRED** — the catalog is a parameter the host injects, so `mergeBundledFixtures(model, catalog)` takes it explicitly. The paragraph below is preserved for the reasoning; read `catalog` wherever it says `bundledFixtures` — the real catalog is supplied by the consuming app (the Axoview PWA injects `@isoflow/isopacks` into the model at create-time). The merge contract still holds: an empty `bundledFixtures` makes the union `≡ model.icons`, and any future library-bundled defaults can be added to the file without changing call sites.
 - `model.icons` is whatever was loaded from JSON (post-strip, may be empty or contain only custom icons).
 - Union is by `id`, with `model.icons` taking precedence on collision (so a user override of a default icon's metadata wins).
 

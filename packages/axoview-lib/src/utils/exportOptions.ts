@@ -1,6 +1,7 @@
 import domtoimage from 'dom-to-image-more';
 import { optimizeSvgDataUrl, utf8ToBase64 } from './svgOptimizer';
 import { stripDefaultIcons } from './leanSave';
+import type { Icon } from 'src/types';
 import { computeRenderTarget } from './renderTarget';
 import { Model, Size } from '../types';
 
@@ -66,8 +67,14 @@ export const downloadFile = (data: Blob, filename: string) => {
   URL.revokeObjectURL(url);
 };
 
-export const exportAsJSON = (model: Model) => {
-  const lean = stripDefaultIcons(model);
+/**
+ * ADR 0003 addendum (2026-08-01) — the catalog is the HOST's, so the caller
+ * passes it. Without it this wrote every icon the session had loaded into the
+ * file (F5/ICON-01/02): the lib's half of lean-save ran against an empty
+ * fixture and stripped nothing.
+ */
+export const exportAsJSON = (model: Model, catalog: readonly Icon[] = []) => {
+  const lean = stripDefaultIcons(model, catalog);
   const data = new Blob([JSON.stringify(lean)], {
     type: 'application/json;charset=utf-8'
   });

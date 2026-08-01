@@ -37,9 +37,16 @@ import { notificationStore } from '../stores/notificationStore';
 import { sequentialName } from '../utils/fileOperations';
 import { apiBaseUrl } from '../utils/apiBaseUrl';
 import { exportAsJSON } from 'axoview';
+import {
+  CORE_ICONS,
+  getBundledCatalog,
+  publishLoadedPackIcons
+} from '../services/icons/bundledCatalog';
 
 // Core icons — loaded once at module level
-const coreIcons = flattenCollections([isoflowIsopack]);
+// ADR 0003 addendum (2026-08-01): the core set moved to the canonical catalog
+// module so the catalog has ONE owner; this alias keeps the call sites below.
+const coreIcons = CORE_ICONS;
 
 const defaultColors = [
   { id: 'blue', value: '#0066cc' },
@@ -244,6 +251,14 @@ export function DiagramLifecycleProvider({
     isInitialized
   } = useAppStorage();
   const iconPackManager = useIconPackManager(coreIcons);
+
+  // ADR 0003 addendum (2026-08-01) — publish the live catalog for the non-React
+  // readers. The storage providers are plain classes and cannot read a hook, so
+  // lean-save would otherwise have no catalog to strip against and would keep
+  // every icon. One writer, here; the readers pull `getBundledCatalog()`.
+  useEffect(() => {
+    publishLoadedPackIcons(iconPackManager.loadedIcons as never);
+  }, [iconPackManager.loadedIcons]);
 
   const isPublicShareUrl = !!shareUuid;
   // `readonlyDiagramId` is the basename-stripped route param (react-router), so
@@ -1574,7 +1589,9 @@ export function DiagramLifecycleProvider({
   // Export actions (toolbar Export popover)
   // ---------------------------------------------------------------------------
   const handleExportJSON = useCallback(() => {
-    exportAsJSON(buildSaveData() as Model);
+    // ADR 0003 addendum (2026-08-01) — the host catalog, or the export writes
+    // the entire loaded icon set (F5/ICON-01/02).
+    exportAsJSON(buildSaveData() as Model, getBundledCatalog());
   }, [buildSaveData]);
 
   const handleExportImage = useCallback(() => {

@@ -1,6 +1,10 @@
 import { PersistedDiagramBlob, isPersistedDiagramBlob } from './types';
 import type { Icon } from 'axoview';
-import { ALL_ICON_PACK_NAMES } from '../iconPackManager';
+import { stripDefaultIcons } from 'axoview';
+import {
+  getBundledCatalog,
+  isRehydratableIcon
+} from '../icons/bundledCatalog';
 
 // ADR 0003 lean-save. Shared by every StorageProvider that persists a model so
 // they all strip pack icons + record requiredPacks identically (LocalStorage +
@@ -65,34 +69,47 @@ const allItemIconsResolved = (
   return true;
 };
 /**
- * Collections the load path can actually rehydrate: the bundled `isoflow` set
- * plus every shippable icon pack. Anything else names a source nothing will
- * supply on load.
- */
-// Plain-object dictionary, not a Set — see the file header: under this
-// package's es5 target ts-jest's Set polyfill silently drops string members.
-const REHYDRATABLE_COLLECTIONS: { [k: string]: true } = { isoflow: true };
-ALL_ICON_PACK_NAMES.forEach((pack) => {
-  REHYDRATABLE_COLLECTIONS[pack] = true;
-});
-
-/**
- * "Is this icon the user's data, or will it come back from a pack?" — the
- * app-side counterpart of the question the lib's `stripDefaultIcons` asks
- * (A2/STOR-14). `collection === 'imported'` was a stricter rule than either ADR
- * 0003 or the lib: an icon from a pack this build no longer ships has a
- * collection that is neither 'imported' nor loadable, so the save dropped it,
- * `mergeBundledFixtures` could not restore it, and it returned as a tombstone.
+ * ADR 0003 addendum (owner ruling 2026-08-01) — ONE lean-save implementation.
  *
- * (The remaining STOR-14 case — a user's OVERRIDE of a bundled icon, which ADR
- * 0003 lists as an acceptance criterion — needs the bundled catalog to compare
- * against, and the app half of that catalog is itself empty: that is the wave 4
- * app/lib dual-implementation item, F5/ICON-01/02.)
+ * This file used to carry its own copy of the strip rule, which is how the app
+ * and the lib ended up disagreeing (F5/ICON-01/02: saving wrote one icon,
+ * exporting wrote the whole loaded catalog). The ALGORITHM is the lib's
+ * `stripDefaultIcons`; the CATALOG comes from the app's canonical module; and
+ * the one thing that stays here is the question only the host can answer —
+ * WHICH COLLECTIONS this build can rehydrate.
+ *
+ * Keep an icon when ANY of these holds:
+ *   1. its collection names no source this build can reload (A2/STOR-14 half 1,
+ *      wave 1 — dropping it made the icon return as a tombstone);
+ *   2. it is the user's OVERRIDE of a catalog entry (A2/STOR-14 half 2, this
+ *      wave — dropping it would let the original silently replace the edit);
+ *   3. its id is absent from the catalog entirely (the user's own icon).
+ * Rules 2 and 3 are exactly what `stripDefaultIcons` keeps, so they are not
+ * re-implemented here.
  */
-const isUserIcon = (icon: Icon): boolean => {
-  if (icon.collection === 'imported') return true;
-  if (!icon.collection) return true; // nothing names a source for it
-  return !REHYDRATABLE_COLLECTIONS[icon.collection];
+const applyIconStrip = (modelIcons: Icon[]): Icon[] => {
+  const catalog = getBundledCatalog();
+  // Composed by OBJECT IDENTITY, not by id. `stripDefaultIcons` filters, so it
+  // returns the same references — and nothing enforces id uniqueness in a model
+  // (E4/CLIP-01), so an id-keyed set would keep or drop every icon sharing an id
+  // together. The contract gate's fixture has two entries with one id for
+  // exactly this reason; it caught that on the first run.
+  const keptByLib = stripDefaultIcons({ icons: modelIcons }, catalog).icons;
+  const catalogIds = new Set(catalog.map((c) => c.id));
+
+  return modelIcons.filter((icon) => {
+    // Host-only question: nothing will supply this on load, so it is data.
+    if (!isRehydratableIcon(icon)) return true;
+    // Rehydratable, and the catalog has never heard of it — the pack simply is
+    // not loaded in this session. `requiredPacks` refetches it on load, so it
+    // is reproducible and need not be persisted. (Keeping it here is what made
+    // the export fat: an unloaded pack icon is still a pack icon.)
+    if (!catalogIds.has(icon.id)) return false;
+    // Rehydratable and known: the LIB decides. It keeps an icon the catalog
+    // does not reproduce exactly, which for a known id means the user overrode
+    // it — A2/STOR-14's remaining half.
+    return keptByLib.indexOf(icon) !== -1;
+  });
 };
 
 /**
@@ -129,18 +146,15 @@ export const leanIfModel = (data: unknown): unknown => {
 
   return {
     ...model,
-    // A2/STOR-14: `collection === 'imported'` is a STRICTER rule than ADR 0003
-    // and than the lib's `stripDefaultIcons`, which keeps anything a bundled
-    // fixture does not reproduce exactly. Two kinds of user data were being
-    // discarded on every SAVE while every EXPORT preserved them, and
-    // `mergeBundledFixtures` cannot restore either on load:
-    //   - an icon from a pack this build no longer bundles (its collection is
-    //     not 'imported', and nothing supplies it any more);
-    //   - a bundled icon the user OVERRODE (renamed, re-coloured) — the exact
-    //     case ADR 0003 lists as an acceptance criterion ("override wins").
-    // Keep an icon unless a bundled fixture reproduces it, which is the same
-    // question the lib asks.
-    icons: modelIcons.filter(isUserIcon),
+    // A2/STOR-14, both halves. `collection === 'imported'` was a STRICTER rule
+    // than ADR 0003, so two kinds of user data were discarded on every SAVE
+    // while every EXPORT preserved them, and `mergeBundledFixtures` could
+    // restore neither on load:
+    //   - an icon from a pack this build no longer bundles (wave 1);
+    //   - a bundled icon the user OVERRODE (this wave) — the exact case ADR
+    //     0003 lists as an acceptance criterion ("override wins"), which stayed
+    //     open only because there was no app-side catalog to compare against.
+    icons: applyIconStrip(modelIcons),
     requiredPacks
   };
 };

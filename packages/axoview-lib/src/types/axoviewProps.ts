@@ -629,6 +629,13 @@ export interface IconUsageReport {
   diagramId: string;
   diagramName: string;
   count: number;
+  /**
+   * F5/ICON-06: the diagram is in the TRASH. Its reference is still live —
+   * a trashed diagram is restorable — so it counts for a DELETE gate even
+   * though it is hidden from an ordinary usage report. The dialog labels
+   * these rows so the count stays honest AND the copy stays clear.
+   */
+  inTrash?: boolean;
 }
 
 /**

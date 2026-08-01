@@ -5891,7 +5891,7 @@ whose fixture deliberately gives a node, a rectangle and a label the SAME id.
 **Found by:** exploratory campaign ICON-01 / ICON-02
 
 **Symptom:** Saving a diagram writes a handful of icons. Exporting the SAME
-diagram to JSON (or to a project ZIP) writes every icon the session has loaded —
+diagram to JSON writes every icon the session has loaded —
 the whole AWS / GCP / Azure / Kubernetes / Material catalog, SVG payloads and
 all — producing a file many times larger than the stored document.
 
@@ -5919,12 +5919,49 @@ the export path emits four, and the serialised result is more than twice the siz
 Not a data-integrity problem — re-importing the fat file and saving it strips
 the pack icons again — but the file is what users mail around.
 
+**Correction (wave 4, 2026-08-01): the project ZIP was never fat.** The entry
+names it alongside `exportAsJSON`, but `exportProject` archives the STORED blobs
+via `storage.loadDiagram`, and every provider already leans on write. The ZIP
+dialog did import and re-export `stripDefaultIcons` without ever calling it,
+which is presumably where the claim came from — a dead import read as a code
+path. Only the single-diagram "Export as JSON" was genuinely writing the whole
+loaded catalog.
+
 **Workaround:** none.
 
-**Status:** Open. Fix direction: have `exportAsJSON` and the project-ZIP
-export call the same `leanIfModel` the storage providers use, and delete
-`stripDefaultIcons` / `mergeBundledFixtures` (or the empty fixtures module)
-so there is one lean-save. Repro: [`leansave-icon-01-02-03.explore.test.ts`](packages/axoview-app/src/__explore__/F5/leansave-icon-01-02-03.explore.test.ts).
+**Status:** Fixed in wave 4 (2026-08-01), with the direction **amended by owner
+ruling** and recorded as a dated ADR 0003 addendum.
+
+**The recorded direction could not be followed as written.** "Have
+`exportAsJSON` call the same `leanIfModel`" is not a call that can be made:
+`leanIfModel` is APP-side and depends on `ALL_ICON_PACK_NAMES`, while
+`exportAsJSON` is LIB-side, and the lib cannot import from the app. The
+question the entry was really asking is *where the one lean-save lives*.
+
+**The ruling: the ALGORITHM lives in the lib, the CATALOG is a parameter the
+host injects.** `stripDefaultIcons` / `mergeBundledFixtures` stay as the only
+implementation and now take `catalog: readonly Icon[]`; `src/fixtures/icons.ts`
+is retired; the app owns one canonical `services/icons/bundledCatalog.ts`
+(pack names + core icons + a live registry the pack manager publishes into), and
+`leanIfModel` composes with it instead of re-deriving. An EMPTY catalog strips
+nothing, so a host that forgets to inject loses bytes, never data.
+
+**The rejected alternative, for the record:** filling the lib's fixture with the
+real catalog. It duplicates the catalog on both sides of the package boundary —
+the exact class this wave is closing — bloats a library that publishes
+standalone under a bundle-size gate, and drifts the moment a pack changes. *The
+empty fixture was a symptom; the defect was that a library held an opinion about
+host data.*
+
+**There was a THIRD implementation nobody had counted.** The app's jest mock
+stubbed `stripDefaultIcons` as `(model) => model`, so every app-side test of
+stripping ran against an identity function — and the lib's own `leanSave.test.ts`
+used the empty fixture as both catalog and data, so it asserted that `[]` strips
+to `[]` and explicitly skipped the override case as "unreachable in production".
+**The one suite whose job was to catch this bug could not see it.** The mock now
+re-exports the real lib source; both suites were rewritten against an explicit
+catalog. Class gate:
+[`leanSaveSingleImplementation.contract.test.ts`](packages/axoview-app/src/services/__tests__/leanSaveSingleImplementation.contract.test.ts).
 
 ## A corrupt icon-pack preference breaks icon loading instead of falling back
 
@@ -5950,10 +5987,14 @@ and `'["aws","AWS","not-a-pack"]'` returns all three verbatim.
 
 **Workaround:** clear `axoview-enabled-icon-packs` from localStorage.
 
-**Status:** Open. Fix direction: filter the parsed value against
-`ALL_ICON_PACK_NAMES` (which already exists in the same module) and fall back
-to the default set when nothing survives — and have `loadIconPack` skip an
-unknown name rather than throwing. Repro: [`packs-icon-04-05-06.explore.test.ts`](packages/axoview-app/src/__explore__/F5/packs-icon-04-05-06.explore.test.ts).
+**Status:** Fixed in wave 4 (2026-08-01) — exactly as directed, both halves.
+`loadEnabledPacks` filters against `ALL_ICON_PACK_NAMES` and falls back only
+when NOTHING survives, so one bad entry in an otherwise good list costs the user
+that one pack rather than all of them; and `loadIconPack` returns null for an
+unknown name instead of throwing. The second half matters beyond this entry:
+a name can also arrive from a diagram's `requiredPacks`, which is untrusted
+file content, and a diagram must never be able to break icon loading. Promoted
+regression: [`iconPackPreferences.test.ts`](packages/axoview-app/src/services/__tests__/iconPackPreferences.test.ts).
 
 ## The icon-pack manager crashes when localStorage is unavailable
 
@@ -5984,9 +6025,15 @@ while the guarded shape returns `null`.
 
 **Workaround:** none from the UI.
 
-**Status:** Open. Fix direction: reuse the guarded read/write helpers from
-`persistedSettings` (or lift them into a shared `safeStorage` module) for the
-two pack-manager keys and the writers beside them. Repro: [`packs-icon-04-05-06.explore.test.ts`](packages/axoview-app/src/__explore__/F5/packs-icon-04-05-06.explore.test.ts).
+**Status:** Fixed in wave 4 (2026-08-01). Both keys and both writers go through
+guarded `safeRead`/`safeWrite` helpers, local to the pack manager rather than
+lifted into a shared module: the lib's `persistedSettings` cannot be imported
+from the app's services layer, and a third home for four lines would be its own
+small duplication. A preference that cannot be persisted no longer costs the
+session — the in-memory state is still right for the tab. Promoted regression:
+[`iconPackPreferences.test.ts`](packages/axoview-app/src/services/__tests__/iconPackPreferences.test.ts),
+which installs a genuinely throwing `localStorage` and carries a CONTROL proving
+the stub is in place.
 
 ## Deleting an icon says it is unused when only a trashed diagram uses it
 
@@ -6015,9 +6062,13 @@ row keeps mattering somewhere else.
 
 **Workaround:** empty the trash before deleting icons.
 
-**Status:** Open. Fix direction: scan soft-deleted diagrams too and label their
-rows ("in Trash") in the confirm dialog, so the count is honest and the copy stays
-clear. Repro: [`packs-icon-04-05-06.explore.test.ts`](packages/axoview-app/src/__explore__/F5/packs-icon-04-05-06.explore.test.ts).
+**Status:** Fixed in wave 4 (2026-08-01) — exactly as directed. `scanIconUsage`
+scans the trash, the report carries `inTrash`, and the confirm dialog labels
+those rows "(in Trash)". The distinction the entry draws is the load-bearing
+one: hiding the row was right for a usage REPORT and wrong for a DELETE GATE,
+and the fix is to return it LABELLED rather than to hide it from one more place.
+Promoted regression:
+[`iconUsageTrash.test.ts`](packages/axoview-app/src/services/__tests__/iconUsageTrash.test.ts).
 
 ## A resized icon is only clickable on its original tile
 
@@ -6744,7 +6795,16 @@ anything a bundled fixture does not reproduce. Save and export disagreed about
 what counts as user data, and `mergeBundledFixtures` cannot restore what no pack
 supplies.
 
-**Status:** Fixed in 2b0e5f41 (2026-07-30) — an icon is kept unless a collection
+**Status (override half, wave 4 — 2026-08-01):** closed. The remaining case ADR
+0003 lists as an acceptance criterion — a bundled icon the user OVERRODE
+(renamed, re-pointed) — needed a catalog to compare against, and the app had
+none. It has one now: `services/icons/bundledCatalog.ts`, built as part of the
+F5/ICON-01/02 ruling (ADR 0003 addendum 2026-08-01). `leanIfModel` keeps an
+override, so the bundled original can no longer silently take its place on the
+next load. The comparison itself is DELEGATED to the lib's `stripDefaultIcons`
+rather than re-implemented app-side, which is the same ruling's point.
+
+**Status (wave 1 half):** Fixed in 2b0e5f41 (2026-07-30) — an icon is kept unless a collection
 the load path can actually rehydrate (the bundled `isoflow` set or a shippable
 pack) supplies it. The remaining half of this entry — a user's *override* of a
 bundled icon, which ADR 0003 lists as an acceptance criterion — needs the bundled

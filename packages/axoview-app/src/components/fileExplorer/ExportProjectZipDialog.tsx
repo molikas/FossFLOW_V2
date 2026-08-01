@@ -11,7 +11,6 @@ import {
   Typography
 } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
-import { stripDefaultIcons } from 'axoview';
 import { StorageProvider } from '../../services/storage';
 import {
   exportProject,
@@ -124,4 +123,10 @@ export function ExportProjectZipDialog({
   );
 }
 
-export { stripDefaultIcons };
+// F5/ICON-01/02 correction (2026-08-01). This file used to import and re-export
+// `stripDefaultIcons` without ever applying it. The project-ZIP export archives
+// the STORED blobs (`storage.loadDiagram`), which every provider already leans
+// on write — so the ZIP path never needed a strip of its own, and the entry's
+// claim that it "writes every icon the session has loaded" was inferred from
+// the dead import rather than measured. The single-diagram "Export as JSON"
+// path is the one that was genuinely fat, and it is fixed at its own call site.

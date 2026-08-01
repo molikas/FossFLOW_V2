@@ -412,9 +412,40 @@ run** — otherwise a green fix reads as seven failing new specs.
   One thing neither entry mentions, which the reducer had to get right:
   "delete contents" also removes connectors **anchored to** a deleted node, or
   they would be left as E2/RED-07 anchors pointing at nothing.
-- [ ] **Icon cluster (F5):** ICON-01/02/04/05/06/08 + CLIP-14's icon-reference
-  half + STOR-14's override half; **app/lib dual-implementation class gate**
-  (the dead lean-save half is the root of ICON-01/02).
+- [x] **Icon cluster (F5) — ICON-01/02, 04, 05, 06 + STOR-14's override half +
+  the app/lib dual-implementation class gate.** The ICON-01/02 direction was
+  **amended by owner ruling** (ADR 0003 addendum 2026-08-01): the algorithm is
+  the lib's, the catalog is a host-injected parameter, and `fixtures/icons.ts`
+  is retired. Filling that fixture with the real catalog was the *rejected*
+  alternative — it duplicates host data across the package boundary, bloats a
+  standalone-published lib under a bundle-size gate, and drifts on every pack
+  change. **The empty fixture was a symptom; the defect was a library holding
+  an opinion about host data.**
+
+  **There were THREE implementations, not two.** The app's jest mock stubbed
+  `stripDefaultIcons` as `(model) => model`, and the lib's own `leanSave.test.ts`
+  used the empty fixture as both catalog and data — asserting that `[]` strips
+  to `[]`, and *explicitly skipping* the override case as "unreachable in
+  production". The one suite whose job was to catch this could not see it. Both
+  were rewritten; the mock now re-exports the real lib source.
+
+  **Two corrections to the record.** The project ZIP was never fat — it archives
+  stored blobs, which the providers already lean; the claim came from a dead
+  import that was re-exported and never called. And the class gate had to be
+  tightened after its first red-check: exempting `leanModel.ts` wholesale (the
+  obvious thing, since the permitted composition lives there) let a duplicate be
+  planted in the very file it used to live in.
+
+  Two things the gate caught that no scan could: an id-keyed composition that
+  kept or dropped every icon sharing an id together (E4/CLIP-01's class again),
+  and the SAVE/EXPORT divergence on an unloaded pack icon — which is real, is
+  host knowledge the lib cannot hold, and is now pinned as such rather than
+  papered over.
+
+  Still open in F5: **ICON-08** (a resized icon is only clickable on its
+  original tile — a documented trade-off, not an oversight) and **CLIP-14's
+  icon-reference half**, which needs the `requiredPacks` derivation and is
+  unblocked by the new canonical catalog module.
 - [ ] **E2 reducer remainder:** RED-01, 02, 07, 08, 14, 15. The harness is
   already promoted to `reducers/__fixtures__/reducerHarness.ts`.
 - [ ] **Annotation/view cluster (F2):** VIEW-01/02, 03, 04, 05, 06, 07, 09 +

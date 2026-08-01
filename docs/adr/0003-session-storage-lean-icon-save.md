@@ -11,7 +11,7 @@
 
 Today every saved diagram carries a copy of the bundled icon catalog. For default icons (`{ id, name, url: 'https://...' }`) the cost is small but non-zero — a few hundred bytes per icon, dozens of icons, persisted in every diagram, every save. For session storage the budget is ~5 MB total, shared across all diagrams; this overhead matters. For exports it bloats every JSON download.
 
-The bundled catalog already exists in code at [packages/axoview-lib/src/fixtures/icons.ts](../../packages/axoview-lib/src/fixtures/icons.ts). Persisting it is pure redundancy.
+The bundled catalog already exists in code (at the time of writing, `packages/axoview-lib/src/fixtures/icons.ts` — **retired by the 2026-08-01 addendum below**, which makes the catalog a host-injected parameter). Persisting it is pure redundancy.
 
 ## Decision
 
@@ -67,3 +67,72 @@ Load-time rehydration is handled by [ADR 0002](0002-icon-catalog-merge-on-load.m
 - **Unit test:** model with `icons[0]` = bundled fixture but `name` changed → fixture is preserved (override wins).
 - **Round-trip test** *(specified; not implemented as of v3.7.0)*: a session-save→session-load round-trip asserting the merged `icons` array is element-wise equal is **not present**. `leanSave.test.ts`'s "round-trip: strip then merge" is a pure-function composition (`stripDefaultIcons` → merge) with no `sessionStorage`/provider; `LocalStorageProvider.test` does not save-then-load to compare merged icons. Open test gap.
 - **Manual verification:** the side dock after load shows the full bundled catalog (covered by ADR 0002 tests; called out here because the bug history lives in this surface).
+
+---
+
+### 2026-08-01 addendum — one lean-save: lib-owned algorithm, host-injected catalog
+
+**Owner ruling 2026-08-01**, implemented in the exploratory-remediation wave 4.
+The accepted text above is left as shipped; this addendum settles WHERE the
+implementation lives, which it never stated — and which is why there came to be
+two of it.
+
+**What the campaign found (F5/ICON-01/02).** ADR 0003's lean-save existed twice,
+with different answers for the same model:
+
+- `axoview-lib/src/utils/leanSave.ts` compared against `src/fixtures/icons.ts`,
+  which exported `[]`. With an empty catalog `stripDefaultIcons` was the
+  identity function and `mergeBundledFixtures` was inert, so **"Export as JSON"
+  and the project ZIP wrote every icon the session had loaded** — the whole AWS
+  / GCP / Azure / Kubernetes / Material catalog, SVG payloads and all — into the
+  file users mail around.
+- `axoview-app/src/services/storage/leanModel.ts` carried its own stricter rule
+  (`collection === 'imported'`) used by every StorageProvider, which wrote one
+  icon for that same model — and discarded two kinds of user data doing it
+  (A2/STOR-14).
+
+There was in fact a **third**: the app's jest mock stubbed `stripDefaultIcons`
+as `(model) => model`, so the app's own tests ran against an identity function
+and could not see either behaviour.
+
+**The rule.**
+
+> **The ALGORITHM lives in the lib. The CATALOG is a parameter the host
+> injects. Neither side holds a copy of the other's half.**
+
+The dependency direction decides it: the lib cannot import from the app, and it
+must not bundle the app's icon catalog either — the lib publishes standalone
+under a bundle-size gate, and a catalog is host data.
+
+1. `utils/leanSave.ts` keeps the strip-then-merge algorithm and takes
+   `catalog: readonly Icon[]`. An **empty** catalog means "the host told us
+   nothing" and strips NOTHING — a host that forgets to inject loses bytes,
+   never data.
+2. `src/fixtures/icons.ts` is **retired**. Any catalog needed by a test is
+   declared in that test and is test-only.
+3. The app owns ONE canonical catalog module,
+   `services/icons/bundledCatalog.ts` (`ALL_ICON_PACK_NAMES` + core icons + the
+   live loaded-pack registry). Two readers: lean-save injection, and
+   **A2/STOR-14's override detection** — which stayed open in wave 1 precisely
+   because the app had no such module.
+4. `leanIfModel` composes rather than re-derives. The one thing that stays
+   app-side is the question only a host can answer: **which collections this
+   build can rehydrate**.
+
+**Rejected alternative, recorded.** Filling the lib's fixture with the real
+catalog. It duplicates the catalog on both sides of the package boundary — the
+exact class this closes — bloats the standalone bundle, and drifts the moment a
+pack changes. **The empty fixture was a symptom; the defect was that a library
+held an opinion about host data.**
+
+**One deliberate divergence.** The SAVE path drops a pack icon whose pack is not
+currently loaded (its `requiredPacks` entry refetches it); the EXPORT path keeps
+it, because the lib cannot tell it from the user's own icon. This is host
+knowledge the lib has no way to hold, and it is pinned as such by §4 of the
+class gate rather than papered over.
+
+**Gate.** [`leanSaveSingleImplementation.contract.test.ts`](../../packages/axoview-app/src/services/__tests__/leanSaveSingleImplementation.contract.test.ts)
+— one definition, no app-side re-implementation, no lib-side catalog, and the
+two halves compared on the same input. Verified red twice: once for a planted
+duplicate, and once more after the first attempt exempted `leanModel.ts`
+wholesale and so missed a duplicate planted in the very file it used to live in.

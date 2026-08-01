@@ -8,6 +8,10 @@
  * restore them on load: they came back as tombstones.
  */
 import { leanIfModel } from '../leanModel';
+import {
+  publishLoadedPackIcons,
+  getBundledCatalog
+} from '../../icons/bundledCatalog';
 
 const icon = (id: string, collection?: string) => ({
   id,
@@ -26,9 +30,30 @@ const model = (icons: unknown[], iconRef = 'aws-ec2') => ({
 const iconsOf = (result: unknown) =>
   ((result as { icons: Array<{ id: string }> }).icons ?? []).map((i) => i.id);
 
+// ADR 0003 addendum (2026-08-01): lean-save now compares against the HOST's
+// catalog, so these tests publish one instead of depending on whatever the real
+// isopacks happen to contain. That is the injection seam doing its job — the
+// rule is under test, not the pack contents.
+const CATALOG_AWS = {
+  id: 'aws-ec2',
+  name: 'aws-ec2',
+  url: 'data:aws-ec2',
+  collection: 'aws',
+  isIsometric: true
+};
+
+beforeEach(() => {
+  publishLoadedPackIcons([CATALOG_AWS] as never);
+});
+
 describe('leanIfModel keeps what the load path cannot bring back', () => {
+  it('CONTROL: the catalog under test is the published one', () => {
+    expect(getBundledCatalog().some((i) => i.id === 'aws-ec2')).toBe(true);
+  });
+
   it('strips a pack icon — it is rehydrated from the pack on load', () => {
-    const result = leanIfModel(model([icon('aws-ec2', 'aws')]));
+    // Byte-identical to the catalog entry, so it is reproducible on load.
+    const result = leanIfModel(model([{ ...CATALOG_AWS }]));
     expect(iconsOf(result)).toEqual([]);
     expect((result as { requiredPacks: string[] }).requiredPacks).toEqual(['aws']);
   });
@@ -51,8 +76,32 @@ describe('leanIfModel keeps what the load path cannot bring back', () => {
     expect(iconsOf(result)).toEqual(['orphan']);
   });
 
-  it('strips the bundled isoflow set, which the loader always merges back', () => {
-    const result = leanIfModel(model([icon('block', 'isoflow')], 'block'));
+  it('strips a bundled isoflow icon, which the loader always merges back', () => {
+    // PRECONDITION: the core set really is in the catalog. (One argument —
+    // Jest rejects the Playwright `expect(value, 'message')` form, which is
+    // what `jestExpectArity.contract.test.ts` gates. It caught this line.)
+    const core = getBundledCatalog().find((i) => i.collection === 'isoflow');
+    expect(core).toBeTruthy();
+    const result = leanIfModel(model([{ ...core }], core!.id));
     expect(iconsOf(result)).toEqual([]);
+  });
+
+  // A2/STOR-14's remaining half, closed in wave 4. Same id, different metadata:
+  // the user renamed or re-pointed a bundled icon. Dropping it would let the
+  // bundled original silently take its place on the next load.
+  it('KEEPS a user OVERRIDE of a bundled icon', () => {
+    const core = getBundledCatalog().find((i) => i.collection === 'isoflow')!;
+    const overridden = { ...core, name: 'My renamed icon' };
+    const result = leanIfModel(model([overridden], core.id));
+    expect(iconsOf(result)).toEqual([core.id]);
+  });
+
+  // …and the boundary the other way: a pack icon whose pack is not loaded is
+  // still reproducible, because requiredPacks refetches it on load. Keeping it
+  // is what made the export fat (F5/ICON-01/02).
+  it('strips a pack icon whose pack is NOT currently loaded', () => {
+    const result = leanIfModel(model([icon('gcp-run', 'gcp')], 'gcp-run'));
+    expect(iconsOf(result)).toEqual([]);
+    expect((result as { requiredPacks: string[] }).requiredPacks).toEqual(['gcp']);
   });
 });

@@ -168,6 +168,50 @@ describe("deleteLayer contents: 'delete' — the Photoshop meaning (RED-13)", ()
     expect(anchoredToN1).toBe(false);
   });
 
+  // E2/RED-07's class gets its own pin rather than coverage-by-side-effect: the
+  // assertion above happens to hold because `c1` is ALSO on the deleted layer,
+  // so it would still pass if the cascade were removed. This one cannot — its
+  // connector is on NO layer and is anchored to a node that is, which is
+  // exactly the case a layer-only filter misses.
+  it('RED-07 PIN: a delete-with-contents leaves ZERO dangling anchors', () => {
+    const s = stateWith();
+    // A connector nobody assigned to the layer, anchored to a node that is on
+    // it. PRECONDITION first, so a fixture that stopped setting this up could
+    // not let the pin pass vacuously.
+    const view = viewOf(s);
+    view.connectors = [
+      ...(view.connectors ?? []),
+      {
+        id: 'c3',
+        color: 'c',
+        anchors: [
+          { id: 'd1', ref: { item: 'n1' } },
+          { id: 'd2', ref: { tile: { x: 7, y: 7 } } }
+        ]
+      }
+    ] as View['connectors'];
+    const c3 = (view.connectors ?? []).find((c) => c.id === 'c3');
+    expect(c3?.layerId).toBeUndefined();
+    expect(
+      (view.items ?? []).find((i) => i.id === 'n1')?.layerId
+    ).toBe('l1');
+
+    const after = viewOf(
+      deleteLayer({ layerId: 'l1', contents: 'delete' }, ctx(s))
+    );
+
+    // The invariant, stated over the WHOLE view rather than over one connector:
+    // every remaining item-anchor resolves to a surviving item.
+    const surviving = new Set((after.items ?? []).map((i) => i.id));
+    const dangling = (after.connectors ?? []).flatMap((c) =>
+      c.anchors
+        .map((a) => (a.ref as { item?: string })?.item)
+        .filter((id): id is string => !!id && !surviving.has(id))
+    );
+    expect(dangling).toEqual([]);
+    expect((after.connectors ?? []).map((c) => c.id)).toEqual(['c2']);
+  });
+
   it('leaves an unrelated connector alone', () => {
     expect(out().connectors?.map((c) => c.id)).toEqual(['c2']);
   });

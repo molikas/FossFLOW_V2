@@ -158,6 +158,23 @@ export const DeleteIconConfirmDialog = ({
                         title={r.diagramName}
                       >
                         {r.diagramName}
+                        {/* F5/ICON-06: a trashed diagram is RESTORABLE, so its
+                            reference is live and must count — but the row says
+                            where the use is, or the count reads as wrong. */}
+                        {r.inTrash && (
+                          <Typography
+                            component="span"
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ ml: 0.75, fontStyle: 'italic' }}
+                            data-axoview-id="icon-usage-in-trash"
+                          >
+                            {/* Hardcoded to match this dialog, whose copy is
+                                all literal English — i18n'ing one string here
+                                would be the inconsistency, not the fix. */}
+                            (in Trash)
+                          </Typography>
+                        )}
                       </Typography>
                       <Typography
                         variant="caption"

@@ -2,6 +2,7 @@ import { useRef, useState, useCallback, useEffect, useLayoutEffect, useMemo } fr
 import { useTranslation } from 'react-i18next';
 import { Tree, TreeApi, NodeApi } from 'react-arborist';
 import { exportAsJSON, mergeBundledFixtures, type Model } from 'axoview';
+import { getBundledCatalog } from '../../services/icons/bundledCatalog';
 import {
   Box,
   Button,
@@ -780,8 +781,12 @@ export function FileExplorer() {
         const raw = await provider.loadDiagram(node.id);
         // Storage returns `unknown`; runtime shape is a persisted diagram blob
         // that matches Model structurally — assert at this single lib boundary.
-        const model = mergeBundledFixtures(raw as Model);
-        exportAsJSON(model);
+        // ADR 0003 addendum (2026-08-01): both halves take the HOST catalog.
+        // Without it the merge added nothing and the strip removed nothing, so
+        // the file carried every icon the session had loaded (F5/ICON-01/02).
+        const catalog = getBundledCatalog();
+        const model = mergeBundledFixtures(raw as Model, catalog);
+        exportAsJSON(model, catalog);
       } catch {
         notificationStore.push({ severity: 'error', message: `Failed to export "${node.name}"` });
       }
