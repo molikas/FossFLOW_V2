@@ -26,6 +26,8 @@
  * is its own failure (ADR 0011).
  */
 
+import { sweepDanglingAnchorRefs } from 'src/stores/reducers/anchorGraph';
+
 type RawObject = Record<string, unknown>;
 
 const isObj = (v: unknown): v is RawObject => typeof v === 'object' && v !== null;
@@ -46,10 +48,20 @@ export interface ModelRepairReport {
   danglingLayerRefs: number;
   /** Coordinates clamped because they were non-finite or out of range. */
   outOfRangeCoords: number;
+  /**
+   * Anchor-to-anchor refs that resolved to nothing (E2/RED-02 + RED-07/14).
+   * The tile the anchor used to sit on is gone by load time, so these are
+   * dropped rather than re-pointed; a connector left with fewer than two
+   * anchors goes with them.
+   */
+  danglingAnchorRefs: number;
 }
 
 export const isCleanRepair = (r: ModelRepairReport): boolean =>
-  r.duplicateIds === 0 && r.danglingLayerRefs === 0 && r.outOfRangeCoords === 0;
+  r.duplicateIds === 0 &&
+  r.danglingLayerRefs === 0 &&
+  r.outOfRangeCoords === 0 &&
+  r.danglingAnchorRefs === 0;
 
 /** Human-readable summary of a non-clean report, for the load-time notification. */
 export const describeRepair = (r: ModelRepairReport): string => {
@@ -67,6 +79,11 @@ export const describeRepair = (r: ModelRepairReport): string => {
   if (r.outOfRangeCoords > 0) {
     parts.push(
       `${r.outOfRangeCoords} out-of-range coordinate${r.outOfRangeCoords !== 1 ? 's' : ''} clamped`
+    );
+  }
+  if (r.danglingAnchorRefs > 0) {
+    parts.push(
+      `${r.danglingAnchorRefs} connection${r.danglingAnchorRefs !== 1 ? 's' : ''} detached from a connection that no longer exists`
     );
   }
   return parts.join('; ');
@@ -132,7 +149,8 @@ export const repairModelIdentity = (
   const report: ModelRepairReport = {
     duplicateIds: 0,
     danglingLayerRefs: 0,
-    outOfRangeCoords: 0
+    outOfRangeCoords: 0,
+    danglingAnchorRefs: 0
   };
 
   const data: RawObject = { ...raw };
@@ -199,6 +217,31 @@ export const repairModelIdentity = (
         }
         return out;
       });
+    }
+
+    // E2/RED-02's LOAD half, and the other side of RED-07/RED-14.
+    //
+    // Wave 1's repair-don't-reject ruling: bad refs already in users' files get
+    // REPAIRED on load, and the write sites stop producing them. The write
+    // sites are the two delete paths (they sweep the anchor graph now); this is
+    // the repair for every file the bug already wrote — and for hand-edited or
+    // partially-migrated imports, which no write-site fix can reach.
+    //
+    // Without it, a stored dangling ref survived load and was then a permanent
+    // `INVALID_ANCHOR_TO_ANCHOR_REF` — which, until RED-02, made the whole view
+    // un-editable. Both halves are needed and neither is sufficient: the sweep
+    // stops new ones, this heals the old ones, and RED-02 stops either from
+    // taking the editor down while they exist.
+    if (Array.isArray(next.connectors)) {
+      const before = next.connectors as unknown[];
+      const swept = sweepDanglingAnchorRefs(before as never);
+      const lost =
+        swept.dropped +
+        // A removed connector's own anchors stop existing too; count the
+        // connector once rather than each of its refs.
+        swept.removed;
+      if (lost > 0) report.danglingAnchorRefs += lost;
+      next.connectors = swept.connectors as unknown as RawObject[];
     }
 
     return next;

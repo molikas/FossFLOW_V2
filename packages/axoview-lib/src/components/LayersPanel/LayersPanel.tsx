@@ -593,6 +593,7 @@ export const LayersPanel = () => {
             <span>
               <IconButton
                 size="small"
+                data-axoview-id="layers-panel-delete"
                 onClick={handleDeleteSelected}
                 disabled={!selectedLayerId}
                 sx={{ p: 0.5 }}
@@ -652,7 +653,6 @@ export const LayersPanel = () => {
                     onToggleVisible={handleToggleVisible}
                     onToggleLocked={handleToggleLocked}
                     onRename={handleRename}
-                    onDelete={deleteLayer}
                     dragHandleProps={{
                       onMouseDown: (e) => {
                         e.preventDefault();

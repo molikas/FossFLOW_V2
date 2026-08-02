@@ -114,3 +114,32 @@ export const mergeMarqueeSelection = (
 export const isAdditiveModifier = (
   modifiers: { ctrl?: boolean; meta?: boolean; shift?: boolean } | undefined
 ): boolean => !!(modifiers?.ctrl || modifiers?.meta || modifiers?.shift);
+
+/**
+ * E2/RED-15 — re-validate a LIVE selection after the layer state changes.
+ *
+ * ADR 0006 §3 / canvas-interaction I-1: `selectedIds` may only ever contain
+ * interactable refs. Every guard covered the ACQUISITION paths — Ctrl+A, lasso,
+ * click and the context menu all filter through `makeInteractableCheck` — and
+ * nothing re-validated a selection that was legal when it was made and stopped
+ * being legal afterwards.
+ *
+ * So: select items, then hide or lock their layer. `selectedIds` still held
+ * them. Delete removed items the user could no longer see, and a group drag or
+ * a style write moved entities the panel presented as locked.
+ *
+ * The root is structural — layer state lives in the model, selection in
+ * ui-state, with no subscription between them — so the fix is an INVALIDATION
+ * step applied where the layer state changes, using the same filter the
+ * acquisition paths share. Pure, so the caller decides when to run it.
+ */
+export const dropUninteractableRefs = (
+  selected: readonly ItemReference[],
+  lockedIds: ReadonlySet<string>,
+  visibleIds: ReadonlySet<string>,
+  hasLayers: boolean
+): { refs: ItemReference[]; dropped: number } => {
+  const isInteractable = makeInteractableCheck(lockedIds, visibleIds, hasLayers);
+  const refs = selected.filter((ref) => isInteractable(ref.id));
+  return { refs, dropped: selected.length - refs.length };
+};

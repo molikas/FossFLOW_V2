@@ -291,7 +291,10 @@ describe('class gate — a model carrying the class is repaired, not rejected', 
     expect(report).toEqual({
       duplicateIds: 0,
       danglingLayerRefs: 0,
-      outOfRangeCoords: 0
+      outOfRangeCoords: 0,
+      // E2/RED-02 load half — the anchor-graph repair joined the report in
+      // wave 4. A clean file must still leave every counter at zero.
+      danglingAnchorRefs: 0
     });
     expect(data).toEqual(raw);
   });

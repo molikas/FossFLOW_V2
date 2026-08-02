@@ -74,7 +74,7 @@ type IssueType =
       };
     };
 
-type Issue = IssueType & {
+export type Issue = IssueType & {
   message: string;
 };
 
@@ -219,7 +219,15 @@ export const validateView = (view: View, ctx: { model: Model }): Issue[] => {
   // linear getItemByIdOrThrow / Array.includes scans throughout validation.
   // The view-item ref check was the O(N^3) paste-freeze driver (PASTE-1); the
   // connector/anchor checks were the next cliff at O(C·A·N) (VALIDATE-2).
-  const modelItemIds = new Set(ctx.model.items.map((i) => i.id));
+  // E2/RED-01, the independent half: defensive about HOLES. A malformed
+  // `model.items` — an `undefined` slot from a bad `delete`, a hand-edited or
+  // partially-migrated file — used to throw a raw TypeError here, and because
+  // `updateViewItem` validates on every item update that took the WHOLE EDITOR
+  // down rather than reporting one bad entry. Validation's job is to report
+  // problems, not to become one.
+  const modelItemIds = new Set(
+    ctx.model.items.filter((i) => !!i).map((i) => i.id)
+  );
   const colorIds = new Set(ctx.model.colors.map((c) => c.id));
 
   if (view.connectors) {

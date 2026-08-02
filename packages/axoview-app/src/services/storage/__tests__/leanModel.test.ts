@@ -105,3 +105,107 @@ describe('leanIfModel keeps what the load path cannot bring back', () => {
     expect((result as { requiredPacks: string[] }).requiredPacks).toEqual(['gcp']);
   });
 });
+
+/**
+ * E4/CLIP-14, the icon-reference half — folded into the E2 reference-integrity
+ * pass because that is what it is: a reference to something that is not there,
+ * and the fix is a derivation next to the validation work rather than a new
+ * validation rule.
+ *
+ * The entry's repro: paste a node from a diagram that loaded a pack into one
+ * that did not. `model.items[n].icon` names an id absent from `model.icons`,
+ * both `modelSchema` and `validateView` accept it (deliberately — icons come
+ * from separately-loaded packs), and the save then derived `requiredPacks` only
+ * from icons it could see. The pack was never named, the load path never
+ * fetched it, and the node returned as a tombstone.
+ */
+describe('CLIP-14 — requiredPacks learns about an icon ref the model cannot resolve', () => {
+  const pasted = (extra: Record<string, unknown> = {}) => ({
+    title: 'T',
+    icons: [],
+    items: [{ id: 'n1', name: 'Pasted', icon: 'aws-ec2' }],
+    views: [],
+    ...extra
+  });
+
+  it('PRECONDITION: the ref really is unresolvable within the model', () => {
+    expect(pasted().icons).toEqual([]);
+    expect(pasted().items[0].icon).toBe('aws-ec2');
+  });
+
+  it('the pack is recovered from the catalog and recorded', () => {
+    const result = leanIfModel(pasted());
+    expect((result as { requiredPacks: string[] }).requiredPacks).toEqual(['aws']);
+  });
+
+  it('CONTROL: an id the catalog has never heard of records nothing', () => {
+    // The derivation must not invent a pack name. An id from a pack this build
+    // does not ship is genuinely unrecoverable — the right outcome is an empty
+    // list, not a guess the loader would chase.
+    const result = leanIfModel({
+      ...pasted(),
+      items: [{ id: 'n1', name: 'Pasted', icon: 'who-knows' }]
+    });
+    expect((result as { requiredPacks: string[] }).requiredPacks).toEqual([]);
+  });
+
+  it('CONTROL: a CORE id resolves but contributes no pack', () => {
+    // `isoflow` is bundled, so naming it in requiredPacks would send the loader
+    // after a pack that does not exist. Resolved, and correctly silent.
+    const core = getBundledCatalog().find((i) => i.collection === 'isoflow')!;
+    const result = leanIfModel({
+      ...pasted(),
+      items: [{ id: 'n1', name: 'Pasted', icon: core.id }]
+    });
+    expect((result as { requiredPacks: string[] }).requiredPacks).toEqual([]);
+  });
+
+  // The reason the derivation is a UNION now rather than an either/or. An
+  // already-lean model re-saved with one unresolvable ref used to discard the
+  // packs it HAD derived and fall back to the input's list wholesale; a model
+  // with no list at all lost them outright.
+  it('an unresolvable ref does not discard the packs that DID derive', () => {
+    const result = leanIfModel({
+      title: 'T',
+      icons: [icon('gcp-run', 'gcp')],
+      items: [
+        { id: 'n1', name: 'Resolvable', icon: 'gcp-run' },
+        { id: 'n2', name: 'Not', icon: 'who-knows' }
+      ],
+      views: []
+    });
+    expect(
+      ((result as { requiredPacks: string[] }).requiredPacks ?? []).sort()
+    ).toEqual(['gcp']);
+  });
+
+  it('and an existing list is preserved ALONGSIDE them, not instead', () => {
+    const result = leanIfModel({
+      title: 'T',
+      icons: [icon('gcp-run', 'gcp')],
+      items: [
+        { id: 'n1', name: 'Resolvable', icon: 'gcp-run' },
+        { id: 'n2', name: 'Not', icon: 'who-knows' }
+      ],
+      views: [],
+      requiredPacks: ['azure']
+    });
+    expect(
+      ((result as { requiredPacks: string[] }).requiredPacks ?? []).sort()
+    ).toEqual(['azure', 'gcp']);
+  });
+
+  it('a fully-resolved model still drops a pack nothing references any more', () => {
+    // The authoritative case must survive the union: `requiredPacks` is a fetch
+    // list, and keeping a stale entry forever would refetch a pack the diagram
+    // no longer uses on every load.
+    const result = leanIfModel({
+      title: 'T',
+      icons: [{ ...CATALOG_AWS }],
+      items: [{ id: 'n1', name: 'N', icon: 'aws-ec2' }],
+      views: [],
+      requiredPacks: ['azure']
+    });
+    expect((result as { requiredPacks: string[] }).requiredPacks).toEqual(['aws']);
+  });
+});

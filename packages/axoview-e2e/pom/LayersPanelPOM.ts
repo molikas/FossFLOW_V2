@@ -73,6 +73,39 @@ export class LayersPanelPOM {
     await this.addLayerButton().click();
   }
 
+  /** Selects a layer row (the toolbar's delete acts on the selection). */
+  async selectLayer(layerName: string) {
+    await this.getLayerRow(layerName).click();
+  }
+
+  /**
+   * Clicks the toolbar's delete. F4/LAY-05 + E2/RED-13: this is the ONLY delete
+   * route, and for a layer that holds something it opens the confirm dialog
+   * rather than acting — the caller must then choose `keep` or `deleteContents`.
+   * An EMPTY layer skips the dialog because there is nothing to decide.
+   */
+  async deleteSelectedLayer() {
+    await byAxoviewId(this.page, 'layers-panel-delete').click();
+  }
+
+  deleteDialog(): Locator {
+    return byAxoviewId(this.page, 'layer-delete-confirm');
+  }
+
+  hiddenLayerWarning(): Locator {
+    return byAxoviewId(this.page, 'layer-delete-hidden-warning');
+  }
+
+  /** "Keep them" — the contents are unassigned and survive. */
+  async confirmDeleteKeepContents() {
+    await byAxoviewId(this.page, 'layer-delete-keep').click();
+  }
+
+  /** "Delete them too" — the Photoshop reading. */
+  async confirmDeleteWithContents() {
+    await byAxoviewId(this.page, 'layer-delete-contents').click();
+  }
+
   /**
    * Drives the item-to-layer assignment via the panel's synthetic drag-drop.
    * LayerItemRow.onMouseDown → setItemDragState; LayerRow.onMouseEnter →

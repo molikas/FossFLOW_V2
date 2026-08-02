@@ -193,7 +193,20 @@ describe('useInitialDataManager - Orphaned Connector Handling', () => {
               id: 'connector1',
               anchors: [
                 { id: 'anchor1', ref: { item: 'item1' } },
-                { id: 'anchor2', ref: { anchor: 'anchor3' } } // References another anchor
+                // References a REAL anchor on the sibling below. The fixture
+                // used to point at an 'anchor3' that existed nowhere — which is
+                // the E2/RED-07/14 corruption itself, not a valid
+                // anchor-to-anchor ref, and it only survived because nothing
+                // checked. A dangling one is now repaired on load, so the test
+                // for 'a valid anchor ref is preserved' needs a valid one.
+                { id: 'anchor2', ref: { anchor: 'anchor3' } }
+              ]
+            },
+            {
+              id: 'connector2',
+              anchors: [
+                { id: 'anchor3', ref: { tile: { x: 4, y: 4 } } },
+                { id: 'anchor4', ref: { tile: { x: 6, y: 6 } } }
               ]
             }
           ],
@@ -209,8 +222,12 @@ describe('useInitialDataManager - Orphaned Connector Handling', () => {
 
     // Connector with anchor reference should be preserved
     const setCall = mockModelStore.actions.set.mock.calls[0][0];
-    expect(setCall.views[0].connectors).toHaveLength(1);
+    expect(setCall.views[0].connectors).toHaveLength(2);
     expect(setCall.views[0].connectors[0].id).toBe('connector1');
+    // The VALID anchor-to-anchor ref survives the load repair untouched.
+    expect(setCall.views[0].connectors[0].anchors[1].ref).toEqual({
+      anchor: 'anchor3'
+    });
   });
 
   it('should handle views with no connectors', () => {

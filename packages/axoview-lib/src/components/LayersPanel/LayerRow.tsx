@@ -25,7 +25,6 @@ interface Props {
   onToggleVisible: (id: string) => void;
   onToggleLocked: (id: string) => void;
   onRename: (id: string, name: string) => void;
-  onDelete: (id: string) => void;
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
 }
 

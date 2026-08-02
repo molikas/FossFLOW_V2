@@ -1,6 +1,10 @@
 import { Connector } from 'src/types';
 import { produce } from 'immer';
 import { getItemByIdOrThrow, getConnectorPath } from 'src/utils';
+import {
+  collectAnchorTiles,
+  sweepDanglingAnchorRefs
+} from './anchorGraph';
 import { State, ViewReducerContext } from './types';
 
 export const deleteConnector = (
@@ -13,6 +17,22 @@ export const deleteConnector = (
   const newState = produce(state, (draft) => {
     draft.model.views[view.index].connectors?.splice(connector.index, 1);
     delete draft.scene.connectors[id];
+
+    // E2/RED-14 — the direct-delete twin of RED-07. Dropping a connector left
+    // any SIBLING anchored to its anchors pointing at nothing, and by the
+    // RED-02 amplifier that made the whole page un-editable. Same rule, same
+    // helper: the removed connector's anchors are the only place its tiles
+    // still exist, so they are collected before the sweep runs.
+    const doomedTiles = collectAnchorTiles([connector.value]);
+    const existingConnectors = draft.model.views[view.index].connectors;
+    const swept = sweepDanglingAnchorRefs(existingConnectors, doomedTiles);
+    if (existingConnectors) {
+      draft.model.views[view.index].connectors = swept.connectors;
+    }
+    const survivingIds = new Set(swept.connectors.map((c) => c.id));
+    Object.keys(draft.scene.connectors).forEach((connectorId) => {
+      if (!survivingIds.has(connectorId)) delete draft.scene.connectors[connectorId];
+    });
   });
 
   return newState;

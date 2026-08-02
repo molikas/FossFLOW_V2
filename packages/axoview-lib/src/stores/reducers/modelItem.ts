@@ -42,11 +42,27 @@ export const createModelItem = (
   });
 };
 
+/**
+ * E2/RED-01 — `splice`, not `delete`.
+ *
+ * `delete draft.model.items[i]` looks like a removal and is not one. Immer's
+ * copy materialises that index, so the array keeps its length and index `i` is
+ * PRESENT holding `undefined` — not a sparse hole that `map`/`filter` would
+ * skip. Three things broke at once: `validateView`'s
+ * `ctx.model.items.map(i => i.id)` threw, and since `updateViewItem` validates
+ * on every item update, ONE call made the whole view permanently un-editable;
+ * `modelSchema.safeParse` rejected the model, so it would not reload; and
+ * `JSON.stringify` emitted `null` for the slot, so the corruption is what got
+ * saved.
+ *
+ * `deleteViewItem` has always used `splice`. This is the same list operation
+ * written the other way, in the twin function.
+ */
 export const deleteModelItem = (id: string, state: State): State => {
   const modelItem = getItemByIdOrThrow(state.model.items, id);
 
   const newState = produce(state, (draft) => {
-    delete draft.model.items[modelItem.index];
+    draft.model.items.splice(modelItem.index, 1);
   });
 
   return newState;

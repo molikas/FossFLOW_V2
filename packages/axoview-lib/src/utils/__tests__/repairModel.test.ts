@@ -199,15 +199,39 @@ describe('out-of-range coordinates (CLIP-15)', () => {
 describe('the repair is reported, never silent', () => {
   it('describes each kind of repair', () => {
     expect(
-      describeRepair({ duplicateIds: 2, danglingLayerRefs: 1, outOfRangeCoords: 3 })
+      describeRepair({
+        duplicateIds: 2,
+        danglingLayerRefs: 1,
+        outOfRangeCoords: 3,
+        danglingAnchorRefs: 2
+      })
     ).toBe(
-      '2 duplicate ids removed; 1 item unassigned from a layer that no longer exists; 3 out-of-range coordinates clamped'
+      '2 duplicate ids removed; 1 item unassigned from a layer that no longer exists; 3 out-of-range coordinates clamped; 2 connections detached from a connection that no longer exists'
     );
   });
 
   it('singularises', () => {
     expect(
-      describeRepair({ duplicateIds: 1, danglingLayerRefs: 0, outOfRangeCoords: 0 })
+      describeRepair({
+        duplicateIds: 1,
+        danglingLayerRefs: 0,
+        outOfRangeCoords: 0,
+        danglingAnchorRefs: 0
+      })
     ).toBe('1 duplicate id removed');
+  });
+
+  // E2/RED-02's load half — the repair-don't-reject ruling applied to the
+  // anchor graph. The singular form matters: one detached connection is the
+  // common case (RED-14 produces exactly one).
+  it('singularises the anchor-ref clause too', () => {
+    expect(
+      describeRepair({
+        duplicateIds: 0,
+        danglingLayerRefs: 0,
+        outOfRangeCoords: 0,
+        danglingAnchorRefs: 1
+      })
+    ).toBe('1 connection detached from a connection that no longer exists');
   });
 });

@@ -897,10 +897,19 @@ model", corrupts the document.
 
 **Workaround:** don't call it; delete view items instead.
 
-**Status:** Open. Fix direction: `splice(i, 1)` (what `deleteViewItem` already
-does), and independently make `validateView` defensive about holes so a single
-malformed array cannot take the whole editor down. Repro:
-[`red-01-02.explore.test.ts`](packages/axoview-lib/src/__explore__/E2/red-01-02.explore.test.ts).
+**Status:** Fixed in wave 4 (2026-08-01) — both halves, as directed.
+`deleteModelItem` splices, and `validateView` filters falsy entries before
+mapping so a malformed array already in a user's file degrades to "that item is
+not there" instead of taking the editor down. The second half matters
+independently of the first: the corruption is already saved in documents, and
+`splice` cannot reach them.
+
+The pre-existing pin said in as many words that "any future splice-based fix
+will be caught by the change in this assertion" — that change is made rather
+than the assertion deleted, which is the only reason the old behaviour is
+provably gone. Promoted regressions:
+[`modelItem.test.ts`](packages/axoview-lib/src/stores/reducers/__tests__/modelItem.test.ts)
+(the `deleteModelItem — sparse array pin` block).
 
 ## One invalid entity anywhere in a view makes every node move and every node placement throw
 
@@ -928,11 +937,33 @@ file, a hand-edited JSON import, or the `deleteModelItem` corruption above.
 
 **Workaround:** none in-app; the diagram must be repaired outside the editor.
 
-**Status:** Open. Fix direction: validate only what the action touched (or at
-minimum, only fail on issues the action *introduced* — diff the issue set against
-the pre-state), and surface a rejected write as a notification rather than an
-uncaught throw. Repro:
-[`red-01-02.explore.test.ts`](packages/axoview-lib/src/__explore__/E2/red-01-02.explore.test.ts).
+**Status:** Fixed in wave 4 (2026-08-01) — the "only fail on issues the action
+introduced" variant, diffed against the pre-state. Issue identity is `type` plus
+the sorted `params`, not `type` alone: the params name the entities involved, so
+an update that introduces a *second* dangling ref cannot hide behind a
+pre-existing first one.
+
+This is the cluster's amplifier, so it is ruled against wave 1's
+**repair-don't-reject** ruling in both directions, and the two halves ship
+together: pre-existing issues are left for the load-time repair to heal (bad
+refs already in users' files), and the write sites (RED-07, RED-14) stop
+producing them. Neither half is sufficient — a write-site fix cannot reach a
+file the bug already wrote, and a load repair cannot stop the next delete.
+
+One hole found by the tests rather than by reasoning, and worth recording
+because the shape recurs: `createViewItem` unshifts the new item and *then*
+calls `updateViewItem`, so the baseline already contained it and an issue the
+creation introduced was classified pre-existing and waved through. The
+"guard keeps its teeth" test caught it; `createViewItem` now passes the
+pre-insert state explicitly. Promoted regressions:
+[`danglingRefIntegrity.test.ts`](packages/axoview-lib/src/stores/reducers/__tests__/danglingRefIntegrity.test.ts)
+(the `AMPLIFIER` block, including that test and its CONTROL).
+
+Deliberately **not** done: turning a rejected write into a notification. The
+throw is now reachable only by an action that genuinely introduced an issue,
+which is a programming error rather than a user-facing state, and routing it to
+the notification system would make it look like a condition the user could act
+on.
 
 ## Nothing validates layer references — a `layerId` naming no layer is accepted, saved and reloaded
 
@@ -1056,7 +1087,10 @@ so when the cascade removes its target connector the surviving one is left with 
 - `getConnectorPath` throws on it, so `SYNC_SCENE` writes
   `{ tiles: [], unroutable: true }` — and `useHistory.resyncScene` treats
   `unroutable` as deliberate and never retries, so the connector is invisible for
-  the rest of the session (see the sticky-unroutable entry, RED-09).
+  the rest of the session. (RED-09 probed that stickiness and was FALSIFIED on
+  the undo path — recovery happens, but incidentally, via HIST-06's coarse
+  inverse patch rather than by a retry. No entry was filed; the disposition is
+  in `docs/exploratory/areas/E2-reducers-cascades.md`.)
 
 **Root cause:** the cascade computes its victim set from direct item references
 only and never walks the anchor graph transitively —
@@ -1065,11 +1099,35 @@ only and never walks the anchor graph transitively —
 
 **Workaround:** delete the chained connector manually before deleting the node.
 
-**Status:** Open. Fix direction: after removing connectors, sweep the view's
-remaining connectors for `ref.anchor` values that no longer resolve and either
-re-point them at the anchor's last tile or cascade-delete them — the same
-"leave no dangling ref" rule the direct-reference cascade already follows. Repro:
-[`red-06-07.explore.test.ts`](packages/axoview-lib/src/__explore__/E2/red-06-07.explore.test.ts).
+**Status:** Fixed in wave 4 (2026-08-01), as the entry directs and jointly with
+RED-14 — one shared sweep, run by both delete paths and by the load repair.
+`sweepDanglingAnchorRefs` re-points an unresolvable `ref.anchor` at that
+anchor's last known tile, drops the ref where no tile is knowable, and removes a
+connector the sweep leaves with fewer than two anchors.
+
+Three things the implementation had to get right that the fix direction does not
+say:
+
+- The tiles only exist *before* the delete, so they are collected from the
+  doomed connectors while they are still in the model.
+- The walk is **transitive** and fixed-point. A→B→C, where removing C removes B,
+  leaves A pointing at one of B's anchors; a single pass misses it.
+- A connector that arrived *already* malformed — one anchor, which the CLIP-01
+  anchor dedupe can produce — is left alone. Removing it would silently widen
+  "sweep dangling refs" into "also delete malformed connectors", in a helper
+  three call sites share. A per-connector `touched` flag draws that line.
+
+There is a named pin for the symptom class rather than coverage-by-side-effect:
+`RED-07 PIN: a delete-with-contents leaves ZERO dangling anchors` in
+[`deleteLayerContents.test.ts`](packages/axoview-lib/src/stores/reducers/__tests__/deleteLayerContents.test.ts).
+Re-verified after this pass by reverting the delete-with-contents write path to
+its layer-only form: the pin went red and the other 15 tests in the file stayed
+green, so it is discriminating rather than incidentally satisfied. Promoted
+regressions:
+[`anchorGraph.test.ts`](packages/axoview-lib/src/stores/reducers/__tests__/anchorGraph.test.ts)
+(the rule) and
+[`danglingRefIntegrity.test.ts`](packages/axoview-lib/src/stores/reducers/__tests__/danglingRefIntegrity.test.ts)
+(both delete paths and the load repair, in one file, because they are one rule).
 
 ## Deleted nodes leak their model items — `model.items` grows forever and ships in every save
 
@@ -1090,11 +1148,24 @@ garbage-collection step anywhere between the delete and the save.
 
 **Workaround:** none in-app.
 
-**Status:** Open. Fix direction: sweep unreferenced `model.items` at save time
-(lean-save is the natural home — an item referenced by no view item in any view is
-dead) rather than at delete time, so undo of a delete keeps working. Fixing
-`deleteModelItem` (RED-01) is a prerequisite for any delete-time variant. Repro:
-[`red-08-09.explore.test.tsx`](packages/axoview-lib/src/__explore__/E2/red-08-09.explore.test.tsx).
+**Status:** Fixed in wave 4 (2026-08-01) — at save time, in lean-save, exactly as
+the entry directs. `sweepOrphanModelItems` lives in the lib next to
+`stripDefaultIcons` and runs from `leanIfModel`, so every provider that persists
+a model sweeps identically (the same single-implementation rule the ADR 0003
+addendum imposes on the icon strip).
+
+Two decisions are load-bearing and each has its own test. **Save, not delete**:
+collecting on delete would make undo of that delete restore a view item whose
+model item is gone; save is the moment the document is declared final and undo
+cannot cross it. **Referenced by ANY view, not the current one**: a model item
+used only on page 3 is live, and a per-view sweep would delete the model item of
+every node on a page you are not looking at.
+
+The sweep also tolerates an `undefined` slot instead of throwing on one. RED-01's
+corruption is already in users' files, and a sweep that threw would turn a silent
+leak into a failed save — landing on exactly the documents that most need
+repairing. Promoted regression:
+[`sweepOrphanModelItems.test.ts`](packages/axoview-lib/src/utils/__tests__/sweepOrphanModelItems.test.ts).
 
 ## Deleting a connector orphans any connector anchored to it (anchor-to-anchor)
 
@@ -1119,11 +1190,13 @@ only and never walk the anchor graph —
 
 **Workaround:** delete the dependent connector first.
 
-**Status:** Open. Fix direction: one shared "sweep dangling anchor refs" step that
-both delete paths run — for each surviving connector, replace any `ref.anchor`
-that no longer resolves with the anchor's last known tile, or cascade-delete the
-connector if that leaves it with fewer than two anchors. Repro:
-[`red-14.explore.test.ts`](packages/axoview-lib/src/__explore__/E2/red-14.explore.test.ts).
+**Status:** Fixed in wave 4 (2026-08-01) together with RED-07 — one shared sweep,
+which is what the entry asks for and the reason the two were fixed as a pair
+rather than in sequence. See the RED-07 entry above for what the shared helper
+does and the three cases it had to get right. Promoted regressions:
+[`anchorGraph.test.ts`](packages/axoview-lib/src/stores/reducers/__tests__/anchorGraph.test.ts)
+and the `WRITE SITE — deleting a CONNECTOR` block of
+[`danglingRefIntegrity.test.ts`](packages/axoview-lib/src/stores/reducers/__tests__/danglingRefIntegrity.test.ts).
 
 ## Hiding or locking a layer does not drop the entities it covers from the live selection
 
@@ -1148,11 +1221,26 @@ nothing revisits `uiState.selectedIds`.
 **Workaround:** click empty canvas to clear the selection after changing layer
 state.
 
-**Status:** Open. Fix direction: re-run `makeInteractableCheck` over
-`selectedIds` whenever a layer's `visible`/`locked` changes (and on layer delete /
-re-assignment), dropping refs that no longer pass — the same filter the
-acquisition paths already share, applied as an invalidation step. Repro:
-[`red-13-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/E2-reducers/red-13-15.explore.spec.ts).
+**Status:** Fixed in wave 4 (2026-08-01) — the invalidation step the entry
+describes, using the same filter rather than a second opinion about what is
+interactable. A re-check that could disagree with acquisition would be a new way
+for the two to drift, which is the bug `collectSelectableRefs` was factored out
+to prevent, so `dropUninteractableRefs` is a thin wrapper over
+`makeInteractableCheck` and a test asserts the two agree by construction.
+
+It runs in `LayerContextProvider` rather than in `updateLayer`. That is the one
+place that already sees every input to the verdict — the layer rows, the preview
+overrides, and the entity→layer assignment — so it covers layer delete and
+re-assignment for free, which a reducer-side hook on `visible`/`locked` would
+have missed. The entry's root cause is that layer state and selection have no
+subscription between them; this effect *is* that subscription.
+
+The `hasLayers` fallback is preserved and pinned: it keys off whether any layer
+exists, not off `visibleIds.size`, because an empty `visibleIds` also means
+"every entity is on a hidden layer" — conflating them made a fully-hidden view
+snap back to fully-interactable, and that regression must not return through this
+new caller. Promoted regression:
+[`dropUninteractableRefs.test.ts`](packages/axoview-lib/src/utils/__tests__/dropUninteractableRefs.test.ts).
 
 ## Paste does not regenerate connector anchor ids — the clone shares them with the original
 
@@ -1601,11 +1689,26 @@ Promoted regression + class gate: [`modelIdentity.contract.test.ts`](packages/ax
 half (CLIP-15) is closed: `utils/repairModel.ts` clamps a non-finite or absurd
 coordinate on load, per the owner's repair-don't-reject ruling. Non-finite is the
 sharp case — the schema rejects it, so those files do not open at all today. The
-**icon-reference** half is still open and is deliberately not a validation
-change: `validateModelItem` leaves icon refs alone on purpose (icons may come
-from packs that are loaded separately and are not in `model.icons`), so the real
-fix is the `requiredPacks` derivation the entry names, which belongs with the
-wave 4 icon work. Promoted regressions: [`repairModel.test.ts`](packages/axoview-lib/src/utils/__tests__/repairModel.test.ts) and the class gate [`modelIdentity.contract.test.ts`](packages/axoview-lib/src/schemas/__tests__/modelIdentity.contract.test.ts).
+**icon-reference** half is now closed too — fixed in wave 4 (2026-08-01), and
+routed into the E2 reference-integrity pass rather than the F5 icon pass because
+that is what it is: a reference to something that is not there.
+
+It is deliberately **not** a validation change. `validateModelItem` leaves icon
+refs alone on purpose (icons legitimately arrive from packs loaded separately and
+absent from `model.icons`), so rejecting the reference would break the legitimate
+case and repairing it away would delete the user's node. The fix is the
+`requiredPacks` derivation the entry names: at save, item icon ids the model
+cannot resolve are looked up in the host's canonical catalog, and the collection
+it reports is recorded — the pasted node's pack is then fetched on load instead
+of the node returning as a tombstone. That is repair-don't-reject applied to icon
+refs: recover the pack name, keep the reference.
+
+Two consequences worth recording. The catalog lookup is the same host-only
+question `applyIconStrip` asks ("which collections can this build rehydrate?"),
+so it sits next to it rather than in the lib. And the derivation became a
+**union** instead of an either/or: one unresolvable ref used to discard every
+pack the save *had* derived and fall back to the input's list wholesale. Both
+halves were verified able to go red independently. Promoted regressions: [`repairModel.test.ts`](packages/axoview-lib/src/utils/__tests__/repairModel.test.ts) and the class gate [`modelIdentity.contract.test.ts`](packages/axoview-lib/src/schemas/__tests__/modelIdentity.contract.test.ts).
 
 ## Read-only mode is keyboard-editable — the keydown dispatcher has no `editorMode` gate
 

@@ -16,5 +16,10 @@ export {
   mergeBundledFixtures
 } from '../axoview-lib/src/utils/leanSave';
 
+// E2/RED-08, same rule and the same reason: `leanIfModel` calls it, so stubbing
+// it would put the app's tests back to asserting against a stand-in. Its only
+// import is a type.
+export { sweepOrphanModelItems } from '../axoview-lib/src/utils/sweepOrphanModelItems';
+
 // Still a stub — it triggers a browser download, which a unit test must not do.
 export const exportAsJSON = (): void => {};

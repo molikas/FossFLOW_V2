@@ -8,11 +8,15 @@
 import React, { createContext, useContext, useMemo } from 'react';
 import { shallow } from 'zustand/shallow';
 import { useModelStore } from 'src/stores/modelStore';
-import { useUiStateStore } from 'src/stores/uiStateStore';
+import {
+  useUiStateStore,
+  useUiStateStoreApi
+} from 'src/stores/uiStateStore';
 import { Layer, ViewItem, Connector, Rectangle, TextBox, Label } from 'src/types';
 import { getItemByIdOrThrow } from 'src/utils';
 import { isEntityVisibleInPreview } from 'src/utils/previewLayerVisibility';
 import { stripHtmlTags } from 'src/utils/stripHtml';
+import { dropUninteractableRefs } from 'src/utils/selectableRefs';
 
 export type LayerItemType =
   | 'ITEM'
@@ -237,6 +241,32 @@ export const LayerContextProvider = ({
     editorMode,
     previewLayerOverrides
   ]);
+
+  // E2/RED-15 — the invalidation step the acquisition guards never had a twin
+  // for. `selectedIds` may only contain interactable refs (ADR 0006 §3 /
+  // canvas-interaction I-1), and every acquisition path filters through
+  // `makeInteractableCheck` — but a selection that was legal when it was made
+  // stayed in the store after its layer was hidden or locked. Delete then
+  // removed items the user could no longer see, and a group drag moved
+  // entities the panel presented as locked.
+  //
+  // This is the one place that sees every input to that verdict (the layer
+  // rows, the preview overrides, the entity→layer assignment), so it is where
+  // the re-check belongs. Layer state lives in the model and selection in
+  // ui-state with no subscription between them; this effect IS that
+  // subscription.
+  const uiStoreApi = useUiStateStoreApi();
+  React.useEffect(() => {
+    const { selectedIds, actions } = uiStoreApi.getState();
+    if (selectedIds.length === 0) return;
+    const { refs, dropped } = dropUninteractableRefs(
+      selectedIds,
+      value.lockedIds,
+      value.visibleIds,
+      value.layers.length > 0
+    );
+    if (dropped > 0) actions.setSelectedIds(refs);
+  }, [value, uiStoreApi]);
 
   return React.createElement(LayerContext.Provider, { value }, children);
 };
