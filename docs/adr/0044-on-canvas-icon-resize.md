@@ -57,7 +57,7 @@ The on-screen width of an icon is `PROJ_W · k · scale · widthScale · zoom` (
 The **selected** node renders via the DOM path; **unselected** nodes via the WebGL batch. Both must read `viewItem.iconScale ?? icon.scale ?? 1` or the live-dragged node and the committed node render at different sizes. The four readers:
 
 - DOM: [`useIcon.tsx`](../../packages/axoview-lib/src/hooks/useIcon.tsx) → [`IsometricIcon.tsx`](../../packages/axoview-lib/src/components/SceneLayers/Nodes/Node/IconTypes/IsometricIcon.tsx) / [`NonIsometricIcon.tsx`](../../packages/axoview-lib/src/components/SceneLayers/Nodes/Node/IconTypes/NonIsometricIcon.tsx)
-- WebGL: [`NodesCanvas.tsx`](../../packages/axoview-lib/src/components/SceneLayers/Nodes/NodesCanvas.tsx) (`const scale = ...` choke point in `buildInstances`)
+- WebGL: [`nodeEmitter.ts`](../../packages/axoview-lib/src/webgl/scene/nodeEmitter.ts) (`const scale = ...` choke point in `emit`; it was `NodesCanvas.buildInstances` until the ADR 0038 §8 canvas merge moved it here)
 
 **Live drag = DOM only, commit rebuilds the GL batch** (set `geomDirtyRef`) — the same perf shape as the existing CSS-preview move; the GL rebuild happens once, on `mouseup`.
 
@@ -103,7 +103,7 @@ Resizing scales the sprite; the node keeps its **single-tile** footprint for col
 
 ## Implementation notes (non-binding)
 
-- Files: `schemas/views.ts` (field) · `hooks/useIcon.tsx` + `IconTypes/*` + `NodesCanvas.tsx` (readers) · `types/ui.ts` (mode type) · `interaction/modes/Node/TransformNode.ts` (new, mirror `Rectangle/TransformRectangle.ts`) · `useInteractionManager.ts` (register) · `NodeTransformControls.tsx` (wire `onAnchorMouseDown` + corner-only) · `TransformControls.tsx` (ring/handle extent from scaled icon) · `TopBarStyleControls.tsx` (delete control) · `i18n/*` + `types/axoviewProps.ts` (delete 3 keys).
+- Files: `schemas/views.ts` (field) · `hooks/useIcon.tsx` + `IconTypes/*` + `webgl/scene/nodeEmitter.ts` (readers) · `types/ui.ts` (mode type) · `interaction/modes/Node/TransformNode.ts` (new, mirror `Rectangle/TransformRectangle.ts`) · `useInteractionManager.ts` (register) · `NodeTransformControls.tsx` (wire `onAnchorMouseDown` + corner-only) · `TransformControls.tsx` (ring/handle extent from scaled icon) · `TopBarStyleControls.tsx` (delete control) · `i18n/*` + `types/axoviewProps.ts` (delete 3 keys).
 - Precedent worth reading first: [`NodeLabelHitLayer.tsx`](../../packages/axoview-lib/src/components/SceneLayers/Nodes/NodeLabelHitLayer.tsx) — the closest existing "DOM handle drives a per-node view-item property, committed once" pattern, if a full mode feels heavy.
 - Coalesce the live drag into one undo entry via the drag transaction (or `freezePendingPre`/`unfreezePendingPre` on `modelStore`) — do **not** write one `modelStore.set` per pointer tick.
 

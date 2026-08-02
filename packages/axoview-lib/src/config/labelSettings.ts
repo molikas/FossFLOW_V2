@@ -30,8 +30,8 @@ export const LABEL_BASE_FONT_PX = 18;
 //
 // R3/GPU-04 + GPU-05: draw visibility and HIT visibility were decided in
 // different files with different thresholds, so a label could be painted at a
-// zoom where nothing could grab it. Floating Label chips paint from
-// `LabelsCanvas` with no zoom gate at all while `LabelHitLayer` mounted its
+// zoom where nothing could grab it. Floating Label chips paint from the bulk
+// canvas with no zoom gate at all while `LabelHitLayer` mounted its
 // proxies only at `zoom >= 0.4`; node name chips draw below `LABEL_LOD_ZOOM`
 // whenever the "keep labels readable" setting is on, while `NodeLabelHitLayer`
 // gated at the same 0.4 — so the accessibility setting whose whole purpose is

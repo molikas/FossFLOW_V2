@@ -38,11 +38,12 @@ import type { Page } from '@playwright/test';
 import { CanvasPOM } from '../pom/CanvasPOM';
 import { placeIconViaMouse } from '../helpers/place';
 import { getViewItemCount } from '../helpers/store';
+import { sceneCounters } from '../helpers/sceneCanvas';
 
 test.describe.configure({ timeout: 120_000 });
 
 const CANVAS = '[data-testid="axoview-canvas"]';
-const NODES_CANVAS = '[data-testid="axoview-nodes-canvas"]';
+const NODES_CANVAS = '[data-testid="axoview-scene-canvas"]';
 const NODE_NAME_PROXY = '[data-axoview-id="canvas-label-hit"]';
 const labelProxyFor = (id: string) => `[data-label-hit-id="${id}"]`;
 
@@ -98,7 +99,10 @@ const nodeCounters = (page: Page) =>
   page.evaluate((sel: string) => {
     const c = document.querySelector(sel) as HTMLElement | null;
     return {
-      drawCount: Number(c?.dataset.drawCount ?? -1),
+      // R3/GPU-13: one merged canvas, so `data-draw-count` is the TOTAL over
+      // every entity type. The NODE count — which is what every assertion here
+      // means — has its own channel, and it is also ADR 0020's anti-cheat one.
+      drawCount: Number(c?.dataset.nodesDrawn ?? -1),
       labelsDrawn: c?.dataset.labelsDrawn ?? null,
       labelScale: Number(c?.dataset.labelScale ?? '1')
     };
@@ -283,8 +287,9 @@ test('RND-02: hiding a layer removes its connector label chips, not just the bod
   expect(named.connectors, 'exactly one connector was drawn').toBe(1);
   expect(named.labels, 'the connector carries one renderable label').toBe(1);
 
-  // A SELECTED connector is DOM-promoted and always keeps its labels — that
-  // would confound the measurement, so clear the selection first.
+  // R4/RND-13/15: a selected connector is no longer DOM-promoted (selection is
+  // order-preserving), but it still always keeps its labels — that would
+  // confound the measurement, so clear the selection first.
   await clearSelection(page);
   await page.waitForTimeout(600);
 
@@ -294,9 +299,12 @@ test('RND-02: hiding a layer removes its connector label chips, not just the bod
   expect(shown.connectorsOnLayer).toBe(1);
   expect(shown.itemsOnLayer).toBe(2);
   await page.waitForTimeout(900);
+  // R3/GPU-13: the four bulk canvases merged, so whole-canvas painted-pixels
+  // can no longer answer "is the CONNECTOR bulk painting?" — the nodes on the
+  // same layer paint into the same buffer. The per-type counter can.
   expect(
-    await paintedPixels(page, '[data-testid="axoview-connectors-canvas"]'),
-    'PRECONDITION: the connector bulk canvas is painting'
+    (await sceneCounters(page)).connectorsDrawn,
+    'PRECONDITION: the connector bulk is painting'
   ).toBeGreaterThan(0);
   expect(await chips(), 'PRECONDITION: the label chip is mounted').toBeGreaterThan(0);
 
@@ -307,7 +315,7 @@ test('RND-02: hiding a layer removes its connector label chips, not just the bod
   // PRECONDITION: the BODY really went away — otherwise the toggle did nothing
   // and a missing chip would prove nothing either.
   expect(
-    await paintedPixels(page, '[data-testid="axoview-connectors-canvas"]'),
+    (await sceneCounters(page)).connectorsDrawn,
     'PRECONDITION: the connector body stops painting when its layer is hidden'
   ).toBe(0);
 
@@ -411,6 +419,12 @@ test('RND-04: a node whose id contains a comma is still promoted on drag', async
 
 // ---------------------------------------------------------------------------
 // RND-05 — the LOD band covers the promoted node too
+//
+// R4/RND-13/15 changed WHAT promotes: selection is order-preserving now, so a
+// selected node stays on the bulk. The rename session is the promotion this test
+// needs, and it is the same DOM `<Node>` either way — RND-05's claim ("the
+// overlay reads the same `isNodeLabelDrawn` predicate the bulk does") is
+// untouched, only the route to a promoted node moved.
 // ---------------------------------------------------------------------------
 
 test('RND-05: below the label LOD zoom, a promoted node shows no name either', async ({ app }) => {
@@ -434,6 +448,13 @@ test('RND-05: below the label LOD zoom, a promoted node shows no name either', a
   ).toBe(false);
 
   await selectItem(page, id);
+  await page.evaluate(
+    (nodeId) =>
+      (window as any).__axoview__.ui
+        .getState()
+        .actions.setInlineEditNodeId(nodeId),
+    id
+  );
   await expect(page.locator(`[data-drag-id="${id}"]`)).toHaveCount(1);
   await page.evaluate(() =>
     (window as any).__axoview__.ui.getState().actions.setZoom(0.2)
@@ -454,14 +475,19 @@ test('RND-05: below the label LOD zoom, a promoted node shows no name either', a
 // RND-14 — reveal, then act
 // ---------------------------------------------------------------------------
 
-test('RND-14: a selected node keeps its DOM overlay when panned off-screen', async ({ app }) => {
+test('RND-14: a rename started off-screen still finds its node', async ({ app }) => {
   const { page } = app;
   const canvas = new CanvasPOM(page);
   await placeIconViaMouse(page, await canvas.tileToScreen({ x: 0, y: 0 }));
   await expect.poll(() => getViewItemCount(page)).toBe(1);
   const id = (await firstItemId(page))!;
   await selectItem(page, id);
-  await expect(page.locator(`[data-drag-id="${id}"]`)).toHaveCount(1);
+  // R4/RND-13/15: selection alone no longer mounts an overlay — that promotion
+  // WAS the accidental "bring to front". The ruling RND-14 serves ("reveal, then
+  // act": a keyboard command on an off-screen selection must not be a silent
+  // no-op) is unchanged, and this is now the whole of it — the rename intent both
+  // bypasses the viewport cull and promotes, in one store write.
+  await expect(page.locator(`[data-drag-id="${id}"]`)).toHaveCount(0);
 
   // Pan far enough that the node's tile leaves the padded coarse bounds.
   await page.evaluate(() => {
@@ -485,10 +511,6 @@ test('RND-14: a selected node keeps its DOM overlay when panned off-screen', asy
     )
   ).toBe(id);
 
-  // …and so is the overlay F2 talks to. "Reveal, then act": the promoted set
-  // bypasses the cull, so a rename started off-screen has a target.
-  await expect(page.locator(`[data-drag-id="${id}"]`)).toHaveCount(1);
-
   // `handleFunctionKeys` drops F2 unless the keystroke came from inside the
   // renderer or from document.body, and placing an icon leaves focus in the
   // Elements grid — so reset focus before asserting F2 works.
@@ -499,6 +521,9 @@ test('RND-14: a selected node keeps its DOM overlay when panned off-screen', asy
   ).toBe('BODY');
   await page.keyboard.press('F2');
   await page.waitForTimeout(600);
+  // "Reveal, then act": the rename intent joins the promoted set, which bypasses
+  // the viewport cull — so the culled node mounts and the editor has a target.
+  await expect(page.locator(`[data-drag-id="${id}"]`)).toHaveCount(1);
   expect(
     await page.locator('[contenteditable="true"]').count()
   ).toBeGreaterThan(0);

@@ -50,7 +50,7 @@ import {
 // was the one manufacturing visible-but-inert ones. The gate follows the DRAW
 // decision now, from the shared predicate. Nothing may be painted at a zoom
 // where it cannot be hit.
-// Mirror Label/NodesCanvas chip padding (theme.spacing(1.5) / spacing(1)) and
+// Mirror Label/SceneCanvas chip padding (theme.spacing(1.5) / spacing(1)) and
 // the 250px max chip width, so the hit box matches the drawn name chip.
 const CHIP_PAD_X = 12;
 const CHIP_PAD_Y = 8;
@@ -119,7 +119,7 @@ export const NodeLabelHitLayer = ({ nodes }: Props) => {
   );
   const active = (editable || viewMode) && lodVisible;
   const modelItems = useModelStore((s) => s.items);
-  // Layer visibility: a node on a hidden layer is not drawn (NodesCanvas), so it
+  // Layer visibility: a node on a hidden layer is not drawn (SceneCanvas), so it
   // must expose no invisible drag/rename hit-proxy either. `layers.length === 0`
   // is the no-layer-system escape hatch — NOT `visibleIds.size`, which is also
   // empty when every node sits on a hidden layer.
@@ -197,21 +197,21 @@ export const NodeLabelHitLayer = ({ nodes }: Props) => {
   // Double-click a node's on-canvas label to edit it (parity with connector
   // labels, which are DOM and already double-click-editable). At rest a node
   // label is Canvas2D with no DOM element, so the edit gesture never reached it;
-  // this proxy sits over the label, so a double-click here selects the node
-  // (promoting it into the DOM overlay) and then asks that overlay to enter
-  // inline-rename via the same event F2 uses. Dispatched on the next frame so
-  // the just-mounted node is listening.
+  // this proxy sits over the label, so a double-click here selects the node and
+  // opens the rename session on it.
+  //
+  // R4/RND-13/15: selection no longer promotes the node into the DOM overlay —
+  // the RENAME does — so this writes `inlineEditNodeId` rather than dispatching
+  // the `inlineEditNodeName` event on the next frame. The rAF was there because
+  // the event needed the freshly-mounted node to be listening; a store write
+  // needs no such handshake, and the mounted editor reads the id.
   const onLabelDoubleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>, node: ViewItem) => {
       e.stopPropagation();
       const ui = uiStoreApi.getState();
       if (ui.editorMode !== 'EDITABLE') return;
       ui.actions.setSelectedIds?.([{ type: 'ITEM', id: node.id }]);
-      requestAnimationFrame(() => {
-        window.dispatchEvent(
-          new CustomEvent('inlineEditNodeName', { detail: { id: node.id } })
-        );
-      });
+      ui.actions.setInlineEditNodeId(node.id);
     },
     [uiStoreApi]
   );

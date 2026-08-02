@@ -4,10 +4,12 @@ import { id, coords, constrainedStrings, NOTES_MAX_LENGTH } from './common';
 // Floating Label — a first-class billboard chip (ADR 0031), peer to TextBox /
 // Node / Connector / Rectangle. Extracted from the retired textBox
 // `variant:'label'`: the iso-projection and per-character rich text are removed,
-// leaving a plain-text chip with whole-chip styling. Rendered on Canvas2D
-// (LabelsCanvas) ABOVE the node layer, so a label can sit over a node; an
-// explicit `zIndex` orders labels within that layer. Model-only — unlike a
-// TextBox it carries no scene-size entry: the Canvas2D layer and the DOM
+// leaving a plain-text chip with whole-chip styling. Drawn by the merged bulk
+// canvas ABOVE nodes at the same layer/z-index — the `label` TYPE RANK in
+// `compareSceneDrawOrder` (ADR 0031 §2, restated as a sort-key property by ADR
+// 0038 §8) — so a label can sit over a node; an explicit `zIndex` outranks the
+// type rank and orders labels against every other entity type. Model-only —
+// unlike a TextBox it carries no scene-size entry: the bulk canvas and the DOM
 // hit-proxy each measure the chip themselves, exactly like node labels.
 export const labelSchema = z.object({
   id,
@@ -35,7 +37,7 @@ export const labelSchema = z.object({
   isUnderline: z.boolean().optional(),
   // Stacking order WITHIN the Label layer (send-to-front/back). Absent = 0.
   // Cross-layer order vs nodes is structural (the layer mounts above
-  // NodesCanvas — ADR 0031 §2), not expressed here.
+  // SceneCanvas — ADR 0031 §2), not expressed here.
   zIndex: z.number().int().optional(),
   // Optional external link (2026-07-01) — parity with node/connector
   // `headerLink`. Set from the top-bar Link control; opened from the view-mode

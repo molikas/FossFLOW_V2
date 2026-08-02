@@ -45,7 +45,7 @@ Evidence detail: t2-design.md FINDINGs (Iter 8, 9).
 ## Decision
 
 **Canvas2D becomes the default and sole *bulk* node-render substrate.**
-[`NodesCanvas`](../../packages/axoview-lib/src/components/SceneLayers/Nodes/NodesCanvas.tsx)
+`NodesCanvas` (retired 2026-08-02 — the four bulk canvases merged into [`SceneCanvas`](../../packages/axoview-lib/src/components/SceneLayers/SceneCanvas.tsx) under ADR 0038 §8)
 — an imperative, store-subscribed `<canvas>` (icon-bitmap cache, iso projection
 matrix, tile cull, painter-order sort, the readable-labels counter-scale ported to
 `ctx` transforms) — replaces the per-node React DOM subtree for all N nodes.

@@ -156,7 +156,7 @@ export const rasterizeNodeChip = (
 };
 
 // Rasterise a floating Label chip via the shared drawLabelChip (same pixels as
-// LabelsCanvas). drawLabelChip centres at (cx,cy) → here (chipW/2, chipH/2) so
+// SceneCanvas). drawLabelChip centres at (cx,cy) → here (chipW/2, chipH/2) so
 // the chip fills the local (0,0)→(chipW,chipH) box.
 export const rasterizeLabelChip = (
   label: Label,

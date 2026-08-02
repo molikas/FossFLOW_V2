@@ -544,9 +544,9 @@ export const DragItems: ModeActions = {
       uiState.snapToGrid ?? true
     );
 
-    // Floating labels are canvas-drawn (LabelsCanvas) with no [data-drag-id] DOM
+    // Floating labels are canvas-drawn (SceneCanvas) with no [data-drag-id] DOM
     // element to carry a CSS `--ff-drag-*` preview, so publish their accumulated
-    // target tile/offset to the group move-preview channel — LabelsCanvas redraws
+    // target tile/offset to the group move-preview channel — SceneCanvas redraws
     // each dragged chip there. Without this the labels stay frozen mid-drag and
     // only jump into place on the mouseup commit (the reported "label not moving"
     // confusion). Cleared on mouseup (after commit) and on exit.
@@ -601,7 +601,7 @@ export const DragItems: ModeActions = {
         }))
       );
     }
-    // Drop the canvas move-preview AFTER the model commit above, so LabelsCanvas
+    // Drop the canvas move-preview AFTER the model commit above, so SceneCanvas
     // redraws each chip at its new model position and the preview clears in the
     // same pass (no one-frame jump back to the origin). Mirrors the single-label
     // updateLabel → clearLabelMove ordering in LabelHitLayer.

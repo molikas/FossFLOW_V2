@@ -77,7 +77,7 @@ const NO_OFFSET: Coords = { x: 0, y: 0 };
 //
 // R1/PROJ-06, ruled 2026-07-30: DERIVED from the projection constants, not
 // hardcoded. These were 3-decimal literals (0.707 / 0.409), moved verbatim from
-// `RectanglesCanvas` when this module was extracted, deliberately, so that the
+// `SceneCanvas` when this module was extracted, deliberately, so that the
 // extraction changed no rendered pixel. But the exact ratio `getTilePosition`
 // uses is ±(0.7075, 0.4095) — half of `TILE_PROJECTION_MULTIPLIERS` — so an
 // area quad drifted hypot(0.05, 0.05) px per tile of extent against a node drawn
@@ -190,7 +190,7 @@ export const tileFootprintAt = (
  * The four drawn corners of a tile-range area (rectangle, text box) in
  * SceneLayer px, offset included — origin first, then clockwise in draw order.
  *
- * This IS the WebGL bulk path's vertex math (ADR 0038): `RectanglesCanvas`
+ * This IS the WebGL bulk path's vertex math (ADR 0038): `SceneCanvas`
  * calls it per rectangle per frame, so it stays allocation-light (one point
  * object per corner, nothing else) and takes no options object.
  */

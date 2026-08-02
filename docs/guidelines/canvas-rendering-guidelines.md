@@ -123,7 +123,7 @@ const o1 = getTilePos({ tile: { x: 1, y: 0 } });
 const widthScale = Math.hypot(o1.x - o0.x, o1.y - o0.y) / UNPROJECTED_TILE_SIZE;
 ```
 
-Measuring from `getTilePosition` (not a hard-coded iso constant) keeps connectors and rectangles consistent and correct if the projection ever changes. Reference: [`ConnectorsCanvas`](../../packages/axoview-lib/src/components/SceneLayers/Connectors/ConnectorsCanvas.tsx) + [`RectanglesCanvas`](../../packages/axoview-lib/src/components/SceneLayers/Rectangles/RectanglesCanvas.tsx).
+Measuring from `getTilePosition` (not a hard-coded iso constant) keeps connectors and rectangles consistent and correct if the projection ever changes. Reference: [`connectorEmitter`](../../packages/axoview-lib/src/webgl/scene/connectorEmitter.ts) + [`rectangleEmitter`](../../packages/axoview-lib/src/webgl/scene/rectangleEmitter.ts).
 
 ---
 
@@ -155,7 +155,7 @@ addSprite(..., arrowUV, 1, 1, 1, 1, 0);
 addSprite(..., arrowUV, 0, 0, 0, 1, 0);
 ```
 
-Reference: arrow emission in [`ConnectorsCanvas`](../../packages/axoview-lib/src/components/SceneLayers/Connectors/ConnectorsCanvas.tsx).
+Reference: arrow emission in [`connectorEmitter`](../../packages/axoview-lib/src/webgl/scene/connectorEmitter.ts).
 
 ---
 
@@ -167,7 +167,7 @@ Reference: arrow emission in [`ConnectorsCanvas`](../../packages/axoview-lib/src
 
 **Rule:** any GPU layer whose geometry is tile→scene **projected** must list `strategy.projectionName` in its rebuild deps (mirror `NodesCanvas`). A DOM hit-proxy and its GPU paint must share **one** projection, or they drift apart — a hybrid-boundary invariant (ADR 0038 §2).
 
-Reference: rebuild-effect deps in [`LabelsCanvas`](../../packages/axoview-lib/src/components/SceneLayers/Labels/LabelsCanvas.tsx) / [`NodesCanvas`](../../packages/axoview-lib/src/components/SceneLayers/Nodes/NodesCanvas.tsx).
+Reference: rebuild-effect deps in [`SceneCanvas`](../../packages/axoview-lib/src/components/SceneLayers/SceneCanvas.tsx) — one effect for the whole bulk since the ADR 0038 §8 merge.
 
 ---
 
@@ -278,7 +278,7 @@ const vx = (La * hx + Lc * hy) * size, vy = (Lb * hx + Ld * hy) * size; // L·h 
 const vx = -uy * size, vy = ux * size;
 ```
 
-Reference: arrow emission in [`ConnectorsCanvas`](../../packages/axoview-lib/src/components/SceneLayers/Connectors/ConnectorsCanvas.tsx) (the `La/Lb/Lc/Ld` basis).
+Reference: arrow emission in [`connectorEmitter`](../../packages/axoview-lib/src/webgl/scene/connectorEmitter.ts) (the `La/Lb/Lc/Ld` basis).
 
 ---
 
@@ -302,7 +302,7 @@ Reference: [`CanvasCompositorOverlay.tsx`](../../packages/axoview-lib/src/compon
 
 **Rule:** any component that **paints** an entity (every `*Canvas` bulk layer) or **exposes an interactive affordance** for it (selection handles, anchor overlays, transform/resize/rotate controls) must re-apply the layer filter itself — it is never inherited from the sibling that happens to filter. Paint layers skip on `visibleIds.size > 0 && !visibleIds.has(id)` (the `size === 0` escape hatch = no layers configured); affordance layers use the codebase-wide interactable invariant `!lockedIds.has(id) && (visibleIds.size === 0 || visibleIds.has(id))` (same predicate as `useInteractionManager` / `usePanHandlers`). A **locked** layer's element may still be *selected* (from the Layers list, to inspect / re-layer / unlock) — so render the selection ring but withhold every transform handle (draw.io / PowerPoint / Canva parity), never a live-editable selection. Add `visibleIds` (and `lockedIds` for affordances) to the geometry-rebuild deps so a visibility/lock toggle rebuilds.
 
-Reference: filter loop + rebuild deps in [`RectanglesCanvas`](../../packages/axoview-lib/src/components/SceneLayers/Rectangles/RectanglesCanvas.tsx); the overlay gate in [`ConnectorAnchorOverlay`](../../packages/axoview-lib/src/components/ConnectorAnchorOverlay/ConnectorAnchorOverlay.tsx); the handle gate in [`TransformControlsManager`](../../packages/axoview-lib/src/components/TransformControlsManager/TransformControlsManager.tsx) (`showHandles={!lockedIds.has(id)}`); invariant source in [`useInteractionManager`](../../packages/axoview-lib/src/interaction/useInteractionManager.ts).
+Reference: the `buildDrawOrder` filter + rebuild deps in [`SceneCanvas`](../../packages/axoview-lib/src/components/SceneLayers/SceneCanvas.tsx); the overlay gate in [`ConnectorAnchorOverlay`](../../packages/axoview-lib/src/components/ConnectorAnchorOverlay/ConnectorAnchorOverlay.tsx); the handle gate in [`TransformControlsManager`](../../packages/axoview-lib/src/components/TransformControlsManager/TransformControlsManager.tsx) (`showHandles={!lockedIds.has(id)}`); invariant source in [`useInteractionManager`](../../packages/axoview-lib/src/interaction/useInteractionManager.ts).
 
 ---
 
@@ -335,8 +335,8 @@ When building or debugging a GPU layer, **read these first**:
 | Chip rasterisation (content inset, supersample) | [`itemRaster.ts`](../../packages/axoview-lib/src/webgl/itemRaster.ts) |
 | Context-loss recovery | [`contextLoss.ts`](../../packages/axoview-lib/src/webgl/contextLoss.ts) |
 | Backing-store / export scale clamp | [`renderTarget.ts`](../../packages/axoview-lib/src/utils/renderTarget.ts) |
-| The canonical bulk layer (build vs draw split, projection deps) | [`NodesCanvas.tsx`](../../packages/axoview-lib/src/components/SceneLayers/Nodes/NodesCanvas.tsx) |
-| Projection-scaled widths + line-styles | [`ConnectorsCanvas.tsx`](../../packages/axoview-lib/src/components/SceneLayers/Connectors/ConnectorsCanvas.tsx) |
+| The canonical bulk layer (build vs draw split, projection deps, the merged sort) | [`SceneCanvas.tsx`](../../packages/axoview-lib/src/components/SceneLayers/SceneCanvas.tsx) |
+| Projection-scaled widths + line-styles | [`connectorEmitter.ts`](../../packages/axoview-lib/src/webgl/scene/connectorEmitter.ts) |
 | Unit-testable pure math (the CI-visible surface) | [`webgl/__tests__`](../../packages/axoview-lib/src/webgl/__tests__) · [`renderTarget.test.ts`](../../packages/axoview-lib/src/utils/__tests__/renderTarget.test.ts) |
 
 ---

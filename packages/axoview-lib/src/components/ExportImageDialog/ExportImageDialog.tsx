@@ -638,7 +638,7 @@ export const ExportImageDialog = memo(({ onClose }: Props) => {
     let cancelled = false;
     // A2: model-ready + one rAF guarantees React painted, but the canvas icon
     // bitmaps decode asynchronously and may not be on the first frame. Wait for
-    // NodesCanvas to report `data-all-icons-drawn="true"` before capturing, so
+    // SceneCanvas to report `data-all-icons-drawn="true"` before capturing, so
     // icon nodes aren't dropped from the snapshot. Cap the wait so a stuck/broken
     // icon can never hang the export — we capture anyway and recapture below once
     // the icons finish.

@@ -44,9 +44,14 @@ type Need = 'visible' | 'visible+locked';
  */
 const LAYERS: Array<{ file: string; needs: Need; why: string }> = [
   {
-    file: 'components/SceneLayers/Nodes/NodesCanvas.tsx',
+    // R3/GPU-13: the four bulk canvases merged into ONE (ADR 0038 §8), so the
+    // four separate filter sites became one — and the class this gate guards
+    // (each layer deciding independently, without the rule in front of it) got
+    // structurally smaller rather than being satisfied by accident. The filter
+    // lives in `buildDrawOrder`, which every entity type walks through.
+    file: 'components/SceneLayers/SceneCanvas.tsx',
     needs: 'visible',
-    why: 'Bulk paint. Locked nodes still draw; only gestures are withheld.'
+    why: 'Bulk paint, all four entity types. Locked entities still draw; only gestures are withheld.'
   },
   {
     file: 'components/SceneLayers/Nodes/NodeLabelHitLayer.tsx',
@@ -54,29 +59,14 @@ const LAYERS: Array<{ file: string; needs: Need; why: string }> = [
     why: 'Affordance: label drag + rename + context menu. OVL-13.'
   },
   {
-    file: 'components/SceneLayers/Labels/LabelsCanvas.tsx',
-    needs: 'visible',
-    why: 'Bulk paint of floating Label chips.'
-  },
-  {
     file: 'components/SceneLayers/Labels/LabelHitLayer.tsx',
     needs: 'visible+locked',
     why: 'Affordance: chip select/drag/inline-edit/menu.'
   },
   {
-    file: 'components/SceneLayers/Connectors/ConnectorsCanvas.tsx',
-    needs: 'visible',
-    why: 'Bulk paint.'
-  },
-  {
     file: 'components/SceneLayers/ConnectorLabels/ConnectorLabels.tsx',
     needs: 'visible',
     why: 'Paint only — the chips own their own gestures downstream. RND-02.'
-  },
-  {
-    file: 'components/SceneLayers/Rectangles/RectanglesCanvas.tsx',
-    needs: 'visible',
-    why: 'Bulk paint.'
   },
   {
     file: 'components/TransformControlsManager/TransformControlsManager.tsx',
@@ -131,7 +121,7 @@ describe('class gate — every canvas layer reaches the layer context', () => {
   it('the table is not empty and every file exists (the gate can go red)', () => {
     // A scan that finds nothing is a green gate that cannot fail — the shape the
     // 2026-07-29 audit flagged for the madge and bundle-size gates.
-    expect(LAYERS.length).toBeGreaterThan(6);
+    expect(LAYERS.length).toBeGreaterThan(5);
     for (const layer of LAYERS) expect(read(layer.file).length).toBeGreaterThan(0);
   });
 
@@ -188,7 +178,7 @@ describe('class gate — the locked filter, where gestures are offered', () => {
 
   it('the table still classes some layers each way', () => {
     expect(gesture.length).toBeGreaterThan(2);
-    expect(paintOnly.length).toBeGreaterThan(2);
+    expect(paintOnly.length).toBeGreaterThan(1);
   });
 
   it.each(gesture.map((l) => [l.file, l.why] as const))(

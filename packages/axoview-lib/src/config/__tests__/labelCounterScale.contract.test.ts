@@ -63,9 +63,7 @@ describe('§1 — one derivation, and every consumer uses it', () => {
     // A path typo would otherwise make every assertion below vacuously true.
     expect(FILES.length).toBeGreaterThan(200);
     expect(FILES.map(rel)).toContain(DERIVATION_FILE);
-    expect(FILES.map(rel)).toContain(
-      'components/SceneLayers/Nodes/NodesCanvas.tsx'
-    );
+    expect(FILES.map(rel)).toContain('components/SceneLayers/SceneCanvas.tsx');
   });
 
   it('only the shared derivation calls `computeLabelCounterScale`', () => {
@@ -107,9 +105,13 @@ describe('§1 — one derivation, and every consumer uses it', () => {
     // pass the negative checks above.
     const CONSUMERS = [
       'components/Label/ExpandableLabel.tsx',
-      'components/SceneLayers/Labels/LabelsCanvas.tsx',
+      // R3/GPU-13: the two GPU chip emitters moved out of the four merged
+      // canvases into `webgl/scene/` — same emission, one context. Listing the
+      // EMITTERS rather than the component keeps this pointed at the code that
+      // actually derives a per-chip factor.
+      'webgl/scene/labelEmitter.ts',
+      'webgl/scene/nodeEmitter.ts',
       'components/SceneLayers/Labels/LabelHitLayer.tsx',
-      'components/SceneLayers/Nodes/NodesCanvas.tsx',
       'components/SceneLayers/Nodes/NodeLabelHitLayer.tsx',
       'components/SceneLayers/ConnectorLabels/ConnectorLabel.tsx'
     ];
@@ -198,8 +200,8 @@ describe('§3 — the GPU layer carries the factor per instance', () => {
 
   it('both GPU label emitters pass a per-instance value', () => {
     for (const f of [
-      'components/SceneLayers/Nodes/NodesCanvas.tsx',
-      'components/SceneLayers/Labels/LabelsCanvas.tsx'
+      'webgl/scene/nodeEmitter.ts',
+      'webgl/scene/labelEmitter.ts'
     ]) {
       const src = fs.readFileSync(path.join(SRC, f), 'utf8');
       // The per-chip factor is computed inside the emission, from the chip's

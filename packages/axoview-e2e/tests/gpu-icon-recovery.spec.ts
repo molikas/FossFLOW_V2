@@ -24,7 +24,7 @@ import { getViewItemCount } from '../helpers/store';
 
 test.describe.configure({ timeout: 120_000 });
 
-const NODES = 'axoview-nodes-canvas';
+const NODES = 'axoview-scene-canvas';
 
 /** A real 1×1 PNG — the "the server came back" body for the recovery case. */
 const PNG_1PX = Buffer.from(

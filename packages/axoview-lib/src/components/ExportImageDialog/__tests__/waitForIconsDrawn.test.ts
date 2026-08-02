@@ -1,6 +1,6 @@
 import { waitForIconsDrawn } from '../waitForIconsDrawn';
 
-// QA #10: the export must wait for the hidden Axoview's NodesCanvas to mount AND
+// QA #10: the export must wait for the hidden Axoview's SceneCanvas to mount AND
 // finish painting before capturing. The original poll treated an absent canvas
 // as "nothing to wait for" and resolved true immediately — so on a slower mount
 // it captured a blank frame and (because it returned true) the caller skipped

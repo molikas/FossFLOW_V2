@@ -394,7 +394,7 @@ export interface UiState {
   labelDrag: { id: string; height: number } | null;
   /**
    * Transient floating-Label move preview (ADR 0031). While a Label is dragged
-   * via LabelHitLayer this holds its id + the live tile/offset, so LabelsCanvas
+   * via LabelHitLayer this holds its id + the live tile/offset, so SceneCanvas
    * redraws the chip following the pointer WITHOUT a per-frame model write
    * (which would re-render every hit-proxy div). UI-only, never persisted; the
    * model position is committed ONCE on release. Null when no move is in flight.
@@ -404,10 +404,10 @@ export interface UiState {
    * Transient GROUP move-preview for floating labels (ADR 0031). A single-label
    * drag uses `labelMove` (LabelHitLayer); a MULTI-selection drag moves through
    * DragItems, where nodes/rectangles/text boxes get a CSS `--ff-drag-*` preview
-   * on their DOM wrapper — but a label is canvas-drawn (LabelsCanvas) with no DOM
+   * on their DOM wrapper — but a label is canvas-drawn (SceneCanvas) with no DOM
    * element to translate, so without this channel the label sat frozen until the
    * mouseup commit ("the label doesn't move when I drag the selection"). Keyed by
-   * label id → its preview tile + off-grid offset; LabelsCanvas redraws each keyed
+   * label id → its preview tile + off-grid offset; SceneCanvas redraws each keyed
    * chip at that position. UI-only, never persisted; committed once on release.
    * Null when no group drag is in flight.
    */
@@ -433,11 +433,27 @@ export interface UiState {
   selectedConnectorLabel: { connectorId: string; labelId: string } | null;
   /**
    * The floating Label (ADR 0031) currently being inline-edited on canvas (via
-   * double-click or F2), or null. While set, LabelsCanvas skips painting that
+   * double-click or F2), or null. While set, SceneCanvas skips painting that
    * label (the DOM contentEditable in LabelHitLayer takes over) so the text
    * isn't drawn twice. UI-only, never persisted.
    */
   inlineEditLabelId: string | null;
+  /**
+   * The NODE currently being inline-renamed on canvas (F2, double-click, or the
+   * context-menu Rename), or null.
+   *
+   * R4/RND-13/15 + R3/GPU-13: selection alone no longer promotes a node into the
+   * DOM `<Nodes>` overlay, because with one merged bulk canvas a promoted element
+   * can only paint ABOVE or BELOW the whole canvas — never in its own place in
+   * the document order — and lifting it on selection is exactly the accidental
+   * "bring to front" RND-13/15 filed. Renaming still needs the DOM
+   * contentEditable, so the rename INTENT is what promotes now, and it has to be
+   * store state rather than the `inlineEditNodeName` window event the DOM `<Node>`
+   * used to listen for: that event is dispatched synchronously, and a node that
+   * is not mounted yet cannot receive it. Mirrors `inlineEditLabelId`. UI-only,
+   * never persisted.
+   */
+  inlineEditNodeId: string | null;
   /**
    * The layer new elements are placed onto (F4/LAY-03), or null for the
    * unassigned bucket. Set by selecting a row in the Layers panel; cleared
@@ -667,6 +683,7 @@ export interface UiStateActions {
   ) => void;
   /** Enter / leave inline-edit for a floating Label (double-click / F2). */
   setInlineEditLabelId: (id: string | null) => void;
+  setInlineEditNodeId: (id: string | null) => void;
   setActiveLayerId: (id: string | null) => void;
   /** Publish / clear the view-mode hovered Label chip (LabelHitLayer →
    *  ViewModeInfoPopover; see `viewModeHoveredLabelId`). */

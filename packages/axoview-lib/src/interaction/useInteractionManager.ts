@@ -345,11 +345,15 @@ const handleFunctionKeys = (
       // the contentEditable), not the node/connector inlineEditNodeName event.
       e.preventDefault();
       uiState.actions.setInlineEditLabelId(ctrl.id);
-    } else if (
-      ctrl?.type === 'ITEM' ||
-      ctrl?.type === 'TEXTBOX' ||
-      ctrl?.type === 'CONNECTOR'
-    ) {
+    } else if (ctrl?.type === 'ITEM') {
+      // R4/RND-13/15: a NODE rename is driven by uiState too, for the same
+      // reason a Label's is — the node is not in the DOM until the rename
+      // promotes it, so a synchronous window event would arrive before there is
+      // anything listening. Text boxes and connector labels are always DOM and
+      // keep the event.
+      e.preventDefault();
+      uiState.actions.setInlineEditNodeId(ctrl.id);
+    } else if (ctrl?.type === 'TEXTBOX' || ctrl?.type === 'CONNECTOR') {
       e.preventDefault();
       window.dispatchEvent(
         new CustomEvent('inlineEditNodeName', { detail: { id: ctrl.id } })

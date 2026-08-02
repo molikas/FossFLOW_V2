@@ -8,9 +8,10 @@ import { ModelProvider } from 'src/stores/modelStore';
 import { CanvasModeProvider } from 'src/contexts/CanvasModeContext';
 import type { ViewItem } from 'src/types';
 import { createSpriteBatch, type SpriteBatch } from 'src/webgl/glSpriteBatch';
-import { NodesCanvas } from '../NodesCanvas';
+import { SceneProvider } from 'src/stores/sceneStore';
+import { SceneCanvas } from '../SceneCanvas';
 
-// The node layer is WebGL2-only (the Canvas2D fallback was removed with the
+// The bulk canvas is WebGL2-only (the Canvas2D fallback was removed with the
 // GPU fold). jsdom has no WebGL2, so createSpriteBatch would return null and the
 // layer would draw nothing — swap in a stub batch whose `render` we can observe.
 // render(bw, bh, zoom·dpr, originXDev, originYDev, counterScale) is the WebGL
@@ -23,7 +24,7 @@ jest.mock('src/webgl/glSpriteBatch', () => ({
 // ---------------------------------------------------------------------------
 // Regression guard — canvas-pan "rubber-band" (shake-out 2026-06-23).
 //
-// The bug: NodesCanvas repainted via requestAnimationFrame on every scroll/zoom
+// The bug: the node canvas repainted via requestAnimationFrame on every scroll/zoom
 // change. But the mouse-pan path runs `setScroll` INSIDE the useRAFThrottle rAF
 // callback (useInteractionManager), so a *nested* requestAnimationFrame here only
 // fires on the NEXT frame — while the DOM scene layers (Grid.tsx / SceneLayer.tsx)
@@ -31,7 +32,7 @@ jest.mock('src/webgl/glSpriteBatch', () => ({
 // The canvas node layer therefore trailed the grid / connectors / selected-node
 // overlay by exactly one frame for the whole drag: the visible drift the user saw.
 //
-// The fix (NodesCanvas.tsx): when scroll or zoom changes, repaint synchronously
+// The fix (now SceneCanvas.tsx): when scroll or zoom changes, repaint synchronously
 // (drawNow) in the same store tick as the DOM layers, instead of scheduling a rAF.
 //
 // Why this test is a true falsifier (not a green-test trap): it reproduces the
@@ -43,7 +44,7 @@ jest.mock('src/webgl/glSpriteBatch', () => ({
 // lockstep.
 // ---------------------------------------------------------------------------
 
-const UV = { u0: 0, v0: 0, uS: 1, vS: 1 };
+const UV = { u0: 0, v0: 0, uS: 1, vS: 1, page: 0 };
 
 // Stub SpriteBatch — its `render` is the observation point; the atlas/instance
 // methods are inert (empty scene). putCanvas/putImage return a valid UV so
@@ -94,7 +95,7 @@ const createMockCtx = () =>
     textBaseline: 'alphabetic'
   });
 
-describe('NodesCanvas — pan/zoom repaints synchronously (rubber-band regression)', () => {
+describe('SceneCanvas — pan/zoom repaints synchronously (rubber-band regression)', () => {
   let stubBatch: ReturnType<typeof makeStubBatch>;
   let getContextSpy: jest.SpyInstance;
   let origRaf: typeof window.requestAnimationFrame;
@@ -113,10 +114,17 @@ describe('NodesCanvas — pan/zoom repaints synchronously (rubber-band regressio
     render(
       <UiStateProvider>
         <ModelProvider>
-          <CanvasModeProvider>
-            <Capture />
-            <NodesCanvas nodes={[] as ViewItem[]} />
-          </CanvasModeProvider>
+          <SceneProvider>
+            <CanvasModeProvider>
+              <Capture />
+              <SceneCanvas
+                rectangles={[]}
+                connectors={[]}
+                nodes={[] as ViewItem[]}
+                labels={[]}
+              />
+            </CanvasModeProvider>
+          </SceneProvider>
         </ModelProvider>
       </UiStateProvider>
     );

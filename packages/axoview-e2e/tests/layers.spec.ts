@@ -183,10 +183,13 @@ const getViewItem = (page: import('@playwright/test').Page, id: string) =>
  */
 const nodesDrawCount = (page: import('@playwright/test').Page) =>
   page.evaluate(() => {
+    // R3/GPU-13: one merged canvas, so `data-draw-count` is the TOTAL over every
+    // entity type. The node count has its own channel — which is also the
+    // ADR 0020 anti-cheat channel.
     const el = document.querySelector(
-      '[data-testid="axoview-nodes-canvas"]'
+      '[data-testid="axoview-scene-canvas"]'
     ) as HTMLCanvasElement | null;
-    return el ? parseInt(el.dataset.drawCount ?? '0', 10) || 0 : 0;
+    return el ? parseInt(el.dataset.nodesDrawn ?? '0', 10) || 0 : 0;
   });
 
 /**

@@ -75,10 +75,10 @@ async function importSampleDiagram(page: Page) {
   await byLibTestId(page, 'axoview-canvas').waitFor({ state: 'visible', timeout: 10_000 });
   await waitForDebugBridge(page);
   // Named nodes render either as DOM (`node-label`) or, under the default canvas
-  // node renderer (ADR 0019), as canvas pixels (`axoview-nodes-canvas`). Wait for
+  // node renderer (ADR 0019), as canvas pixels (`axoview-scene-canvas`). Wait for
   // whichever surface this run uses.
   await page
-    .locator('[data-testid="node-label"], [data-testid="axoview-nodes-canvas"]')
+    .locator('[data-testid="node-label"], [data-testid="axoview-scene-canvas"]')
     .first()
     .waitFor({ state: 'attached', timeout: 10_000 });
 }
@@ -91,7 +91,7 @@ async function importSampleDiagram(page: Page) {
 const getVisibleLabelCount = (page: Page): Promise<number> =>
   page.evaluate(() => {
     const canvas = document.querySelector(
-      '[data-testid="axoview-nodes-canvas"]'
+      '[data-testid="axoview-scene-canvas"]'
     );
     if (canvas) {
       return parseInt(

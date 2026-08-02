@@ -684,7 +684,7 @@ export const useSceneActions = () => {
   );
 
   // -------------------------------------------------------------------------
-  // Label CRUD (ADR 0031) — model-only; no scene sync (the Canvas2D LabelsCanvas
+  // Label CRUD (ADR 0031) — model-only; no scene sync (the Canvas2D SceneCanvas
   // and the DOM LabelHitLayer self-measure the chip, like node labels).
   // -------------------------------------------------------------------------
 

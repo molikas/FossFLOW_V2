@@ -101,8 +101,8 @@ export const useSceneData = () => {
   );
 
   // Labels are model-only (ADR 0031) — no scene-size merge. The Canvas2D layer
-  // (LabelsCanvas) and the DOM hit-proxy (LabelHitLayer) each measure the chip
-  // themselves, exactly like node labels in NodesCanvas.
+  // (SceneCanvas) and the DOM hit-proxy (LabelHitLayer) each measure the chip
+  // themselves, exactly like node labels in SceneCanvas.
   const labelsList = useMemo(
     () => currentView.labels ?? [],
     [currentView.labels]

@@ -5,8 +5,8 @@ import { isNoOpUpdate } from './noOpUpdate';
 import { State, ViewReducerContext } from './types';
 
 // Label reducers (ADR 0031). Labels are MODEL-ONLY: unlike a TextBox they carry
-// no scene-size entry — the Canvas2D LabelsCanvas and the DOM LabelHitLayer each
-// measure the chip themselves (exactly like node labels in NodesCanvas), so
+// no scene-size entry — the Canvas2D SceneCanvas and the DOM LabelHitLayer each
+// measure the chip themselves (exactly like node labels in SceneCanvas), so
 // there is no syncLabel / scene write here and nothing for SYNC_SCENE to rebuild.
 
 export const updateLabel = (

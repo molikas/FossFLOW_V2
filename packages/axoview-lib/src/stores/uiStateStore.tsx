@@ -93,6 +93,7 @@ const initialState = () => {
       iconScaleDrag: null,
       selectedConnectorLabel: null,
       inlineEditLabelId: null,
+      inlineEditNodeId: null,
       activeLayerId: null,
       viewModeHoveredLabelId: null,
       editingTextBoxId: null,
@@ -409,7 +410,7 @@ const initialState = () => {
           set({ labelDrag: null });
         },
         setLabelMove: (id, tile, offset) => {
-          // Transient floating-Label move preview (ADR 0031). LabelsCanvas reads
+          // Transient floating-Label move preview (ADR 0031). SceneCanvas reads
           // this to redraw the dragged chip following the pointer with NO model
           // write, so the LabelHitLayer proxy divs don't re-render each frame.
           // Committed to the model once, on release.
@@ -421,7 +422,7 @@ const initialState = () => {
         setLabelMoves: (moves) => {
           // Transient GROUP floating-Label move preview (ADR 0031): the
           // multi-selection-drag counterpart of setLabelMove. DragItems writes
-          // the whole dragged-label set once per frame; LabelsCanvas redraws each
+          // the whole dragged-label set once per frame; SceneCanvas redraws each
           // keyed chip at its preview tile/offset with NO model write. Committed
           // to the model once, on release.
           set({ labelMoves: moves });
@@ -442,6 +443,15 @@ const initialState = () => {
         },
         setInlineEditLabelId: (id) => {
           set({ inlineEditLabelId: id });
+        },
+        // R4/RND-13/15: the canvas inline-RENAME intent for a node. Selection no
+        // longer promotes a node into the DOM overlay (order-preserving
+        // selection, ADR 0038 §8), so renaming — which needs a real
+        // contentEditable — is what promotes it now, and the intent has to be
+        // store state: the `inlineEditNodeName` window event fires synchronously,
+        // and a node that has not mounted yet cannot hear it.
+        setInlineEditNodeId: (id) => {
+          set({ inlineEditNodeId: id });
         },
         // F4/LAY-03 — the layer new elements are placed onto. There was no
         // active-layer concept anywhere in the store, so every new element

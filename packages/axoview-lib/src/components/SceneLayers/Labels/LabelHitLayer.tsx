@@ -31,14 +31,14 @@ import {
 
 // ---------------------------------------------------------------------------
 // LabelHitLayer (ADR 0031 §4) — the pixel-accurate DOM hit-proxy over the
-// Canvas2D LabelsCanvas paint (mirrors NodeLabelHitLayer). One invisible div per
+// Canvas2D SceneCanvas paint (mirrors NodeLabelHitLayer). One invisible div per
 // visible label, sized to its chip, so the FULL chip width is selectable (not a
 // single anchor tile) and a connector passing UNDER the chip stays selectable
 // where the chip isn't — labels are deliberately NOT in the tile hit-test
 // (hitDetection.ts), the proxy owns label hits.
 //
 // A press selects the label; a drag past slop moves it via the transient
-// `labelMove` preview (LabelsCanvas redraws the chip following the pointer with
+// `labelMove` preview (SceneCanvas redraws the chip following the pointer with
 // NO per-frame model write, so the proxy divs don't thrash), committing the new
 // position ONCE on release (one undo). The divs live in a <SceneLayer>, so they
 // are positioned in canvas-px — the same space getTilePosition + the canvas draw
@@ -53,7 +53,7 @@ import {
 
 // R3/GPU-04: there used to be a `HIT_MIN_ZOOM = 0.4` gate here — "below this
 // zoom chips are too small to grab precisely; also bounds the div count". But
-// `LabelsCanvas` paints floating Label chips with NO zoom gate at all, so below
+// `SceneCanvas` paints floating Label chips with NO zoom gate at all, so below
 // 0.4 a Label was visible and completely inert: not selectable, not draggable,
 // no context menu, with nothing on screen to say why. Draw visibility and hit
 // visibility were decided in two files with two different thresholds.
@@ -89,7 +89,7 @@ const fallbackChip = (text: string, fontSize: number): LabelChipLayout => {
 
 // Inline contentEditable editor for a floating Label (double-click / F2). It
 // overlays the chip at the same canvas-px rect the hit-proxy uses; while it is
-// mounted LabelsCanvas skips painting this label (uiState.inlineEditLabelId) so
+// mounted SceneCanvas skips painting this label (uiState.inlineEditLabelId) so
 // the text isn't drawn twice. Left-click-away / Enter commit; right-click-away /
 // Escape cancel (useInlineRename's shared contract).
 const LabelInlineEditor = ({
@@ -281,7 +281,7 @@ export const LabelHitLayer = ({ labels }: Props) => {
     null
   );
 
-  // "Keep labels readable" (ADR 0015): the WebGL chip in LabelsCanvas counter-
+  // "Keep labels readable" (ADR 0015): the WebGL chip in SceneCanvas counter-
   // scales about its centre when zoomed out, so the DOM hit proxy (and inline
   // editor) must scale by the SAME factor about the same centre or the enlarged
   // chip's outer margin goes dead to pointer events. Mirror ExpandableLabel — a

@@ -99,8 +99,9 @@ export const ViewModeInfoPopover = () => {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    // A hovered chip WINS over the tile hit: chips paint ABOVE the canvas
-    // layers (LabelsCanvas mounts after NodesCanvas), so what the pointer is
+    // A hovered chip WINS over the tile hit: a Label chip paints ABOVE nodes
+    // (the `label` type rank in `compareSceneDrawOrder` — ADR 0031 §2, now a
+    // sort-key property rather than a mount-order one), so what the pointer is
     // visually on top of is the chip. Both paths feed the same intent timers.
     const hit: ItemReference | null = viewModeHoveredLabelId
       ? { type: 'LABEL', id: viewModeHoveredLabelId }

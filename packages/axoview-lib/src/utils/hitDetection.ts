@@ -71,7 +71,7 @@ const getItemTileIndex = (
   return itemTileIndexCache.get(items)!;
 };
 
-// Items in PAINT order, bottom-first — the order `NodesCanvas` draws them in.
+// Items in PAINT order, bottom-first — the order `SceneCanvas` draws them in.
 //
 // R1/PROJ-10: the hit test used to scan `scene.items` backwards and return the
 // last ARRAY entry, while the canvas paints in

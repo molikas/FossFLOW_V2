@@ -81,7 +81,7 @@ const getLabelScale = (page: Page): Promise<number> =>
       return parseFloat(raw) || 1;
     }
     const canvas = document.querySelector(
-      '[data-testid="axoview-nodes-canvas"]'
+      '[data-testid="axoview-scene-canvas"]'
     );
     if (canvas) {
       return parseFloat(canvas.getAttribute('data-label-scale') ?? '') || 1;
@@ -107,7 +107,7 @@ async function importSampleDiagram(page: Page) {
   await byLibTestId(page, 'axoview-canvas').waitFor({ state: 'visible' });
   await page
     .locator(
-      '[data-testid="node-label"], [data-testid="axoview-nodes-canvas"]'
+      '[data-testid="node-label"], [data-testid="axoview-scene-canvas"]'
     )
     .first()
     .waitFor({ state: 'attached', timeout: 10_000 });

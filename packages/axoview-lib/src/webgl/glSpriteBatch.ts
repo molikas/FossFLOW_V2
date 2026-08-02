@@ -23,7 +23,7 @@
 // so u_view = (zoom·dpr, origin_css_x·dpr, origin_css_y·dpr). tilePoint is the
 // getTilePosition() output (independent of zoom/scroll — the whole point: only
 // the uniform changes on navigation). The label counter-scale multiplies the
-// LOCAL geometry (not the anchor), matching NodesCanvas exactly.
+// LOCAL geometry (not the anchor), matching SceneCanvas exactly.
 //
 // WebGL2 is required (Phase C): createSpriteBatch returns null when it is
 // unavailable, and the Renderer gates the whole canvas behind the

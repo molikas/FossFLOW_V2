@@ -128,6 +128,13 @@ export const CanvasContextMenu = () => {
       actions.setInlineEditLabelId(target.id);
       return;
     }
+    // R4/RND-13/15: a NODE is not in the DOM until the rename promotes it, so
+    // its session is store-driven like a Label's; text boxes and connector
+    // labels are always DOM and keep the event.
+    if (target.type === 'ITEM') {
+      actions.setInlineEditNodeId(target.id);
+      return;
+    }
     window.dispatchEvent(
       new CustomEvent('inlineEditNodeName', { detail: { id: target.id } })
     );
