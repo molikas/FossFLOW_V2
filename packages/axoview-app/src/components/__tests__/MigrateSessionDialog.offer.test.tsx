@@ -1,12 +1,18 @@
 /**
- * A4 — FEX-15: the `MigrateSessionDialog` auto-offer.
+ * Promoted from the A4 explore lane (ADR 0047 flip rule) — A4/FEX-15.
  *
  * The dialog is the only thing standing between session-only work and a closed
- * tab, and it offers itself exactly once per fresh grant. The hypothesis says
- * the offer can fire zero or two times, because `pendingOfferRef` is consumed
- * by `tryAutoOffer` only when `getCachedRootId()` is already set and the
- * `axoview-drive-root-ready` event can interleave with the auth-status effect
- * either way. Probed here: both halves, separately.
+ * tab, and it offers itself exactly once per fresh grant. `enumerateSession`
+ * swallowed every failure into `[]`, which the caller cannot tell apart from
+ * "nothing to move" — so one transient listing hiccup at the moment of the
+ * grant returned silently having already spent BOTH one-shot refs, and the
+ * offer never came back for the rest of the session however long it stayed
+ * signed in.
+ *
+ * The failure/empty distinction is the whole fix, so the tests are paired: the
+ * once-per-grant property must SURVIVE (a spent offer stays spent) while a
+ * FAILED attempt re-arms. Asserting only the second would let "always re-offer"
+ * pass, which would rebuild the checkbox list under a user mid-decision.
  */
 import { act, waitFor } from '@testing-library/react';
 import { render } from '@testing-library/react';
@@ -41,14 +47,22 @@ jest.mock('../../stores/authStore', () => ({
 }));
 
 import { appStorageValue, dg, flush, makeAuth, makeLifecycle, makePlace } from '../../testUtils/fileExplorerHarness';
-import { MigrateSessionDialog } from '../../components/MigrateSessionDialog';
+import { MigrateSessionDialog } from '../MigrateSessionDialog';
 import { useNotificationStore } from '../../stores/notificationStore';
 
 const dialog = () => document.querySelector('[data-axoview-id="migrate-session-dialog"]');
-const rows = () =>
-  [...document.querySelectorAll('[data-axoview-id="migrate-session-dialog"] li')].map(
-    (li) => li.textContent
-  );
+// `Array.prototype.slice.call`, not a spread: this package targets es5 without
+// downlevelIteration, and a NodeList spread is a tsc error here (the same class
+// the harness header records for Map/Set, where it fails SILENTLY at runtime).
+// Only surfaced once this file moved out of the tsc-excluded explore lane.
+const rows = (): (string | null)[] =>
+  Array.prototype.slice
+    .call(
+      document.querySelectorAll(
+        '[data-axoview-id="migrate-session-dialog"] li'
+      )
+    )
+    .map((li: Element) => li.textContent);
 
 beforeEach(() => {
   useNotificationStore.getState().dismissAll();
@@ -69,14 +83,14 @@ async function signIn(opts: { rootCached: boolean; sessionDiagrams?: number }) {
   const life = makeLifecycle(session);
   appStorage = appStorageValue({ session, drive, googleDriveConfigured: true });
   lifecycleCtx = life.ctx;
-  auth = makeAuth({ status: 'UNAUTHENTICATED' });
+  auth = makeAuth({ status: 'UNAUTHENTICATED' }) as unknown as Record<string, unknown>;
 
   const utils = render(<MigrateSessionDialog />);
   await flush();
   // PRECONDITION: nothing is offered while signed out.
   expect(dialog()).toBeNull();
 
-  auth = makeAuth({ status: 'AUTHENTICATED', user: { email: 'a@b.c' } });
+  auth = makeAuth({ status: 'AUTHENTICATED', user: { email: 'a@b.c' } }) as unknown as Record<string, unknown>;
   await act(async () => { utils.rerender(<MigrateSessionDialog />); });
   await flush();
   return { session, drive, life, utils };
@@ -92,14 +106,14 @@ const rootReady = async () => {
 // ---------------------------------------------------------------------------
 // The offer works when nothing goes wrong — both orderings.
 // ---------------------------------------------------------------------------
-describe('FEX-15 — the auto-offer in its two healthy orderings', () => {
-  it('characterization: root already cached — the offer fires on the auth transition', async () => {
+describe('FEX-15 — the auto-offer in its two healthy orderings (unchanged)', () => {
+  it('root already cached — the offer fires on the auth transition', async () => {
     await signIn({ rootCached: true });
     await waitFor(() => expect(dialog()).not.toBeNull());
     expect(rows()).toEqual(['Diagram 0', 'Diagram 1']);
   });
 
-  it('characterization: root configured later — the ready event fires the offer, ONCE', async () => {
+  it('root configured later — the ready event fires the offer, ONCE', async () => {
     const { session, drive } = await signIn({ rootCached: false });
     // PRECONDITION: the offer is armed but waiting for the setup gate.
     expect(dialog()).toBeNull();
@@ -120,16 +134,17 @@ describe('FEX-15 — the auto-offer in its two healthy orderings', () => {
     expect(session.log.filter((l) => l.startsWith('listDiagrams'))).toHaveLength(1);
   });
 
-  it.failing('FEX-15a: a second root-ready event re-opens or rebuilds the offer', async () => {
+  it('a second root-ready event does NOT re-open or rebuild the offer', async () => {
     const { session } = await signIn({ rootCached: true });
     await waitFor(() => expect(dialog()).not.toBeNull());
     expect(session.log.filter((l) => l.startsWith('listDiagrams'))).toHaveLength(1); // precondition
     await rootReady();
     await rootReady();
-    // The "fires twice" half of the hypothesis: FALSIFIED. `tryAutoOffer`
-    // clears `pendingOfferRef` before its first await, so every later caller
-    // returns at the first line.
-    expect(session.log.filter((l) => l.startsWith('listDiagrams')).length).toBeGreaterThan(1);
+    // The "fires twice" half of the hypothesis was FALSIFIED, and the FEX-15
+    // fix must not turn it true: `tryAutoOffer` still clears `pendingOfferRef`
+    // before its first await, so every later caller returns at the first line.
+    // The refs are re-armed on the FAILURE path only.
+    expect(session.log.filter((l) => l.startsWith('listDiagrams'))).toHaveLength(1);
   });
 });
 
@@ -137,21 +152,21 @@ describe('FEX-15 — the auto-offer in its two healthy orderings', () => {
 // The zero-fire half.
 // ---------------------------------------------------------------------------
 describe('FEX-15 — one transient failure consumes the whole session\'s offer', () => {
-  it('characterization: a failed enumeration burns the offer and never retries', async () => {
+  it('a failed enumeration does not burn the offer', async () => {
     const session = makePlace('local', { diagrams: [dg('d0', 'Only copy')] });
     const drive = makePlace('google-drive');
     drive.rootId = 'drive-root';
     const life = makeLifecycle(session);
     appStorage = appStorageValue({ session, drive, googleDriveConfigured: true });
     lifecycleCtx = life.ctx;
-    auth = makeAuth({ status: 'UNAUTHENTICATED' });
+    auth = makeAuth({ status: 'UNAUTHENTICATED' }) as unknown as Record<string, unknown>;
     const utils = render(<MigrateSessionDialog />);
     await flush();
 
     // The session listing fails once — a transient localStorage/server hiccup
     // at exactly the moment the grant lands.
     session.fail.add('listDiagrams');
-    auth = makeAuth({ status: 'AUTHENTICATED', user: { email: 'a@b.c' } });
+    auth = makeAuth({ status: 'AUTHENTICATED', user: { email: 'a@b.c' } }) as unknown as Record<string, unknown>;
     await act(async () => { utils.rerender(<MigrateSessionDialog />); });
     await flush();
 
@@ -159,40 +174,35 @@ describe('FEX-15 — one transient failure consumes the whole session\'s offer',
     expect(session.log.filter((l) => l.startsWith('listDiagrams'))).toHaveLength(1);
     expect(dialog()).toBeNull();
 
-    // Storage recovers, and the gate re-announces the root — but the offer was
-    // consumed by the attempt that failed (`pendingOfferRef` is cleared before
-    // the await, and `offeredThisGrantRef` before that), so nothing re-arms it
-    // short of signing out. `enumerateSession`'s `catch` returns `[]`, which is
-    // indistinguishable from "no session diagrams to move".
+    // Storage recovers and the gate re-announces the root. The offer was NOT
+    // consumed by the attempt that failed, so it comes back and rescues the
+    // work it exists for.
     session.fail.delete('listDiagrams');
     await rootReady();
-    expect(dialog()).toBeNull();
-    expect(session.log.filter((l) => l.startsWith('listDiagrams'))).toHaveLength(1);
-    // …and the work it would have rescued is still session-only.
-    expect(session.diagrams.map((d) => d.name)).toEqual(['Only copy']);
+    await waitFor(() => expect(dialog()).not.toBeNull());
+    expect(session.log.filter((l) => l.startsWith('listDiagrams'))).toHaveLength(2);
   });
 
-  it.failing('FEX-15: a failed enumeration leaves the offer armed for the next chance', async () => {
+  it('the recovered offer lists the diagrams it exists to rescue', async () => {
     const session = makePlace('local', { diagrams: [dg('d0', 'Only copy')] });
     const drive = makePlace('google-drive');
     drive.rootId = 'drive-root';
     const life = makeLifecycle(session);
     appStorage = appStorageValue({ session, drive, googleDriveConfigured: true });
     lifecycleCtx = life.ctx;
-    auth = makeAuth({ status: 'UNAUTHENTICATED' });
+    auth = makeAuth({ status: 'UNAUTHENTICATED' }) as unknown as Record<string, unknown>;
     const utils = render(<MigrateSessionDialog />);
     await flush();
     session.fail.add('listDiagrams');
-    auth = makeAuth({ status: 'AUTHENTICATED', user: { email: 'a@b.c' } });
+    auth = makeAuth({ status: 'AUTHENTICATED', user: { email: 'a@b.c' } }) as unknown as Record<string, unknown>;
     await act(async () => { utils.rerender(<MigrateSessionDialog />); });
     await flush();
     expect(dialog()).toBeNull(); // precondition
     session.fail.delete('listDiagrams');
     await rootReady();
-    // Expected: a failure is not an answer — the once-per-grant offer should be
-    // spent only when the user actually saw it (or when there was genuinely
-    // nothing to move). Actual: `enumerateSession` swallows the error into `[]`
-    // after both refs are already consumed.
+    // A failure is not an answer: the once-per-grant offer is spent only when
+    // the user actually saw it, or when there was genuinely nothing to move.
     await waitFor(() => expect(dialog()).not.toBeNull());
+    expect(rows()).toEqual(['Only copy']);
   });
 });

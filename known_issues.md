@@ -7433,10 +7433,23 @@ diagram is still in the provider's listing.
 **Workaround:** re-open the diagram from the file explorer after a failed
 delete.
 
-**Status:** Open. Fix direction: cancel the autosave (not the whole canvas)
-before the delete, and reset the canvas only after storage confirms — or restore
-the diagram into the canvas in the `catch`. Repro:
-[`fileexplorer-fex-08-to-12.explore.test.tsx`](packages/axoview-app/src/__explore__/A4/fileexplorer-fex-08-to-12.explore.test.tsx).
+**Status:** Fixed in wave 4 (2026-08-02) — the entry's SECOND option, restore
+the diagram into the canvas in the `catch`.
+
+Not the first ("reset only after storage confirms"), because the reset-first
+ordering is load-bearing and the comment above it is right: it cancels the
+in-flight autosave so a save cannot recreate the diagram after the delete
+lands. Deferring it would trade this bug for that one. Restoring on failure is
+safe precisely because the delete did NOT happen — the work is still in storage,
+and re-opening it is the same call the user would make by hand.
+
+Scoped to the diagram that was OPEN: re-opening an unrelated one would navigate
+the user somewhere they never asked to go, and there is a test for that.
+
+Note this is why the probe could not flip — it asserted the MECHANISM (`order`
+must not contain the canvas reset) rather than the outcome, so a legitimate
+alternative fix reads as no fix. Re-derived on promotion; queued as a
+probe-authoring rule for the wave-6 appendix. Promoted regression: [`fileExplorerHandlers.test.tsx`](packages/axoview-app/src/components/fileExplorer/__tests__/fileExplorerHandlers.test.tsx).
 
 ## The name-collision dialog offers "Replace" and only moves — leaving two identically-named siblings
 
@@ -7459,12 +7472,20 @@ and the destination folder holds two rows named `Report`.
 
 **Workaround:** rename one of the two afterwards.
 
-**Status:** Open. Fix direction: either implement replace (delete the colliding
-sibling inside the same confirmation, which needs the delete's own confirmation
-semantics thought through for a folder), or change the dialog to the honest
-choice — "Keep both" (copy-suffix, `copySuffix` already exists) vs Cancel.
-Repro:
-[`fileexplorer-fex-08-to-12.explore.test.tsx`](packages/axoview-app/src/__explore__/A4/fileexplorer-fex-08-to-12.explore.test.tsx).
+**Status:** Fixed in wave 4 (2026-08-02) — the entry's SECOND option: the
+dialog now says **"Keep both"** and does exactly that, moving the item in under
+a `copySuffix` name. The other button is **Skip**, which resolves just that
+collision and leaves the rest of the queue offered (see FEX-10).
+
+Implementing a real replace was rejected for the reason the entry itself flags:
+it has to DELETE the colliding sibling inside this confirmation, and for a
+folder that means inheriting the delete's own descendant-count semantics — a
+destructive action behind a dialog whose copy never mentioned it. The
+non-destructive reading is also the one that cannot lose work.
+
+The regression asserts both items survive **under distinct names**, since the
+bug was two rows the user could not tell apart rather than the move itself.
+Promoted regression: [`fileExplorerHandlers.test.tsx`](packages/axoview-app/src/components/fileExplorer/__tests__/fileExplorerHandlers.test.tsx).
 
 ## A multi-select drag is abandoned at the first item that is skipped or collides
 
@@ -7488,10 +7509,16 @@ calls and leaves `mover` at the root, with an empty notification queue.
 
 **Workaround:** drag items one at a time.
 
-**Status:** Open. Fix direction: `continue` in both branches, and queue
-collisions (dialog per item, or one "apply to all" decision) so the rest of the
-drag completes. Repro:
-[`fileexplorer-fex-08-to-12.explore.test.tsx`](packages/axoview-app/src/__explore__/A4/fileexplorer-fex-08-to-12.explore.test.tsx).
+**Status:** Fixed in wave 4 (2026-08-02) exactly as directed — `continue` in
+both branches, and `collisionDialog` became a QUEUE presented one item at a time
+after the loop, so every collision in a drag is offered rather than only the
+first.
+
+The queued item carries the destination's `siblingNames` with it. Re-deriving
+them when the dialog resolves would miss the items from the SAME drag that have
+already landed, so two colliding items could be renamed to the same suffix —
+which is the bug this cluster is about, reintroduced by the fix. Promoted
+regression: [`fileExplorerHandlers.test.tsx`](packages/axoview-app/src/components/fileExplorer/__tests__/fileExplorerHandlers.test.tsx).
 
 ## A rename resolves the entity type from a second, independently refreshed list — so it can rename the wrong kind of thing, silently
 
@@ -7516,10 +7543,18 @@ Measured: after the folder is dropped from the listing, the submit produces
 
 **Workaround:** refresh the tree and rename again.
 
-**Status:** Open. Fix direction: take the type from the node `onRename` provides
-(fall back to the composed row), and treat an unresolvable id as an error rather
-than a diagram. Repro:
-[`fileexplorer-fex-08-to-12.explore.test.tsx`](packages/axoview-app/src/__explore__/A4/fileexplorer-fex-08-to-12.explore.test.tsx).
+**Status:** Fixed in wave 4 (2026-08-02) exactly as directed. `onRename` now
+passes the node through, `handleRenameSubmit` takes the TYPE from it (falling
+back to the composed row via `findComposedNode`, then to the place's own lists
+via `typeOfId`), and an id that resolves to neither raises "Rename failed"
+instead of falling through to `renameDiagram`.
+
+The regression drives the exact repro — the folder is dropped from the listing
+while the input is open — rather than a synthetic unknown id, because the
+fallback chain has to be exercised at the point where the first link is stale.
+Fixed together with FEX-12 and FEX-16: all three are the same handler answering
+a question from re-derived state instead of from the row the user was editing.
+Promoted regression: [`fileExplorerHandlers.test.tsx`](packages/axoview-app/src/components/fileExplorer/__tests__/fileExplorerHandlers.test.tsx).
 
 ## A tree operation whose place cannot be resolved is executed against the session place
 
@@ -7547,12 +7582,21 @@ in both places, the Drive copy is renamed and the session copy is untouched.
 
 **Workaround:** wait for the tree to finish reconnecting before renaming.
 
-**Status:** Open. Fix direction: pass the node (or its `placeId`) through the
-rename/delete/move paths instead of re-deriving from an id, and treat an
-unresolvable id as an error rather than defaulting to a place. Duplicate ids
-across places should be detected during composition (the model-side sibling is
-CLIP-01). Repro:
-[`fileexplorer-fex-08-to-12.explore.test.tsx`](packages/axoview-app/src/__explore__/A4/fileexplorer-fex-08-to-12.explore.test.tsx).
+**Status:** Fixed in wave 4 (2026-08-02) for the rename path — the node's own
+stamped `placeId` decides, and an unresolvable id is an error rather than a
+default. That closes shape (a) (a Drive rename sent to the session provider when
+the Drive tree was cleared mid-operation) and shape (b) for this path (a shared
+id resolving to Drive because the map is built Drive-last), since the node's
+stamp is unambiguous where the map is not.
+
+`placeOfId` still exists and is still last-write-wins; it is now a FALLBACK for
+callers that genuinely have only an id, not the primary answer. **Still open:**
+duplicate ids across places are not detected during composition, so the map
+remains ambiguous for any future id-only caller. That is the entry's third
+sentence and it is deliberately not done here — it is a composition-time
+integrity check, the same shape as the model-side CLIP-01, and it wants to be
+one change covering every consumer rather than a second special case in the
+rename path. Promoted regression: [`fileExplorerHandlers.test.tsx`](packages/axoview-app/src/components/fileExplorer/__tests__/fileExplorerHandlers.test.tsx).
 
 ## A failed rename is rolled back in the tree only — the open diagram keeps the name that was never saved
 
@@ -7579,10 +7623,19 @@ name.
 
 **Workaround:** reload the diagram after a failed rename.
 
-**Status:** Open. Fix direction: notify the lifecycle after the storage call
-succeeds, or re-notify with the stored name in the `catch` (the same
-single-owner-per-value problem as the A1 title cluster). Repro:
-[`fileexplorer-fex-08-to-12.explore.test.tsx`](packages/axoview-app/src/__explore__/A4/fileexplorer-fex-08-to-12.explore.test.tsx).
+**Status:** Fixed in wave 4 (2026-08-02) — the second option, re-notify with
+the stored name in the `catch`.
+
+Not "notify after the storage call succeeds": the optimistic update is what
+makes the rename feel immediate, and a Drive round-trip is long enough that
+deferring it would be a visible regression in the common (successful) case. The
+`catch` now undoes BOTH optimistic updates rather than only `tree.refresh()`.
+
+Two things the fix also had to get right. The previous name is captured BEFORE
+the optimistic rename, since that is the only moment it is still knowable. And
+`notifyDiagramRenamedFromTree` is now called only for a DIAGRAM — it used to
+fire for folders too, handing a folder id to `setDiagramName`. Promoted
+regression: [`fileExplorerHandlers.test.tsx`](packages/axoview-app/src/components/fileExplorer/__tests__/fileExplorerHandlers.test.tsx).
 
 ## Moving a diagram to Drive copies the last SAVED blob, so edits made while it moves are deleted with the source
 
@@ -7608,11 +7661,25 @@ is gone (`notifyDiagramDeletedFromTree` then `openDiagramById` on the Drive id).
 
 **Workaround:** stop editing until the move finishes.
 
-**Status:** Open. Fix direction: re-flush (or refuse) immediately before the
-source delete, and prefer the in-memory model over the persisted blob for the
-diagram that is currently open. The bulk path (`MigrateSessionDialog`) has the
-same shape for every item after the first. Repro:
-[`movetodrive-fex-13-14.explore.test.tsx`](packages/axoview-app/src/__explore__/A4/movetodrive-fex-13-14.explore.test.tsx).
+**Status:** Fixed in wave 4 (2026-08-02) — re-flush immediately before the
+source delete, on BOTH paths, and refuse the delete if the flush fails.
+
+`moveDiagramsToDrive` takes a `flushSource(id)` hook, called at the last moment
+before `deleteDiagram`: it flushes that diagram's in-memory edits to the source
+and reports whether it wrote, and the Drive copy is refreshed from the source
+when it did. Deliberately at that point rather than earlier — the whole bug is
+the size of the window between the read and the delete, so anything checked
+sooner just reopens it. A flush that throws reports `sourceRemained: true`
+instead of deleting: the source holds the only copy of whatever could not be
+written, and the flag tells the caller the Drive copy is real so a retry does
+not mint a second one (the A2/STOR-09 contract).
+
+The hook rather than a model reference keeps `driveTransfer` storage-only, which
+is what lets the bulk `MigrateSessionDialog` path use the same code — and it has
+the same window, wider, because every item waits for the ones before it. The
+lifecycle side is `flushDiagramIfDirty`, which reads the dirty set through its
+ref so an edit made after the caller built its closure is still seen. Promoted
+regression: [`fileExplorerHandlers.test.tsx`](packages/axoview-app/src/components/fileExplorer/__tests__/fileExplorerHandlers.test.tsx) and the harness's own `flushDiagramIfDirty` double.
 
 ## The Drive section can keep showing "Finish Google Drive setup…" after the root is configured
 
@@ -7641,11 +7708,16 @@ unchanged — and a refresh-token bump alone (no new Drive data) clears it.
 
 **Workaround:** collapse/expand or refresh the file explorer.
 
-**Status:** Open. Fix direction: make the root id reactive — subscribe to
-`axoview-drive-root-ready` in the explorer (or hold the root id in state
-alongside `driveTree.status`) rather than reading a cache during render.
-Repro:
-[`movetodrive-fex-13-14.explore.test.tsx`](packages/axoview-app/src/__explore__/A4/movetodrive-fex-13-14.explore.test.tsx).
+**Status:** Fixed in wave 4 (2026-08-02) as directed — the root id is held in
+state and re-read on `axoview-drive-root-ready`, so the "Finish Google Drive
+setup…" row clears when the root actually appears rather than when something
+unrelated happens to re-render.
+
+It also re-reads on `driveTree.status` and `fileTreeRefreshToken` changes,
+because the root can be created by a WRITE (`ensureRoot()`) that fires no event
+— which is one of the two routes the entry names, and the one
+`DriveSetupGate.handleConfirm`'s `refreshFileTree()` was accidentally covering.
+Promoted regression: [`fileExplorerHandlers.test.tsx`](packages/axoview-app/src/components/fileExplorer/__tests__/fileExplorerHandlers.test.tsx).
 
 ## One transient listing failure permanently consumes the "move session diagrams to Drive" offer
 
@@ -7677,10 +7749,19 @@ every later caller returns at the first line (probe `FEX-15a`).
 **Workaround:** open it by hand from the avatar menu / session section header
 ("Move to Drive"), which goes through the `axoview-open-migrate` path.
 
-**Status:** Open. Fix direction: consume the one-per-grant offer only after the
-dialog actually opens — let `enumerateSession` distinguish failure from empty
-and leave both refs armed on failure. Repro:
-[`migrate-fex-15.explore.test.tsx`](packages/axoview-app/src/__explore__/A4/migrate-fex-15.explore.test.tsx).
+**Status:** Fixed in wave 4 (2026-08-02) as directed — `enumerateSession`
+returns `null` for FAILED and `[]` for genuinely empty, and `tryAutoOffer`
+re-arms both refs when it sees `null`, so the `axoview-drive-root-ready`
+listener can try again once storage recovers.
+
+`pendingOfferRef` is still cleared BEFORE the await, which is what stops a
+re-entrant second offer — the refs are restored on the failure path rather than
+the clear being moved, so the "offer at most once per grant" property is
+unchanged for every path that does not fail. The on-demand path (avatar menu /
+session header) now reports the failure instead of saying "No session diagrams
+to move", which was the same conflation told to the user's face. Promoted
+regression: the probe's own assertions, moved into
+[`MigrateSessionDialog`'s suite](packages/axoview-app/src/components/__tests__/MigrateSessionDialog.offer.test.tsx).
 
 ## The quota-full "Clear All Diagrams" deletes your settings and none of your diagrams
 
