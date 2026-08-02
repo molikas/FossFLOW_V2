@@ -323,7 +323,7 @@ hazard is closed by construction.
 
 ### Implementation note (2026-08-02, written from the merge)
 
-The merge landed as decided. Five things it corrected or settled, each found by
+The merge landed as decided. Six things it corrected or settled, each found by
 implementing rather than by reasoning — recorded here because the next reader of
 this section will otherwise re-derive them.
 
@@ -380,6 +380,18 @@ the agreement gate could assert anything true.** At equal `zIndex` the pre-merge
 `RectanglesCanvas` walked plain model order (last entry on top) while the DOM
 `<Rectangles>` layer and `hitDetection`'s rectangle branch both use REVERSED
 insertion (first entry on top). The merged canvas adopts the picker's convention.
+
+**6 — `data-all-icons-drawn` is a claim about the PAINT, and was being written
+about the BUILD.** It was set inside `buildInstances`, before the draw call for
+that build had been issued, so the export dialog — which polls it and then
+captures the canvas (ADR 0025 / QA #10) — could snapshot the previous frame and
+produce a PNG with no icon nodes in it. It is written after `render()` now. The
+merge did not cause this: the window is small and the export's 400 ms readiness
+budget was already marginal against the hidden Renderer's mount, so the race
+resolved differently run to run (`import-export-image`'s #10 case measured 0.001
+non-background pixels one run and 0.042 the next, against a 0.01 floor). It is
+the kind of thing a merge exposes — the first build now packs four entity types
+plus the arrow and ring sprites, which is enough to move the timing.
 
 The agreement gate itself
 ([`pickerAgreement.contract.test.ts`](../../packages/axoview-lib/src/utils/__tests__/pickerAgreement.contract.test.ts))
