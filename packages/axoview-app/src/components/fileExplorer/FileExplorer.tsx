@@ -32,7 +32,13 @@ import { ExportProjectZipDialog } from './ExportProjectZipDialog';
 import { ImportDialog } from './ImportDialog';
 import { ShareErrorDialog } from '../ShareErrorDialog';
 import { notificationStore } from '../../stores/notificationStore';
-import { copySuffix, countDescendants, detectCollision } from '../../utils/fileOperations';
+import {
+  copySuffix,
+  countDescendants,
+  detectCollision,
+  findComposedNode,
+  typeOfId
+} from '../../utils/fileOperations';
 import { shareUrlFromUuid } from '../../utils/shareUrl';
 import { ExportScope } from '../../services/project/projectZip';
 
@@ -48,12 +54,20 @@ interface DeleteConfirm {
   placeId: PlaceId;
 }
 
-interface CollisionDialog {
+/**
+ * A4/FEX-09 + FEX-10 — one queued name collision from a (possibly multi-item)
+ * drag. `siblingNames` rides along because the "Keep both" resolution needs the
+ * destination's names to pick a free suffix, and re-deriving them after the
+ * other items in the same drag have already landed would miss the ones just
+ * added.
+ */
+interface CollisionItem {
   dragId: string;
   type: 'diagram' | 'folder';
   name: string;
   targetFolderId: string | null;
   placeId: PlaceId;
+  siblingNames: string[];
 }
 
 interface PendingNew {
@@ -155,6 +169,7 @@ export function FileExplorer() {
     notifyDiagramRenamedFromTree,
     notifyDiagramDeletedFromTree,
     saveAllDirty,
+    flushDiagramIfDirty,
     axoviewRef
   } = useDiagramLifecycle();
   const treeRef = useRef<TreeApi<FileNode> | undefined>(undefined);
@@ -169,7 +184,10 @@ export function FileExplorer() {
   // Which place a context-menu create action targets (set from the clicked row).
   const [contextMenuPlace, setContextMenuPlace] = useState<PlaceId | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirm | null>(null);
-  const [collisionDialog, setCollisionDialog] = useState<CollisionDialog | null>(null);
+  // A queue, not a single item: a multi-select drag can collide more than once,
+  // and the old single slot silently dropped every collision after the first.
+  const [collisionQueue, setCollisionQueue] = useState<CollisionItem[]>([]);
+  const collisionDialog = collisionQueue[0] ?? null;
   // ADR 0011 — share-link creation failure from the file-tree context menu (a
   // bare action, outside any dialog). Holds the node so "Try again" can re-POST.
   const [shareErrorNode, setShareErrorNode] = useState<FileNode | null>(null);
@@ -239,11 +257,35 @@ export function FileExplorer() {
 
   // Drive root not configured yet (first-connect dialog cancelled/pending):
   // lists come back empty with no cached root id.
+  //
+  // A4/FEX-14 — the cached root id is owned by an ASYNC probe, so reading it
+  // during render gave the explorer a value with no subscription: the "Finish
+  // Google Drive setup…" row stayed over a place that was actually ready, and
+  // dragging into Drive stayed blocked, until an unrelated re-render happened
+  // to clear it. `DriveSetupGate.handleConfirm` calls `refreshFileTree()` right
+  // after dispatching, which is what hid this on the common path — the gate's
+  // OTHER dispatch site (`hasConfiguredRoot()` resolving true, i.e. another tab
+  // configured it, or `ensureRoot()` created it during a write) does not.
+  //
+  // Held in state and re-read on the event, so the row clears when the root
+  // actually appears rather than when something else happens to re-render.
+  const [driveRootId, setDriveRootId] = useState<string | null | undefined>(
+    () => (driveProvider as GoogleDriveProvider | null)?.getCachedRootId?.()
+  );
+  useEffect(() => {
+    const read = () =>
+      setDriveRootId(
+        (driveProvider as GoogleDriveProvider | null)?.getCachedRootId?.()
+      );
+    read();
+    window.addEventListener('axoview-drive-root-ready', read);
+    return () => window.removeEventListener('axoview-drive-root-ready', read);
+    // Re-read whenever the provider or the tree's own state changes too — the
+    // root can be created by a write that fires no event.
+  }, [driveProvider, driveTree.status, fileTreeRefreshToken]);
+
   const driveRootMissing =
-    dualMode &&
-    driveUsable &&
-    driveTree.status === 'ready' &&
-    !(driveProvider as GoogleDriveProvider | null)?.getCachedRootId?.();
+    dualMode && driveUsable && driveTree.status === 'ready' && !driveRootId;
 
   const driveReady =
     dualMode && driveUsable && driveTree.status === 'ready' && !driveRootMissing;
@@ -504,7 +546,7 @@ export function FileExplorer() {
   }, []);
 
   const handleRenameSubmit = useCallback(
-    async (id: string, name: string) => {
+    async (id: string, name: string, node?: FileNode | null) => {
       if (id === '__pending__') {
         const trimmed = name.trim();
         const type = pendingNew?.type;
@@ -540,26 +582,61 @@ export function FileExplorer() {
         return;
       }
 
-      // Normal rename — route to the node's own place.
+      // Normal rename. A4/FEX-11 + FEX-12: the PLACE and the TYPE both come
+      // from the node react-arborist handed us, not from a second lookup
+      // against hook state that may have refreshed since the input opened.
+      //
+      //   FEX-11 — `tree.folders.some(f => f.id === id)` missed a folder the
+      //   tree had dropped mid-edit, fell through to `renameDiagram`, and a
+      //   provider that no-ops on an unknown id never reached the catch. The
+      //   row showed the new name until the next refresh and nothing said so.
+      //
+      //   FEX-12 — `placeOfId.get(id) ?? 'local'` sent a Drive rename to the
+      //   session provider whenever the Drive tree had been cleared by the
+      //   `enabled` gate (a token lapse), and resolved a shared id to Drive
+      //   because the map is built Drive-last.
+      //
+      // Unresolvable is an ERROR, not a default: guessing a place performs a
+      // real write against the wrong provider.
       const trimmed = name.trim();
       if (!trimmed) return;
-      const placeId = placeOfId.get(id) ?? 'local';
+      const target = node ?? findComposedNode(composedData, id);
+      const placeId = target?.placeId ?? placeOfId.get(id);
+      const type = target?.type ?? (placeId ? typeOfId(treeFor(placeId), id) : undefined);
+      if (!placeId || (type !== 'folder' && type !== 'diagram')) {
+        notificationStore.push({ severity: 'error', message: 'Rename failed' });
+        void treeFor(placeOfId.get(id) ?? 'local').refresh();
+        return;
+      }
       const tree = treeFor(placeId);
+      // A4/FEX-16 — the name to restore if the storage call fails. The tree row
+      // is rolled back by `refresh()`, but `notifyDiagramRenamedFromTree` is
+      // NOT display-only: it sets the diagram name, the current diagram and the
+      // in-memory model's title, so a failed rename left the canvas titled one
+      // thing and storage another, and the next autosave persisted the name the
+      // user was told did not stick.
+      const previousName =
+        type === 'diagram'
+          ? tree.diagrams.find((d) => d.id === id)?.name
+          : undefined;
       tree.optimisticRename(id, trimmed);
-      notifyDiagramRenamedFromTree(id, trimmed);
+      if (type === 'diagram') notifyDiagramRenamedFromTree(id, trimmed);
       try {
-        const isFolder = tree.folders.some((f) => f.id === id);
-        if (isFolder) {
+        if (type === 'folder') {
           await tree.renameFolder(id, trimmed);
         } else {
           await tree.renameDiagram(id, trimmed);
         }
       } catch {
         notificationStore.push({ severity: 'error', message: 'Rename failed' });
+        // Both optimistic updates are undone, not just the tree's.
+        if (type === 'diagram' && previousName !== undefined) {
+          notifyDiagramRenamedFromTree(id, previousName);
+        }
         tree.refresh();
       }
     },
-    [pendingNew, checkUnsavedBeforeNavigate, providerFor, treeFor, placeOfId, openDiagramById, notifyDiagramRenamedFromTree]
+    [pendingNew, checkUnsavedBeforeNavigate, providerFor, treeFor, placeOfId, composedData, openDiagramById, notifyDiagramRenamedFromTree]
   );
 
   // ---------------------------------------------------------------------------
@@ -649,14 +726,28 @@ export function FileExplorer() {
         // MQA #18: if the deleted diagram is the one currently on the canvas,
         // reset the canvas BEFORE the storage delete so the in-flight autosave
         // is canceled and can't recreate the diagram after we remove it.
+        //
+        // A4/FEX-08 — that ordering is right and the FAILURE path was not: the
+        // catch showed "Delete failed" over a blanked canvas while the work was
+        // still in storage, and nothing on screen said so. Re-opening it from
+        // the tree was the only way back. The canvas is restored here instead,
+        // which is safe precisely because the delete did NOT happen.
+        const wasOpen = currentDiagram?.id === target.id;
         notifyDiagramDeletedFromTree(target.id);
-        await tree.hardDeleteDiagram(target.id);
+        try {
+          await tree.hardDeleteDiagram(target.id);
+        } catch (err) {
+          if (wasOpen) {
+            await openDiagramById(target.id, target.name, target.placeId);
+          }
+          throw err;
+        }
         notificationStore.push({ severity: 'success', message: `"${target.name}" deleted` });
       }
     } catch {
       notificationStore.push({ severity: 'error', message: 'Delete failed' });
     }
-  }, [deleteConfirm, treeFor, notifyDiagramDeletedFromTree]);
+  }, [deleteConfirm, treeFor, notifyDiagramDeletedFromTree, openDiagramById, currentDiagram]);
 
   // ---------------------------------------------------------------------------
   // Copy share link (session-backend contract — local place only)
@@ -703,6 +794,9 @@ export function FileExplorer() {
           drive,
           diagrams: [node.diagramMeta],
           sourceFolders: sessionTree.folders,
+          // A4/FEX-13 — catch an edit that lands DURING the move, before the
+          // source copy is deleted.
+          flushSource: flushDiagramIfDirty,
           ...(explicitTargetFolderId !== undefined
             ? { targetFolderId: explicitTargetFolderId }
             : {})
@@ -859,6 +953,7 @@ export function FileExplorer() {
     }) => {
       const target = resolveDropTarget(parentId);
       if (!target) return;
+      const collisions: CollisionItem[] = [];
       for (const dragId of dragIds) {
         const dragPlace = placeOfId.get(dragId) ?? 'local';
 
@@ -885,7 +980,10 @@ export function FileExplorer() {
           ? (tree.folders.find((f) => f.id === dragId)?.parentId ?? null)
           : (tree.diagrams.find((d) => d.id === dragId)?.folderId ?? null);
 
-        if (currentParentId === target.folderId) return; // same-parent reorder: silently ignore
+        // A4/FEX-10 — `continue`, not `return`. These two guards used to abandon
+        // the REST of a multi-select drag: one item already in the destination,
+        // or one name collision, and everything after it silently never moved.
+        if (currentParentId === target.folderId) continue; // same-parent reorder: ignore
 
         const node = isFolder
           ? tree.folders.find((f) => f.id === dragId)
@@ -897,8 +995,18 @@ export function FileExplorer() {
           : tree.diagrams.filter((d) => d.folderId === target.folderId && d.id !== dragId).map((d) => d.name);
 
         if (detectCollision(nodeName, siblingNames)) {
-          setCollisionDialog({ dragId, type, name: nodeName, targetFolderId: target.folderId, placeId: dragPlace });
-          return;
+          // Queued rather than shown immediately, so the non-colliding items in
+          // the same drag still complete. The queue is presented one at a time
+          // after the loop.
+          collisions.push({
+            dragId,
+            type,
+            name: nodeName,
+            targetFolderId: target.folderId,
+            placeId: dragPlace,
+            siblingNames
+          });
+          continue;
         }
 
         try {
@@ -907,23 +1015,51 @@ export function FileExplorer() {
           notificationStore.push({ severity: 'error', message: `Failed to move "${nodeName}"` });
         }
       }
+      if (collisions.length > 0) setCollisionQueue(collisions);
     },
     [resolveDropTarget, placeOfId, treeFor, driveReady, sessionTree.diagrams, handleMoveToDrive]
   );
 
+  /**
+   * A4/FEX-09 — "Keep both", which is what this actually does.
+   *
+   * The dialog used to offer "Replace" and then perform exactly the
+   * non-colliding move: no delete of the colliding sibling, no rename. Both
+   * ended up side by side with the same name, and the one the user meant to
+   * replace was still there — the folder now held two rows they could not tell
+   * apart.
+   *
+   * The entry offered two fixes. This is the non-destructive one: the move is
+   * renamed with the `copySuffix` that already existed. Implementing a real
+   * replace would need the colliding sibling DELETED inside this confirmation,
+   * and for a folder that means inheriting the delete's own descendant-count
+   * confirmation semantics — a destructive action hidden behind a dialog whose
+   * copy never mentioned it.
+   */
   const confirmMove = useCallback(async () => {
-    if (!collisionDialog) return;
-    setCollisionDialog(null);
+    const item = collisionQueue[0];
+    if (!item) return;
+    setCollisionQueue((q) => q.slice(1));
+    const tree = treeFor(item.placeId);
+    const newName = copySuffix(item.name, item.siblingNames);
     try {
-      await treeFor(collisionDialog.placeId).moveItem(
-        collisionDialog.dragId,
-        collisionDialog.type,
-        collisionDialog.targetFolderId
-      );
+      await tree.moveItem(item.dragId, item.type, item.targetFolderId);
+      if (newName !== item.name) {
+        if (item.type === 'folder') {
+          await tree.renameFolder(item.dragId, newName);
+        } else {
+          await tree.renameDiagram(item.dragId, newName);
+        }
+      }
     } catch {
       notificationStore.push({ severity: 'error', message: 'Move failed' });
     }
-  }, [collisionDialog, treeFor]);
+  }, [collisionQueue, treeFor]);
+
+  /** Skip just this collision; the rest of the queue is still offered. */
+  const skipMove = useCallback(() => {
+    setCollisionQueue((q) => q.slice(1));
+  }, []);
 
   const disableDrag = useCallback(
     (data: FileNode) => data.type === 'place' || data.type === 'placeState',
@@ -1069,7 +1205,9 @@ export function FileExplorer() {
           onMove={handleMove}
           disableDrag={disableDrag}
           disableDrop={disableDrop}
-          onRename={({ id, name }) => handleRenameSubmit(id, name)}
+          onRename={({ id, name, node }) =>
+            handleRenameSubmit(id, name, node?.data ?? null)
+          }
           onSelect={(nodes) => {
             const data = nodes[0]?.data ?? null;
             setSelectedNode(data && (data.type === 'folder' || data.type === 'diagram') ? data : null);
@@ -1276,9 +1414,10 @@ export function FileExplorer() {
       {/* Name collision dialog */}
       <Dialog
         open={!!collisionDialog}
-        onClose={() => setCollisionDialog(null)}
+        onClose={skipMove}
         maxWidth="xs"
         fullWidth
+        data-axoview-id="file-explorer-collision"
         slotProps={{ paper: { sx: { boxShadow: '0px 10px 20px -2px rgba(0,0,0,0.25)', borderRadius: 2 } } }}
       >
         <DialogTitle sx={{ pb: 1, pr: 6 }}>
@@ -1287,20 +1426,39 @@ export function FileExplorer() {
           </Typography>
           <IconButton
             size="small"
-            onClick={() => setCollisionDialog(null)}
+            onClick={skipMove}
             sx={{ position: 'absolute', top: 12, right: 12, color: 'text.secondary' }}
           >
             <CloseIcon fontSize="small" />
           </IconButton>
         </DialogTitle>
         <DialogContent sx={{ pt: 0 }}>
+          {/* FEX-09: the copy names what the button does. It never replaced. */}
           <Typography variant="body2" color="text.secondary">
-            &ldquo;{collisionDialog?.name}&rdquo; already exists in this folder. Replace it?
+            &ldquo;{collisionDialog?.name}&rdquo; already exists in this folder.
+            Move it in under a new name?
           </Typography>
+          {collisionQueue.length > 1 && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+              {collisionQueue.length - 1} more to resolve.
+            </Typography>
+          )}
         </DialogContent>
         <DialogActions sx={{ px: 2.5, pb: 2.5, pt: 1 }}>
-          <Button variant="text" onClick={() => setCollisionDialog(null)}>Cancel</Button>
-          <Button variant="contained" onClick={confirmMove}>Replace</Button>
+          <Button
+            variant="text"
+            data-axoview-id="file-explorer-collision-skip"
+            onClick={skipMove}
+          >
+            Skip
+          </Button>
+          <Button
+            variant="contained"
+            data-axoview-id="file-explorer-collision-keep-both"
+            onClick={confirmMove}
+          >
+            Keep both
+          </Button>
         </DialogActions>
       </Dialog>
 

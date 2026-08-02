@@ -8,6 +8,7 @@
  * never be in the trash), FEX-07 (correcting a stale source comment).
  */
 import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { useFileTree } from '../../hooks/useFileTree';
 import { LocalStorageProvider } from '../../services/storage/providers/LocalStorageProvider';
@@ -66,49 +67,29 @@ const dg = (id: string, name: string, folderId: string | null, extra: Partial<Di
 
 const useTree = (r: Rig) => renderHook(() => useFileTree(r.storage, 0));
 
-const readSrc = (p: string) => readFileSync(p, 'utf8');
-const APP_SRC = 'packages/axoview-app/src/';
+// RIG (2026-08-02): resolved from THIS FILE, not from the runner's cwd. The
+// path used to be repo-root-relative ('packages/axoview-app/src/'), which broke
+// the moment the explore lane started running per-package: jest's cwd is the
+// package dir, so the path doubled and every source-scanning probe threw ENOENT
+// — presenting as four findings that were really one rig fault. See the wave-6
+// rig-traps appendix.
+const readSrc = (p: string) => readFileSync(resolve(APP_SRC, p), 'utf8');
+const APP_SRC = resolve(__dirname, '../../');
 
-// ---------------------------------------------------------------------------
-// FEX-01 — a dangling folderId is invisible everywhere.
-// ---------------------------------------------------------------------------
-describe('FEX-01 — a diagram whose folder is gone renders nowhere', () => {
-  const ORPHANED = () =>
-    rig({
-      folders: [{ id: 'real', name: 'Real', parentId: null }],
-      diagrams: [dg('good', 'Good', 'real'), dg('lost', 'Lost', 'deleted-folder')]
-    });
-
-  const flatIds = (nodes: ReturnType<typeof useFileTree>['treeData']): string[] =>
-    nodes.flatMap((n) => [n.id, ...flatIds(n.children ?? [])]);
-
-  it('characterization: the orphan is in `diagrams` but in neither the tree nor the trash', async () => {
-    const r = ORPHANED();
-    const { result } = useTree(r);
-    await waitFor(() => expect(result.current.status).toBe('ready'));
-
-    // PRECONDITION: the provider really returned both diagrams, so a missing
-    // row below is the tree builder's doing and not a fetch problem.
-    expect(result.current.diagrams.map((d) => d.id).sort()).toEqual(['good', 'lost']);
-
-    // The tree holds the folder and the good diagram only.
-    expect(flatIds(result.current.treeData).sort()).toEqual(['good', 'real']);
-    // And the trash is keyed on `deletedAt`, which the orphan does not have —
-    // so there is no surface anywhere that can reach it.
-    expect(result.current.trashData).toEqual([]);
-  });
-
-  it.failing('FEX-01: a diagram with an unresolvable folder still has somewhere to appear', async () => {
-    const r = ORPHANED();
-    const { result } = useTree(r);
-    await waitFor(() => expect(result.current.status).toBe('ready'));
-    expect(result.current.diagrams).toHaveLength(2); // precondition
-    // Expected: degrade to the root (the treatment a dangling `layerId` gets in
-    // the lib — "unassigned" rather than "gone"), or list it in the trash.
-    // Actual: `buildTree` walks down from `parentId === null` and never sees it.
-    expect(flatIds(result.current.treeData)).toContain('lost');
-  });
-});
+// FEX-01 is FIXED and its probes are retired (re-derived 2026-08-02).
+//
+// The two characterizations here described the pre-fix world: a diagram whose
+// `folderId` named no existing folder appeared in no folder and at no root,
+// invisible in the tree while still counted by every consumer of the listing.
+//
+// What closed it was NOT the RED-03/05 layer-reference work (the wave-3 note's
+// attribution — re-checked and wrong): it was A2/STOR-13's fix in
+// `useFileTree`, which rewrites an unresolvable `folderId` to `null` so the
+// diagram surfaces at ROOT, where it can be seen and moved. That is exactly the
+// "degrade to the root, the treatment a dangling `layerId` gets in the lib"
+// resolution the `it.failing` probe asked for — reached from the Drive side
+// (a file the user moved out of the Axoview folder in Drive's own UI) rather
+// than from this one. Promoted regression: `useFileTree.orphanFolder.test.tsx`.
 
 // ---------------------------------------------------------------------------
 // FEX-02 / FEX-06 — the trash machine has no caller, and folders can't enter it.
@@ -131,7 +112,7 @@ describe('FEX-02 / FEX-06 — soft delete and the trash are implemented and unre
       'components/DiagramManager.tsx',
       'App.tsx',
       'providers/DiagramLifecycleProvider.tsx'
-    ].map((p) => readSrc(APP_SRC + p));
+    ].map((p) => readSrc(p));
     // PRECONDITION: we are reading the real files.
     expect(sources[0]).toContain('hardDeleteDiagram');
 
@@ -158,7 +139,7 @@ describe('FEX-02 / FEX-06 — soft delete and the trash are implemented and unre
     // And the Drive provider patches the DRIVE file's `trashed` flag, which the
     // app never reads back as `deletedAt` (its `listFolders` query filters
     // `trashed=false` server-side, so a trashed folder simply vanishes).
-    const drive = readSrc(APP_SRC + 'services/storage/providers/GoogleDriveProvider.ts');
+    const drive = readSrc('services/storage/providers/GoogleDriveProvider.ts');
     expect(drive).toContain("await this.patchJson(id, { trashed: true })");
     expect(drive).not.toContain('deletedAt');
   });
@@ -195,13 +176,13 @@ describe('FEX-03 — the tree manifest is write-only end to end', () => {
       'components/fileExplorer/FileTreeNode.tsx',
       'components/fileExplorer/FileTreeToolbar.tsx'
     ]) {
-      const src = readSrc(APP_SRC + p);
+      const src = readSrc(p);
       expect(src).not.toContain('updateManifest');
       expect(src).not.toMatch(/\btree\.manifest\b/);
     }
     // The zip side already showed the other half (A3/ZIP-10): exported into
     // every archive, parsed on import, applied by nothing.
-    const zip = readSrc(APP_SRC + 'services/project/projectZip.ts');
+    const zip = readSrc('services/project/projectZip.ts');
     expect(zip).toContain("zip.file('tree-manifest.json'");
     expect(zip).toContain('const importProject');
   });
@@ -327,7 +308,7 @@ describe('FEX-07 — a self-parented folder is not walked forever', () => {
     // The comment in LocalStorageProvider's `uniqueSuffix` names the wrong
     // failure mode for this shape, which matters because it is the stated
     // justification for that helper.
-    const src = readSrc(APP_SRC + 'services/storage/providers/LocalStorageProvider.ts');
+    const src = readSrc('services/storage/providers/LocalStorageProvider.ts');
     expect(src).toContain('recursive tree builder then walks forever');
   });
 });

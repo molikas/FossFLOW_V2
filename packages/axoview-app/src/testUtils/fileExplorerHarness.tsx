@@ -1,5 +1,5 @@
 /**
- * A4 shared harness — renders the real `FileExplorer` (both `useFileTree`
+ * FileExplorer test harness — renders the real `FileExplorer` (both `useFileTree`
  * instances live) with in-memory place doubles, a lifecycle-context double and
  * the arborist capture stub (`./arboristStub`).
  *
@@ -9,11 +9,15 @@
  * `continue`s. None of that is observable below `FileExplorer`, and the two
  * hooks it composes are what make `placeOfId` ambiguous in the first place.
  *
+ * Moved out of the A4 explore lane (2026-08-02) when the FEX-08..16 probes were
+ * promoted: the main suite must not import from a quarantined lane that wave 6
+ * archives.
+ *
  * Callers MUST declare these mocks before importing this module (jest.mock is
  * hoisted, so the harness's own `import { FileExplorer }` already sees them):
- *   react-arborist, react-i18next, ../../providers/AppStorageContext,
- *   ../../providers/DiagramLifecycleProvider, ../../stores/authStore
- * See any A4 probe for the canonical block.
+ *   react-arborist, react-i18next, ../providers/AppStorageContext,
+ *   ../providers/DiagramLifecycleProvider, ../stores/authStore
+ * See `fileExplorerHandlers.test.tsx` for the canonical block.
  *
  * Rig traps found building this (2026-07-30):
  *  - jsdom has no `ResizeObserver`; `FileExplorer`'s height measurement throws
@@ -33,14 +37,14 @@
  *    verdict rests on this; it cost two wrong readings here.
  */
 import { render, act } from '@testing-library/react';
-import type { PlaceId } from '../../hooks/useFileTree';
+import type { PlaceId } from '../hooks/useFileTree';
 import type {
   DiagramMeta,
   FolderMeta,
   StorageProvider,
   TreeManifest
-} from '../../services/storage/types';
-import { FileExplorer } from '../../components/fileExplorer/FileExplorer';
+} from '../services/storage/types';
+import { FileExplorer } from '../components/fileExplorer/FileExplorer';
 import { resetArborist } from './arboristStub';
 
 // ---------------------------------------------------------------------------
@@ -233,6 +237,22 @@ export function makeLifecycle(
       d.log.push('saveAllDirty');
       d.pendingFlush.forEach((blob, id) => sessionPlace?.blobs.set(id, blob));
       d.pendingFlush.clear();
+    },
+    // A4/FEX-13 — the per-id flush the move-to-Drive path calls immediately
+    // before deleting the source, reporting whether it actually wrote. Reads
+    // `pendingFlush` at CALL time, which is the point: an edit staged after the
+    // move started must still be visible here.
+    flushDiagramIfDirty: async (id: string) => {
+      if (!d.pendingFlush.has(id)) return false;
+      d.log.push(`flushDiagramIfDirty(${id})`);
+      const blob = d.pendingFlush.get(id);
+      d.pendingFlush.delete(id);
+      // Through the PROVIDER, not straight into `blobs`: the real flush is a
+      // `saveDiagram` call, and a double that bypasses it makes the provider
+      // log lie about whether anything was written — which is exactly what a
+      // FEX-13 probe reads to decide whether the re-flush happened.
+      if (blob !== undefined) await sessionPlace?.provider.saveDiagram(id, blob);
+      return true;
     },
     refreshFileTree: () => d.log.push('refreshFileTree'),
     setFileExplorerOpen: () => {},

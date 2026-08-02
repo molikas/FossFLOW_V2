@@ -5515,9 +5515,22 @@ for the two transitions that change what is on the canvas underneath.
 
 **Workaround:** open the pen and press Clear before switching.
 
-**Status:** Open. Fix direction: clear `annotation.strokes` + `redoStack` in
-`resetUiState` (diagram load) and in `setView` (page switch), keeping the
-existing `setEditorMode` behaviour. Repro: [`annotations-view-01-02-04-07-13.explore.test.tsx`](packages/axoview-lib/src/__explore__/F2/annotations-view-01-02-04-07-13.explore.test.tsx).
+**Status:** Fixed in wave 4 (2026-08-02) exactly as directed — the annotation
+slice is cleared in `resetUiState` (diagram load) and in `setView` (page
+switch), and `setEditorMode` still keeps the strokes.
+
+The line the fix draws, which is what makes it defensible rather than arbitrary:
+**clear when the CONTENT under the ink changes identity, keep when only the
+PRESENTATION changes.** A page switch and a diagram load change what is
+underneath; an edit<->present toggle does not — that is the case `setEditorMode`
+was always right about. The same line decides VIEW-03 the other way (a
+projection switch is presentation, so the ink is re-projected rather than
+cleared).
+
+The operation log is cleared with the strokes, not just the strokes: otherwise
+Undo after a page switch would re-materialise the previous page's ink onto the
+new one, which is a worse version of the original bug. Promoted regression:
+[`annotationSlice.test.ts`](packages/axoview-lib/src/stores/__tests__/annotationSlice.test.ts).
 
 ## Switching projection leaves the annotation ink behind
 
@@ -5541,11 +5554,32 @@ projected layer that does not.
 
 **Workaround:** pick a projection before annotating.
 
-**Status:** Open — the honest fix needs a product call. Either (a) store strokes
-in TILE space so they re-project with the content, (b) clear the strokes on a
-projection switch the way a page switch should clear them (VIEW-01), or (c)
-state that ink is screen furniture and freeze it to the viewport instead of the
-scene. (a) matches what users expect when they circle a node. Repro: [`view-modes.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F2-view/view-modes.explore.spec.ts).
+**Status:** Fixed in wave 4 (2026-08-02) — option (a)'s behaviour, by a
+narrower mechanism than the entry's wording.
+
+**Why (a) and not (b) or (c).** The ink already follows scroll and zoom, so it
+is already scene-anchored; leaving it behind on a projection switch alone was
+the inconsistency. (b) — clear on the switch — would contradict the line VIEW-01/02
+draws: clear when the CONTENT changes, keep when only the PRESENTATION does, and
+a projection change is presentation. (c) — freeze to the viewport — would also
+stop the ink following a pan, which it correctly does today.
+
+**Mechanism.** Not "store strokes in tile space" as written, but a point re-map
+at the switch: `reprojectAnnotationStrokes` runs the same
+px -> fractional tile -> px map (`reprojectOffset`) that the scroll correction
+and the PROJ-07 residual already use. `fromCanvasPoint` returns a FRACTIONAL
+tile, so freehand keeps its sub-tile precision. Stroke thickness, the eraser
+radius and the path builder all stay in px and are untouched — a tile-space
+rewrite would have had to answer for each of them, in the same change as the
+VIEW-07 restructure.
+
+It runs for VIEWERS too, deliberately: the EDITABLE-only guard beside it exists
+because re-projecting `offset` is a MODEL write that VIEW-08 forbids a viewer
+from making, and annotation strokes are uiState. The log is re-mapped with the
+live strokes, so an undo after the switch puts the stroke back where the content
+is now. Promoted regressions:
+[`annotationSlice.test.ts`](packages/axoview-lib/src/stores/__tests__/annotationSlice.test.ts)
+and [`view-mode-annotation.spec.ts`](packages/axoview-e2e/tests/view-mode-annotation.spec.ts).
 
 ## Erasing an annotation stroke cannot be undone — and Undo then deletes a different one
 
@@ -5570,9 +5604,28 @@ no representation in that model, so the next Undo simply eats the tail.
 
 **Workaround:** none.
 
-**Status:** Open. Fix direction: give the annotation slice a real operation log
-(`{kind:'add'|'erase'|'clear', strokes, index}`) instead of two stroke stacks,
-so erase and clear are undoable at their own position. Repro: [`annotations-view-01-02-04-07-13.explore.test.tsx`](packages/axoview-lib/src/__explore__/F2/annotations-view-01-02-04-07-13.explore.test.tsx).
+**Status:** Fixed in wave 4 (2026-08-02) — the operation log the entry
+specifies, `{ kind: 'add' | 'erase' | 'clear', stroke/strokes, index }`, with
+`past`/`future` replacing the two stroke stacks. The VIEW-13 ruling rides it
+(Clear is now an entry in the log, so it is undoable like the Undo/Redo pair
+beside it).
+
+`applyAnnotationOp` / `revertAnnotationOp` are pure and are the log's whole
+semantics; the property under test is that they are exact INVERSES, rather than
+each branch being asserted separately. Two details that were not obvious:
+
+- Reverting an `add` is keyed on stroke IDENTITY, not position — the list may
+  have shifted under it when an intervening erase was undone.
+- Reverting an `erase` restores at its own index, because later strokes paint
+  over earlier ones: re-appending would silently reorder the drawing.
+
+An erase of nothing and a clear of nothing record no operation — an inert log
+entry costs a real Undo press to get past. The palette's Undo/Redo now gate on
+the log lengths rather than on `strokes.length`; gating Undo on the stroke count
+would grey it out after a Clear, which is exactly the case VIEW-13 adds.
+Promoted regressions:
+[`annotationOps.test.ts`](packages/axoview-lib/src/utils/__tests__/annotationOps.test.ts)
+and [`annotationSlice.test.ts`](packages/axoview-lib/src/stores/__tests__/annotationSlice.test.ts).
 
 ## A click with the annotation pen leaves an invisible stroke
 
@@ -5600,9 +5653,23 @@ nothing at any stroke width.
 
 **Workaround:** none; press Undo after a stray click.
 
-**Status:** Open. Fix direction: require `points.length >= 2` for freehand too
-— or, if a deliberate dot is wanted, emit `M x y L x y` so the round linecap
-renders it. Repro: [`annotations-view-01-02-04-07-13.explore.test.tsx`](packages/axoview-lib/src/__explore__/F2/annotations-view-01-02-04-07-13.explore.test.tsx).
+**Status:** Fixed in wave 4 (2026-08-02) — `points.length >= 2` for freehand,
+the first of the two options.
+
+Rejected rather than rendered as a dot because the sibling branch already
+discards a zero-extent shape, and because in present mode — where the pen mostly
+lives — an accidental click leaving a permanent mark is the worse of the two
+failure modes. Reversible: emit `M x y L x y` in `strokeHasExtent`'s freehand
+branch instead if a deliberate dot turns out to be wanted.
+
+The gate moved out of `AnnotationLayer.endStroke` into
+`utils/annotationOps.strokeHasExtent`. That is not tidying: this entry's own
+probe TRANSCRIBED the gate into the test file because the real one was buried in
+a `useCallback` inside a pointer-driven component, so it asserted its own copy
+and could never flip. The extraction is what lets the promoted regression import
+the thing that ships. (Queued as a probe-authoring rule for the wave-6
+appendix.) Promoted regression:
+[`annotationOps.test.ts`](packages/axoview-lib/src/utils/__tests__/annotationOps.test.ts).
 
 ## A floating Label's link and notes are unreachable in present mode
 
@@ -5632,8 +5699,15 @@ node pins the popover and renders its link; the Label pins nothing.
 
 **Workaround:** give the Label notes as well, and hover rather than click.
 
-**Status:** Open. Fix direction: add `'LABEL'` to `INFO_TYPES` — the
-per-type derivation it feeds already handles the type completely. Repro: [`view-modes.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F2-view/view-modes.explore.spec.ts).
+**Status:** Fixed in wave 4 (2026-08-02) — `'LABEL'` added to `INFO_TYPES`,
+exactly as directed; `deriveItemInfo`'s `case 'LABEL'` already handled the type
+completely, so nothing else changed.
+
+The regression is written for a link-only Label with NO notes, which is the
+shape that had no route at all: the hover branch is notes-gated (owner
+2026-07-01), so notes+link would have passed through the branch that already
+worked. Promoted regression:
+[`view-mode-annotation.spec.ts`](packages/axoview-e2e/tests/view-mode-annotation.spec.ts).
 
 ## The view-mode popover mangles a mailto: or tel: link
 
@@ -5660,9 +5734,18 @@ normalisers do that — a fix must keep an allowlist, not swap in a
 
 **Workaround:** none from the UI.
 
-**Status:** Open. Fix direction: have `toHref` reuse `normalizeWebLinkUrl`
-so there is one normaliser, and add a test asserting the two agree on the whole
-scheme matrix. Repro: [`href-view-06.explore.test.ts`](packages/axoview-lib/src/__explore__/F2/href-view-06.explore.test.ts).
+**Status:** Fixed in wave 4 (2026-08-02) as directed — `toHref` delegates to
+`normalizeWebLinkUrl`, and the promoted test asserts the two agree across the
+whole scheme matrix rather than only checking `toHref`'s outputs. That
+distinction is the point: a second implementation is how this bug happened, and
+an output-only table would pass again the day someone reintroduces one.
+
+The allowlist is kept, per the entry's warning — the prefixing is also what
+defangs a `javascript:` / `data:` / `vbscript:` payload, so the tempting "does
+it have a scheme?" simplification would have turned a cosmetic fix into an XSS
+vector. Those four payloads are asserted to be prefixed rather than passed
+through. Promoted regression:
+[`toHref.test.ts`](packages/axoview-lib/src/components/ViewModeInfoPopover/__tests__/toHref.test.ts).
 
 ## Every element panel except the node's is fully editable in view mode
 
@@ -5730,10 +5813,25 @@ only way out is the undocumented Escape/V key.
 
 **Workaround:** n/a (a); press Escape (b).
 
-**Status:** Open. Fix direction: either delete the flag and its three consumers,
-or finish the feature — and when finishing it, reset
-`annotation.tool` to `'select'` (or keep the palette mounted) whenever the
-chrome is hidden. Repro: [`view-modes.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F2-view/view-modes.explore.spec.ts).
+**Status:** Symptom (b) fixed in wave 4 (2026-08-02); symptom (a) left open
+deliberately, with a reason.
+
+**(b) — the latent trap is closed.** `setHideViewControls` now resets
+`annotation.tool` to `'select'`, so hiding the chrome can no longer leave a
+full-canvas overlay at `pointer-events: auto` with its pen and tool row gone and
+only the undocumented Escape/V key as a way out. Disarming rather than keeping
+the palette mounted (the entry's other option): the point of the toggle is a
+clean screenshot, and a mounted palette defeats it. This was fixed even though
+symptom (a) means nothing in the app calls the setter — it is on the PUBLIC
+action surface, so an embedder can reach the trap today.
+
+**(a) — the flag is kept, not deleted.** Deleting it would be a breaking change
+to `UiStateActions`, and wiring a control is new product surface rather than
+remediation. `docs/features.md` referred to "the same 'hide all controls'
+toggle" as though it existed; that wording is corrected. Whether to ship a
+control is a product decision, deliberately not taken here. Promoted regression:
+[`annotationSlice.test.ts`](packages/axoview-lib/src/stores/__tests__/annotationSlice.test.ts)
+and [`view-mode-annotation.spec.ts`](packages/axoview-e2e/tests/view-mode-annotation.spec.ts).
 
 ## Bolding a multi-selection wipes its italic and underline
 

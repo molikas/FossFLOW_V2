@@ -40,7 +40,7 @@ jest.mock('../../stores/authStore', () => ({
   useAuthStore: (sel: (s: Record<string, unknown>) => unknown) => sel(auth)
 }));
 
-import { appStorageValue, dg, flush, makeAuth, makeLifecycle, makePlace } from './harness';
+import { appStorageValue, dg, flush, makeAuth, makeLifecycle, makePlace } from '../../testUtils/fileExplorerHarness';
 import { MigrateSessionDialog } from '../../components/MigrateSessionDialog';
 import { useNotificationStore } from '../../stores/notificationStore';
 

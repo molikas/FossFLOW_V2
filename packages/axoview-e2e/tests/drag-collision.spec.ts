@@ -82,6 +82,16 @@ test.describe('Node drag with collision — Track 5e-3', () => {
     const ICON_B: CanvasPoint = { x: 540, y: 360 };
     await placeIcon(page, ICON_A);
     await placeIcon(page, ICON_B);
+    // Poll the VIEW items, not the model count. Placement writes the model item
+    // and the view item in separate commits, so a model count of 2 does not
+    // imply the view has caught up — and reading the view unpolled after
+    // polling the model is a race that only shows under load. It surfaced in
+    // the 2026-08-02 full run (this test alone, 274 others green, and it passes
+    // in isolation on repeat) as `before` being []. Spec-side fix; the product
+    // ordering is deliberate and unchanged.
+    await expect
+      .poll(async () => (await getViewItemTiles(page)).length, { timeout: 10_000 })
+      .toBe(2);
     await expect.poll(() => getModelItemCount(page), { timeout: 5_000 }).toBe(2);
 
     const before = await getViewItemTiles(page);

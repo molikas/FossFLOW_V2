@@ -7,7 +7,7 @@
  */
 import { act, waitFor } from '@testing-library/react';
 
-jest.mock('react-arborist', () => require('./arboristStub'));
+jest.mock('react-arborist', () => require('../../testUtils/arboristStub'));
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, fallback?: unknown) =>
@@ -46,8 +46,8 @@ import {
   makeLifecycle,
   makePlace,
   renderExplorer
-} from './harness';
-import { rowIds, treeProps } from './arboristStub';
+} from '../../testUtils/fileExplorerHarness';
+import { rowIds, treeProps } from '../../testUtils/arboristStub';
 import { useNotificationStore } from '../../stores/notificationStore';
 
 const PLACE_DRIVE = 'place:google-drive';

@@ -16,10 +16,10 @@
  * handle records `edit`/`open`/`closeAll` calls instead of performing them.
  *
  * Mount it from a probe with:
- *   jest.mock('react-arborist', () => require('./arboristStub'));
+ *   jest.mock('react-arborist', () => require('../../testUtils/arboristStub'));
  */
 import React from 'react';
-import type { FileNode } from '../../hooks/useFileTree';
+import type { FileNode } from '../hooks/useFileTree';
 
 export interface TreeProps {
   data: FileNode[];
@@ -52,8 +52,15 @@ export function resetArborist(): void {
   apiCalls.length = 0;
 }
 
-export const Tree = React.forwardRef<typeof treeApi, TreeProps>(function Tree(props, ref) {
-  captured.props = props;
+// `React.forwardRef`'s inferred prop type is `Omit<TreeProps, 'ref'>`, which
+// tsc will not widen back to TreeProps — so the cast is on the captured value
+// rather than on the component. (Only surfaced once this file moved out of the
+// tsc-excluded explore lane, 2026-08-02.)
+export const Tree = React.forwardRef<typeof treeApi, TreeProps>(function Tree(
+  props,
+  ref
+) {
+  captured.props = props as TreeProps;
   captured.renders += 1;
   React.useImperativeHandle(ref, () => treeApi, []);
   return null;

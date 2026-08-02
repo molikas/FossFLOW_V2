@@ -46,7 +46,20 @@ import { RichTextEditor } from 'src/components/RichTextEditor/RichTextEditor';
 const HOVER_OPEN_MS = 150;
 const HOVER_CLOSE_MS = 100;
 
-const INFO_TYPES = new Set(['ITEM', 'CONNECTOR', 'RECTANGLE', 'TEXTBOX']);
+// Types whose SELECTION opens the popover. F2/VIEW-05 added 'LABEL': the hover
+// branch already had a dedicated `viewModeHoveredLabelId` path and
+// `deriveItemInfo` a full `case 'LABEL'`, but the selection path was gated here
+// — so a selected Label was filtered out before the derivation it already had
+// was ever called. The hover branch is notes-gated (owner 2026-07-01), so a
+// Label carrying only a LINK had no route to its popover at all, while the same
+// content on a node opened it.
+const INFO_TYPES = new Set([
+  'ITEM',
+  'CONNECTOR',
+  'RECTANGLE',
+  'TEXTBOX',
+  'LABEL'
+]);
 
 export const ViewModeInfoPopover = () => {
   const { t } = useTranslation('viewModeInfoPopover');
@@ -130,8 +143,9 @@ export const ViewModeInfoPopover = () => {
     if (!active) return null;
     // Per-type derivation lives in deriveItemInfo (pure, unit-tested) — notes
     // parity across all five element types is enforced there. LABEL hover
-    // arrives via viewModeHoveredLabelId (labels aren't tile-hit-tested; a
-    // pinned label stays a follow-up — INFO_TYPES gates the pinned path).
+    // arrives via viewModeHoveredLabelId (labels aren't tile-hit-tested); the
+    // PINNED label path is live too since F2/VIEW-05 added 'LABEL' to
+    // INFO_TYPES.
     const { name, notes, headerLink, anchorTile, anchorOffset } =
       deriveItemInfo(active.type, {
         modelItem,

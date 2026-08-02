@@ -109,3 +109,42 @@ export function propagateDirty(
   return result;
 }
 
+
+/**
+ * A4/FEX-11 + FEX-12 — resolve a tree row from the COMPOSED tree by id.
+ *
+ * The composed dual-place tree stamps `placeId` and carries `type` on every
+ * row, so a row found here answers both "which provider owns this?" and "is it
+ * a folder or a diagram?" from one source. The handlers used to answer them
+ * separately, from two independently-refreshed lists, and could therefore
+ * disagree with each other and with the row the user was actually editing.
+ *
+ * Returns `null` rather than a default when the id is not in the tree. That is
+ * the point of the entry: a defaulted place performs a real write against the
+ * wrong provider, and a defaulted type calls the wrong rename API.
+ */
+export function findComposedNode<
+  T extends { id: string; children?: T[] }
+>(nodes: T[] | undefined, id: string): T | null {
+  for (const node of nodes ?? []) {
+    if (node.id === id) return node;
+    const hit = findComposedNode(node.children, id);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/**
+ * Fallback for `findComposedNode` — the entity kind according to one place's
+ * own lists. Only consulted when the composed row is unavailable (a caller with
+ * nothing but an id), and it returns `undefined` for an unknown id rather than
+ * assuming "diagram", which is the FEX-11 failure exactly.
+ */
+export function typeOfId(
+  tree: { folders: { id: string }[]; diagrams: { id: string }[] },
+  id: string
+): 'folder' | 'diagram' | undefined {
+  if (tree.folders.some((f) => f.id === id)) return 'folder';
+  if (tree.diagrams.some((d) => d.id === id)) return 'diagram';
+  return undefined;
+}

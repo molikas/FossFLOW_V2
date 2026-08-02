@@ -54,6 +54,7 @@ export function MigrateSessionDialog() {
     openDiagramById,
     notifyDiagramDeletedFromTree,
     saveAllDirty,
+    flushDiagramIfDirty,
     isReadonlyUrl
   } = useDiagramLifecycle();
   const authStatus = useAuthStore((s) => s.status);
@@ -77,7 +78,17 @@ export function MigrateSessionDialog() {
     setRootReady(!!drive?.getCachedRootId());
   }, [drive]);
 
-  const enumerateSession = useCallback(async (): Promise<DiagramMeta[]> => {
+  /**
+   * A4/FEX-15 — `null` means FAILED, `[]` means genuinely nothing to move.
+   *
+   * This used to swallow every failure into `[]`, which the callers cannot tell
+   * apart from an empty session. So a single transient listing hiccup at the
+   * moment of the grant made the auto-offer return silently having already
+   * spent BOTH one-shot refs — and the offer never came back for the rest of
+   * the session, however long it stayed signed in. The diagrams it exists to
+   * rescue stayed session-only until the tab closed and they were gone.
+   */
+  const enumerateSession = useCallback(async (): Promise<DiagramMeta[] | null> => {
     if (!local) return [];
     try {
       // Flush in-memory edits first so counts and moved content are current.
@@ -85,7 +96,7 @@ export function MigrateSessionDialog() {
       const list = await local.listDiagrams();
       return list.filter((d) => !d.deletedAt);
     } catch {
-      return [];
+      return null;
     }
   }, [local, saveAllDirty]);
 
@@ -103,8 +114,18 @@ export function MigrateSessionDialog() {
   const tryAutoOffer = useCallback(async () => {
     if (!pendingOfferRef.current) return;
     if (!drive?.getCachedRootId()) return; // wait for the setup gate
+    // A4/FEX-15 — the one-per-grant offer is consumed only once the enumeration
+    // has actually SUCCEEDED. Clearing `pendingOfferRef` before the await (as
+    // this did) also protects against a re-entrant second offer, so both refs
+    // are re-armed on failure instead: the `axoview-drive-root-ready` listener
+    // can then try again when storage recovers.
     pendingOfferRef.current = false;
     const metas = await enumerateSession();
+    if (metas === null) {
+      pendingOfferRef.current = true;
+      offeredThisGrantRef.current = false;
+      return;
+    }
     if (metas.length === 0) return;
     openWithItems(metas);
   }, [drive, enumerateSession, openWithItems]);
@@ -151,6 +172,16 @@ export function MigrateSessionDialog() {
       void (async () => {
         checkRootReady();
         const metas = await enumerateSession();
+        if (metas === null) {
+          notificationStore.push({
+            severity: 'error',
+            message: t(
+              'migrate.listFailed',
+              'Could not read session diagrams — try again'
+            )
+          });
+          return;
+        }
         if (metas.length === 0) {
           notificationStore.push({
             severity: 'info',
@@ -188,6 +219,9 @@ export function MigrateSessionDialog() {
       const results = await moveDiagramsToDrive({
         source: local,
         drive,
+        // A4/FEX-13 — the bulk path has the same window as the single move, and
+        // a wider one: every item after the first waits for the ones before it.
+        flushSource: flushDiagramIfDirty,
         diagrams: selected,
         sourceFolders: folders,
         onProgress: (done, total) => setProgress({ done, total })

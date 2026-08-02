@@ -83,6 +83,36 @@ export const useCanvasModeToggle = (): {
       offset: CoordsUtils.zero()
     });
 
+    // F2/VIEW-03 — the annotation ink re-projects with the content. Strokes are
+    // stored in scene-canvas px inside a `<g>` whose transform is rebuilt from
+    // scroll/zoom/rendererSize only, so a projection switch moved everything
+    // anchored to a TILE and left everything anchored to raw canvas px behind:
+    // a circle drawn around a node ended up over empty canvas. The rendering
+    // guidelines (§8) require every projected layer to list
+    // `strategy.projectionName` in its rebuild deps, and the overlay is a
+    // projected layer that did not.
+    //
+    // Same px → fractional tile → px map as the scroll correction and the
+    // PROJ-07 residual above (`reprojectOffset`); `fromCanvasPoint` was written
+    // for exactly this and returns a FRACTIONAL tile, so freehand keeps its
+    // sub-tile precision.
+    //
+    // The entry's fix direction says "store strokes in tile space". This is the
+    // same observable behaviour with a far smaller blast radius: stroke
+    // thickness, the eraser radius and the path builder all stay in px and are
+    // untouched. Recorded in the entry.
+    //
+    // Deliberately BEFORE the EDITABLE-only guard below. That guard exists
+    // because re-projecting `offset` is a MODEL write and VIEW-08 forbids a
+    // viewer dirtying someone else's document; annotation strokes are uiState,
+    // so a viewer gets their ink re-projected with nothing saved.
+    const { annotation } = uiStateApi.getState();
+    if (annotation.strokes.length > 0) {
+      actions.reprojectAnnotationStrokes((point) =>
+        reprojectOffset(fromStrategy, toStrategy, point)
+      );
+    }
+
     // R1/PROJ-07 (ruled 2026-07-30, ADR 0023 addendum E): `offset` is a
     // POST-projection residual, so it does not survive a projection change —
     // carrying it byte-identical drew an item that had been inside its own ISO

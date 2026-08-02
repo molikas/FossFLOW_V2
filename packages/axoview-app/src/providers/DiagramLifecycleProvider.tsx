@@ -182,6 +182,18 @@ interface DiagramLifecycleContextValue {
   notifyDiagramRenamedFromTree: (id: string, newName: string) => void;
   notifyDiagramDeletedFromTree: (id: string) => void;
   saveAllDirty: () => Promise<void>;
+  /**
+   * A4/FEX-13 — flush ONE diagram if it is dirty RIGHT NOW, reporting whether
+   * anything was written.
+   *
+   * `saveAllDirty` is a fire-and-forget bulk flush and its callers cannot tell
+   * whether it wrote. The move-to-Drive path needs both: it must re-check
+   * dirtiness immediately before deleting the source (the whole bug is the size
+   * of the window between the read and the delete) and refresh the Drive copy
+   * only when there was something new to send. Reads the dirty set through its
+   * ref, so an edit made after the caller's closure was created is still seen.
+   */
+  flushDiagramIfDirty: (id: string) => Promise<boolean>;
   handleCreateBlankDiagram: (
     folderId: string | null,
     focusAfter?: 'fileExplorer' | 'elements',
@@ -1614,6 +1626,14 @@ export function DiagramLifecycleProvider({
   // run even while a Drive diagram is open: move-to-Drive relies on it to make
   // the persisted session copy current before the source is deleted.
   // ---------------------------------------------------------------------------
+  const flushDiagramIfDirtyRef = useRef<(id: string) => Promise<boolean>>(
+    async () => false
+  );
+  const flushDiagramIfDirty = useCallback(
+    (id: string) => flushDiagramIfDirtyRef.current(id),
+    []
+  );
+
   const saveAllDirty = useCallback(async () => {
     if (serverStorageAvailable) return; // server deploys have no session place
     const allDirtyIds = Array.from(dirtyDiagramIdsRef.current);
@@ -1713,6 +1733,18 @@ export function DiagramLifecycleProvider({
       });
     }
   }, [diagrams, serverStorageAvailable, storageManager]);
+
+  // A4/FEX-13 — bound through a ref so the exposed callback is stable while
+  // still closing over the CURRENT saveAllDirty. Dirtiness is read from the
+  // ref, not from state, so an edit that landed after the caller built its
+  // closure is still caught.
+  useEffect(() => {
+    flushDiagramIfDirtyRef.current = async (id: string) => {
+      if (!dirtyDiagramIdsRef.current.has(id)) return false;
+      await saveAllDirty();
+      return true;
+    };
+  }, [saveAllDirty]);
 
   // ---------------------------------------------------------------------------
   // Model update handler
@@ -1860,6 +1892,7 @@ export function DiagramLifecycleProvider({
     notifyDiagramRenamedFromTree,
     notifyDiagramDeletedFromTree,
     saveAllDirty,
+    flushDiagramIfDirty,
     handleCreateBlankDiagram,
     checkUnsavedBeforeNavigate,
     handleGoogleSignedOut,

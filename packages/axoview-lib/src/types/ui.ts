@@ -529,12 +529,36 @@ export interface AnnotationStroke {
 }
 
 /**
+ * One undoable annotation operation (F2/VIEW-07, VIEW-13).
+ *
+ * The overlay used to keep two plain stroke stacks, which can only model
+ * "draw / un-draw at the tail". An erase is a delete at an ARBITRARY index and
+ * had no representation in that model, so erasing the middle stroke and
+ * pressing Undo ate the last one instead — and there was no way to get the
+ * erased stroke back at all. Clear had no representation either.
+ *
+ * Each op therefore carries what it did AND where, so it can be inverted in
+ * place: `index` is the position the stroke occupied (erase) or was appended at
+ * (add), and `clear` keeps the whole list it removed.
+ */
+export type AnnotationOp =
+  | { kind: 'add'; stroke: AnnotationStroke; index: number }
+  | { kind: 'erase'; stroke: AnnotationStroke; index: number }
+  | { kind: 'clear'; strokes: AnnotationStroke[] };
+
+/**
  * Ephemeral annotation state (ADR 0014). Session-scoped, in-memory, and
  * **never** persisted — it lives only in uiState, never in the Model, so no
  * save/export/zip path can reach it. `open` is the single pen-driven toggle:
  * open ⇒ palette + drawing shown; closed ⇒ both hidden but strokes retained
  * (close ≠ discard; only Clear wipes). `tool` decides whether the overlay
  * captures input (`select` = canvas interactive).
+ *
+ * Session-scoped means scoped to the CONTENT, not to the tab: the strokes are
+ * cleared when the canvas underneath them changes identity — a diagram load or
+ * a page switch (F2/VIEW-01/02) — because scene-canvas coordinates mean nothing
+ * against different content. An edit↔present toggle keeps them, which is the
+ * case `setEditorMode` was always right about.
  */
 export interface AnnotationState {
   open: boolean;
@@ -542,8 +566,10 @@ export interface AnnotationState {
   color: string;
   thickness: number;
   strokes: AnnotationStroke[];
-  /** Strokes available to redo (cleared by any new stroke / erase / clear). */
-  redoStack: AnnotationStroke[];
+  /** Operations that can be undone, oldest first. */
+  past: AnnotationOp[];
+  /** Operations that can be redone, most-recently-undone first. */
+  future: AnnotationOp[];
 }
 
 export interface UiStateActions {
@@ -662,6 +688,12 @@ export interface UiStateActions {
   redoAnnotationStroke: () => void;
   eraseAnnotationStroke: (id: string) => void;
   clearAnnotations: () => void;
+  /**
+   * F2/VIEW-03 — re-map every stored annotation point through `mapPoint`, so
+   * the ink follows the content across an iso<->2D switch. Applied to the live
+   * strokes and to the operation log alike.
+   */
+  reprojectAnnotationStrokes: (mapPoint: (point: Coords) => Coords) => void;
   setIconPackManager: (iconPackManager: IconPackManagerProps | null) => void;
   setIconUsageScan: (scan: IconUsageScan | null) => void;
   setLinkedDiagrams: (diagrams: Array<{ id: string; name: string }>) => void;

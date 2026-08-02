@@ -10,7 +10,7 @@
  */
 import { act, fireEvent, waitFor } from '@testing-library/react';
 
-jest.mock('react-arborist', () => require('./arboristStub'));
+jest.mock('react-arborist', () => require('../../testUtils/arboristStub'));
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, fallback?: unknown) =>
@@ -50,8 +50,8 @@ import {
   makePlace,
   renderExplorer,
   type PlaceDouble
-} from './harness';
-import { captured, rowIds, treeProps } from './arboristStub';
+} from '../../testUtils/fileExplorerHarness';
+import { captured, rowIds, treeProps } from '../../testUtils/arboristStub';
 import { useNotificationStore } from '../../stores/notificationStore';
 import type { FileNode } from '../../hooks/useFileTree';
 

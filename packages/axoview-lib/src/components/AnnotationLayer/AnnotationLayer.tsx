@@ -16,6 +16,7 @@ import { useUiStateStore, useUiStateStoreApi } from 'src/stores/uiStateStore';
 import { shallow } from 'zustand/shallow';
 import { AnnotationStroke, AnnotationTool, Coords } from 'src/types';
 import { generateId } from 'src/utils';
+import { strokeHasExtent } from 'src/utils/annotationOps';
 import {
   screenToSceneCanvas,
   polylinePathD,
@@ -392,13 +393,9 @@ export const AnnotationLayer = () => {
     drawingRef.current = false;
     const cur = draftRef.current;
     if (cur) {
-      const isShapeOrSeg = isShape(cur.tool) || isSegment(cur.tool);
-      // Drop zero-extent shapes/segments (a click without a drag).
-      const hasExtent = isShapeOrSeg
-        ? cur.points[0].x !== cur.points[1].x ||
-          cur.points[0].y !== cur.points[1].y
-        : cur.points.length >= 1;
-      if (hasExtent) actions.addAnnotationStroke(cur);
+      // F2/VIEW-04 — the extent rule lives in `utils/annotationOps` so it can
+      // be pinned without driving pointer events through this component.
+      if (strokeHasExtent(cur)) actions.addAnnotationStroke(cur);
     }
     setDraftBoth(null);
   }, [actions, setDraftBoth]);

@@ -27,7 +27,11 @@ import {
   useUiStateStoreApi
 } from 'src/stores/uiStateStore';
 import { INITIAL_DATA } from 'src/config';
-import { savePersistedSettings } from 'src/config/persistedSettings';
+import {
+  savePersistedSettings,
+  loadPersistedSettings,
+  persistableSettingsFor
+} from 'src/config/persistedSettings';
 import { useInitialDataManager } from 'src/hooks/useInitialDataManager';
 import { useView } from 'src/hooks/useView';
 import { useDirtyTracker } from 'src/hooks/useDirtyTracker';
@@ -272,8 +276,15 @@ const App = forwardRef<AxoviewRef, AxoviewProps>(
     // scoped store; persisting from them would leak those transient export values
     // into the shared settings and flip the live canvas (ADR 0025).
     useEffect(() => {
-      if (editorMode === 'NON_INTERACTIVE') return;
-      savePersistedSettings(persistableSettings);
+      // F2/VIEW-08 — which keys this mode may persist. The rule lives in
+      // `persistableSettingsFor` so it can be pinned without mounting the
+      // editor; `null` means "write nothing" (NON_INTERACTIVE).
+      const toPersist = persistableSettingsFor(
+        editorMode,
+        persistableSettings,
+        loadPersistedSettings()
+      );
+      if (toPersist) savePersistedSettings(toPersist);
     }, [persistableSettings, editorMode]);
 
     useEffect(() => {

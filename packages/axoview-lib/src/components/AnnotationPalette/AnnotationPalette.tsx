@@ -109,7 +109,16 @@ const GroupCaret = () => (
 export const AnnotationPalette = () => {
   const { t } = useTranslation('annotationPalette');
   const actions = useUiStateStore((s) => s.actions);
-  const { open, tool, color, thickness, strokeCount, redoCount, dockOpen } =
+  const {
+    open,
+    tool,
+    color,
+    thickness,
+    strokeCount,
+    undoCount,
+    redoCount,
+    dockOpen
+  } =
     useUiStateStore(
       (s) => ({
         open: s.annotation.open,
@@ -117,7 +126,10 @@ export const AnnotationPalette = () => {
         color: s.annotation.color,
         thickness: s.annotation.thickness,
         strokeCount: s.annotation.strokes.length,
-        redoCount: s.annotation.redoStack.length,
+        // F2/VIEW-07: Undo/Redo are gated on the OPERATION log, not on the
+        // stroke count — a Clear leaves zero strokes and is still undoable.
+        undoCount: s.annotation.past.length,
+        redoCount: s.annotation.future.length,
         dockOpen: s.rightSidebarOpen
       }),
       shallow
@@ -413,7 +425,7 @@ export const AnnotationPalette = () => {
               <span>
                 <IconButton
                   onClick={actions.undoAnnotationStroke}
-                  disabled={strokeCount === 0}
+                  disabled={undoCount === 0}
                   data-axoview-id="annotation-undo"
                   sx={{ width: '100%', p: 0.5, borderRadius: 1.5 }}
                 >
