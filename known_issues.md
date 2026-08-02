@@ -2976,14 +2976,29 @@ OTHER as well, not just with the canvas.
 One correction to the direction: **the layer order is NOT available here.**
 `hitDetection` is handed a flat `HitTestScene` with no `layers` array, so
 `resolveRenderOrder` is called with `layerOrder: 0` — zIndex and iso-depth are
-honoured, the layer bucket is not. That is not a gap in practice (hidden-layer
-entities are excluded upstream by `isItemInteractable`, and two items on
-different visible layers do not share a tile without also colliding), and it is
-stated in the code so a later reader does not assume otherwise. Promoted
-regression:
+honoured, the layer bucket is not. Promoted regression:
 [`hitPaintOrder.test.ts`](packages/axoview-lib/src/utils/__tests__/hitPaintOrder.test.ts),
 which runs the same case with the array order BOTH ways — the flip is the bug —
 and was verified to go red without the fix.
+
+**Residual — OPEN (re-scoped 2026-08-02, R3/GPU-13 picker-gate ruling).** The
+missing layer tier was recorded above as "not a gap in practice", on the grounds
+that hidden-layer entities are excluded upstream by `isItemInteractable` and that
+two items on different visible layers never share a tile without colliding. **The
+second half is true of NODES only** — collision is a node-placement rule.
+Rectangles, labels and connectors overlap across layers freely, so the divergence
+is reachable:
+
+> A rectangle on a high-`order` layer paints above a rectangle on a lower one, but
+> the picker resolves both with `layerOrder: 0` — so the lower-layer rectangle
+> wins on `zIndex` and takes the click from the one visibly on top.
+
+The GPU-13 merge makes the renderer and the picker agree by construction on the
+zIndex and iso-depth tiers, and its agreement gate is **deliberately scoped to
+those two**, with the layer tier named as excluded and this repro shape in the
+gate's header. Closing the residual means threading `layers` into the
+`HitTestScene` — routed to the **program final sweep** as its own item so it does
+not widen the merge.
 
 ## Selecting a connector attached to an off-grid node makes the wire jump at that node
 

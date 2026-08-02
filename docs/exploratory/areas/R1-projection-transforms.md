@@ -2,6 +2,20 @@
 
 **Status:** DONE · **Counted hypotheses:** 15 / 10 · **Bugs:** 6 · **Hypothesis ID prefix:** `PROJ-`
 
+**PROJ-10 residual re-scoped (2026-08-02, from R3/GPU-13's picker-gate ruling).**
+PROJ-10 was fixed in wave 3 at both item paths, but its fix left the LAYER tier
+out: `hitDetection` is handed a flat `HitTestScene` with no `layers` array, so it
+resolves paint order with `layerOrder: 0`. Wave 3 recorded that as "not a gap in
+practice"; **that rationale was wrong and is now corrected in the code, in
+known_issues, and here.** It holds for NODES only — collision is a node-placement
+rule. Rectangles, labels and connectors overlap across layers freely, so the
+divergence is reachable: *a rectangle on a high-`order` layer paints above one on
+a lower layer, but both resolve with `layerOrder: 0`, so the lower-layer
+rectangle wins on zIndex and takes the click.* GPU-13's renderer/picker-agreement
+gate is deliberately scoped to the tiers the picker can see and names this shape
+as excluded; threading `layers` into the hit-test scene is routed to the program
+final sweep as its own item.
+
 **Scope:** The two CoordinateTransformStrategy objects (isometricStrategy, cartesian2DStrategy) define tile->SceneLayer-px (toScreen), the inverses (fromCanvasPoint, fromScreen), and grid assets. CanvasModeContext binds them into getTilePosition/screenToTile/getProjectionCss for every consumer. renderedGeometry.ts is the single source of truth for composing the ADR-0023 off-grid `offset` (a post-projection SceneLayer-px residual) onto the integer tile: getRenderedTilePosition, getRenderedAreaCorners, footprintContainsPoint. useIsoProjection turns a tile range into CSS (position + iso matrix, or 2D with the Y-orientation rotate branch). getCanvasModeSwitchScroll preserves the viewport-centre tile across an iso<->2D switch.
 
 **Code:**

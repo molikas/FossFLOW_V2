@@ -83,12 +83,22 @@ const getItemTileIndex = (
 // order for exactly this reason.
 //
 // `layerOrder` is 0 for every item here: this module is handed a flat scene with
-// no `layers` array, so the layer BUCKET cannot be resolved. That is not a gap
-// in practice — hidden-layer entities are excluded from interaction by
-// `isItemInteractable` upstream, and two items on different visible layers do
-// not share a tile without also colliding — but it is why this is a paint-order
-// approximation rather than the paint order itself, and it is stated here so a
-// future reader does not assume the layer bucket is being honoured.
+// no `layers` array, so the layer BUCKET cannot be resolved. This is a paint-order
+// APPROXIMATION, not the paint order, and the divergence is REAL rather than
+// theoretical.
+//
+// A previous version of this note argued the gap "is not a gap in practice",
+// because hidden-layer entities are excluded upstream by `isItemInteractable` and
+// two items on different visible layers do not share a tile without colliding.
+// That second half holds for NODES only — collision is a node-placement rule.
+// Rectangles, labels and connectors overlap across layers freely, so a visually
+// top rectangle on a high-`order` layer can lose the click to a lower-layer
+// rectangle that wins the `zIndex` tie. Corrected 2026-08-02 (R3/GPU-13
+// picker-gate scoping); recorded as PROJ-10's residual.
+//
+// Closing it means threading `layers` into the hit-test scene — routed to the
+// program final sweep as its own item, deliberately NOT folded into the GPU-13
+// merge.
 const itemsInPaintOrder = (items: HitTestScene['items']) =>
   [...items].sort(
     (a, b) =>

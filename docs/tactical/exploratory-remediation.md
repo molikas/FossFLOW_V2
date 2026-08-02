@@ -563,10 +563,17 @@ run** — otherwise a green fix reads as seven failing new specs.
 >    publishing it from the merged renderer, and keep `data-build-count` flat
 >    across a pan — `PERF_ATLAS` asserts that per layer.
 > 7. **Still to do in the merge:** the renderer/picker-agreement gate the brief
->    calls for (§5, "worth asserting"). Note `hitDetection.ts` passes `layerOrder: 0`
->    deliberately — it is handed a flat scene with no `layers` array — so agreement
->    is exact only on the zIndex/iso-depth tiers unless the picker is given layers.
->    Decide which, and say so in the gate.
+>    calls for (§5, "worth asserting"). **Scope ruled 2026-08-02** — it covers the
+>    **zIndex and iso-depth tiers only**; the layer tier is excluded, because
+>    `hitDetection` is handed a flat scene with no `layers` array and resolves with
+>    `layerOrder: 0`. The gate's **header must name the repro shape** rather than
+>    call the divergence unreachable: *a rectangle on a high-`order` layer paints
+>    above one on a lower layer, but both resolve with `layerOrder: 0`, so the
+>    lower-layer rectangle wins on zIndex and takes the click.* (The old "different
+>    visible layers never share a tile without colliding" argument holds for NODES
+>    only — collision is a node-placement rule; rectangles, labels and connectors
+>    overlap freely.) Closing it is PROJ-10's residual and belongs to the **program
+>    final sweep**, not this merge.
 >
 > Both briefs and their sign-off blocks remain the contract:
 >
@@ -684,6 +691,18 @@ run** — otherwise a green fix reads as seven failing new specs.
   - **Wave 4, PROBE AUTHORING: a probe that TRANSCRIBES the code under test can never flip.** F2/VIEW-04's probe copied `AnnotationLayer.endStroke`'s commit gate into the test file (`// transcribed:`) because the real one was buried in a `useCallback` inside a pointer-driven component. The gate was then fixed and the probe stayed green — it was asserting its own copy. This is the F5 duplicate-implementation class appearing in the LANE rather than in the product. When the real predicate is unreachable, **extract it** (here: `strokeHasExtent` into `utils/annotationOps`) rather than transcribing it; the extraction is usually the right change anyway, and the promoted regression then imports the thing that shipped.
   - **Wave 4, FLIP RULE: a fix can invalidate a NEIGHBOURING probe's premise.** The RED-07/RED-14 sweep removed the only route RED-09's probe had to `unroutable: true`, so that probe went red without RED-09 being fixed or refuted. Those need an explicit disposition in the area file ("no longer reachable via X; the underlying guard is unchanged; re-open if Y"), or the finding evaporates silently. A lane failure is not automatically a flip.
   - **Wave 4, PINS: re-verify a named pin red AFTER the pass that was supposed to keep it green**, not only when it is written. A pin that asserts a symptom class can start passing for a reason unrelated to the mechanism it guards. Revert the write path deliberately and check that the pin — and *only* the pin — goes red.
+- [ ] **Program final sweep — thread `layers` into the `HitTestScene` (PROJ-10's residual).**
+  `hitDetection` resolves paint order with `layerOrder: 0` because it is handed a
+  flat scene with no `layers` array, so the picker honours zIndex and iso-depth
+  but not the layer bucket. Recorded through wave 3 as "not a gap in practice"; that
+  rationale was **corrected 2026-08-02** — it holds for NODES only, because
+  collision is a node-placement rule. Rectangles, labels and connectors overlap
+  across layers freely, so the divergence is reachable: *a rectangle on a
+  high-`order` layer paints above one on a lower layer, but both resolve with
+  `layerOrder: 0`, so the lower-layer rectangle wins on zIndex and takes the
+  click.* GPU-13's renderer/picker-agreement gate is deliberately scoped to the two
+  tiers the picker can see, and names this shape as excluded. Its own item here
+  because it must **not** widen the merge — see the PROJ-10 entry in known_issues.
 - [ ] Headless path: verify `claude -p "/explore"` cold-start on this machine (subscription auth, no API key); document optional Task Scheduler wiring in the skill.
 - [ ] Archive: `git mv` campaign records → `docs/reviews/exploratory-2026-07/`; retire COLDSTART.md; fix inbound links (docs lint green).
 - [ ] Update workflow.md decision table (+ one line in testing.md) so `/explore` is discoverable.
