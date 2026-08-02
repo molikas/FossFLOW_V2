@@ -182,3 +182,8 @@ assertion). §5 answers:
 
 §6 sequencing approved: steps 1–3 one PR (HIST-04 rides it), HIST-03 strictly
 separate.
+
+**Mid-wave addition (2026-08-02):** HIST-03 (paired-trim by `seq` across both
+stacks) does **not** depend on the GPU-13 merge — it lands **this session** as
+its own change after the steps-1–3 commit, or, if capacity runs out, it is named
+**first** in the wave-5 resume point. It must not fall between sessions.

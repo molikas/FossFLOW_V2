@@ -209,6 +209,21 @@ overlay-agreement fix. Note it changes today's visible behaviour (the hybrid
 overlay currently lifts the whole element) — specs assert the sort, and the full
 Playwright budget applies.
 
+**Mid-wave approvals (2026-08-02):** (a) **Session boundary approved** — this
+session delivers measurements + the dated §8 amendment; the merge implementation
+starts fresh next session from a precise resume point. A partially-merged
+renderer never lands. (b) **Anti-cheat rename approved**: `data-nodes-drawn == N`
+becomes the honesty channel, total `data-draw-count` stays informational — the
+perf-harness assertion updates **in the same change** as the rename, the §8
+amendment records it, and ADR 0020 gets a dated one-line addendum
+cross-referencing §8 (both directions, per the docs convention). (c)
+**`atlasStats()` approved** as shared-substrate instrumentation: no per-frame
+cost (ADR 0038 §5), published through the existing debug-bridge gating, survives
+the merge. (d) The amendment must carry **all three measured numbers** —
+run-length, atlas occupancy at N=1000/2000/5000, buildInstances single-pass —
+not just the sorted-draw conclusion; if any measurement contradicts sorted-draw,
+that is a contract change: stop and ping the owner.
+
 **§7 Q2 — connector labels are out of scope.** Grounded cost/impact was
 reviewed: in-scope ≈ +30–40% project scope (path-keyed instances, raster-cache
 invalidation over OVL-02's fresh unification, a new hit-proxy layer) for a
