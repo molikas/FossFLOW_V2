@@ -86,6 +86,38 @@ Four things worth carrying forward:
    patch simply undid, and passed for the wrong reason until the premise was
    checked.
 
+### Exploratory remediation wave 5 — paired history trimming (2026-08-02)
+
+**HIST-03** — [`useHistory.pairedTrim.test.tsx`](../../packages/axoview-lib/src/hooks/__tests__/useHistory.pairedTrim.test.tsx)
+(4 cases). The 50-entry-per-store cap became a 50-**logical-action** window
+evaluated against the counter both stores already share, so one action's two
+halves are never split.
+
+Two testing lessons, both about what a probe was asserting:
+
+1. **The probe's own repro could never have flipped.** Its `it.failing` demanded
+   the shared seq still be PRESENT in the model stack — one particular
+   resolution — while its comment allowed either ("evicted together, or neither
+   is"). The fix evicts together, so the probe stayed red through a correct fix.
+   Wave 4 named this class (*a probe that pins a MECHANISM cannot flip on a
+   legitimate alternative fix*); this is the first case of it in a probe written
+   *before* that lesson existed. **Re-read a probe's assertion against its own
+   comment before trusting its verdict.**
+2. **Assert through the surface that decides behaviour, not through raw state.**
+   The window is evaluated on READ, so a store that has stopped writing keeps
+   aged-out entries in `history.past` until its next write or step. An assertion
+   over `history.past` therefore reads a stale floor and fails on a correct fix —
+   which is what a first draft of the pairing test did. `canUndo`/`peek*`/`undo`
+   are what a Ctrl+Z consults, so they are what must agree. The sharp assertion
+   is the bug's own shape: **drain the model store alone, then require the scene
+   store to have nothing left over.**
+
+Of the four cases, two are detectors and two are pins — verified by reverting to
+the old independent trim, under which exactly the two detectors go red. The
+connector leg stays green either way (`resyncScene` re-routes the orphan and
+always hid the split), and it is in the suite to say that repair is no longer
+load-bearing.
+
 ### Exploratory remediation wave 4 — running the e2e gate (rig notes, 2026-07-31)
 
 Three things cost this wave hours of wall clock. All three are rig, not product.

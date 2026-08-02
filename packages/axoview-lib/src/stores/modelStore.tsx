@@ -7,7 +7,8 @@ import { INITIAL_DATA } from 'src/config';
 import {
   allocateHistorySequence,
   currentHistorySequence,
-  currentHistoryViewId
+  currentHistoryViewId,
+  retainWithinHistoryWindow
 } from 'src/stores/historySequence';
 
 // Enable Immer patch support — must be called once before any produce() call.
@@ -125,12 +126,20 @@ const initialState = () => {
       pendingPre = extractModelData(get());
     };
 
-    const undo = (): boolean => {
-      const { history } = get();
-      if (history.past.length === 0) return false;
+    // E1/HIST-03: the retained set is the newest MAX_HISTORY_SIZE logical
+    // actions, not this stack's newest MAX_HISTORY_SIZE entries. Applied on
+    // READ as well as on write, because a store that has stopped writing must
+    // still age out in step with the other one — that lag is precisely the
+    // window in which the two stacks disagreed about which action is oldest.
+    const retained = () =>
+      retainWithinHistoryWindow(get().history.past, MAX_HISTORY_SIZE);
 
-      const entry = history.past[history.past.length - 1];
-      const newPast = history.past.slice(0, history.past.length - 1);
+    const undo = (): boolean => {
+      const past = retained();
+      if (past.length === 0) return false;
+
+      const entry = past[past.length - 1];
+      const newPast = past.slice(0, past.length - 1);
 
       set((state) => {
         const currentModel = extractModelData(state);
@@ -173,11 +182,11 @@ const initialState = () => {
       return true;
     };
 
-    const canUndo = () => get().history.past.length > 0;
+    const canUndo = () => retained().length > 0;
     const canRedo = () => get().history.future.length > 0;
 
     const peekUndoSeq = (): number | null => {
-      const { past } = get().history;
+      const past = retained();
       return past.length > 0 ? past[past.length - 1].seq : null;
     };
 
@@ -187,7 +196,7 @@ const initialState = () => {
     };
 
     const peekUndoViewId = (): string | undefined => {
-      const { past } = get().history;
+      const past = retained();
       return past.length > 0 ? past[past.length - 1].viewId : undefined;
     };
 
@@ -257,20 +266,25 @@ const initialState = () => {
                 return { ...state, ...next };
               }
 
-              const newPast = [
-                ...state.history.past,
-                {
-                  patches,
-                  inversePatches,
-                  seq: currentHistorySequence(),
-                  // E1/HIST-10. Read, never derived: the scene store stamps the
-                  // same register for the same logical action, so the two
-                  // halves agree by construction.
-                  viewId: currentHistoryViewId()
-                }
-              ];
-              if (newPast.length > state.history.maxHistorySize)
-                newPast.shift();
+              // E1/HIST-03: trim by the shared logical-action window, not by
+              // this stack's own length. `newPast.shift()` evicted whichever
+              // entry this store happened to have oldest, which is a different
+              // action from the one the OTHER store would have evicted.
+              const newPast = retainWithinHistoryWindow(
+                [
+                  ...state.history.past,
+                  {
+                    patches,
+                    inversePatches,
+                    seq: currentHistorySequence(),
+                    // E1/HIST-10. Read, never derived: the scene store stamps
+                    // the same register for the same logical action, so the two
+                    // halves agree by construction.
+                    viewId: currentHistoryViewId()
+                  }
+                ],
+                state.history.maxHistorySize
+              );
 
               return {
                 ...state,

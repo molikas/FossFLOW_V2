@@ -78,3 +78,51 @@ export const currentHistorySequence = (): number => {
 export const currentHistoryViewId = (): string | undefined => {
   return viewId;
 };
+
+/**
+ * E1/HIST-03 — the history window, expressed in LOGICAL ACTIONS rather than in
+ * per-store entries.
+ *
+ * The cap used to be "50 entries, per store, trimmed independently", and the two
+ * stores fill at different rates: a model-only action (place an icon, rename)
+ * pushes a model entry and nothing on the scene side. Fifty of those after one
+ * both-stores action evicted that action's MODEL half while its SCENE half sat
+ * at the bottom of the scene stack — so draining the stacks eventually stepped
+ * the scene half alone and reverted half an action that nothing could complete.
+ * For a connector `resyncScene` re-routed the orphan and hid it; for a text box
+ * it left a model box with no scene size, permanently (INV-5b).
+ *
+ * The fix is to make the retained set a property of the SEQUENCE space, which
+ * both stores already share, instead of a property of each stack's length: keep
+ * the newest `maxActions` logical actions and drop everything older. Both stores
+ * evaluate the identical predicate against the identical counter, so the two
+ * halves of one action are always retained together or dropped together — the
+ * pairing holds by construction rather than by coordination, and neither store
+ * needs to see the other.
+ *
+ * Entries are appended in allocation order and `seq` is monotonic, so the
+ * retained set is always a SUFFIX; the common case (nothing to drop) returns the
+ * same array reference, so this is free to call from a read.
+ *
+ * Two consequences worth stating rather than discovering:
+ *  - an action that pushed to neither store still consumes a slot, so the
+ *    effective depth can be under `maxActions` entries. HIST-15's ruling (keep
+ *    the silent cap, document it) is unchanged; the cap now means "the last N
+ *    actions", which is the thing a user would have guessed anyway.
+ *  - the counter is module-global, so a SECOND provider pair recording history
+ *    would age this one's window. The only second `<Axoview>` today is the
+ *    hidden export Renderer (ADR 0025), and it loads through
+ *    `useInitialDataManager` with `skipHistory`, so it allocates nothing. A
+ *    future instance that records would need a per-pair counter — the same
+ *    caveat, and the same fix, as the sequence itself.
+ */
+export const retainWithinHistoryWindow = <T extends { seq: number }>(
+  past: T[],
+  maxActions: number
+): T[] => {
+  const floor = counter - maxActions;
+  if (past.length === 0 || past[0].seq > floor) return past;
+  let first = 0;
+  while (first < past.length && past[first].seq <= floor) first += 1;
+  return past.slice(first);
+};

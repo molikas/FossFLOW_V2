@@ -738,7 +738,7 @@ patch set for that action is empty never pushed, and so never cleared its own
 future: `canRedo` stayed true and Redo re-applied a stale scene patch. Promoted
 regression: [`historyBrackets.test.tsx`](packages/axoview-lib/src/hooks/__tests__/historyBrackets.test.tsx).
 
-## Independent 50-entry history trimming splits one logical action across the two stacks
+## Independent 50-entry history trimming splits one logical action across the two stacks — FIXED
 
 **Found by:** exploratory campaign HIST-03
 
@@ -765,10 +765,28 @@ different rates because model-only actions push nothing to the scene stack.
 **Workaround:** none. Switching pages rebuilds the scene from the model and
 restores the missing size.
 
-**Status:** Open. Fix direction: trim by logical-action sequence rather than by
-per-stack length — when a store evicts seq N, drop every entry with seq ≤ N from
-both stacks. Repro:
-[`hist-02-03.explore.test.tsx`](packages/axoview-lib/src/__explore__/E1/hist-02-03.explore.test.tsx).
+**Status:** Fixed on `remediation/exploratory-campaign` (2026-08-02, wave 5). The
+retained set is now a property of the SEQUENCE space both stores already share
+rather than of each stack's length: keep the newest 50 **logical actions** and
+drop everything older
+([`retainWithinHistoryWindow`](packages/axoview-lib/src/stores/historySequence.ts)).
+Both stores evaluate the identical predicate against the identical counter, so
+the two halves of one action are always retained together or dropped together —
+the pairing holds by construction, and neither store has to see the other.
+
+That is a simpler shape than this entry's proposed "when a store evicts seq N,
+drop every entry with seq ≤ N from both stacks", which needs one store to reach
+into the other or to publish through a channel the other polls. It is also why the
+predicate is applied on READ as well as on write: a store that has stopped
+writing must still age out in step, and that lag is exactly the window in which
+the two stacks disagreed about which action is oldest.
+
+**The cap's meaning changed, deliberately.** It was "50 entries per store"; it is
+now "the last 50 logical actions", so an action that pushed to neither store still
+consumes a slot. HIST-15's ruling (keep the silent cap, document it) is unchanged
+— and the new meaning is closer to what the ruling describes. Promoted regression:
+[`useHistory.pairedTrim.test.tsx`](packages/axoview-lib/src/hooks/__tests__/useHistory.pairedTrim.test.tsx);
+the probe is retired.
 
 ## A failed edit arms the undo snapshot; the next page switch records a phantom history entry
 

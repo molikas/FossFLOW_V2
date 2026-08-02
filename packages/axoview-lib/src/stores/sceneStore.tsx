@@ -6,7 +6,8 @@ import { SceneStore, Scene } from 'src/types';
 import {
   allocateHistorySequence,
   currentHistorySequence,
-  currentHistoryViewId
+  currentHistoryViewId,
+  retainWithinHistoryWindow
 } from 'src/stores/historySequence';
 
 // enablePatches() is idempotent — safe to call in multiple modules.
@@ -115,12 +116,21 @@ const initialState = () => {
     // The redo also consumed the future entry, disabling the redo button.
     // Mirror the model store: push the ORIGINAL entry to future on undo,
     // pop it back on redo. entry.patches always travel pre → post.
-    const undo = (): boolean => {
-      const { history } = get();
-      if (history.past.length === 0) return false;
+    // E1/HIST-03 — see modelStore for the full contract. The retained set is the
+    // newest MAX_HISTORY_SIZE LOGICAL ACTIONS, evaluated against the shared
+    // counter, so this stack and the model stack always agree about which action
+    // is the oldest one still undoable. The scene stack is the one that used to
+    // be left holding an orphaned half: model-only actions fill the model stack
+    // while this one stands still.
+    const retained = () =>
+      retainWithinHistoryWindow(get().history.past, MAX_HISTORY_SIZE);
 
-      const entry = history.past[history.past.length - 1];
-      const newPast = history.past.slice(0, history.past.length - 1);
+    const undo = (): boolean => {
+      const past = retained();
+      if (past.length === 0) return false;
+
+      const entry = past[past.length - 1];
+      const newPast = past.slice(0, past.length - 1);
 
       set((state) => {
         const currentScene = extractSceneData(state);
@@ -161,11 +171,11 @@ const initialState = () => {
       return true;
     };
 
-    const canUndo = () => get().history.past.length > 0;
+    const canUndo = () => retained().length > 0;
     const canRedo = () => get().history.future.length > 0;
 
     const peekUndoSeq = (): number | null => {
-      const { past } = get().history;
+      const past = retained();
       return past.length > 0 ? past[past.length - 1].seq : null;
     };
 
@@ -175,7 +185,7 @@ const initialState = () => {
     };
 
     const peekUndoViewId = (): string | undefined => {
-      const { past } = get().history;
+      const past = retained();
       return past.length > 0 ? past[past.length - 1].viewId : undefined;
     };
 
@@ -246,19 +256,22 @@ const initialState = () => {
                 return { ...state, ...next };
               }
 
-              const newPast = [
-                ...state.history.past,
-                {
-                  patches,
-                  inversePatches,
-                  seq: currentHistorySequence(),
-                  // E1/HIST-10 — same register the model store reads, so the
-                  // two halves of one action carry the same page.
-                  viewId: currentHistoryViewId()
-                }
-              ];
-              if (newPast.length > state.history.maxHistorySize)
-                newPast.shift();
+              // E1/HIST-03 — trim by the shared logical-action window, so this
+              // stack and the model stack evict the same action.
+              const newPast = retainWithinHistoryWindow(
+                [
+                  ...state.history.past,
+                  {
+                    patches,
+                    inversePatches,
+                    seq: currentHistorySequence(),
+                    // E1/HIST-10 — same register the model store reads, so the
+                    // two halves of one action carry the same page.
+                    viewId: currentHistoryViewId()
+                  }
+                ],
+                state.history.maxHistorySize
+              );
 
               return {
                 ...state,
