@@ -44,6 +44,48 @@ E2E suite lives at [`packages/axoview-e2e/`](../../packages/axoview-e2e/) (Playw
 
 To scale further, raise the shard count (`SHARD_TOTAL` + the matrix list in the workflow, kept in sync) — diminishing past ~6 shards because a fixed ~3 min setup (npm ci + build:lib + Playwright install + dev-server boot) is paid per shard.
 
+### Exploratory remediation wave 5 — page-stamped history (2026-08-02)
+
+**HIST-10 + HIST-04, one change** — [`useHistory.pageStamp.test.tsx`](../../packages/axoview-lib/src/hooks/__tests__/useHistory.pageStamp.test.tsx)
+(15 cases, real stores) and [`undo-page-navigation.spec.ts`](../../packages/axoview-e2e/tests/undo-page-navigation.spec.ts)
+(5 cases). History entries carry the page they were recorded on; undo/redo
+switches to it. Design + owner sign-off:
+[`wave5-brief-hist-10-page-stamped-entries.md`](../tactical/wave5-brief-hist-10-page-stamped-entries.md).
+
+Four things worth carrying forward:
+
+1. **Two assertions the sign-off made mandatory, and why they are the right two.**
+   *Both stores stamp the same page for one logical action* — they read one
+   register at one boundary, so a disagreement means the boundary moved, not that
+   a store drifted. *Navigation records no history* — the failure mode is a
+   LOOP: an undo that pushes an entry leaves the next Ctrl+Z something to eat and
+   the stack never drains. The sharp form of the second is "an undo that
+   navigated did not GROW either past stack", not "the drain terminated": a plant
+   that pushes one entry per navigation still drains, so the loop-bound assertion
+   alone passes while the growth assertion fails.
+2. **Red-verify by planting the defect where it would actually live.** Killing
+   the scene half's stamp reddens the agreement check; making
+   `navigateToEntryView` write history reddens the growth check; making it return
+   `false` reddens four of the five e2e cases. The one that stays green
+   (`redo brings the page back`) is honest — it asserts the page returns and the
+   active id resolves, neither of which needs navigation.
+3. **A fix can close a bug in a NEIGHBOURING area without being aimed at it.**
+   HIST-09/D-9 (a cross-page undo writing the previous page's cached connector
+   paths into the page on screen) flipped to passing untouched, because the step
+   now lands on the page the entry belongs to and SYNC_SCENEs it. That coverage
+   existed only in the probe, so it was promoted — asserting the ORPHAN COUNT,
+   not the navigation — before the probe was retired. **Ask what a flipped probe
+   proved that your promoted regression does not**, in both directions: the
+   sibling case in wave 4 was a probe going red without its bug being fixed.
+4. **A guard can be unreachable through the public API and still be right.** The
+   `model.views has it` check almost never fires, because every inverse patch
+   replaces the whole `views` array — an undo that steps past a page removal
+   *restores* the page. The reachable case is HIST-03's half-step, and the test
+   has to construct it (drop the model half, then remove the page with a
+   `skipHistory` write). A first attempt asserted the guard on a setup the coarse
+   patch simply undid, and passed for the wrong reason until the premise was
+   checked.
+
 ### Exploratory remediation wave 4 — running the e2e gate (rig notes, 2026-07-31)
 
 Three things cost this wave hours of wall clock. All three are rig, not product.
@@ -657,6 +699,30 @@ Uses real `ModelProvider` + `SceneProvider` wrappers — tests actual Zustand st
 | Overflow (1) | After 51 mutations, `history.past.length` stays ≤ 50 (oldest entry dropped by `shift()`) |
 | Redo round-trip (1) | `undo()` then `redo()` returns to the later value |
 | Transaction real-store (2) | `transaction()` produces exactly 1 checkpoint for 3 ops; nested transaction produces only 1 checkpoint |
+
+---
+
+### [useHistory.pageStamp.test.tsx](../../packages/axoview-lib/src/hooks/__tests__/useHistory.pageStamp.test.tsx) · 15 tests · ✅ VALID
+
+**Production target:** `src/stores/historySequence.ts`, both stores' entry
+construction, `useHistory.undo/redo`, `useSceneActions.createView`.
+
+E1/HIST-10 (owner ruling "always navigate", 2026-07-30) and E1/HIST-04 riding it.
+Real stores — the behaviour is a stamp written by two stores, consumed by
+`useHistory`, and acted on through `useSceneActions.switchView`, so the mocked
+suite above cannot see it.
+
+| Group | What's covered |
+|---|---|
+| Navigation (7) | Undo of a delete of the ACTIVE page returns to it; an edit on another page is undone WITH the switch; redo goes to the page the action was ORIGINALLY on (§5 Q2); every step navigates, so two undos move twice (§5 Q1); an entry with NO stamp stays put (`undefined` ≠ `views[0]`); a stamp naming a page no longer in the model does not navigate; a HALF-stepped action still navigates (§5 Q3, fail-visible over fail-silent) |
+| Stamp agreement (2) — **mandatory** | Every `seq` present on both stacks carries the same `viewId` on both, with a CONTROL asserting the comparison set is non-empty; the stamp is the page active at RECORD time, and moving does not rewrite it |
+| No history from navigation (3) — **mandatory** | `setView` pushes nothing onto either stack; an undo that NAVIGATED does not GROW either past stack (the sharp one — see below); repeated undo drains in exactly the number of logical actions recorded |
+| HIST-04 (3) | `createView` records exactly one entry, symmetric with `deleteView`; Ctrl+Z after "New page" removes the page (not the action before it) and leaves the active view resolvable; redo restores it |
+
+**Why the growth assertion and not just the drain.** The failure mode is an undo
+loop, but a plant that pushes one entry per navigation still drains — each undo
+eats the one before it. Only "did not grow" catches it. The drain bound is a
+runaway guard, not the detector.
 
 ---
 

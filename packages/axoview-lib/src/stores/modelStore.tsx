@@ -6,7 +6,8 @@ import { ModelStore, Model } from 'src/types';
 import { INITIAL_DATA } from 'src/config';
 import {
   allocateHistorySequence,
-  currentHistorySequence
+  currentHistorySequence,
+  currentHistoryViewId
 } from 'src/stores/historySequence';
 
 // Enable Immer patch support — must be called once before any produce() call.
@@ -14,7 +15,29 @@ enablePatches();
 
 // `seq` stamps each entry with the logical-action sequence it belongs to so
 // useHistory can coordinate the two independent stacks (D-7, historySequence.ts).
-type HistoryEntry = { patches: Patch[]; inversePatches: Patch[]; seq: number };
+type HistoryEntry = {
+  patches: Patch[];
+  inversePatches: Patch[];
+  seq: number;
+  /**
+   * E1/HIST-10 — the page that was active when this entry's action was
+   * performed; the page on which its effect is visible. `undo`/`redo`
+   * navigates here when it is not the active page, so the effect of a step is
+   * never off-screen (owner ruling 2026-07-30, "always navigate").
+   *
+   * It is the page active at RECORD time, not the page the patches touch: a
+   * patch can touch several pages (a cross-page paste) or none (a colour
+   * change), and the question the ruling answers is "where was the user when
+   * they did this", because that is where the effect will be visible when it
+   * is reverted.
+   *
+   * `undefined` for entries with no page context — the document-level fields
+   * (title, description, colours, icons) and any pre-existing in-flight stack
+   * from before this field existed. Undefined means "do not navigate", never
+   * "navigate to views[0]".
+   */
+  viewId?: string;
+};
 
 export interface HistoryState {
   // Each entry is a diff pair rather than a full Model snapshot.
@@ -54,6 +77,14 @@ export interface ModelStoreWithHistory extends Omit<ModelStore, 'actions'> {
     // null when the respective stack is empty.
     peekUndoSeq: () => number | null;
     peekRedoSeq: () => number | null;
+    /**
+     * E1/HIST-10: the page stamped on the top undo/redo entry, or `undefined`
+     * when the stack is empty or the entry carries no page context. Peeked by
+     * `useHistory` BEFORE it steps, because a step moves the entry between the
+     * two stacks.
+     */
+    peekUndoViewId: () => string | undefined;
+    peekRedoViewId: () => string | undefined;
   };
 }
 
@@ -155,6 +186,16 @@ const initialState = () => {
       return future.length > 0 ? future[0].seq : null;
     };
 
+    const peekUndoViewId = (): string | undefined => {
+      const { past } = get().history;
+      return past.length > 0 ? past[past.length - 1].viewId : undefined;
+    };
+
+    const peekRedoViewId = (): string | undefined => {
+      const { future } = get().history;
+      return future.length > 0 ? future[0].viewId : undefined;
+    };
+
     const clearHistory = () => {
       pendingPre = null;
       pendingPreFrozen = false;
@@ -218,7 +259,15 @@ const initialState = () => {
 
               const newPast = [
                 ...state.history.past,
-                { patches, inversePatches, seq: currentHistorySequence() }
+                {
+                  patches,
+                  inversePatches,
+                  seq: currentHistorySequence(),
+                  // E1/HIST-10. Read, never derived: the scene store stamps the
+                  // same register for the same logical action, so the two
+                  // halves agree by construction.
+                  viewId: currentHistoryViewId()
+                }
               ];
               if (newPast.length > state.history.maxHistorySize)
                 newPast.shift();
@@ -249,7 +298,9 @@ const initialState = () => {
         freezePendingPre,
         unfreezePendingPre,
         peekUndoSeq,
-        peekRedoSeq
+        peekRedoSeq,
+        peekUndoViewId,
+        peekRedoViewId
       }
     };
   });

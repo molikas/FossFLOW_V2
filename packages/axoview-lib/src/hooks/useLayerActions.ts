@@ -47,13 +47,17 @@ const useLayerActions = () => {
       // stack at all. (A layer op that leaves the scene untouched still records
       // no scene entry — `set()` drops a zero-patch write — which the seq
       // coordination is built to handle.)
-      allocateHistorySequence();
+      //
+      // E1/HIST-10: layers are stored per view, so a layer op is page-scoped by
+      // construction (owner sign-off 2026-08-02, §5 Q4) — it stamps the active
+      // page like every other coordinated action.
+      allocateHistorySequence(currentViewId);
       modelStoreApi.getState().actions.saveToHistory();
       sceneStoreApi.getState().actions.saveToHistory();
       modelStoreApi.getState().actions.set(newState.model, true);
       sceneStoreApi.getState().actions.set(newState.scene, true);
     },
-    [modelStoreApi, sceneStoreApi]
+    [currentViewId, modelStoreApi, sceneStoreApi]
   );
 
   const dispatch = useCallback(

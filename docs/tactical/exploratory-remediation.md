@@ -538,7 +538,38 @@ run** — otherwise a green fix reads as seven failing new specs.
 >    correct to navigate. HIST-03 stays separate — it is a trimming bug, and
 >    pairing it would make either failure hard to attribute.
 
-- [ ] **HIST-10:** ~~brief drafted → owner sign-off~~ **SIGNED OFF 2026-08-02** (shape + all four §5 answers as recommended — see the brief's sign-off block) → implement §6 steps 1–3 as one PR, HIST-04 rides it; HIST-03 strictly separate, after.
+- [x] **HIST-10 + HIST-04 — DONE 2026-08-02.** §6 steps 1–3 as one change, exactly
+  as signed off. Entries carry an optional `viewId`, stamped at the logical
+  action's own boundary (`historySequence.ts`, beside `seq`); `useHistory` peeks
+  it before stepping and switches pages via `switchView`; `createView` runs inside
+  `withHistory`. Promoted: [`useHistory.pageStamp.test.tsx`](../../packages/axoview-lib/src/hooks/__tests__/useHistory.pageStamp.test.tsx)
+  (15) + [`undo-page-navigation.spec.ts`](../../packages/axoview-e2e/tests/undo-page-navigation.spec.ts)
+  (5). Both probes retired. **HIST-03 is untouched and still open**, strictly
+  separate as ruled.
+
+  **Three corrections to the brief, all found by implementing it.**
+  - **The stores cannot read `uiState.view`.** They are created by providers that
+    sit OUTSIDE `UiStateProvider`, so §3's "both stamped from the same
+    `uiState.view` at the same moment" is not implementable as written. Both now
+    read one logical-action register instead — which is *stronger*: the halves are
+    stamped from a single value and cannot disagree even in principle. (§3 also
+    says each store constructs entries at two sites; there is one. The two
+    branches it describes are the sequence allocation.)
+  - **§4's step 4 `resyncScene()` is wrong on the navigating path.** It is a
+    same-page repair closed over the OLD active view; run after a navigation it
+    checks the previous page's connectors against the new page's scene. The
+    navigating path uses `switchView` — the primitive a tab click uses — whose
+    SYNC_SCENE is a full deterministic rebuild that subsumes it. `resyncScene()`
+    still runs, unchanged, whenever no navigation happens.
+  - **The `model.views has it` guard is nearly unreachable through the public
+    API**, because every inverse patch replaces the whole `views` array (HIST-06):
+    an undo that steps past a page removal *restores* the page. The reachable case
+    is HIST-03's half-step, and the test constructs it deliberately.
+
+  **Unplanned: HIST-09 / D-9 closed as a side effect** — the cross-page phantom
+  scene connector cannot form once the step lands on the page the entry belongs to
+  and SYNC_SCENEs it. Promoted (orphan-count assertion, red-verified) before the
+  probe was retired, since that was the only D-9 coverage in the repo.
 - [ ] **GPU-13:** ~~brief drafted → owner sign-off~~ **SIGNED OFF 2026-08-02** — Option A, measurement-first (the measurement selects sorted-draw vs depth-two-pass **inside** the merged context; it never un-merges); selection **order-preserving**; connector labels **out of scope** with the documented inconsistency + follow-up trigger → run §4 measurements → write the dated ADR 0038 §8 amendment → implement.
 
 ### Wave 6 — Program build-out (should-have)

@@ -104,8 +104,9 @@ export const useSceneActions = () => {
     // saves would overwrite it and lose the original starting state.
     if (session.dragInProgress) return;
     // One logical action across both stores — allocate a single shared seq so
-    // its model+scene entries stamp the same value (D-7).
-    allocateHistorySequence();
+    // its model+scene entries stamp the same value (D-7), and record the page
+    // it is being performed on so undo/redo can navigate back to it (HIST-10).
+    allocateHistorySequence(currentViewId);
     // E1/HIST-02: a new action branches history, so BOTH futures are stale. The
     // store whose patch set for this action turns out to be empty never pushes
     // an entry, and so never cleared its own — leaving `canRedo` true and a
@@ -114,7 +115,7 @@ export const useSceneActions = () => {
     sceneStoreApi.getState().actions.clearFuture();
     modelStoreApi.getState().actions.saveToHistory();
     sceneStoreApi.getState().actions.saveToHistory();
-  }, [session, modelStoreApi, sceneStoreApi]);
+  }, [session, currentViewId, modelStoreApi, sceneStoreApi]);
 
   /**
    * Arm the undo snapshot for one logical action and run its reducer. If the
@@ -147,15 +148,16 @@ export const useSceneActions = () => {
     if (session.dragInProgress) return;
     session.dragInProgress = true;
     // The whole drag is one logical action — allocate a single shared seq so the
-    // model+scene commit entries stamp the same value (D-7).
-    allocateHistorySequence();
+    // model+scene commit entries stamp the same value (D-7), on the page the
+    // drag started on (HIST-10).
+    allocateHistorySequence(currentViewId);
     modelStoreApi.getState().actions.clearFuture(); // E1/HIST-02
     sceneStoreApi.getState().actions.clearFuture();
     modelStoreApi.getState().actions.saveToHistory();
     sceneStoreApi.getState().actions.saveToHistory();
     modelStoreApi.getState().actions.freezePendingPre();
     sceneStoreApi.getState().actions.freezePendingPre();
-  }, [modelStoreApi, sceneStoreApi]);
+  }, [session, currentViewId, modelStoreApi, sceneStoreApi]);
 
   const commitDragTransaction = useCallback(() => {
     if (!session.dragInProgress) return;
@@ -812,32 +814,51 @@ export const useSceneActions = () => {
     [modelStoreApi, changeView]
   );
 
+  /**
+   * E1/HIST-04 — creating a page is undoable, and became safe to make undoable
+   * only once entries carry a page stamp (HIST-10).
+   *
+   * It used to write `skipHistory` with no `saveToHistoryBeforeChange`, so
+   * "New page" recorded nothing: the next Ctrl+Z reverted whatever came BEFORE
+   * it while the new page stayed, and `deleteView` — which does record — made
+   * the pair asymmetric.
+   *
+   * Recording it on its own would have been worse, which is why wave 1 held it.
+   * Every entry's inverse patch replaces the whole `views` array (HIST-06), so
+   * an undo that removes the just-created page leaves `uiState.view` pointing
+   * at a deleted id — E3/SCN-09's dangling active view, which every reader
+   * papers over by falling back to `views[0]`. `withHistory` arms the snapshot
+   * BEFORE `changeView` moves us, so the entry is stamped with the page the
+   * user came from and the undo has somewhere correct to navigate.
+   */
   const createView = useCallback(
     (newViewPartial?: Partial<View>) => {
-      const newViewId = generateId();
-      const views = modelStoreApi.getState().views;
-      const newState = reducers.view({
-        action: 'CREATE_VIEW',
-        payload: {
-          ...VIEW_DEFAULTS,
-          ...newViewPartial,
-          // D13 — interpolate {count} via i18n, never concatenate. The number
-          // comes from the highest existing suffix, not from `views.length`:
-          // deleting a page in the middle used to make the next one duplicate a
-          // name already on screen (E3/SCN-13).
-          name:
-            newViewPartial?.name ??
-            nextPageName(
-              t('pageName'),
-              views.map((v) => v.name)
-            )
-        },
-        ctx: { viewId: newViewId, state: getState() }
+      return withHistory(() => {
+        const newViewId = generateId();
+        const views = modelStoreApi.getState().views;
+        const newState = reducers.view({
+          action: 'CREATE_VIEW',
+          payload: {
+            ...VIEW_DEFAULTS,
+            ...newViewPartial,
+            // D13 — interpolate {count} via i18n, never concatenate. The number
+            // comes from the highest existing suffix, not from `views.length`:
+            // deleting a page in the middle used to make the next one duplicate
+            // a name already on screen (E3/SCN-13).
+            name:
+              newViewPartial?.name ??
+              nextPageName(
+                t('pageName'),
+                views.map((v) => v.name)
+              )
+          },
+          ctx: { viewId: newViewId, state: getState() }
+        });
+        setState(newState);
+        changeView(newViewId, newState.model);
       });
-      setState(newState);
-      changeView(newViewId, newState.model);
     },
-    [getState, setState, modelStoreApi, changeView, t]
+    [getState, setState, withHistory, modelStoreApi, changeView, t]
   );
 
   const deleteView = useCallback(

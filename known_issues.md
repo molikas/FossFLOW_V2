@@ -670,7 +670,7 @@ op now carries its own seq, so `useHistory.undo` stops dragging the previous
 action's scene entry down with it. Promoted regression:
 [`useLayerActions.history.test.tsx`](packages/axoview-lib/src/hooks/__tests__/useLayerActions.history.test.tsx).
 
-## Creating a page is not undoable, and Ctrl+Z after it silently reverts the previous action
+## Creating a page is not undoable, and Ctrl+Z after it silently reverts the previous action — FIXED
 
 **Found by:** exploratory campaign HIST-04
 
@@ -696,11 +696,19 @@ that every reader papers over by falling back to `views[0]`. Measured e2e in
 
 **Workaround:** delete the page manually (that *is* undoable).
 
-**Status:** Open. Fix direction: add `saveToHistoryBeforeChange()` to `createView`,
-matching `deleteView`. Note the related open question of whether undoing a page
-create/delete should also restore `uiState.view` — it is not part of either
-history stack (see HIST-10). Repro:
-[`hist-01-04.explore.test.tsx`](packages/axoview-lib/src/__explore__/E1/hist-01-04.explore.test.tsx).
+**Status:** Fixed on `remediation/exploratory-campaign` (2026-08-02, wave 5) —
+`createView` now runs inside `withHistory`, which arms the snapshot *before*
+`changeView` moves the user, so the recorded entry is stamped with the page the
+user created from.
+
+The fix had to wait for HIST-10 and could not be the one-line
+`saveToHistoryBeforeChange()` this entry originally proposed: recording the create
+on its own would have made the "worse, end-to-end" paragraph above the *normal*
+case rather than an edge one — the undo removes the page and leaves `uiState.view`
+on its id. The page stamp is what gives that undo somewhere correct to go. Promoted
+regressions: [`useHistory.pageStamp.test.tsx`](packages/axoview-lib/src/hooks/__tests__/useHistory.pageStamp.test.tsx)
+and [`undo-page-navigation.spec.ts`](packages/axoview-e2e/tests/undo-page-navigation.spec.ts);
+the `__explore__` probe is retired.
 
 ## Redo stays armed on the scene stack after a new action, resurrecting an undone connector's path
 

@@ -5,7 +5,8 @@ import { enablePatches, produceWithPatches, applyPatches, Patch } from 'immer';
 import { SceneStore, Scene } from 'src/types';
 import {
   allocateHistorySequence,
-  currentHistorySequence
+  currentHistorySequence,
+  currentHistoryViewId
 } from 'src/stores/historySequence';
 
 // enablePatches() is idempotent — safe to call in multiple modules.
@@ -13,7 +14,16 @@ enablePatches();
 
 // `seq` stamps each entry with the logical-action sequence it belongs to so
 // useHistory can coordinate the two independent stacks (D-7, historySequence.ts).
-type HistoryEntry = { patches: Patch[]; inversePatches: Patch[]; seq: number };
+// `viewId` stamps the page the action was performed on (E1/HIST-10) — the same
+// shape modelStore declares, and deliberately stamped from the same register so
+// the two halves of one logical action always agree. See modelStore.tsx for the
+// full contract.
+type HistoryEntry = {
+  patches: Patch[];
+  inversePatches: Patch[];
+  seq: number;
+  viewId?: string;
+};
 
 export interface SceneHistoryState {
   past: HistoryEntry[];
@@ -54,6 +64,9 @@ export interface SceneStoreWithHistory extends Omit<SceneStore, 'actions'> {
     // null when the respective stack is empty.
     peekUndoSeq: () => number | null;
     peekRedoSeq: () => number | null;
+    /** E1/HIST-10: the page stamped on the top undo/redo entry. See modelStore. */
+    peekUndoViewId: () => string | undefined;
+    peekRedoViewId: () => string | undefined;
   };
 }
 
@@ -161,6 +174,16 @@ const initialState = () => {
       return future.length > 0 ? future[0].seq : null;
     };
 
+    const peekUndoViewId = (): string | undefined => {
+      const { past } = get().history;
+      return past.length > 0 ? past[past.length - 1].viewId : undefined;
+    };
+
+    const peekRedoViewId = (): string | undefined => {
+      const { future } = get().history;
+      return future.length > 0 ? future[0].viewId : undefined;
+    };
+
     const clearHistory = () => {
       pendingPre = null;
       pendingPreFrozen = false;
@@ -225,7 +248,14 @@ const initialState = () => {
 
               const newPast = [
                 ...state.history.past,
-                { patches, inversePatches, seq: currentHistorySequence() }
+                {
+                  patches,
+                  inversePatches,
+                  seq: currentHistorySequence(),
+                  // E1/HIST-10 — same register the model store reads, so the
+                  // two halves of one action carry the same page.
+                  viewId: currentHistoryViewId()
+                }
               ];
               if (newPast.length > state.history.maxHistorySize)
                 newPast.shift();
@@ -256,7 +286,9 @@ const initialState = () => {
         freezePendingPre,
         unfreezePendingPre,
         peekUndoSeq,
-        peekRedoSeq
+        peekRedoSeq,
+        peekUndoViewId,
+        peekRedoViewId
       }
     };
   });
