@@ -61,11 +61,22 @@ export const promotedIconBox = async (page: Page, id: string) => {
  * same resolution the GPU emitter uses (`webgl/scene/nodeEmitter.ts`), which is
  * what makes this a fair reading of "what does the canvas say?".
  */
-export const promotedLabelText = async (page: Page, id: string) => {
+export const promotedLabelText = async (
+  page: Page,
+  id: string,
+  timeout = 2_000
+) => {
   await promoteNode(page, id);
-  const label = page.locator(`[data-drag-id="${id}"] [data-testid="node-label"]`).first();
-  await label.waitFor({ state: 'visible', timeout: 5_000 });
-  const text = (await label.innerText()).trim();
+  const label = page
+    .locator(`[data-drag-id="${id}"] [data-testid="node-label"]`)
+    .first();
+  // `attached` + `textContent`, NOT `visible` + `innerText`: the node shell is a
+  // zero-size positioned anchor with the chip transformed out of it, so
+  // Playwright does not call the chip visible — which is why the spec this
+  // replaced already waited for `attached`. `innerText` needs layout and would
+  // come back empty.
+  await label.waitFor({ state: 'attached', timeout });
+  const text = ((await label.textContent()) ?? '').trim();
   await unpromoteNode(page);
   return text;
 };

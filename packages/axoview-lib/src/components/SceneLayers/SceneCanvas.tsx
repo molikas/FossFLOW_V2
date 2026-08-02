@@ -478,6 +478,18 @@ export const SceneCanvas = memo(
       // Published on data-build-count: the "no per-frame CPU work" invariant is
       // that this stays FLAT during a pan/zoom. The perf harness asserts it.
       let buildCount = 0;
+      /**
+       * The icon-readiness verdict of the last BUILD, held until the frame that
+       * carries it has actually been painted.
+       *
+       * `data-all-icons-drawn` gates image export (ADR 0025 / QA #10): the export
+       * dialog polls it and then captures the canvas. Writing it inside
+       * `buildInstances` published "every icon is on screen" while the draw call
+       * for that build had not been issued yet — a window in which a capture sees
+       * the PREVIOUS frame and drops the icons. The signal is a claim about the
+       * paint, so it is written after `render()`.
+       */
+      let allIconsDrawnPending = true;
 
       const buildInstances = (b: SpriteBatch) => {
         const ui = uiApi.getState();
@@ -641,7 +653,10 @@ export const SceneCanvas = memo(
         canvas.dataset.linkedLabelsDrawn = String(
           nodeEmitter.stats.linkedLabelsDrawn
         );
-        canvas.dataset.allIconsDrawn = String(nodeEmitter.stats.allIconsDrawn);
+        // NOT `data-all-icons-drawn` — see `pendingAllIconsDrawn` below. Every
+        // other counter describes the BUILD and is honest the moment the build
+        // ends; icon readiness is a claim about the PAINT.
+        allIconsDrawnPending = nodeEmitter.stats.allIconsDrawn;
         canvas.dataset.buildCount = String(++buildCount);
         publishAtlasStats(canvas, b);
         lastBuiltDrawLabels = drawLabels ? 1 : 0;
@@ -676,6 +691,9 @@ export const SceneCanvas = memo(
         const originYDev = (H / 2 + scroll.position.y) * dpr;
         b.render(bw, bh, zoom * dpr, originXDev, originYDev, counterScale);
         canvas.dataset.labelScale = String(counterScale);
+        // Now — and only now — is it true that a frame was painted with every
+        // available icon. See `allIconsDrawnPending`.
+        canvas.dataset.allIconsDrawn = String(allIconsDrawnPending);
       };
 
       const draw = () => {
