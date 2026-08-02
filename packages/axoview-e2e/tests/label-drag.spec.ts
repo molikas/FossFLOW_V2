@@ -85,8 +85,15 @@ async function dragElement(page: Page, selector: string, dy: number) {
   await page.mouse.up();
 }
 
+// R4/RND-13/15: BOTH label-drag paths are the invisible hit proxy now.
+// `canvas-label-chip` is the DOM `<Label>`'s reposition handle, which only
+// exists on a PROMOTED node — and selection stopped promoting (ADR 0038 §8), so
+// a selected node's label is grabbed exactly the way an unselected one's is.
+// That the two tests below now drive the same surface is the point, not a
+// duplication: one pins the undo/reload contract, the other that grabbing a
+// label does not select.
 const dragLabel = (page: Page, dy: number) =>
-  dragElement(page, '[data-axoview-id="canvas-label-chip"]', dy);
+  dragElement(page, '[data-axoview-id="canvas-label-hit"]', dy);
 
 test.describe('Label drag — T6 (ADR 0024)', () => {
   test('drag the label below the node; it is one undo entry and persists across reload', async ({

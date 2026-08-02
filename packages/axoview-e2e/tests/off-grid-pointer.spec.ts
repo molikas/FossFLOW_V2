@@ -28,6 +28,7 @@
 import { canvasReadyTest as test, expect } from '../fixtures/app.fixture';
 import { byAxoviewId } from '../helpers/selectors';
 import { getViewItemCount } from '../helpers/store';
+import { promotedIconBox } from '../helpers/nodeOverlay';
 import {
   centreOf,
   closeElementsPanel,
@@ -48,7 +49,15 @@ type Locator = ReturnType<Page['locator']>;
 /** The deliberately non-tile-multiple nudge, in SCREEN px. */
 const NUDGE: Point = { x: 37, y: 11 };
 
-/** Place one node with global snap OFF, select it, and hand back its icon box. */
+/**
+ * Place one node with global snap OFF and select it by clicking where it is
+ * DRAWN — which is itself a hit-test assertion, and the one this file is about.
+ *
+ * R4/RND-13/15: selecting no longer mounts a DOM overlay (ADR 0038 §8), so the
+ * click is verified against `itemControls` rather than against an element
+ * appearing, and the icon box comes from `helpers/nodeOverlay` — see there for
+ * why measuring the overlay is still measuring the drawn position.
+ */
 async function placeAndSelect(page: Page) {
   await setSnapToGrid(page, false);
   await placeIconRealMouse(page, { x: 460, y: 320 });
@@ -58,12 +67,18 @@ async function placeAndSelect(page: Page) {
   const [item] = await getOffGridItems(page);
   const at = await drawnClientPoint(page, item);
   await page.mouse.click(at.x, at.y);
-  // The node shell is a zero-size positioned anchor; its <img> is the drawn icon
-  // and the box a user sees (the handle canvas-node-render.spec uses too).
-  const dom: Locator = page.locator(`[data-drag-id="${item.id}"] img`).first();
-  await dom.waitFor({ state: 'visible', timeout: 5_000 });
-  return { id: item.id, dom };
+  await expect
+    .poll(() => selectedItemId(page), { timeout: 5_000 })
+    .toBe(item.id);
+  return { id: item.id };
 }
+
+/** The id of the single-selected ITEM, or null. */
+const selectedItemId = (page: Page) =>
+  page.evaluate(() => {
+    const ic = (window as any).__axoview__.ui.getState().itemControls;
+    return ic && ic.type === 'ITEM' ? ic.id : null;
+  });
 
 /**
  * Nudge the selected node by NUDGE screen px; return the icon box either side
@@ -74,9 +89,8 @@ async function placeAndSelect(page: Page) {
  * ABOVE its tile, so the image centre is outside the tile footprint and a press
  * there would start a lasso instead of a move.
  */
-async function nudge(page: Page, id: string, dom: Locator) {
-  const before = await dom.boundingBox();
-  if (!before) throw new Error('node has no bounding box');
+async function nudge(page: Page, id: string) {
+  const before = await promotedIconBox(page, id);
 
   const start = (await getOffGridItems(page)).find((i) => i.id === id)!;
   const grab = await drawnClientPoint(page, start);
@@ -86,13 +100,11 @@ async function nudge(page: Page, id: string, dom: Locator) {
   const drawn = await drawnClientPoint(page, moved);
   const bare = await drawnClientPoint(page, { ...moved, offset: undefined });
 
-  // A drag drops the single-selection promotion, so the node is back on the
-  // canvas. Click it at its DRAWN position to bring the DOM box back — which is
-  // itself a hit-test assertion.
+  // Click it at its DRAWN position — a hit-test assertion in itself — then
+  // measure the icon again.
   await page.mouse.click(drawn.x, drawn.y);
-  await dom.waitFor({ state: 'visible', timeout: 5_000 });
-  const after = await dom.boundingBox();
-  if (!after) throw new Error('node lost its bounding box after the drag');
+  await expect.poll(() => selectedItemId(page), { timeout: 5_000 }).toBe(id);
+  const after = await promotedIconBox(page, id);
 
   return { before, after, drawn, bare, moved };
 }
@@ -109,8 +121,8 @@ test.describe('Off-grid pointer — the sub-tile regime (ADR 0023)', () => {
     app
   }) => {
     void app;
-    const { id, dom } = await placeAndSelect(page);
-    const { before, after, moved } = await nudge(page, id, dom);
+    const { id } = await placeAndSelect(page);
+    const { before, after, moved } = await nudge(page, id);
 
     // The whole point: the element sits where the pointer left it. A snap-back
     // would round this to a whole tile (~46 × 27 screen px at the default zoom)
@@ -131,8 +143,8 @@ test.describe('Off-grid pointer — the sub-tile regime (ADR 0023)', () => {
     app
   }) => {
     void app;
-    const { id, dom } = await placeAndSelect(page);
-    const { drawn, bare } = await nudge(page, id, dom);
+    const { id } = await placeAndSelect(page);
+    const { drawn, bare } = await nudge(page, id);
     await clearSelection(page, bare);
 
     // HOVER at the drawn position raises the outline (see `hoverAt` for why the
@@ -198,9 +210,12 @@ test.describe('Off-grid pointer — the sub-tile regime (ADR 0023)', () => {
     app
   }) => {
     void app;
-    const { id, dom } = await placeAndSelect(page);
-    const { drawn, bare } = await nudge(page, id, dom);
-    // The name chip's hit proxy only mounts for UNSELECTED nodes.
+    const { id } = await placeAndSelect(page);
+    const { drawn, bare } = await nudge(page, id);
+    // R4/RND-13/15: the name chip's hit proxy mounts for every node the bulk
+    // draws — which, since selection stopped promoting, includes the selected
+    // one. Clearing the selection is kept because the rest of the case is about
+    // the RESTING chip.
     await clearSelection(page, bare);
 
     const chip = page.locator(`[data-label-hit-id="${id}"]`);

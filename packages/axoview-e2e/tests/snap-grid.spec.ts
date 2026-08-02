@@ -27,6 +27,7 @@ import { canvasReadyTest as test, expect } from '../fixtures/app.fixture';
 import { CanvasPOM, CanvasPoint } from '../pom/CanvasPOM';
 import { byAxoviewId, byLibTestId } from '../helpers/selectors';
 import { getViewItemCount, waitForDebugBridge } from '../helpers/store';
+import { promotedIconBox } from '../helpers/nodeOverlay';
 import {
   closeElementsPanel,
   drawnClientPoint,
@@ -343,12 +344,13 @@ test.describe('T8 — off-grid positioning & per-item collision (ADR 0023)', () 
 
     const moved = (await getOffGridItems(page))[0];
     const drawnBefore = await drawnClientPoint(page, moved);
-    // Select it so it is promoted to DOM, and measure the box the user sees.
+    // Click where it is DRAWN — a hit-test assertion in itself — then measure the
+    // box the user sees. R4/RND-13/15: selection no longer promotes the node into
+    // the DOM (ADR 0038 §8), so the measurement goes through
+    // `helpers/nodeOverlay`; see there for why the overlay is still the drawn
+    // position.
     await page.mouse.click(drawnBefore.x, drawnBefore.y);
-    const icon = page.locator(`[data-drag-id="${moved.id}"] img`).first();
-    await icon.waitFor({ state: 'visible', timeout: 5_000 });
-    const boxBefore = await icon.boundingBox();
-    if (!boxBefore) throw new Error('node has no bounding box before reload');
+    const boxBefore = await promotedIconBox(page, moved.id);
 
     // Persist exactly what an explicit Save writes, then reload — boot
     // re-validates through viewItemSchema, so this also proves `offset` survives
@@ -406,10 +408,7 @@ test.describe('T8 — off-grid positioning & per-item collision (ADR 0023)', () 
     await page.waitForTimeout(300);
     const drawnAfter = await drawnClientPoint(page, restored);
     await page.mouse.click(drawnAfter.x, drawnAfter.y);
-    const iconAfter = page.locator(`[data-drag-id="${restored.id}"] img`).first();
-    await iconAfter.waitFor({ state: 'visible', timeout: 5_000 });
-    const boxAfter = await iconAfter.boundingBox();
-    if (!boxAfter) throw new Error('node has no bounding box after reload');
+    const boxAfter = await promotedIconBox(page, restored.id);
 
     // The icon's horizontal centre sits on the drawn point.
     expect(

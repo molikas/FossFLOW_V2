@@ -20,6 +20,7 @@ import { canvasReadyTest as test, expect } from '../fixtures/app.fixture';
 import { CanvasPOM } from '../pom/CanvasPOM';
 import { placeIconViaMouse } from '../helpers/place';
 import { getViewTextBoxCount, getModelHistoryLength } from '../helpers/store';
+import { promotedLabelText } from '../helpers/nodeOverlay';
 
 type Page = import('@playwright/test').Page;
 
@@ -283,9 +284,10 @@ test.describe('The node label↔name decouple holds before the first reload', ()
         .getState()
         .actions.setItemControls({ type: 'ITEM', id }, { openPanel: false });
     }, item!.id);
-    const nodeLabel = page.locator('[data-testid="node-label"]').first();
-    await nodeLabel.waitFor({ state: 'attached', timeout: 5_000 });
-    expect(((await nodeLabel.textContent()) ?? '').trim()).toBe('Untitled');
+    // R4/RND-13/15: selection no longer mounts the DOM overlay (ADR 0038 §8), so
+    // reading the drawn text goes through the rename session. `<Node>` resolves
+    // it as `label ?? name` — the same resolution the GPU emitter uses.
+    expect(await promotedLabelText(page, item!.id)).toBe('Untitled');
 
     // Exactly what LayersPanel.handleItemRename does for an ITEM row.
     await page.evaluate((id: string) => {
@@ -307,6 +309,6 @@ test.describe('The node label↔name decouple holds before the first reload', ()
     expect(after).toEqual({ name: 'Renamed identity', label: 'Untitled' });
     // The canvas text did NOT follow the identity rename — the ADR 0032
     // amendment's contract, now true before the first reload as well as after.
-    expect(((await nodeLabel.textContent()) ?? '').trim()).toBe('Untitled');
+    expect(await promotedLabelText(page, item!.id)).toBe('Untitled');
   });
 });
