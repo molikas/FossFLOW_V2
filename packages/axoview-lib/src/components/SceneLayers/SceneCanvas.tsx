@@ -20,8 +20,7 @@ import { useCanvasMode } from 'src/contexts/CanvasModeContext';
 import { useLayerContext } from 'src/hooks/useLayerContext';
 import {
   SceneEntityKind,
-  compareSceneDrawOrder,
-  findLayer
+  compareSceneDrawOrder
 } from 'src/utils/renderOrder';
 import { ChipColors, LabelChipLayout } from 'src/utils/labelChip';
 import { computeBackingStore } from 'src/utils/renderTarget';
@@ -404,8 +403,12 @@ export const SceneCanvas = memo(
         // `visibleNow.size`, since an empty set also means "everything is on a
         // hidden layer" and must stay hidden.
         const layered = layersNow.length > 0;
+        // id → order once, rather than `findLayer`'s linear scan per entity: this
+        // loop now walks EVERY bulk entity rather than one type's worth, so an
+        // O(entities × layers) lookup is a cost the merge would have introduced.
+        const orderByLayerId = new Map(layersNow.map((l) => [l.id, l.order]));
         const layerOrderOf = (layerId: string | undefined) =>
-          findLayer(layerId, layersNow)?.order ?? 0;
+          (layerId ? orderByLayerId.get(layerId) : undefined) ?? 0;
 
         const units: DrawUnit[] = [];
         for (let i = rects.length - 1; i >= 0; i -= 1) {
