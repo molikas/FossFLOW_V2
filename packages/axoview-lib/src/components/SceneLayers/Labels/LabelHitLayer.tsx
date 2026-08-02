@@ -17,7 +17,6 @@ import {
   LABEL_CHIP_PAD_Y,
   LABEL_CHIP_RADIUS
 } from 'src/utils/labelChip';
-import { computeLabelCounterScale } from 'src/utils/labelScale';
 import { getRenderedTilePosition } from 'src/utils/renderedGeometry';
 import {
   LABEL_DRAG_SLOP_PX,
@@ -27,8 +26,7 @@ import {
 } from 'src/utils/labelPointerContract';
 import {
   LABEL_BASE_FONT_PX,
-  LABEL_MIN_READABLE_PX,
-  LABEL_MAX_COUNTER_SCALE
+  labelCounterScaleFor
 } from 'src/config/labelSettings';
 
 // ---------------------------------------------------------------------------
@@ -291,20 +289,34 @@ export const LabelHitLayer = ({ labels }: Props) => {
   // --axoview-label-scale on a display:contents wrapper; each proxy / editor
   // composes it into `transform: scale(...)`. No-op (1) when the toggle is off.
   const counterScaleRef = useRef<HTMLDivElement>(null);
+  /**
+   * R5/OVL-02 — the factor is PER PROXY now, not one value on the wrapper.
+   *
+   * It used to be a single `--axoview-label-scale` published on this
+   * `display: contents` wrapper and inherited by every proxy, which was exactly
+   * right while the factor was computed from the module-default font size and
+   * cannot survive it becoming per-label. Each proxy carries its own font size
+   * in `data-label-font`, and the subscription walks them — so this keeps the
+   * property that matters: pan/zoom updates the DOM directly and never
+   * re-renders React (the §8.8 pattern).
+   *
+   * The proxies must track the CHIPS exactly; a factor that moved on one side
+   * alone would put the grab box somewhere other than the thing it proxies,
+   * which is R5/OVL-12 reintroduced from the other side.
+   */
   const applyCounterScale = useCallback(() => {
-    if (!counterScaleRef.current) return;
+    const root = counterScaleRef.current;
+    if (!root) return;
     const { zoom, readableLabels } = uiStoreApi.getState();
-    counterScaleRef.current.style.setProperty(
-      '--axoview-label-scale',
-      String(
-        computeLabelCounterScale(zoom, {
-          enabled: readableLabels,
-          baseFontPx: LABEL_BASE_FONT_PX,
-          minReadablePx: LABEL_MIN_READABLE_PX,
-          maxCounterScale: LABEL_MAX_COUNTER_SCALE
-        })
-      )
-    );
+    const proxies = root.querySelectorAll<HTMLElement>('[data-label-font]');
+    for (let i = 0; i < proxies.length; i++) {
+      const el = proxies[i];
+      const font = Number(el.dataset.labelFont);
+      el.style.setProperty(
+        '--axoview-label-scale',
+        String(labelCounterScaleFor(zoom, readableLabels, font))
+      );
+    }
   }, [uiStoreApi]);
   useEffect(() => {
     applyCounterScale();
@@ -561,6 +573,9 @@ export const LabelHitLayer = ({ labels }: Props) => {
             key={label.id}
             data-axoview-id="canvas-label-hit"
             data-label-hit-id={label.id}
+            // R5/OVL-02: the counter-scale subscription reads this to compute
+            // THIS proxy's factor, so the grab box tracks its own chip.
+            data-label-font={fontSize}
             // View mode is HOVER-ONLY: no press/double-click/context handlers
             // and no stopPropagation, so presses bubble to the window-level pan
             // handlers (usePanHandlers) — panning keeps working over a chip.

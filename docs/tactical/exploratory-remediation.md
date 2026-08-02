@@ -342,9 +342,9 @@ run** — otherwise a green fix reads as seven failing new specs.
 >
 > | | |
 > |---|---|
-> | **Committed** | F3 styling (`3c5c8a30`) · F1 text/label + E2/RED-06 + F4 layers incl. LAY-05/RED-13 + the lane rig gate (`77ced974`) |
-> | **Gate** | full Playwright **265 passed, exit 0, 36.7 min** over the F1/F4 product code; lib **185 suites / 2171**, app **40 / 431**; tsc, knip, check-cycles (47) and lint:docs clean |
-> | **Not started** | F5 icons · E2 reducer remainder (RED-01/02/07/08/14/15) · F2 annotation/view · A4 FileExplorer · A5 chrome · OVL-02 |
+> | **Committed** | F3 styling (`3c5c8a30`) · F1 text/label + E2/RED-06 + F4 layers incl. LAY-05/RED-13 + the lane rig gate (`77ced974`) · F5 icons (`9e657cec`) · E2 reference-integrity remainder + CLIP-14 (`e8b6d282`) · F2 annotation/view (`c326a4ff`) · A4 FileExplorer + FEX-01 re-derivation (`a70f1e6f`) · A5 chrome (`da2457ba`) · OVL-02 |
+> | **Gate** | full Playwright **274 passed, 38.2 min** after F2 (the machine was NOT 4x slow that day — do not read wave 3's 36.7 min as a like-for-like baseline either way); a second full run after OVL-02, which changes rendered output for styled labels; lib **195 suites / 2309**, app **50 / 555**; tsc + lint clean |
+> | **Not started** | — wave 4 is complete; wave 5 is design-gated on the two briefs below |
 >
 > **Ordering for the remainder (owner, 2026-07-31).** F5 → E2 remainder → F2 →
 > A4 → A5 in root-cause cluster order, then **OVL-02 last-but-one** so its full
@@ -480,8 +480,31 @@ run** — otherwise a green fix reads as seven failing new specs.
 > e2e lane and every other jest area are green.
 
 ### Wave 5 — Design-gated larges (rulings 2026-07-30)
-- [ ] **HIST-10:** design note for page-stamped history entries (entry shape touches both stores) → implement always-navigate undo.
-- [ ] **GPU-13:** ADR 0038 amendment + design pass for cross-type z-depth (single canvas vs per-entity depth) → owner sign-off → implement.
+
+> **RESUME POINT (2026-08-02).** Wave 4 is complete and committed. Both briefs
+> are **drafted and awaiting owner sign-off — no implementation has started, by
+> instruction.** Read them before writing any code:
+>
+> - [`wave5-brief-gpu-13-cross-type-depth.md`](wave5-brief-gpu-13-cross-type-depth.md)
+> - [`wave5-brief-hist-10-page-stamped-entries.md`](wave5-brief-hist-10-page-stamped-entries.md)
+>
+> **Two things in the briefs change the shape of the task and should be read as
+> findings, not as options:**
+>
+> 1. **GPU-13's "single canvas vs per-entity depth" is not a choice between two
+>    alternatives.** Four separate WebGL contexts do not share a depth buffer, so
+>    per-entity depth cannot order across them at all — it is a sub-decision
+>    *inside* a merged canvas, not an alternative to merging. The brief
+>    recommends the merge, with a draw-call batching measurement as the gate on
+>    that recommendation.
+> 2. **HIST-10 must land before HIST-04, not beside it.** Making `createView`
+>    undoable on its own leaves `uiState.view` pointing at a deleted page
+>    (E3/SCN-09's shape); the page stamp is what gives that undo somewhere
+>    correct to navigate. HIST-03 stays separate — it is a trimming bug, and
+>    pairing it would make either failure hard to attribute.
+
+- [ ] **HIST-10:** brief drafted → **owner sign-off** → implement always-navigate undo, then HIST-04 rides it.
+- [ ] **GPU-13:** brief drafted (ADR 0038 §8 amendment skeletoned) → **owner sign-off** → implement.
 
 ### Wave 6 — Program build-out (should-have)
 - [ ] Write `.claude/skills/explore.md`: APPROACH distilled + COLDSTART flow + rig-traps appendix + delta-mode area selection (`git diff` vs last campaign end commit); regenerate-baseline step.
@@ -495,6 +518,11 @@ run** — otherwise a green fix reads as seven failing new specs.
   - **Wave 4: machine speed is a confounder, not a constant.** 2026-07-31 ran ~4× slower than wave 3; a spec racing an internal retry/timeout budget flips red with no code change. Raise the timeout per-run on the CLI, never in the committed config, and check a suspicious red at a raised timeout before diagnosing it.
   - **Wave 4, GATE AUTHORING: an exemption must name the permitted CALL SITE, never the FILE.** The lean-save class gate exempted `leanModel.ts` from its duplicate scan, because the one permitted composition legitimately lives there — and a duplicate planted in that same file passed clean on the first red-check. A file-level exemption is a hole shaped exactly like the bug, since the duplicate's natural home *is* the file that already owns the concern. Name `applyIconStrip`, not `leanModel.ts`. Corollary: **red-verify a gate by planting the defect where it actually lived**, not in a convenient neighbouring file.
   - **Wave 4, FLIP RULE: promote what the probe PROVED, not what the fix TOUCHED.** Retiring `red-13-15.explore.spec.ts` would have left LAY-05/RED-13 with a reducer test and nothing else — and the ruling was *"the choice must be surfaced to the user"*, which no reducer test can fail on. Before deleting a probe, ask what it covered that the promoted regression does not. Sibling case in the same pass: RED-15's unit test proves the filter, and only the e2e proves the invalidation is *wired* — a unit test cannot fail if the effect is deleted.
+  - **Wave 4, PROBE AUTHORING — four flavours of "cannot flip", all found in one wave.** A probe is only a flip detector if it exercises the SHIPPED path with the OUTCOME asserted. These four all passed review and none could ever have gone green:
+    1. **Transcribes** the code under test (F2/VIEW-04 copied a `useCallback`'s gate into the test file) — it asserts its own copy. Fix: extract the predicate; the promoted regression then imports what ships.
+    2. **Models** the callers instead of calling them (R5/OVL-02 called the pure math helper with the constant the callers pass) — it can only ever restate the bug. Fix: call the consumer, or gate the call sites by source scan.
+    3. **Pins a MECHANISM** rather than an outcome (A4/FEX-08 demanded a specific call ordering; A4/FEX-09 demanded a delete; A5/CHR-05 demanded that `ready` settle) — a legitimate alternative fix reads as no fix. Fix: assert what the user sees.
+    4. **Depends on a signal the runner cannot produce** (A5/CHR-07 keys off a build-time `NODE_ENV` jest sets to `'test'`). Fix: drive the signal explicitly, and verify where it matters — here, that the production bundle no longer contains the string at all.
   - **Wave 4, PROBE AUTHORING: a probe that pins a MECHANISM cannot flip on a legitimate alternative fix.** Two A4 entries recorded two acceptable fix directions; the fixes took the second one each time, and the probes — which asserted the first one's mechanism (`order` must not contain the canvas reset; the colliding sibling must be deleted) — stayed red as though nothing had been fixed. Assert the OUTCOME the user sees. This is the counterpart to the transcription trap below: one copies the code, the other over-specifies it.
   - **Wave 4, PROBE RIG: a source-scanning probe must resolve paths from `__dirname`, not from the runner's cwd.** `A4/filetree-fex-01-to-07` used repo-root-relative paths, which worked when the lane ran from the root and broke silently when it started running per-package: four probes threw ENOENT and *presented as four findings*. The wave-3 note recorded "two stale characterizations" in this file; it was six, and four were this.
   - **Wave 4, PROMOTION: the lane is tsc-EXCLUDED, the main suite is not.** Promoting a probe verbatim surfaces type errors it never had to satisfy — including the package's es5 traps (`[...nodeList]` is a tsc error; `[...someMap]` compiles and silently yields `[]`). Budget a typecheck pass per promotion, and move any shared harness out of `__explore__` at the same time (wave 6 archives that directory).

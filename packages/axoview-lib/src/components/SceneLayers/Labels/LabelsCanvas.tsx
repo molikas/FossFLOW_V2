@@ -14,7 +14,6 @@ import { createSpriteBatch, SpriteBatch } from 'src/webgl/glSpriteBatch';
 import { attachContextLossRecovery } from 'src/webgl/contextLoss';
 import { rasterizeLabelChip, CHIP_SUPERSAMPLE } from 'src/webgl/itemRaster';
 import { computeBackingStore } from 'src/utils/renderTarget';
-import { computeLabelCounterScale } from 'src/utils/labelScale';
 import { resolveRenderOrder, findLayer } from 'src/utils/renderOrder';
 import {
   getRenderedTilePosition,
@@ -22,8 +21,7 @@ import {
 } from 'src/utils/renderedGeometry';
 import {
   LABEL_BASE_FONT_PX,
-  LABEL_MIN_READABLE_PX,
-  LABEL_MAX_COUNTER_SCALE
+  labelCounterScaleFor
 } from 'src/config/labelSettings';
 
 // ---------------------------------------------------------------------------
@@ -109,7 +107,7 @@ export const LabelsCanvas = memo(({ labels }: Props) => {
     // Shared per-frame state (sizes, transform inputs, sorted labels).
     const frameState = () => {
       const ui = uiApi.getState();
-      const { scroll, zoom, rendererSize } = ui;
+      const { scroll, zoom, rendererSize, readableLabels } = ui;
       const move = ui.labelMove;
       const moves = ui.labelMoves;
       const editingId = ui.inlineEditLabelId;
@@ -170,6 +168,8 @@ export const LabelsCanvas = memo(({ labels }: Props) => {
         editingId,
         getTilePos,
         colors,
+        // R5/OVL-02: per-chip factor derived at emission.
+        readableLabels,
         sorted
       };
     };
@@ -254,7 +254,30 @@ export const LabelsCanvas = memo(({ labels }: Props) => {
             // counterScaleFlag = 1: the "keep labels readable" uniform grows the
             // chip about its centre (cx,cy) when zoomed out (ADR 0015). No-op when
             // the toggle is off (uniform = 1) — parity with the node name chips.
-            b.addSprite(cx, cy, -w / 2, -h / 2, w, 0, 0, h, uv, 1, 1, 1, 1, 1);
+            // R5/OVL-02: this chip's own counter-scale, from its own font size.
+            b.addSprite(
+              cx,
+              cy,
+              -w / 2,
+              -h / 2,
+              w,
+              0,
+              0,
+              h,
+              uv,
+              1,
+              1,
+              1,
+              1,
+              1,
+              0,
+              0,
+              labelCounterScaleFor(
+                f.zoom,
+                f.readableLabels,
+                labelFontPx(label)
+              )
+            );
             drawn += 1;
           }
         }
@@ -294,12 +317,9 @@ export const LabelsCanvas = memo(({ labels }: Props) => {
       // "Keep labels readable" (ADR 0015): the shader counter-scales flagged chips
       // up to a legible floor when zoomed out. 1 (no-op) when the toggle is off or
       // above the threshold — parity with the node name chips in NodesCanvas.
-      const counterScale = computeLabelCounterScale(zoom, {
-        enabled: readableLabels,
-        baseFontPx: LABEL_BASE_FONT_PX,
-        minReadablePx: LABEL_MIN_READABLE_PX,
-        maxCounterScale: LABEL_MAX_COUNTER_SCALE
-      });
+      // R5/OVL-02: the uniform carries the DEFAULT-sized factor; each chip
+      // packs its own (from its own font size) into `i_misc.w`.
+      const counterScale = labelCounterScaleFor(zoom, readableLabels);
 
       if (geomDirtyRef.current) {
         buildInstances(b);

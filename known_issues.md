@@ -3879,6 +3879,44 @@ addendum ("on-screen font size" now means the per-label effective size — ADR
 alternative is **rejected** for the reason this entry gives. Rendered output
 changes for styled labels → full Playwright run, per the wave-2/3 lesson.
 
+**Status:** Fixed in wave 4 (2026-08-02), as ruled — one change, the derivation
+in `labelSettings.labelCounterScaleFor`, every consumer moved with it, the
+contract gate, the dated ADR 0015 addendum, and the full Playwright run.
+
+**Correction to the scope: there are SIX consumers, not three.** The entry names
+the GL node layer and the two hit layers; the sweep found `LabelsCanvas` (the GL
+floating-Label layer), `ConnectorLabel` and `ExpandableLabel` computing the same
+factor from the same constant. All six moved. Leaving any one behind would have
+been the OVL-12 failure the entry warns about — the counter-scale decides where
+a *grab box* sits as well as how big a chip is drawn.
+
+Two structural consequences the ruling implies but does not state, both of which
+turned out to be the actual work:
+
+- **The GPU factor had to become per INSTANCE.** `i_misc.w` was spare exactly as
+  the entry says, and the shader's `mix(1.0, u_counterScale, i_misc.x)` became a
+  per-instance select. The uniform survives as the fallback for an instance that
+  carries no per-instance value, so an emitter that has not been migrated keeps
+  its old behaviour rather than collapsing to 1.
+- **The DOM factor had to become per ELEMENT.** All three DOM consumers published
+  a single `--axoview-label-scale` on a shared `display: contents` wrapper —
+  correct while the factor was one value, and unable to carry a per-label one.
+  Each label element now carries `data-label-font` and the store subscription
+  sets the variable on that element, which preserves the reason the wrapper
+  existed: pan/zoom writes the DOM directly and never re-renders React.
+
+The `maxCounterScale` bound still governs, and it is worth being explicit that
+this does not fully rescue every label: one shrunk past what the cap can lift
+lands short of the floor. That is the trade ADR 0015 already made, now applied
+per label instead of once for everyone.
+
+Contract gate:
+[`labelCounterScale.contract.test.ts`](packages/axoview-lib/src/config/__tests__/labelCounterScale.contract.test.ts),
+red-verified three ways — a second derivation planted **inside the exempted
+file** (the hole wave 4's lean-save gate had, and the reason the exemption names
+the FUNCTION rather than the file), a hit layer reverted to the wrapper
+variable, and a consumer silently dropping the counter-scale altogether.
+
 ## Arrow keys cannot move a floating Label — they pan the canvas instead
 
 **Found by:** exploratory campaign OVL-14

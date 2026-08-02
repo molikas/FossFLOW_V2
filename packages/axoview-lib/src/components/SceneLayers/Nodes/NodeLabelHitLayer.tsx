@@ -3,11 +3,9 @@ import { ViewItem } from 'src/types';
 import { DEFAULT_LABEL_HEIGHT, DEFAULT_FONT_FAMILY } from 'src/config';
 import {
   LABEL_BASE_FONT_PX,
-  LABEL_MIN_READABLE_PX,
-  LABEL_MAX_COUNTER_SCALE,
-  isNodeLabelDrawn
+  isNodeLabelDrawn,
+  labelCounterScaleFor
 } from 'src/config/labelSettings';
-import { computeLabelCounterScale } from 'src/utils/labelScale';
 import { useCanvasMode } from 'src/contexts/CanvasModeContext';
 import { useLayerContext } from 'src/hooks/useLayerContext';
 import { useModelStore } from 'src/stores/modelStore';
@@ -291,20 +289,34 @@ export const NodeLabelHitLayer = ({ nodes }: Props) => {
   // `display: contents` wrapper (no per-zoom React re-render) and each proxy
   // composes it into `transform: scale(...)` about the same centre.
   const counterScaleRef = useRef<HTMLDivElement>(null);
+  /**
+   * R5/OVL-02 — the factor is PER PROXY now, not one value on the wrapper.
+   *
+   * It used to be a single `--axoview-label-scale` published on this
+   * `display: contents` wrapper and inherited by every proxy, which was exactly
+   * right while the factor came from the module-default font size and cannot
+   * survive it becoming per-label. Each proxy carries its own font size in
+   * `data-label-font`, and the subscription walks them — so this keeps the
+   * property that matters: pan/zoom updates the DOM directly and never
+   * re-renders React (the §8.8 pattern).
+   *
+   * The proxies must track the CHIPS exactly; a factor that moved on one side
+   * alone would put the grab box somewhere other than the thing it proxies,
+   * which is R5/OVL-12 reintroduced from the other side.
+   */
   const applyCounterScale = useCallback(() => {
-    if (!counterScaleRef.current) return;
+    const root = counterScaleRef.current;
+    if (!root) return;
     const { zoom, readableLabels } = uiStoreApi.getState();
-    counterScaleRef.current.style.setProperty(
-      '--axoview-label-scale',
-      String(
-        computeLabelCounterScale(zoom, {
-          enabled: readableLabels,
-          baseFontPx: LABEL_BASE_FONT_PX,
-          minReadablePx: LABEL_MIN_READABLE_PX,
-          maxCounterScale: LABEL_MAX_COUNTER_SCALE
-        })
-      )
-    );
+    const proxies = root.querySelectorAll<HTMLElement>('[data-label-font]');
+    for (let i = 0; i < proxies.length; i++) {
+      const el = proxies[i];
+      const font = Number(el.dataset.labelFont);
+      el.style.setProperty(
+        '--axoview-label-scale',
+        String(labelCounterScaleFor(zoom, readableLabels, font))
+      );
+    }
   }, [uiStoreApi]);
   useEffect(() => {
     applyCounterScale();
@@ -352,6 +364,9 @@ export const NodeLabelHitLayer = ({ nodes }: Props) => {
           <div
             key={node.id}
             data-axoview-id="canvas-label-hit"
+            // R5/OVL-02: the counter-scale subscription reads this to compute
+            // THIS proxy's factor, so the grab box tracks its own chip.
+            data-label-font={fontSize}
             data-label-hit-id={node.id}
             onPointerDown={
               editable ? (e) => onPointerDown(e, node) : undefined
@@ -410,6 +425,8 @@ export const NodeLabelHitLayer = ({ nodes }: Props) => {
               // Congruent with the counter-scaled chip: the proxy is centred on
               // the chip rect, so scaling about its centre keeps the whole drawn
               // chip grabbable when readable-labels enlarges it. 1× when off.
+              // R5/OVL-02: the variable is set on THIS element from its own
+              // `data-label-font`, not inherited from the wrapper.
               transform: 'scale(var(--axoview-label-scale, 1))',
               transformOrigin: 'center'
             }}

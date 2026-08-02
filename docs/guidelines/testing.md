@@ -921,3 +921,40 @@ npm test --workspace=packages/axoview-lib -- --coverage # with coverage
 ```
 
 Run from `packages/axoview-lib/`. HTML coverage report at `packages/axoview-lib/coverage/lcov-report/index.html`. **Measured 2026-07-29:** statements 40.2 % · branches 28.5 % · functions 34.6 % · lines 40.2 %. Floors in [`jest.config.js`](../../packages/axoview-lib/jest.config.js) are a **ratchet**, deliberately set ~6pp under measured reality so the tested core cannot silently erode — global **34 / 23 / 29 / 34**, with `stores/reducers/` (85 stmts / 65 branches) and `schemas/` (95 / 90) carrying their own higher floors. *(This line previously read "~32 %; thresholds floored at 10 %" — both figures had gone stale; the floors were re-ratcheted from 30/20/25/30 on 2026-07-29 after coverage rose without them following, widening the intended slack to ~10pp. **Re-measure and re-tighten whenever coverage moves up materially** — that is the maintenance this gate needs to keep working.)* Aggregate KPIs (test:source ratio, LOC, lint debt, complexity baseline) and the static-analysis report locations are in [technical-review-2026-06.md §8](../reviews/technical-review-2026-06.md#8-quality-kpis-aggregate).
+
+## Label counter-scale — one derivation, six consumers (2026-08-02, R5/OVL-02)
+
+`labelSettings.labelCounterScaleFor` is the **only** place the "keep labels
+readable" factor is computed. Six layers consume it — two GPU (`NodesCanvas`,
+`LabelsCanvas`), three DOM hit/proxy (`LabelHitLayer`, `NodeLabelHitLayer`,
+`ConnectorLabel`) and `ExpandableLabel` — and they must always move together:
+the paint layers draw the chip while the hit layers size the box that grabs it,
+so a factor that changes on one side alone puts the grab box somewhere other
+than the thing it proxies.
+
+Two mechanisms carry it, and a change to either needs the other checked:
+
+- **GPU:** per INSTANCE via `i_misc.w`, not the `u_counterScale` uniform (one
+  uniform per draw can only be right for a default-sized label). The uniform is
+  the fallback for an instance that packs no value.
+- **DOM:** per ELEMENT via `data-label-font` + a store subscription, not one
+  `--axoview-label-scale` on a shared `display: contents` wrapper.
+
+[`labelCounterScale.contract.test.ts`](../../packages/axoview-lib/src/config/__tests__/labelCounterScale.contract.test.ts)
+enforces all of it. Its exemption names the **function**, not the file — see the
+gate-authoring rule below.
+
+## Gate authoring — an exemption names the CALL SITE, never the FILE (2026-08-01)
+
+A dual-implementation gate has to exempt its one legitimate implementation. Do
+that by naming the **function**, not the file it lives in.
+
+Wave 4's lean-save gate exempted `leanModel.ts` wholesale, because the one
+permitted composition legitimately lives there — and a duplicate planted in that
+same file passed clean on the first red-check. A file-level exemption is a hole
+shaped exactly like the bug, since a duplicate's natural home *is* the file that
+already owns the concern.
+
+Corollary: **red-verify a gate by planting the defect where it actually lived**,
+not in a convenient neighbouring file. The OVL-02 gate above was verified three
+ways, one of which was a second derivation planted inside its own exempted file.

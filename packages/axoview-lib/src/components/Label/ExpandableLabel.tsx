@@ -6,15 +6,21 @@ import { Gradient } from 'src/components/Gradient/Gradient';
 import { ExpandButton } from './ExpandButton';
 import { Label, Props as LabelProps } from './Label';
 import { useUiStateStore, useUiStateStoreApi } from 'src/stores/uiStateStore';
-import { computeLabelCounterScale } from 'src/utils/labelScale';
 import {
   LABEL_BASE_FONT_PX,
-  LABEL_MIN_READABLE_PX,
-  LABEL_MAX_COUNTER_SCALE
+  labelCounterScaleFor
 } from 'src/config/labelSettings';
 
 type Props = Omit<LabelProps, 'maxHeight'> & {
   onToggleExpand?: (isExpanded: boolean) => void;
+  /**
+   * R5/OVL-02 — this label's own font size, for the "keep labels readable"
+   * counter-scale. ADR 0015's floor is stated in terms of the label's on-screen
+   * font size, so a label the user enlarged or shrank (ADR 0032's style strip)
+   * needs its own factor; the module default was only ever right for a
+   * default-sized label. Omitted = inherits `LABEL_BASE_FONT_PX`.
+   */
+  labelFontSizePx?: number;
 };
 
 const STANDARD_LABEL_HEIGHT = 80;
@@ -30,6 +36,7 @@ const ScrollContent = styled('div')({
 export const ExpandableLabel = ({
   children,
   onToggleExpand,
+  labelFontSizePx,
   ...rest
 }: Props) => {
   const { forceExpandLabels, editorMode, labelSettings } = useUiStateStore(
@@ -57,16 +64,17 @@ export const ExpandableLabel = ({
   // to uiState.zoom (the §8.8 / NodeActionBar pattern) so panning/zooming never
   // re-renders React; the scale is published as a CSS custom property the Label
   // composes into its transform. Label-only — node geometry is untouched.
+  // Read through a ref so a font-size change does not have to re-subscribe —
+  // the subscription exists to avoid React re-renders on pan/zoom.
+  const fontSizeRef = useRef(labelFontSizePx);
+  fontSizeRef.current = labelFontSizePx;
   useEffect(() => {
     const apply = () => {
       if (!counterScaleRef.current) return;
       const { zoom, readableLabels } = storeApi.getState();
-      const scale = computeLabelCounterScale(zoom, {
-        enabled: readableLabels,
-        baseFontPx: LABEL_BASE_FONT_PX,
-        minReadablePx: LABEL_MIN_READABLE_PX,
-        maxCounterScale: LABEL_MAX_COUNTER_SCALE
-      });
+      // R5/OVL-02 — this label's OWN font size, so an enlarged label is not
+      // boosted again and a shrunk one is actually lifted to the floor.
+      const scale = labelCounterScaleFor(zoom, readableLabels, fontSizeRef.current);
       counterScaleRef.current.style.setProperty(
         '--axoview-label-scale',
         String(scale)

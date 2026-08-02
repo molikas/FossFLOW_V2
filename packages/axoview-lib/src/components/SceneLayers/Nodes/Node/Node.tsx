@@ -376,6 +376,8 @@ const NodeContent = memo(
               <ExpandableLabel
                 maxWidth={isEditingName ? 600 : 250}
                 expandDirection="BOTTOM"
+                // R5/OVL-02: the readable-labels floor is per label.
+                labelFontSizePx={labelFontSize}
                 labelHeight={
                   labelDragHeight ??
                   labelOffsetPreview ??

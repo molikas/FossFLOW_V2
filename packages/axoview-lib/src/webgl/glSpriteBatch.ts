@@ -35,7 +35,7 @@ layout(location=0) in vec4 i_anchorLocal; // (anchorX, anchorY, localOriginX, lo
 layout(location=1) in vec4 i_basis;       // (ux, uy, vx, vy)  local edge vectors, tile space
 layout(location=2) in vec4 i_uvRect;      // (u0, v0, uSize, vSize)  atlas coords
 layout(location=3) in vec4 i_tint;        // (r, g, b, a)  colour multiply
-layout(location=4) in vec4 i_misc;        // (counterScaleFlag, shapeMode, halfWidth, _)
+layout(location=4) in vec4 i_misc;        // (counterScaleFlag, shapeMode, halfWidth, counterScale)
 uniform vec2 u_resolution;   // device px
 uniform vec3 u_view;         // (zoom*dpr, originX_dev, originY_dev)
 uniform float u_counterScale;
@@ -53,7 +53,15 @@ const vec2 QUAD[6] = vec2[6](
 );
 void main() {
   vec2 q = QUAD[gl_VertexID];
-  float s = mix(1.0, u_counterScale, i_misc.x);
+  // R5/OVL-02 — the counter-scale is PER INSTANCE (i_misc.w), not one uniform
+  // for the whole draw. ADR 0015's floor is stated in terms of the label's own
+  // on-screen font size, and per-label sizes (ADR 0032) make that per-label; a
+  // single uniform could only ever be right for a default-sized label.
+  // u_counterScale remains as the fallback for an instance that carries no
+  // per-instance value (w <= 0), so an emitter that has not been migrated keeps
+  // its previous behaviour rather than collapsing to 1.
+  float perInstance = (i_misc.w > 0.0) ? i_misc.w : u_counterScale;
+  float s = mix(1.0, perInstance, i_misc.x);
   vec2 local = (i_anchorLocal.zw + q.x * i_basis.xy + q.y * i_basis.zw) * s;
   vec2 tile = i_anchorLocal.xy + local;
   vec2 dev = vec2(u_view.x * tile.x + u_view.y, u_view.x * tile.y + u_view.z);
@@ -235,7 +243,18 @@ export interface SpriteBatch {
     // half-width / disc radius in SCENE units. Packed into the spare i_misc.y/.z —
     // no instance-stride growth.
     shapeMode?: number,
-    halfWidth?: number
+    halfWidth?: number,
+    /**
+     * R5/OVL-02: this instance's own counter-scale, packed into the spare
+     * `i_misc.w`. `0` (the default) means "use the `u_counterScale` uniform",
+     * which keeps every un-migrated emitter behaving exactly as before.
+     *
+     * Per-instance because ADR 0015's readable floor is stated in terms of the
+     * LABEL's on-screen font size, and per-label sizes (ADR 0032) make that a
+     * per-label quantity — a single uniform can only ever be right for a
+     * default-sized label.
+     */
+    counterScale?: number
   ): void;
   commitInstances(): void;
   instanceCount(): number;
@@ -644,7 +663,8 @@ export const createSpriteBatch = (
       a,
       counterScaleFlag,
       shapeMode = 0,
-      halfWidth = 0
+      halfWidth = 0,
+      counterScale = 0
     ) {
       ensureCapacity(FLOATS_PER_INSTANCE);
       const v = staging;
@@ -668,7 +688,8 @@ export const createSpriteBatch = (
       v[i++] = counterScaleFlag; // i_misc.x
       v[i++] = shapeMode; // i_misc.y (0 textured / 1 line / 2 disc)
       v[i++] = halfWidth; // i_misc.z (scene units)
-      v[i++] = 0; // i_misc.w (spare)
+      // i_misc.w — R5/OVL-02 per-instance counter-scale. 0 = "use the uniform".
+      v[i++] = counterScale;
       floatCount = i;
     },
     commitInstances() {

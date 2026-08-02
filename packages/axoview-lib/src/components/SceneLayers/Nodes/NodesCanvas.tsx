@@ -10,11 +10,9 @@ import {
 } from 'src/config';
 import {
   LABEL_BASE_FONT_PX,
-  LABEL_MIN_READABLE_PX,
-  LABEL_MAX_COUNTER_SCALE,
-  isNodeLabelDrawn
+  isNodeLabelDrawn,
+  labelCounterScaleFor
 } from 'src/config/labelSettings';
-import { computeLabelCounterScale } from 'src/utils/labelScale';
 import { useUiStateStoreApi } from 'src/stores/uiStateStore';
 import { useModelStoreApi } from 'src/stores/modelStore';
 import { useCanvasMode } from 'src/contexts/CanvasModeContext';
@@ -389,12 +387,12 @@ export const NodesCanvas = memo(({ nodes, skipNodes }: Props) => {
       const getTilePos = getTilePositionRef.current;
       const isIso = projectionRef.current === 'ISOMETRIC';
 
-      const counterScale = computeLabelCounterScale(zoom, {
-        enabled: readableLabels,
-        baseFontPx: LABEL_BASE_FONT_PX,
-        minReadablePx: LABEL_MIN_READABLE_PX,
-        maxCounterScale: LABEL_MAX_COUNTER_SCALE
-      });
+      // R5/OVL-02: the uniform now carries only the DEFAULT-sized factor. Each
+      // label chip packs its own into `i_misc.w` from its own font size; this
+      // remains the fallback for any instance that does not (and the value the
+      // `data-label-scale` attribute reports, which is the default-label case
+      // the e2e specs measure).
+      const counterScale = labelCounterScaleFor(zoom, readableLabels);
       const drawLabels = isNodeLabelDrawn(zoom, readableLabels);
       const skipIds = skipIdsRef.current;
 
@@ -445,6 +443,9 @@ export const NodesCanvas = memo(({ nodes, skipNodes }: Props) => {
         getTilePos,
         isIso,
         counterScale,
+        // R5/OVL-02: the per-chip factor is derived at emission from each
+        // node's own font size, so the build frame carries the inputs.
+        readableLabels,
         drawLabels,
         sorted
       };
@@ -706,7 +707,9 @@ export const NodesCanvas = memo(({ nodes, skipNodes }: Props) => {
             const anchorY = pos.y - labelHeight;
             const x0 = -chipW / 2;
             const y0 = labelHeight < 0 ? 0 : -chipH;
-            // chip scales with the label counter-scale (flag = 1).
+            // chip scales with the label counter-scale (flag = 1), and since
+            // R5/OVL-02 that factor is THIS label's — derived from its own
+            // font size, not the module default. Packed into i_misc.w.
             b.addSprite(
               anchorX,
               anchorY,
@@ -721,7 +724,10 @@ export const NodesCanvas = memo(({ nodes, skipNodes }: Props) => {
               1,
               1,
               1,
-              1
+              1,
+              0,
+              0,
+              labelCounterScaleFor(f.zoom, f.readableLabels, node.labelFontSize)
             );
           }
         }
@@ -764,12 +770,7 @@ export const NodesCanvas = memo(({ nodes, skipNodes }: Props) => {
         height: bh,
         dpr
       } = computeBackingStore(W, H, window.devicePixelRatio || 1);
-      const counterScale = computeLabelCounterScale(zoom, {
-        enabled: readableLabels,
-        baseFontPx: LABEL_BASE_FONT_PX,
-        minReadablePx: LABEL_MIN_READABLE_PX,
-        maxCounterScale: LABEL_MAX_COUNTER_SCALE
-      });
+      const counterScale = labelCounterScaleFor(zoom, readableLabels);
       const drawLabels = isNodeLabelDrawn(zoom, readableLabels) ? 1 : 0;
 
       // Rebuild geometry only on a scene change or a label-LOD-band crossing.
