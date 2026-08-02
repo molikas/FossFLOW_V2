@@ -103,7 +103,19 @@ describe('SCN-06 — pasteItems validation window', () => {
     }
   );
 
-  it('characterization: the poisoned view then refuses every node move (RED-02 compound)', () => {
+  // RE-DERIVED 2026-08-02. This characterization asserted the RED-02 AMPLIFIER —
+  // that one bad reference anywhere in a view made every later node move throw —
+  // and wave 4 fixed exactly that: `updateViewItem` now diffs the issue set
+  // against the pre-state and only rejects what the ACTION introduced, leaving
+  // pre-existing problems for the load-time repair (wave 1's repair-don't-reject
+  // ruling). So the paste still lands a rectangle with an unknown colour, and
+  // the view stays editable.
+  //
+  // The SCN-06 finding itself — that `pasteItems` accepts an entity referencing
+  // a colour the model does not have — is UNCHANGED and still open. What
+  // changed is its blast radius, which is the whole point of having fixed the
+  // amplifier first.
+  it('characterization: the poisoned view is still EDITABLE (RED-02 fixed)', () => {
     const result = setup();
 
     const payload = makePastePayload(0);
@@ -119,13 +131,21 @@ describe('SCN-06 — pasteItems validation window', () => {
     act(() => {
       result.current.scene.pasteItems(payload);
     });
+    // PRECONDITION: the bad reference really did land — the finding stands.
     expect(modelView(result).rectangles).toHaveLength(1);
+    expect(
+      validateView(modelView(result), {
+        model: result.current.modelApi.getState()
+      }).length
+    ).toBeGreaterThan(0);
 
-    expect(() => {
-      act(() => {
-        result.current.scene.updateViewItem('node-A', { tile: { x: 2, y: 2 } });
-      });
-    }).toThrow();
+    // …and an UNRELATED node move now succeeds instead of throwing.
+    act(() => {
+      result.current.scene.updateViewItem('node-A', { tile: { x: 2, y: 2 } });
+    });
+    expect(
+      modelView(result).items.find((i: { id: string }) => i.id === 'node-A')?.tile
+    ).toEqual({ x: 2, y: 2 });
   });
 });
 

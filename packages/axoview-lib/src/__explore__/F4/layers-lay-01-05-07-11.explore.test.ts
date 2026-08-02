@@ -156,42 +156,18 @@ describe('LAY-07 — a dangling layerId (RED-03) in the Layers panel', () => {
 // LAY-11 — assignLayerToItems matches by bare id
 // ---------------------------------------------------------------------------
 
-describe('LAY-11 — assignLayerToItems ignores the entity type', () => {
-  const seeded = () =>
-    seedState({
-      view: {
-        layers: [layer('L1', 0)],
-        items: [{ id: 'shared-id', tile: { x: 0, y: 0 } }],
-        rectangles: [
-          { id: 'shared-id', from: { x: 2, y: 2 }, to: { x: 3, y: 3 } }
-        ]
-      } as never
-    });
-
-  it('PRECONDITION: a duplicate id across two collections loads (CLIP-01 — nothing enforces uniqueness)', () => {
-    const view = viewOf(seeded());
-    expect(view.items[0].id).toBe('shared-id');
-    expect(view.rectangles![0].id).toBe('shared-id');
-  });
-
-  it('LAY-11: assigning "the node" also moves the rectangle — the reducer takes ids, not references', () => {
-    const next = assignLayerToItems(
-      { layerId: 'L1', itemIds: ['shared-id'] },
-      { viewId: VIEW_ID, state: seeded() }
-    );
-    const view = viewOf(next);
-    expect(view.items[0].layerId).toBe('L1');
-    expect(view.rectangles![0].layerId).toBe('L1');
-  });
-
-  it('CHARACTERIZATION: it also accepts a layerId that names no layer (RED-03 through a second door)', () => {
-    const next = assignLayerToItems(
-      { layerId: 'no-such-layer', itemIds: ['node-A'] },
-      { viewId: VIEW_ID, state: seedState({ view: { layers: [] } as never }) }
-    );
-    expect(viewOf(next).items[0].layerId).toBe('no-such-layer');
-  });
-});
+// LAY-11 is FIXED and its probes are retired (re-derived 2026-08-02 — one of the
+// two stale characterizations the wave-3 note flagged in this file).
+//
+// The probe called `assignLayerToItems({ layerId, itemIds })` with BARE IDS.
+// That signature no longer exists: the reducer takes typed `refs`, which is
+// precisely the fix — "the reducer takes ids, not references" was the finding,
+// and references are what it takes now. The probe throws on the old shape.
+//
+// The second characterization ("it also accepts a layerId that names no layer")
+// is closed by wave 1's RED-03 layer-reference validation, reached through this
+// second door exactly as the note predicted. Promoted regression:
+// `stores/reducers/__tests__/layerAssignment.test.ts`.
 
 // ---------------------------------------------------------------------------
 // Layer order collision after a delete — the RED-04/05 amplifier, re-confirmed
@@ -199,14 +175,22 @@ describe('LAY-11 — assignLayerToItems ignores the entity type', () => {
 // ---------------------------------------------------------------------------
 
 describe('LAY-01b — createLayer after deleteLayer (known: RED-04/05)', () => {
-  it('CHARACTERIZATION: the new layer collides with the survivor, so paint order between them is undefined', () => {
+  // The collision characterization is retired — the OTHER stale one in this
+  // file. `normaliseLayerOrder` (wave 4's RED-04/05 fix) renumbers `order` to a
+  // permutation of 0..n-1 after every mutation, so a create following a delete
+  // can no longer reuse a live value: this sequence now yields [0, 1], not
+  // [1, 1]. The invariant is unbreakable by any single call rather than by each
+  // call being careful, which is why it closed this through a second door.
+  // Promoted regression: `stores/reducers/__tests__/layer.test.ts`.
+  it('CHARACTERIZATION: layer order is a permutation after a delete-then-create', () => {
     let state = seedState({
       view: { layers: [layer('A', 0), layer('B', 1)] } as never
     });
     state = deleteLayer('A', { viewId: VIEW_ID, state });
     state = createLayer({ name: 'C' }, { viewId: VIEW_ID, state });
     const orders = viewOf(state).layers!.map((l) => l.order);
-    // B kept order 1; C got `layers.length` === 1.
-    expect(orders).toEqual([1, 1]);
+    expect(orders).toEqual([0, 1]);
+    expect(new Set(orders).size).toBe(orders.length);
   });
+
 });
