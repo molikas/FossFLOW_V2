@@ -1,4 +1,13 @@
-import { AnnotationOp, AnnotationStroke } from 'src/types';
+// Imported from `types/ui` directly, NOT from the `src/types` barrel.
+// `uiStateStore` imports `applyAnnotationOp`/`revertAnnotationOp` from here
+// (wave 4, F2/VIEW-07), and a barrel import closed the loop back through
+// `types/index → types/interactions → hooks/useScene → … → uiStateStore`:
+// check-cycles went 47 → 48 at `c326a4ff` and stayed red for four commits.
+// `import type` does NOT help — the gate runs madge with
+// `skipTypeImports: false`, so a type-only edge still counts. Only a narrower
+// specifier removes it. Same fix as the 63 → 47 drop recorded in
+// scripts/cycles-baseline.json.
+import type { AnnotationOp, AnnotationStroke } from 'src/types/ui';
 
 /**
  * F2/VIEW-07 + VIEW-13 — the annotation overlay's operation log.

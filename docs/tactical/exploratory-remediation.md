@@ -5,7 +5,7 @@
 > - [docs/exploratory/DECISIONS.md](../exploratory/DECISIONS.md) — the 22 owner rulings this plan implements (incl. the ADR amendments each ruling names)
 > - [docs/exploratory/LEDGER.md](../exploratory/LEDGER.md) — per-area bug counts; [known_issues.md](../../known_issues.md) — the 172 filed entries (`Found by: exploratory campaign <ID>`)
 >
-> **Status:** Waves 0–3 COMPLETE · Wave 4 IN PROGRESS (3 of ~8 clusters) · **Owner:** molikas · **Last updated:** 2026-07-31
+> **Status:** Waves 0–4 COMPLETE · Wave 5 IN PROGRESS · **Owner:** molikas · **Last updated:** 2026-08-02
 >
 > Wave 4 is next. Read the wave 1–3 sections first — between them they carry the
 > items deliberately routed forward (HIST-03/04 and RND-13/15 to wave 5, CLIP-14
@@ -334,17 +334,52 @@ nobody had asserted.
 `packages/axoview-lib/dist`, so **`npm run build:lib` before every Playwright
 run** — otherwise a green fix reads as seven failing new specs.
 
-### Wave 4 — Consistency & decided UX 🟡 IN PROGRESS (F-block + E2 remainder + A4/A5 new, ~55 open entries)
+### Wave 4 — Consistency & decided UX ✅ DONE (F-block + E2 remainder + A4/A5 new)
 
-> **Resume point (2026-07-31).** Four clusters plus the lane gate are DONE and
-> COMMITTED. Read the per-cluster boxes below — each records what landed, what
-> was corrected in the record, and what it learned.
+> **CLOSED 2026-08-02.** Every cluster is committed (`3c5c8a30..cbed965a`) and the
+> OVL-02 full Playwright gate is green — see the Gate row. Read the per-cluster
+> boxes below — each records what landed, what was corrected in the record, and
+> what it learned.
 >
 > | | |
 > |---|---|
 > | **Committed** | F3 styling (`3c5c8a30`) · F1 text/label + E2/RED-06 + F4 layers incl. LAY-05/RED-13 + the lane rig gate (`77ced974`) · F5 icons (`9e657cec`) · E2 reference-integrity remainder + CLIP-14 (`e8b6d282`) · F2 annotation/view (`c326a4ff`) · A4 FileExplorer + FEX-01 re-derivation (`a70f1e6f`) · A5 chrome (`da2457ba`) · OVL-02 |
-> | **Gate** | full Playwright **274 passed, 38.2 min** after F2 (the machine was NOT 4x slow that day — do not read wave 3's 36.7 min as a like-for-like baseline either way); a second full run after OVL-02, which changes rendered output for styled labels; lib **195 suites / 2309**, app **50 / 555**; tsc + lint clean |
+> | **Gate** | **GREEN 2026-08-02** — full Playwright **277 passed, 38.8 min** (every pre-existing spec, incl. `chromium-touch` 25/25); lib **195 suites / 2309**, app **50 / 555**; tsc + lint clean; `check:cycles` **47, OK** (it was red — see below). Earlier: 274 passed, 38.2 min after F2. |
 > | **Not started** | — wave 4 is complete; wave 5 is design-gated on the two briefs below |
+>
+> **It took three full runs to get that green, and no run was red for OVL-02.**
+> Worth reading before trusting any single full-suite result:
+>
+> | run | result | cause |
+> |---|---|---|
+> | 1 (wave-4 agent) | 252 passed, **25 failed** | the whole `chromium-touch` project failing at the app-boot locator, ~37 min into a 40.7-min run. One cause, not 25. |
+> | 2 | 276 passed, **1 failed** | `multi-diagram` J5.2 — `strip-link-button` `disabled` for the full 30 s, i.e. the selection never landed. Touch project **25/25 green**, which settles run 1's diagnosis as run-position instability rather than a regression. |
+> | 3 | **277 passed** (+4 expected reds) | green. J5.2 passed; touch 25/25 again. The 4 reds are wave 5's own `undo-page-navigation.spec.ts` against a `dist` that predates its fix. |
+>
+> Three rig lessons, all queued for the wave-6 appendix:
+>
+> - **A whole Playwright project can fail wholesale at app boot late in a long
+>   run**, and it presents as N product regressions. Check whether the failures
+>   share one locator and one project before diagnosing N bugs.
+> - **A wave-N gate run sweeps up wave-N+1 spec files sitting in the tree.** Run 3's
+>   four reds are wave 5's promoted spec, correct and failing only because
+>   `build:lib` had not run. Harmless here because they were attributable at a
+>   glance; it would not be if the new spec's name did not say which wave it
+>   belongs to.
+> - **Playwright wipes `outputDir` at the start of every run**, so a re-run
+>   destroys the failure artifacts you were about to read. Copy them out first, or
+>   tee the run log somewhere outside `test-results/` (both runs here logged to a
+>   scratchpad file for exactly this reason).
+>
+> **A gate was red at `bfdc19ff` and nothing noticed.** `check:cycles` reported
+> **48 vs a baseline of 47** — bisected with a detached worktree to `c326a4ff`
+> (F2), where `uiStateStore → utils/annotationOps` closed a loop back through the
+> `src/types` barrel. It stayed red for four commits, so the gate was not run after
+> F2. Fixed by importing from `src/types/ui` directly. **The gate's own failure
+> message is wrong**: it advises `import type`, but `check-cycles.js` runs madge
+> with `skipTypeImports: false`, so a type-only edge still counts as one — verified
+> experimentally before the real fix was found. Fixing the message belongs with the
+> wave-6 gate work.
 >
 > **Ordering for the remainder (owner, 2026-07-31).** F5 → E2 remainder → F2 →
 > A4 → A5 in root-cause cluster order, then **OVL-02 last-but-one** so its full
