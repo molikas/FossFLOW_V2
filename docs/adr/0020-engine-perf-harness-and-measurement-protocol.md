@@ -172,6 +172,17 @@ must beat (KR-P3), not a regression comparison.
   extend the §6 anti-cheat with a draw-count == N assertion (`renderedNodes` /
   `renderedLabels`). Gate outcome recorded in git history (the E-slice gate shipped).
 
+**Addendum (2026-08-02) — the §6 node anti-cheat reads `data-nodes-drawn`.**
+The bulk canvases merge into one context under
+[ADR 0038 §8](0038-webgl-instanced-render-substrate.md), where `dataset.drawCount`
+becomes a TOTAL over every entity type and can no longer be compared against N.
+The honesty assertion is therefore **`dataset.nodesDrawn == N`**; the total stays
+published and informational. `NodesCanvas` publishes both today, and the harness
+assertion was repointed in the same change, so there is no window in which it
+reads a dead attribute. `PERF_ATLAS` (`perf-results/atlas.md`) is the §8
+measurement scenario and additionally asserts `buildDelta === 0` per layer across
+a pan, which is §5's invariant stated as a gate rather than a report.
+
 **Addendum (2026-07-08) — T4 WebGL fold shipped (ADR 0038).**
 - T4 (WebGL instanced substrate) shipped; the tier ladder is marked ✅. Nodes,
   labels, connector bodies and rectangle bodies render via `glSpriteBatch`.

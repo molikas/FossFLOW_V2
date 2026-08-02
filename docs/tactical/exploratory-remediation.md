@@ -516,27 +516,62 @@ run** — otherwise a green fix reads as seven failing new specs.
 
 ### Wave 5 — Design-gated larges (rulings 2026-07-30)
 
-> **RESUME POINT (2026-08-02).** Wave 4 is complete and committed. Both briefs
-> are **drafted and awaiting owner sign-off — no implementation has started, by
-> instruction.** Read them before writing any code:
+> **RESUME POINT (2026-08-02, end of session).** The history half of wave 5 is
+> **DONE and committed**: HIST-10 + HIST-04 (`cc44a8e2`), HIST-03 (`be31912f`).
+> GPU-13's **design gate is closed** — all three §4 measurements are taken and the
+> dated [ADR 0038 §8](../adr/0038-webgl-instanced-render-substrate.md) amendment is
+> written, with the reciprocal [ADR 0020](../adr/0020-engine-perf-harness-and-measurement-protocol.md)
+> addendum. **The merge implementation has not started**, by approved session
+> boundary — a partially-merged renderer never lands, so it begins fresh from here.
+>
+> **Start here: GPU-13 implementation.** Everything below is decided; none of it
+> needs another owner round-trip (standing autonomy, 2026-08-02).
+>
+> 1. **The mechanism is settled: sorted draw**, one WebGL2 context, one program,
+>    one VAO, depth buffer stays off. `SpriteBatch.render()` already issues exactly
+>    one `drawArraysInstanced`, so a global sort cannot fragment a draw call.
+> 2. **Do not assume a single atlas.** Measured: a merged chip atlas peaks at
+>    ~4 000 rows and fits the 8192 desktop clamp at 51%, but does **not** fit the
+>    4096 high-DPR clamp at N=5000 — where the label atlas alone already reports
+>    `atlasFull` today. The batch's atlas must stay a per-material resource; the
+>    fallback costs the measured 44–140 draw calls (median run 19–76), which is far
+>    above §4's ~8 revisit threshold. Numbers in `perf-results/atlas.md` and §8.
+> 3. **The sort key must be made uniform first.** Today `NodesCanvas` passes
+>    `-tile.x - tile.y` as iso-depth, `LabelsCanvas` passes `0`, and
+>    `ConnectorsCanvas`/`RectanglesCanvas` do not sort at all. Sorting them together
+>    with today's inputs would put every rectangle and label above every node at
+>    positive depth — a visible re-order of existing documents. One iso-depth
+>    convention plus a type-rank tiebreaker (`rectangle < connector < node < label`)
+>    is what keeps an unlayered document looking identical.
+> 4. **Selection becomes order-preserving** — only chrome floats. That changes
+>    today's visible behaviour (the hybrid overlay lifts the whole element), so it
+>    is the behaviour-change case: full Playwright, not targeted runs. The change
+>    is to the `hybridIds` derivation in `Renderer.tsx`; drag and inline-rename
+>    still need their DOM element, selection alone does not.
+> 5. **Consumer surface of the four canvas test ids — 30 references in 10 files**,
+>    mapped so the merge does not discover them one red spec at a time:
+>    `perf/engine-perf.spec.ts` (13), `label-entity.spec.ts` (3),
+>    `preview-layer-switcher.spec.ts` (3), `renderer-overlay-parity.spec.ts` (3),
+>    `canvas-node-render.spec.ts` (2), `readable-labels.spec.ts` (2),
+>    `element-link-card.spec.ts` (1), `gpu-icon-recovery.spec.ts` (1),
+>    `layers.spec.ts` (1), and **product code** in
+>    `ExportImageDialog/waitForIconsDrawn.ts` (1) — that last one gates image
+>    export on `data-all-icons-drawn` and must follow the merged canvas.
+> 6. **The anti-cheat rename already landed**, so it is not merge work:
+>    `data-nodes-drawn == N` is the honesty channel and the harness asserts it
+>    today, on the un-merged layer where it equals `data-draw-count`. Keep
+>    publishing it from the merged renderer, and keep `data-build-count` flat
+>    across a pan — `PERF_ATLAS` asserts that per layer.
+> 7. **Still to do in the merge:** the renderer/picker-agreement gate the brief
+>    calls for (§5, "worth asserting"). Note `hitDetection.ts` passes `layerOrder: 0`
+>    deliberately — it is handed a flat scene with no `layers` array — so agreement
+>    is exact only on the zIndex/iso-depth tiers unless the picker is given layers.
+>    Decide which, and say so in the gate.
+>
+> Both briefs and their sign-off blocks remain the contract:
 >
 > - [`wave5-brief-gpu-13-cross-type-depth.md`](wave5-brief-gpu-13-cross-type-depth.md)
 > - [`wave5-brief-hist-10-page-stamped-entries.md`](wave5-brief-hist-10-page-stamped-entries.md)
->
-> **Two things in the briefs change the shape of the task and should be read as
-> findings, not as options:**
->
-> 1. **GPU-13's "single canvas vs per-entity depth" is not a choice between two
->    alternatives.** Four separate WebGL contexts do not share a depth buffer, so
->    per-entity depth cannot order across them at all — it is a sub-decision
->    *inside* a merged canvas, not an alternative to merging. The brief
->    recommends the merge, with a draw-call batching measurement as the gate on
->    that recommendation.
-> 2. **HIST-10 must land before HIST-04, not beside it.** Making `createView`
->    undoable on its own leaves `uiState.view` pointing at a deleted page
->    (E3/SCN-09's shape); the page stamp is what gives that undo somewhere
->    correct to navigate. HIST-03 stays separate — it is a trimming bug, and
->    pairing it would make either failure hard to attribute.
 
 - [x] **HIST-10 + HIST-04 — DONE 2026-08-02.** §6 steps 1–3 as one change, exactly
   as signed off. Entries carry an optional `viewId`, stamped at the logical
@@ -594,7 +629,37 @@ run** — otherwise a green fix reads as seven failing new specs.
   **The cap's meaning changed deliberately** from "50 entries per store" to "the
   last 50 logical actions". HIST-15's silent-cap ruling is unchanged and the new
   meaning is closer to what it describes.
-- [ ] **GPU-13:** ~~brief drafted → owner sign-off~~ **SIGNED OFF 2026-08-02** — Option A, measurement-first (the measurement selects sorted-draw vs depth-two-pass **inside** the merged context; it never un-merges); selection **order-preserving**; connector labels **out of scope** with the documented inconsistency + follow-up trigger → run §4 measurements → write the dated ADR 0038 §8 amendment → implement.
+- [ ] **GPU-13 — design gate CLOSED 2026-08-02; merge implementation NOT started**
+  (approved session boundary). ~~brief drafted → owner sign-off~~ **SIGNED OFF
+  2026-08-02** — Option A, measurement-first (the measurement selects sorted-draw
+  vs depth-two-pass **inside** the merged context; it never un-merges); selection
+  **order-preserving**; connector labels **out of scope** with the documented
+  inconsistency + follow-up trigger.
+
+  **All three §4 measurements taken; the dated ADR 0038 §8 amendment is written**
+  (plus the reciprocal ADR 0020 addendum). Nothing contradicted sorted draw, so no
+  owner round-trip was needed.
+
+  - **1 — run lengths.** Structural, not statistical: `SpriteBatch.render()`
+    issues exactly ONE `drawArraysInstanced` — one program, one VAO, one atlas
+    bind — so a global sort cannot fragment a draw call. §2(a)'s risk was reasoned
+    from a multi-program renderer this is not. One atlas → 1 call at every N; the
+    separate-atlas fallback → 118/44/140 calls at N=1000/2000/5000, median run
+    19/76/74, all far above the ~8 revisit threshold.
+  - **2 — atlas budget.** Measured live via a new `atlasStats()` +
+    `PERF_ATLAS` scenario (`perf-results/atlas.md`). **The single-atlas assumption
+    does not hold universally**: a merged chip atlas peaks near 4 000 rows, fits
+    the 8192 desktop clamp at 51%, and does NOT fit the 4096 high-DPR clamp at
+    N=5000 — where today's label atlas *alone* already reports `atlasFull`. Node
+    chip rows collapse between N=1250 and N=1500 (the label LOD band), while
+    floating-label rows keep growing, so the worst case is not at max N.
+  - **3 — build cadence.** `data-build-count` delta across a pan is 0 on all four
+    layers at every N, and `PERF_ATLAS` **asserts** it rather than reporting it.
+
+  **Landed this session so the merge does not have to carry it:** `atlasStats()`
+  on the shared substrate, the `PERF_ATLAS` diagnostic, and the
+  **`data-nodes-drawn == N` anti-cheat rename with the harness assertion repointed
+  in the same change** — no window where the harness reads a dead attribute.
 
 ### Wave 6 — Program build-out (should-have)
 - [ ] Write `.claude/skills/explore.md`: APPROACH distilled + COLDSTART flow + rig-traps appendix + delta-mode area selection (`git diff` vs last campaign end commit); regenerate-baseline step; **embed the end-of-session report contract** (Notes for Claude) so every future run ends with the same four-part report.

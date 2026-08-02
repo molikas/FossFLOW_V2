@@ -220,6 +220,26 @@ export interface SpriteBatch {
    * any build that packs everything.
    */
   atlasOverflowed(): boolean;
+  /**
+   * Atlas occupancy — diagnostics only (R3/GPU-13 §4 measurement 2: does one
+   * merged node+label chip atlas fit at the §6 clamps?).
+   *
+   * Reads the shelf packer's own cursor: no GL round-trip, no allocation, no
+   * per-frame work (ADR 0038 §5). `usedRows` is the high-water row the packer
+   * has reached, which is the quantity that decides whether a set of chips fits
+   * — a shelf packer wastes some width per row, so rows consumed is the honest
+   * measure rather than summed sprite area.
+   */
+  atlasStats(): {
+    /** Atlas edge in texels, AFTER the MAX_TEXTURE_SIZE / high-DPR clamp. */
+    size: number;
+    /** Rows consumed so far (0 … size). */
+    usedRows: number;
+    /** Distinct content-keyed sprites currently packed. */
+    slots: number;
+    /** Did the last build hit the ceiling? */
+    full: boolean;
+  };
 
   // --- instance staging (rebuilt only on a geometry change) ---
   beginInstances(): void;
@@ -708,6 +728,14 @@ export const createSpriteBatch = (
       overflowRetryOffered = true;
       return true;
     },
+    atlasStats: () => ({
+      size: ATLAS,
+      // The shelf cursor IS the occupancy: rows fully consumed, plus the height
+      // of the row currently being filled.
+      usedRows: shelfY + shelfH,
+      slots: uvCache.size,
+      full: atlasFull
+    }),
     instanceCount: () => instCount,
     render(bw, bh, zoomDpr, originXDev, originYDev, counterScale) {
       if (canvas.width !== bw || canvas.height !== bh) {

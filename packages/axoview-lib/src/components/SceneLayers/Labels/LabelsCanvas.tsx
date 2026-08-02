@@ -11,6 +11,7 @@ import {
   LabelChipLayout
 } from 'src/utils/labelChip';
 import { createSpriteBatch, SpriteBatch } from 'src/webgl/glSpriteBatch';
+import { publishAtlasStats } from 'src/webgl/atlasDiagnostics';
 import { attachContextLossRecovery } from 'src/webgl/contextLoss';
 import { rasterizeLabelChip, CHIP_SUPERSAMPLE } from 'src/webgl/itemRaster';
 import { computeBackingStore } from 'src/utils/renderTarget';
@@ -298,6 +299,9 @@ export const LabelsCanvas = memo(({ labels }: Props) => {
       }
       canvas.dataset.drawCount = String(drawn);
       canvas.dataset.buildCount = String(++buildCount);
+      // R3/GPU-13 §4 measurement 2 — this atlas and the node atlas are the two
+      // that decide whether ONE merged chip atlas fits at ADR 0038 §6's clamps.
+      publishAtlasStats(canvas, b);
     };
 
     const drawGLBatch = (b: SpriteBatch) => {

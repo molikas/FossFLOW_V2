@@ -61,6 +61,15 @@ const makeStubBatch = () =>
     // chip, so it can schedule the one follow-up rebuild that compacts. A stub
     // that omits it throws where the real batch would answer "no".
     atlasOverflowed: jest.fn(() => false),
+    // R3/GPU-13: the layer publishes atlas occupancy alongside
+    // `data-build-count`. Same reason as `atlasOverflowed` above — a stub that
+    // omits it throws where the real batch would just answer.
+    atlasStats: jest.fn(() => ({
+      size: 4096,
+      usedRows: 0,
+      slots: 0,
+      full: false
+    })),
     instanceCount: jest.fn(() => 0),
     render: jest.fn(),
     destroy: jest.fn()

@@ -22,6 +22,7 @@ import { decodeHtmlEntities } from 'src/utils/htmlToPlainText';
 import { isLabelVisibleInPreview } from 'src/utils/previewLabelVisibility';
 import { LABEL_LINK_COLOR } from 'src/utils/labelChip';
 import { createSpriteBatch, SpriteBatch } from 'src/webgl/glSpriteBatch';
+import { publishAtlasStats } from 'src/webgl/atlasDiagnostics';
 import { attachContextLossRecovery } from 'src/webgl/contextLoss';
 import { rasterizeNodeChip, CHIP_SUPERSAMPLE } from 'src/webgl/itemRaster';
 import { computeBackingStore } from 'src/utils/renderTarget';
@@ -749,10 +750,18 @@ export const NodesCanvas = memo(({ nodes, skipNodes }: Props) => {
       }
 
       canvas.dataset.drawCount = String(drawn);
+      // R3/GPU-13: `data-draw-count` becomes a TOTAL over every bulk entity type
+      // once the four canvases merge, so it can no longer be compared against N.
+      // `data-nodes-drawn` is the honesty channel ADR 0020's anti-cheat asserts
+      // (`== N`) from here on — published now, on the un-merged layer where it is
+      // still identical to `data-draw-count`, so the harness never reads a dead
+      // attribute across the merge. See ADR 0038 §8 and ADR 0020's addendum.
+      canvas.dataset.nodesDrawn = String(drawn);
       canvas.dataset.labelsDrawn = String(labelsDrawn);
       canvas.dataset.linkedLabelsDrawn = String(linkedLabelsDrawn);
       canvas.dataset.allIconsDrawn = String(allIconsDrawn);
       canvas.dataset.buildCount = String(++buildCount);
+      publishAtlasStats(canvas, b);
       lastBuiltDrawLabels = f.drawLabels ? 1 : 0;
     };
 

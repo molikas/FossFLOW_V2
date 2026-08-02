@@ -186,6 +186,141 @@ a follow-up, not a silent gap:
   Reaching the cap force-loses the oldest context — now recovered by the
   context-loss handling above rather than blanking permanently.
 
+## §8 — Cross-type render order (amendment, 2026-08-02)
+
+**Context.** §2's four-canvas hybrid fixes cross-type paint order to mount order
+in `Renderer.tsx` (`RectanglesCanvas → ConnectorsCanvas → NodesCanvas →
+LabelsCanvas`, all at CSS `zIndex: 0` in ascending document order).
+`resolveRenderOrder` is applied *inside* each canvas, so `layer.order` and
+`zIndex` sort only within an entity type and the z-order controls are silently
+inert across types (R3/GPU-13). Four separate WebGL2 contexts do not share a
+depth buffer, so per-entity depth cannot order across them either — it is a
+sub-decision *inside* a merged context, never an alternative to merging.
+
+**Decision.** Merge the four bulk canvases into **one WebGL2 context** and order
+it by **sorted draw**: the merged instance array is emitted in
+`resolveRenderOrder` order and painted in that order. The depth buffer stays off
+(`depth: false`, `gl.disable(DEPTH_TEST)`, as today).
+
+**Ordering is one sort over all bulk entities**, keyed by
+`resolveRenderOrder(layerOrder, zIndex, isoDepth)` with a **type rank**
+(`rectangle < connector < node < label`) as the tiebreaker at equal keys. Mount
+order carries no ordering meaning.
+
+### The §4 measurements
+
+Owner sign-off framed these as a gate on the **mechanism**, not on the merge. All
+three ran; none contradicts sorted draw.
+
+**1 — Draw-call run lengths under a global sort.** The decisive fact is
+structural, not statistical: `SpriteBatch.render()` issues exactly **one**
+`drawArraysInstanced` over the whole instance array — one program, one VAO, one
+blend state, one atlas bind. Inside one batch there are no material boundaries
+at all, so a global sort cannot fragment a draw call. §2(a)'s batching-regression
+risk was reasoned from a multi-program renderer; this is not one.
+
+Run lengths over the merged sort on the ALL-TYPES scene shape:
+
+| N | instances | one atlas | separate atlases (fallback) |
+|---|---|---|---|
+| 1000 | 2 299 | **1 draw call** | 118 calls, median run 19 |
+| 2000 | 4 581 | **1 draw call** | 44 calls, median run 76 |
+| 5000 | 11 475 | **1 draw call** | 140 calls, median run 74 |
+
+Even the fallback never approaches §4's "revisit below ~8 instances per run"
+threshold.
+
+**2 — Merged chip-atlas budget.** Measured live via `atlasStats()` on the
+ALL-TYPES scene (`PERF_ATLAS`, `perf-results/atlas.md`); rows consumed by the
+shelf packer, which is what decides whether a chip set fits:
+
+| N | node atlas | label atlas | merged rows |
+|---|---|---|---|
+| 250 | 630 / 8192 (7.7%) | 226 / 4096 (5.5%) | 856 |
+| 500 | 1 190 (14.5%) | 454 (11.1%) | 1 644 |
+| 750 | 1 750 (21.4%) | 682 (16.7%) | 2 432 |
+| 1000 | 2 310 (28.2%) | 834 (20.4%) | 3 144 |
+| 1250 | 2 950 (36.0%) | 1 062 (25.9%) | **4 012** |
+| 1500 | 150 (1.8%) | 1 290 (31.5%) | 1 440 |
+| 2000 | 150 (1.8%) | 1 746 (42.6%) | 1 896 |
+| 5000 | 150 (1.8%) | 4 028 (98.3%) **FULL** | **4 178** |
+
+Two things this says that the brief did not anticipate:
+
+- **Node-chip rows collapse between N=1250 and N=1500.** That is the label LOD
+  band switching node name chips off at fit-to-view zoom, leaving the dot, the
+  white texel and a handful of icons (5 slots). Floating Labels (ADR 0031) have
+  no equivalent LOD, so label rows keep growing. The merged worst case is
+  therefore **not** at max N — it is either side of the LOD boundary, and both
+  peaks land near 4 000 rows.
+- **The 4096 clamp is the binding constraint, and it is already binding today.**
+  At the §6 high-DPR/mobile clamp a merged atlas does **not** hold N=5000
+  (4 178 > 4 096) and sits at 98% at N=1250 — but the label atlas *on its own*
+  already reports `atlasFull` at N=5000 at 4096, on a dpr=1 desktop. The merge
+  does not create this ceiling; it removes the slack that hid it.
+
+So the single-atlas assumption behind "1 draw call" holds on the 8192 desktop
+clamp at every measured N (peak 51%), and does **not** hold at the 4096 clamp at
+large N. That is why measurement 1's fallback column matters: it is the design's
+actual degradation path, not a hypothetical.
+
+**3 — One build per scene change.** `data-build-count` delta across a 10-step pan
+is **0 on all four layers at every N measured**, and `PERF_ATLAS` asserts it
+rather than reporting it. Every existing rebuild trigger is a discrete
+scene/geometry event (props identity, store subscription, icon decode,
+atlas-overflow retry, context restore); none is per-frame, so the union of the
+four is still discrete and a merged single-pass build inherits the same cadence.
+
+### Consequences
+
+- **Batching:** one draw call for the whole bulk at any N and any interleaving
+  where the merged content fits one atlas; otherwise one bind per material run,
+  measured above. Down from four draw calls (one per canvas) either way.
+- **The atlas is a per-material resource, not an assumption.** The merged design
+  must not require that everything fits one texture, because at the 4096 clamp it
+  does not. Sorted draw is correct under both; only the draw-call count moves.
+- **The sort key had to be made uniform across types.** Each canvas only had to
+  be internally consistent, so the iso-depth tier is fed inconsistently today:
+  `NodesCanvas` passes `-tile.x - tile.y`, `LabelsCanvas` passes `0`, and
+  `ConnectorsCanvas`/`RectanglesCanvas` do not sort at all — they walk model
+  order, filtering hidden layers. Sorting those together with today's inputs
+  would put every rectangle and label above every node at positive depth, a
+  visible re-ordering of existing documents. The merged key gives every type one
+  iso-depth convention, and the type-rank tiebreaker is what keeps a document
+  with no explicit layering or z-order looking exactly as it does now.
+- **Anti-cheat channel renamed.** `data-draw-count` becomes a TOTAL over all bulk
+  entities and can no longer be compared against N. **`data-nodes-drawn == N`** is
+  the honesty assertion from here on (ADR 0020, addendum 2026-08-02). Both are
+  published on the un-merged `NodesCanvas` today, and the perf-harness assertion
+  was repointed in the same change, so the harness never reads a dead attribute
+  across the merge. §5's `data-build-count` assertion extends to the merged canvas
+  unchanged.
+- **Selection becomes order-preserving.** Selecting no longer lifts an element out
+  of the document's paint order; only selection chrome (handles, outline) floats.
+  This is a visible change from today's hybrid overlay, which lifts the whole
+  element, so affected specs assert the sort and the full Playwright budget
+  applies.
+- `label-entity.spec.ts` asserts the sort, not DOM order; ADR 0031 §2 ("a floating
+  Label paints above nodes") is restated as a sort-key property rather than a
+  mount-order one.
+- Image export composites one canvas (§4 unchanged, mechanism simplified), and
+  `waitForIconsDrawn` follows the merged canvas's `data-all-icons-drawn`.
+- **Connector labels stay DOM and stay out of the sort** (§2: there is no GPU
+  connector-label layer). This leaves a documented inconsistency: a floating Label
+  participates in cross-type depth, a connector label chip does not — chips float
+  above everything, which matches the readable-labels intent. **Follow-up
+  trigger:** pull connector chips into the sort if a user files a stacking defect
+  involving them; it is cheaper once the merge exists (shared atlas, one material
+  run). Grounded estimate at sign-off: in scope would have added ~30–40% to this
+  change (path-keyed instances, raster-cache invalidation over OVL-02's fresh
+  unification, a new hit-proxy layer) for a defect nobody has filed.
+- **`atlasStats()`** is added to `SpriteBatch` as shared-substrate instrumentation
+  (`webgl/atlasDiagnostics.ts`): read from the shelf cursor, published alongside
+  `data-build-count`, gated on the debug surface, no per-frame cost.
+
+**Superseded.** §2's enumeration of four bulk canvases; the GL-13 mount-order
+hazard is closed by construction.
+
 ## §7 — Relationship to ADR 0019
 
 ADR 0019 remains the record of *why* the bulk moved off DOM/SVG and of the

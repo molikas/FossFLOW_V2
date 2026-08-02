@@ -86,6 +86,32 @@ Four things worth carrying forward:
    patch simply undid, and passed for the wrong reason until the premise was
    checked.
 
+### Exploratory remediation wave 5 — the GPU-13 measurement gate (2026-08-02)
+
+`PERF_ATLAS=250,500,…` (`perf/engine-perf.spec.ts` → `perf-results/atlas.md`) is
+the diagnostic behind [ADR 0038 §8](../adr/0038-webgl-instanced-render-substrate.md).
+It reuses the harness's own ALL-TYPES scene builder rather than reconstructing
+one — a measurement that models the code measures the model, which is the
+transcription trap in a different costume.
+
+Three things it establishes as testing practice:
+
+- **An invariant in a diagnostic should be asserted, not printed.** ADR 0038 §5
+  ("no per-frame CPU geometry work") is reported by `measurePan` as `buildDelta`;
+  `PERF_ATLAS` also `expect`s it to be 0 on every layer. A number in a report is
+  read once; a gate is read every run.
+- **A renamed anti-cheat channel and its assertion move in ONE change.**
+  `data-nodes-drawn` is published and the harness repointed together, so there is
+  no window where the assertion reads a missing attribute and silently compares
+  `0` to `N`. Verified by the value it now reports (`drawn=200/200`) — a dead
+  attribute would parse to 0 and fail, not pass.
+- **A hand-rolled stub of a shared interface is a maintenance surface.**
+  `NodesCanvas.scrollSync.test.tsx` builds its own `SpriteBatch`, and adding
+  `atlasStats()` broke it — exactly as `atlasOverflowed()` had before, which that
+  stub already carries a comment about. Extending the interface means extending
+  the stub; the failure is loud and immediate, which is the right trade, but budget
+  for it.
+
 ### Exploratory remediation wave 5 — paired history trimming (2026-08-02)
 
 **HIST-03** — [`useHistory.pairedTrim.test.tsx`](../../packages/axoview-lib/src/hooks/__tests__/useHistory.pairedTrim.test.tsx)

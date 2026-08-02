@@ -1401,8 +1401,15 @@ function installHarness() {
     const canvasEl = document.querySelector(
       '[data-testid="axoview-nodes-canvas"]'
     ) as HTMLElement | null;
+    // R3/GPU-13: the anti-cheat reads `data-nodes-drawn`, not
+    // `data-draw-count`. Once the four bulk canvases merge, `data-draw-count`
+    // is a TOTAL over every entity type and can no longer be compared against
+    // N; `data-nodes-drawn` is the channel that keeps meaning "the canvas
+    // painted every node". Both are published today, so this reads a live
+    // attribute on either side of the merge (ADR 0038 §8; ADR 0020 addendum
+    // 2026-08-02).
     const drawCount = canvasEl
-      ? parseInt(canvasEl.dataset.drawCount ?? '0', 10) || 0
+      ? parseInt(canvasEl.dataset.nodesDrawn ?? '0', 10) || 0
       : 0;
     const dom = {
       totalDoc: document.querySelectorAll('*').length,
@@ -1555,6 +1562,110 @@ function installHarness() {
   // the DOM chip layer ~2.3×'d spawn p95 — so this re-measures the floating-label
   // spawn/settle cost on the new substrate. Labels are MODEL-ONLY (no scene
   // size), so the old scene-size pre-seed hack is gone.
+  // R3/GPU-13 §4 measurements 2 and 3 (2026-08-02). Uses the ALL-TYPES scene —
+  // the representative "everything at once" load — and reports:
+  //
+  //   2. atlas occupancy for the node and label chip atlases, which is what
+  //      decides whether ONE merged atlas fits at ADR 0038 §6's clamps;
+  //   3. whether a pan rebuilds geometry (buildDelta must be 0), i.e. whether the
+  //      existing scene-change trigger is still a single pass with no per-frame
+  //      work (ADR 0038 §5).
+  //
+  // Diagnostic only: writes perf-results/atlas.md, never baseline.md.
+  async function measureAtlas(N: number, capMs: number) {
+    resetState();
+    const w = window as any;
+    const prevAllTypes = w.__perfAllTypes;
+    w.__perfAllTypes = true;
+    try {
+      const scene = buildScene(N, 1);
+      fitForGrid(1, N);
+      await quiesce();
+      const { view } = activeView();
+      const newViews = viewsWith(
+        view.id,
+        scene.vitems,
+        scene.connectors,
+        scene.rectangles,
+        scene.textBoxes,
+        scene.labels
+      );
+      ax()
+        .model.getState()
+        .actions.set({ items: scene.items, views: newViews }, false);
+      ax().changeView(view.id, ax().model.getState());
+      await captureUntilSettled([], capMs);
+
+      const read = (testid: string) => {
+        const el = document.querySelector(
+          `[data-testid="${testid}"]`
+        ) as HTMLElement | null;
+        if (!el) return null;
+        const n = (k: string) => parseInt(el.dataset[k] ?? '0', 10) || 0;
+        return {
+          atlasSize: n('atlasSize'),
+          usedRows: n('atlasUsedRows'),
+          slots: n('atlasSlots'),
+          atlasFull: el.dataset.atlasFull === 'true',
+          buildCount: n('buildCount'),
+          drawCount: n('drawCount'),
+          nodesDrawn: n('nodesDrawn')
+        };
+      };
+
+      const nodesBefore = read('axoview-nodes-canvas');
+      const labelsBefore = read('axoview-labels-canvas');
+      const connBefore = read('axoview-connectors-canvas');
+      const rectBefore = read('axoview-rectangles-canvas');
+
+      // Measurement 3: pan without touching the scene. Nothing may rebuild.
+      const ui = ax().ui.getState();
+      const start = ui.scroll.position;
+      for (let i = 1; i <= 10; i++) {
+        ax()
+          .ui.getState()
+          .actions.setScroll({
+            position: { x: start.x - i * 12, y: start.y - i * 8 },
+            offset: { x: 0, y: 0 }
+          });
+        await raf();
+      }
+      await raf();
+
+      const nodesAfter = read('axoview-nodes-canvas');
+      const labelsAfter = read('axoview-labels-canvas');
+      const connAfter = read('axoview-connectors-canvas');
+      const rectAfter = read('axoview-rectangles-canvas');
+
+      const delta = (a: any, b: any) =>
+        a && b ? b.buildCount - a.buildCount : -1;
+
+      return {
+        N,
+        sceneCounts: {
+          nodes: scene.vitems.length,
+          connectors: scene.connectors.length,
+          rectangles: scene.rectangles.length,
+          labels: (scene.labels ?? []).length
+        },
+        atlases: {
+          nodes: nodesBefore,
+          labels: labelsBefore,
+          connectors: connBefore,
+          rectangles: rectBefore
+        },
+        buildDeltaAcrossPan: {
+          nodes: delta(nodesBefore, nodesAfter),
+          labels: delta(labelsBefore, labelsAfter),
+          connectors: delta(connBefore, connAfter),
+          rectangles: delta(rectBefore, rectAfter)
+        }
+      };
+    } finally {
+      w.__perfAllTypes = prevAllTypes;
+    }
+  }
+
   async function measureFloatingLabelHeavy(N: number, capMs: number) {
     resetState();
     const scene = buildScene(N, 1);
@@ -1657,6 +1768,7 @@ function installHarness() {
     measureIdle,
     measureLabelDrag,
     measureBloat,
+    measureAtlas,
     measurePan,
     measureLabelHeavy,
     measureConnLabelHeavy,
@@ -2212,6 +2324,80 @@ test('engine perf baseline — bulk-spawn + drag across N', async ({ page }) => 
       .split(',')
       .map((s) => parseInt(s.trim(), 10))
       .filter((n) => n > 0);
+
+  // ATLAS mode (R3/GPU-13 §4, 2026-08-02): the two measurements the ADR 0038
+  // §8 amendment needs before the four bulk canvases merge — chip-atlas occupancy
+  // at the §6 clamps, and whether a pan still rebuilds nothing. Diagnostic; writes
+  // perf-results/atlas.md and leaves baseline.md alone.
+  if (process.env.PERF_ATLAS) {
+    const Ns = parseNs(process.env.PERF_ATLAS);
+    fs.mkdirSync(RESULTS_DIR, { recursive: true });
+    const rows: string[] = [];
+    const panRows: string[] = [];
+    for (const N of Ns) {
+      const r: any = await page.evaluate(
+        ([n, c]) => (window as any).__perfH.measureAtlas(n, c),
+        [N, SPAWN_CAP_MS] as const
+      );
+      const pct = (a: any) =>
+        a && a.atlasSize > 0
+          ? `${round((a.usedRows / a.atlasSize) * 100, 1)}%`
+          : 'n/a';
+      const cell = (a: any) =>
+        a
+          ? `${a.usedRows} / ${a.atlasSize} (${pct(a)}), ${a.slots} slots${
+              a.atlasFull ? ' **FULL**' : ''
+            }`
+          : 'not mounted';
+      // Only the two CHIP atlases are reported here. Connectors and
+      // rectangles pack nothing content-keyed — they sample the built-in
+      // `dot`/`white` texels and (connectors) one arrow + ring sprite — so
+      // they carry no merged-budget weight and are not instrumented.
+      rows.push(`| ${N} | ${cell(r.atlases.nodes)} | ${cell(r.atlases.labels)} |`);
+      const d = r.buildDeltaAcrossPan;
+      panRows.push(
+        `| ${N} | ${d.nodes} | ${d.labels} | ${d.connectors} | ${d.rectangles} |`
+      );
+      console.log(
+        `[atlas] N=${N} scene=${JSON.stringify(r.sceneCounts)} ` +
+          `nodes=${cell(r.atlases.nodes)} labels=${cell(r.atlases.labels)} ` +
+          `buildDelta=${JSON.stringify(d)}`
+      );
+      // ADR 0038 §5 is a hard invariant, not a reported number: a pan must not
+      // rebuild geometry on ANY layer. If this trips, the merged-canvas design
+      // question is moot until it is explained.
+      expect(
+        [d.nodes, d.labels, d.connectors, d.rectangles].every((x) => x === 0),
+        `no geometry rebuild during a pan at N=${N} (ADR 0038 §5)`
+      ).toBe(true);
+    }
+    fs.writeFileSync(
+      path.join(RESULTS_DIR, 'atlas.md'),
+      [
+        '# GPU-13 §4 — chip-atlas occupancy & build cadence',
+        '',
+        `_Generated ${new Date().toISOString()} · ALL-TYPES scene · cal ${round(calibrationMs, 1)} ms._`,
+        '',
+        'Measurement 2 — atlas occupancy (rows consumed / atlas edge). A merged',
+        'node+label atlas needs the two middle columns to fit in ONE atlas at the',
+        'ADR 0038 §6 clamp.',
+        '',
+        '| N | node chip atlas | label chip atlas |',
+        '|---|---|---|',
+        ...rows,
+        '',
+        'Measurement 3 — `data-build-count` delta across a 10-step pan. Zero on every',
+        'layer means the scene-change trigger is the only thing that rebuilds, so a',
+        'merged single-pass build inherits the same cadence (ADR 0038 §5).',
+        '',
+        '| N | nodes | labels | connectors | rectangles |',
+        '|---|---|---|---|---|',
+        ...panRows,
+        ''
+      ].join(String.fromCharCode(10))
+    );
+    return;
+  }
 
   // Spawn-class styled scenario: commit a styled scene, report settle/longest/
   // p95 + the draw-count==N anti-cheat. Mirrors the spawn baseline cells so the
