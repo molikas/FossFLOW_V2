@@ -539,14 +539,21 @@ run** — otherwise a green fix reads as seven failing new specs.
 >    the sort — connector label chips (§7 Q2, out of scope with a named follow-up
 >    trigger) and text boxes (same trigger, added by the merge and recorded in ADR
 >    0038 §8's implementation note). None has a filed defect.
-> 3. **The perf A/B was NOT run.** ADR 0020's protocol requires a same-session A/B
->    with a matching calibration index, and the pre-merge arm no longer exists in
->    the tree — measuring it means checking out `71ca5b1b`, running, then running
->    `cf81ba74` in the same session. The merge's own claim (draw calls 4 → 1) is
->    structural and asserted by `PERF_ATLAS`'s `drawCalls`/`atlasPages` columns
->    rather than by a frame-time comparison, and §5's build cadence is asserted, not
->    reported. **Proceeding on that basis unless overruled** — run the A/B in wave 6
->    if the owner wants a frame-time number in `decision-log.md`.
+> 3. **The perf A/B RAN and is in `perf-results/decision-log.md`** — same session,
+>    calibration 3.1 vs 3.2 ms, arm A = `71ca5b1b` checked out and measured, arm B =
+>    the merged tree. **No change, and none was reachable:** both arms sit on the
+>    16.67 ms vsync floor at N=1000 and N=2000 with zero long tasks, because pan was
+>    already one uniform write plus one draw per context. The merge's claim is a
+>    DRAW-CALL claim and `PERF_ATLAS` asserts it — **1 draw call at every N**, down
+>    from four, with `data-build-count` flat across the pan.
+>
+>    That run also **corrected §8's measurement 2**: the merged atlas needs 2 766
+>    rows at N=1000 and 2 354 at N=5000, not the estimated 3 144 / 4 178, because
+>    one shelf packer shares rows across chip kinds instead of two atlases each
+>    rounding up. It fits the 4096 clamp after all, so the multi-page fallback is
+>    insurance rather than a routine path — it strengthens sorted draw rather than
+>    contradicting it, so no owner round-trip. The fallback stays: "must not REQUIRE
+>    one texture" is what made the design safe to commit to.
 
 - [x] **HIST-10 + HIST-04 — DONE 2026-08-02.** §6 steps 1–3 as one change, exactly
   as signed off. Entries carry an optional `viewId`, stamped at the logical

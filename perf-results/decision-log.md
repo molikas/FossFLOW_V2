@@ -1723,3 +1723,51 @@ because it asserts deletion, not the halo). Fix: `connectorHybridIds` now also i
 connectors → `selectionHalos` 0→5, `domConnectorPaths` 0→5) and re-verified green.
 
 **Committed to `integration`** (owner asked). Executive summary handed to the owner.
+
+---
+
+## 2026-08-02 — R3/GPU-13, the four bulk canvases merged into one (ADR 0038 §8)
+
+**Same-session A/B, matching calibration index** (3.1 ms merged vs 3.2 ms
+pre-merge — inside the drift band, so the two arms are comparable; the protocol's
+whole point). Arm A = `71ca5b1b` (four contexts, substrate only), arm B =
+`cf81ba74..8ddcb43c` (one context, sorted draw). `PERF_PAN=1000,2000`:
+
+| N | arm | mean | p95 | longest | longtask | noCPU-rebuild | draw |
+|---|---|---|---|---|---|---|---|
+| 1000 | A (four canvases) | 16.67 ms | 16.8 ms | 16.8 ms | 0 | true | 1000/1000 |
+| 1000 | B (merged) | 16.67 ms | 16.7 ms | 16.8 ms | 0 | true | 1000/1000 |
+| 2000 | A (four canvases) | 16.67 ms | 16.7 ms | 16.8 ms | 0 | true | 2000/2000 |
+| 2000 | B (merged) | 16.67 ms | 16.8 ms | 16.8 ms | 0 | true | 2000/2000 |
+
+**Verdict: no change, and the A/B cannot show one here** — both arms sit on the
+**vsync floor** (16.67 ms = 60 fps) with zero long tasks, so the pan path had no
+headroom to lose or gain. That is the expected result: pan was already one uniform
+write plus one draw call per context, and merging turns four such into one, which
+is far below the floor. The merge's own claim is a DRAW-CALL claim, not a
+frame-time one, and it is asserted rather than reported — see below.
+
+**`PERF_ATLAS=1000,2000,5000` on the merged canvas** (the §8 standing guard; it
+asserts §5's build cadence rather than printing it):
+
+| N | scene | merged atlas | pages | draw calls | build delta across a 10-step pan |
+|---|---|---|---|---|---|
+| 1000 | 1000 nodes / 968 conn / 49 rect / 250 labels | 2 766 / 8192 (33.8%), 1 257 slots | 1 | **1** | 0 |
+| 2000 | 2000 / 1955 / 81 / 500 | 986 / 8192 (12%), 507 slots | 1 | **1** | 0 |
+| 5000 | 5000 / 4929 / 225 / 1250 | 2 354 / 8192 (28.7%), 1 257 slots | 1 | **1** | 0 |
+
+**One draw call for the whole bulk at every N, down from four**, and
+`data-build-count` flat across the pan — ADR 0038 §5, machine-checked on the
+merged canvas.
+
+**A measured correction to §8's measurement 2.** The amendment derived a merged
+budget by SUMMING the two separate chip atlases (3 144 rows at N=1000, 4 178 at
+N=5000) and concluded the merged set would not fit the 4096 high-DPR clamp at
+large N. Measured on the real merged atlas it packs far better — 2 766 and 2 354
+rows — because one shelf packer shares rows across chip kinds instead of each
+atlas rounding up its own. Both fit 4096 comfortably. The multi-page fallback is
+therefore insurance rather than a routine path, which strengthens the sorted-draw
+decision rather than contradicting it; no owner round-trip. The fallback stays,
+because "does not require one texture" is the property that made the design safe
+to commit to.
+

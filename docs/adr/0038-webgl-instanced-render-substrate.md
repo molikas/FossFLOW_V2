@@ -351,6 +351,16 @@ tinted lines, discs and fills — every connector and rectangle instance — joi
 whichever run they land in and can never fragment one. A connector-and-rectangle
 scene is one draw call however it interleaves.
 
+Measured after the merge (`PERF_ATLAS`, `perf-results/decision-log.md`), the
+merged atlas needs **2 766 rows at N=1000 and 2 354 at N=5000** — one page and
+**one draw call at every N**, against measurement 2's estimate of 3 144 and 4 178.
+The estimate was derived by SUMMING the two separate chip atlases; one shelf
+packer shares rows across chip kinds instead of each atlas rounding up its own, so
+the real merged set fits the 4096 high-DPR clamp too. The multi-page fallback is
+insurance rather than a routine path. It stays: "must not REQUIRE one texture" is
+the property that made sorted draw safe to commit to, and an estimate being
+conservative is not a reason to remove the path it justified.
+
 **3 — Connector-body order had to be defended twice.** A SELECTED connector was
 promoted into the DOM `<Connector>` for its S3/A2 halo; keeping that promotion
 would have lifted its body above every node, which order-preserving selection
