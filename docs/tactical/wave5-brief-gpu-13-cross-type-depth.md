@@ -224,6 +224,22 @@ run-length, atlas occupancy at N=1000/2000/5000, buildInstances single-pass —
 not just the sorted-draw conclusion; if any measurement contradicts sorted-draw,
 that is a contract change: stop and ping the owner.
 
+**Picker-gate scope ruled (2026-08-02, wave-5 close question):** the agent's
+default is **accepted** — the renderer/picker-agreement gate covers the
+zIndex/iso-depth tiers; the layer tier is excluded — **with two corrections**:
+
+1. The exclusion rationale must not claim the divergence cannot manifest. The
+   "different visible layers never share a tile without colliding" argument
+   holds for **nodes only**; rectangles, labels and connectors overlap across
+   layers without colliding, so the divergence is real (a visually-top rectangle
+   from a high-`order` layer can lose the click to a lower-layer rectangle that
+   wins the zIndex tie). The gate's header names that repro shape.
+2. The divergence is **PROJ-10's residual** — annotate the PROJ-10 known_issues
+   entry (layer tier still absent from the picker after the merge; the gate
+   excludes it deliberately) and route "thread layers into the hit-test scene"
+   to the **program final sweep** as its own small item. It does not widen the
+   merge.
+
 **§7 Q2 — connector labels are out of scope.** Grounded cost/impact was
 reviewed: in-scope ≈ +30–40% project scope (path-keyed instances, raster-cache
 invalidation over OVL-02's fresh unification, a new hit-proxy layer) for a
