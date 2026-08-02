@@ -503,8 +503,8 @@ run** — otherwise a green fix reads as seven failing new specs.
 >    correct to navigate. HIST-03 stays separate — it is a trimming bug, and
 >    pairing it would make either failure hard to attribute.
 
-- [ ] **HIST-10:** brief drafted → **owner sign-off** → implement always-navigate undo, then HIST-04 rides it.
-- [ ] **GPU-13:** brief drafted (ADR 0038 §8 amendment skeletoned) → **owner sign-off** → implement.
+- [ ] **HIST-10:** ~~brief drafted → owner sign-off~~ **SIGNED OFF 2026-08-02** (shape + all four §5 answers as recommended — see the brief's sign-off block) → implement §6 steps 1–3 as one PR, HIST-04 rides it; HIST-03 strictly separate, after.
+- [ ] **GPU-13:** ~~brief drafted → owner sign-off~~ **SIGNED OFF 2026-08-02** — Option A, measurement-first (the measurement selects sorted-draw vs depth-two-pass **inside** the merged context; it never un-merges); selection **order-preserving**; connector labels **out of scope** with the documented inconsistency + follow-up trigger → run §4 measurements → write the dated ADR 0038 §8 amendment → implement.
 
 ### Wave 6 — Program build-out (should-have)
 - [ ] Write `.claude/skills/explore.md`: APPROACH distilled + COLDSTART flow + rig-traps appendix + delta-mode area selection (`git diff` vs last campaign end commit); regenerate-baseline step.

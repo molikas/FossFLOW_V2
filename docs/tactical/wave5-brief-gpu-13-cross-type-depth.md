@@ -1,9 +1,8 @@
 # Wave-5 design brief — GPU-13: cross-type z-depth
 
-**Status:** DRAFT FOR OWNER REVIEW. Nothing implemented. This is the artifact the
-2026-07-30 ruling asks for ("renderer restructure, ADR 0038 amendment + design
-pass first"); the ADR amendment itself is skeletoned in §6 and stays unwritten
-until an option is chosen.
+**Status:** SIGNED OFF 2026-08-02 — see "Owner sign-off" at the end of this file.
+Implementation may begin, measurement-first per §4. The ADR 0038 §8 amendment is
+written (dated) after the measurement selects the ordering mechanism, before code.
 
 **Ruling being served (DECISIONS.md, 2026-07-30):** *build real cross-type
 depth* — the owner chose the full mechanism over the cheaper alternative of
@@ -191,3 +190,31 @@ with that measurement, because a bad answer there changes the recommendation.
 3. **Is the batching measurement a gate on the decision** (my recommendation), or
    should the design proceed on Option A and treat batching as an
    implementation-time problem?
+
+---
+
+## Owner sign-off (2026-08-02)
+
+**Option A approved, measurement-first** — with one reframe of §2(a)/§7 Q3: the
+measurement is a gate on the **mechanism, not the merge**. A bad run-length
+result selects depth-buffer two-pass ordering (opaque-with-depth, then
+translucent sorted) *inside* the merged context; it never un-merges the
+canvases. Run the §4 measurements first; their outcome fills the amendment's
+Decision paragraph.
+
+**§7 Q1 — selection is order-preserving.** Selecting never changes the
+document's paint order; only selection chrome (handles, outline) floats. This is
+the Figma/Illustrator/draw.io norm and the reading consistent with wave 3's
+overlay-agreement fix. Note it changes today's visible behaviour (the hybrid
+overlay currently lifts the whole element) — specs assert the sort, and the full
+Playwright budget applies.
+
+**§7 Q2 — connector labels are out of scope.** Grounded cost/impact was
+reviewed: in-scope ≈ +30–40% project scope (path-keyed instances, raster-cache
+invalidation over OVL-02's fresh unification, a new hit-proxy layer) for a
+defect nobody has filed; out-of-scope keeps chips floating above everything,
+which matches the readable-labels intent. The amendment must document the
+resulting inconsistency (floating Labels participate in cross-type depth,
+connector chips do not) **with a named follow-up trigger**: pull chips into the
+sort if a user-filed stacking defect involves them — cheaper after the merge
+exists (shared atlas + material runs).

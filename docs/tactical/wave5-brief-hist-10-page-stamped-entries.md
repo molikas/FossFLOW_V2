@@ -1,9 +1,8 @@
 # Wave-5 design brief — HIST-10: page-stamped history entries
 
-**Status:** DRAFT FOR OWNER REVIEW. Nothing implemented. The entry shape below is
-the thing to sign off on, because it is what makes this a design gate rather than
-a patch: it changes a type both stores construct, both trim, and `useHistory`
-pairs across.
+**Status:** SIGNED OFF 2026-08-02 — entry shape (§3) and sequencing (§6) approved
+as drafted; all four §5 questions answered as recommended, see "Owner sign-off"
+at the end of this file.
 
 **Ruling being served (DECISIONS.md, 2026-07-30):** *always navigate* — each
 history entry is stamped with the active page; undo/redo switches to that page
@@ -164,3 +163,22 @@ the failure mode (undo pushes a new entry) is a loop.
    them would make either failure hard to attribute.
 
 Steps 1–3 are one reviewable change; step 4 should not be in it.
+
+---
+
+## Owner sign-off (2026-08-02)
+
+Entry shape approved on all three §3 properties (optional record-time `viewId`,
+`undefined` = stay put; per-store stamp / per-action consume with the agreement
+assertion). §5 answers:
+
+1. **Yes — each undo step navigates**, including rapid sequences that move the
+   viewport back and forth (PowerPoint behaviour; the consistent reading).
+2. **Confirmed** — a redo stamps the page the action was originally performed
+   on; there is no separate "page I pressed undo from".
+3. **Navigate on a half-stepped action** — fail-visible beats fail-silent;
+   HIST-03's own fix retires the case. Do not suppress.
+4. **Confirmed** — layer operations are page-scoped by construction.
+
+§6 sequencing approved: steps 1–3 one PR (HIST-04 rides it), HIST-03 strictly
+separate.
