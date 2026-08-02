@@ -570,10 +570,34 @@ run** — otherwise a green fix reads as seven failing new specs.
   scene connector cannot form once the step lands on the page the entry belongs to
   and SYNC_SCENEs it. Promoted (orphan-count assertion, red-verified) before the
   probe was retired, since that was the only D-9 coverage in the repo.
+
+- [x] **HIST-03 — DONE 2026-08-02**, its own change after the steps-1–3 commit, as
+  scheduled mid-wave. The 50-entry cap becomes a 50-**logical-action** window
+  (`retainWithinHistoryWindow`): both stores apply the identical predicate to the
+  identical shared counter, so an action's two halves are always retained together
+  or dropped together. Simpler than the entry's proposed "when a store evicts seq
+  N, drop ≤ N from both stacks", which needs one store to reach into the other.
+  Applied on READ as well as write — a store that has stopped writing must age out
+  in step, and that lag *was* the bug. Promoted:
+  [`useHistory.pairedTrim.test.tsx`](../../packages/axoview-lib/src/hooks/__tests__/useHistory.pairedTrim.test.tsx);
+  probe retired.
+
+  **The probe's first `it.failing` could never have flipped**, and did not — it
+  asserted the shared seq must still be PRESENT in the model stack ("retain the
+  pair") while its own comment allowed either resolution ("evicted together, or
+  neither is"). The fix evicts the pair together. That is wave 4's
+  over-specified-mechanism trap appearing in a probe nobody had re-read; the
+  promoted regression asserts the OUTCOME instead — a text box that survives the
+  cap *with* its scene size, and a model stack whose exhaustion leaves the scene
+  stack nothing to give.
+
+  **The cap's meaning changed deliberately** from "50 entries per store" to "the
+  last 50 logical actions". HIST-15's silent-cap ruling is unchanged and the new
+  meaning is closer to what it describes.
 - [ ] **GPU-13:** ~~brief drafted → owner sign-off~~ **SIGNED OFF 2026-08-02** — Option A, measurement-first (the measurement selects sorted-draw vs depth-two-pass **inside** the merged context; it never un-merges); selection **order-preserving**; connector labels **out of scope** with the documented inconsistency + follow-up trigger → run §4 measurements → write the dated ADR 0038 §8 amendment → implement.
 
 ### Wave 6 — Program build-out (should-have)
-- [ ] Write `.claude/skills/explore.md`: APPROACH distilled + COLDSTART flow + rig-traps appendix + delta-mode area selection (`git diff` vs last campaign end commit); regenerate-baseline step.
+- [ ] Write `.claude/skills/explore.md`: APPROACH distilled + COLDSTART flow + rig-traps appendix + delta-mode area selection (`git diff` vs last campaign end commit); regenerate-baseline step; **embed the end-of-session report contract** (Notes for Claude) so every future run ends with the same four-part report.
 
   **Rig-traps appendix — queued contents (grow this list, don't rediscover it):**
   - The Jest two-argument `expect(value, 'msg')` trap (wave 3) — and note that wave 4 lands a *gate* for it, so the appendix should point at the gate rather than rely on memory.
@@ -612,6 +636,13 @@ When all sub-tasks are complete and `npm run test:regression` passes:
 
 ## Notes for Claude
 
+- **End-of-session report contract (owner-mandated 2026-08-02).** The final message of every session has exactly four parts, in this order, and nothing else:
+  1. **Shipped:** one line per commit (sha — what).
+  2. **Gate:** one line — suites/e2e counts, green or red.
+  3. **Next:** ONE sentence — the first action of the successor session. All further detail goes in this file's resume point, not in chat.
+  4. **Owner:** the word **"nothing"**, or ONE question with a recommended default so it can be answered in a word. If several questions compete, ask the most blocking one; record the rest in the resume point as "proceeding with X unless overruled".
+
+  Findings, corrections, and lessons are written into their homes (entries, this file, testing.md) and *linked*, never restated in the report. A report the owner cannot act on in under a minute is a defect in the report.
 - **`integration` is off-limits for this program** (unrelated MCP POC in flight, 2026-07-30): never base, merge, or rebase remediation work there. The base is `remediation/exploratory-campaign` off `master`.
 - **The flip rule is per-PR, not per-wave** — never batch "promote probes later"; a fixed bug with its probe still in the lane is an incomplete fix.
 - Fix sessions should read the area file for the bug's ID prefix first: the campaign's rig notes (A1 harness `consumeLoadEcho`, A2 fetch doubles, jsdom canvas stub, `async ({page, app})` fixture trap) are recorded there and cost ~10 wrong verdicts to learn.
