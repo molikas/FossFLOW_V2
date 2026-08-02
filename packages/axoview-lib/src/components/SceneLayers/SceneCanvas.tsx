@@ -23,7 +23,7 @@ import {
   compareSceneDrawOrder,
   findLayer
 } from 'src/utils/renderOrder';
-import { LabelChipLayout } from 'src/utils/labelChip';
+import { ChipColors, LabelChipLayout } from 'src/utils/labelChip';
 import { computeBackingStore } from 'src/utils/renderTarget';
 import {
   createSpriteBatch,
@@ -157,6 +157,13 @@ export const SceneCanvas = memo(
       border: '',
       text: ''
     });
+    // Floating-Label chip colours, through a ref for the same reason the node
+    // chip style is: reading the live theme INSIDE the GL effect would make
+    // `theme` a dependency of it, and a theme change would then tear down and
+    // rebuild the WebGL2 context. Contexts are a scarce resource (ADR 0038's GL
+    // context budget) and the rebuild is pure waste — the geometry effect below
+    // already re-rasterises every chip on a theme change.
+    const labelColorsRef = useRef<ChipColors>({ bg: '', border: '', text: '' });
     rectanglesRef.current = rectangles;
     connectorsRef.current = connectors;
     nodesRef.current = nodes;
@@ -169,6 +176,11 @@ export const SceneCanvas = memo(
       skipNodes && skipNodes.length > 0
         ? new Set(skipNodes.map((n) => n.id))
         : EMPTY_SKIP;
+    labelColorsRef.current = {
+      bg: theme.palette.common.white,
+      border: theme.palette.grey[400],
+      text: theme.palette.text.primary
+    };
     chipStyleRef.current = {
       radius: (theme.shape.borderRadius as number) * 2,
       padX: spacingPx(theme.spacing(1.5)),
@@ -556,11 +568,7 @@ export const SceneCanvas = memo(
           ? createLabelEmitter({
               batch: b,
               measureCtx,
-              colors: {
-                bg: theme.palette.common.white,
-                border: theme.palette.grey[400],
-                text: theme.palette.text.primary
-              },
+              colors: labelColorsRef.current,
               move: ui.labelMove,
               moves: ui.labelMoves,
               editingId: ui.inlineEditLabelId,
@@ -763,7 +771,7 @@ export const SceneCanvas = memo(
         detachLoss();
         batch?.destroy();
       };
-    }, [uiApi, modelApi, sceneApi, theme]);
+    }, [uiApi, modelApi, sceneApi]);
 
     useEffect(() => {
       geomDirtyRef.current = true;
