@@ -3598,16 +3598,48 @@ crosses every type at once.
 
 **Workaround:** none — deselect to see the true stacking.
 
-**Status:** Open. **Deliberately not attempted in wave 3.** The direction is
-sound and unchanged; what it describes is a Renderer restructure — splitting
-"where the node paints" from "where its interactive chrome lives" for the
-promoted overlay — not a contained fix, and it interacts with the same stacking
-order R3/GPU-13's cross-type z-depth work (wave 5, design-gated) will have to
-settle. Doing it twice would be worse than doing it once, with that design in
-hand. Wave 3 did land the **RND-14 ruling** on the neighbouring code path
-(promoted ids bypass the viewport cull, so a keyboard command on an off-screen
-selection is no longer a silent no-op) — recorded here because the two touch the
-same `hybridIds` machinery and a reader of one should know about the other.
+**Status:** Fixed in wave 5 (2026-08-02), with R3/GPU-13's canvas merge, as the
+wave-3 note said it had to be. The restructure it predicted is exactly what
+landed: "where the node paints" and "where its interactive chrome lives" are now
+two different things.
+
+With one merged bulk canvas (ADR 0038 §8) the promotion could not simply be
+re-stacked — a promoted element is a DOM sibling of the canvas, so it can only
+paint ABOVE or BELOW the whole of it, never in its own place in the document
+order. So **selection promotes nothing**: `hybridIds` in
+[`Renderer.tsx`](packages/axoview-lib/src/components/Renderer/Renderer.tsx) drops
+`itemControls` and the element stays in the sorted draw. Only selection CHROME
+floats (the TransformControls handles and outline, which are their own overlays
+and always were). Owner ruling, GPU-13 brief §7 Q1.
+
+**What had to change with it, and was not obvious from the entry.** The DOM
+overlay was also how F2 inline-rename got a `contentEditable`, and `<Node>`
+learned it should open one from a synchronous `inlineEditNodeName` window event —
+which a node that has not mounted yet cannot hear. The rename INTENT is store
+state now (`uiState.inlineEditNodeId`), it is what promotes, and the same write
+un-culls the node, so RND-14's "reveal, then act" ruling still lands a rename
+started on an off-screen selection. The three dispatch sites (F2, the context
+menu, the label-chip double-click) write the store for a node and keep the event
+for text boxes and connector labels, which are always DOM.
+
+**The connector half went the other way.** A selected connector was promoted for
+its S3/A2 halo, which is DOM-only in `<Connector>`; promoting it now would lift
+its BODY above every node. The halo is emitted by the bulk instead, on the
+connector's own instance run, with the same 3.5×/0.35 metrics — so the DOM
+connector layer keeps only the degenerate-dot and unroutable-badge cues, which
+the bulk cannot draw at all.
+
+**Two DOM promotions still float, deliberately**, and both are named in ADR 0038
+§8: the DRAGGED node/rectangle (the `--ff-drag` compositor preview needs a real
+element, and the brief's sign-off keeps drag out of the ruling) and the
+inline-rename session. Dragging is not selecting.
+
+Promoted regression:
+[`cross-type-z-order.spec.ts`](packages/axoview-e2e/tests/cross-type-z-order.spec.ts)
+— selecting a node that sits under a higher-`zIndex` rectangle must not change
+the pixels at the overlap, and no DOM overlay copy may mount; a companion case
+proves renaming still DOES promote, so the affordance was not silently deleted.
+The probe is retired.
 
 ## Below the label LOD zoom the selected node still shows its name
 
@@ -6056,8 +6088,11 @@ position dominates the per-element z-index exactly as it does for nodes. The
 connector and text-box layers do not sort among themselves at all (they paint in
 model order), so there was nothing to re-key there.
 
-Still does NOT cross entity types — a rectangle keeps painting structurally
-under a node — which is GPU-13, design-gated to wave 5. Promoted regression:
+It did NOT cross entity types at the time — a rectangle kept painting
+structurally under a node — which was GPU-13. **Closed in wave 5 (2026-08-02):**
+the four bulk canvases merged into one sorted draw (ADR 0038 §8), so the layer
+bucket and `zIndex` now order across types too, and a rectangle on a high-`order`
+layer really does paint above a node on a lower one. Promoted regression:
 [`layerRenderOrder.test.ts`](packages/axoview-lib/src/utils/__tests__/layerRenderOrder.test.ts),
 which carries the zIndex-only comparator as a CONTROL so the test can be seen to
 distinguish the two.

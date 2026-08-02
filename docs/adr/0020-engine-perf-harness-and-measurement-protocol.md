@@ -177,11 +177,19 @@ The bulk canvases merge into one context under
 [ADR 0038 §8](0038-webgl-instanced-render-substrate.md), where `dataset.drawCount`
 becomes a TOTAL over every entity type and can no longer be compared against N.
 The honesty assertion is therefore **`dataset.nodesDrawn == N`**; the total stays
-published and informational. `NodesCanvas` publishes both today, and the harness
-assertion was repointed in the same change, so there is no window in which it
-reads a dead attribute. `PERF_ATLAS` (`perf-results/atlas.md`) is the §8
-measurement scenario and additionally asserts `buildDelta === 0` per layer across
-a pan, which is §5's invariant stated as a gate rather than a report.
+published and informational. `NodesCanvas` published both from the rename onward
+and the harness assertion was repointed in the same change, so there was no window
+in which it read a dead attribute. `PERF_ATLAS` (`perf-results/atlas.md`) is the §8
+measurement scenario and additionally asserts `buildDelta === 0` across a pan,
+which is §5's invariant stated as a gate rather than a report.
+
+**Merge landed the same day.** The four canvases are now one
+(`axoview-scene-canvas`), so every anti-cheat reads a PER-TYPE channel on it:
+`data-nodes-drawn`, `data-connectors-drawn`, `data-rectangles-drawn`,
+`data-labels-drawn` (node NAME chips) and `data-floating-labels-drawn` (ADR 0031
+Labels). `data-build-count` is one counter instead of four summed, and
+`PERF_ATLAS` reports the one merged atlas plus the pages and draw calls it needed
+— which is what says whether §8's "one draw call" case held on a given run.
 
 **Addendum (2026-07-08) — T4 WebGL fold shipped (ADR 0038).**
 - T4 (WebGL instanced substrate) shipped; the tier ladder is marked ✅. Nodes,

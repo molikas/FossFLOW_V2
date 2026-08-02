@@ -321,6 +321,75 @@ four is still discrete and a merged single-pass build inherits the same cadence.
 **Superseded.** §2's enumeration of four bulk canvases; the GL-13 mount-order
 hazard is closed by construction.
 
+### Implementation note (2026-08-02, written from the merge)
+
+The merge landed as decided. Five things it corrected or settled, each found by
+implementing rather than by reasoning — recorded here because the next reader of
+this section will otherwise re-derive them.
+
+**1 — The tie order above is wrong as written, and the correction is
+load-bearing.** "Keyed by `resolveRenderOrder(layerOrder, zIndex, isoDepth)` with
+a type rank as the tiebreaker at equal keys" cannot be implemented: iso depth is
+fed inconsistently across types (as the consequence above itself records), so a
+node at a positive tile has a NEGATIVE iso depth and sorts below every rectangle
+and label on the same layer at the same z-index — the keys are never equal, so the
+tiebreaker never runs, and the result is exactly the "visible re-ordering of
+existing documents" this section says must not happen. The shipped key ranks
+**layer stack ▸ z-index ▸ TYPE RANK ▸ iso depth**, then the caller's array order
+via a stable sort. Iso depth therefore only ever separates same-type entities,
+which is the only thing it ever meant. `compareSceneDrawOrder` in
+[`renderOrder.ts`](../../packages/axoview-lib/src/utils/renderOrder.ts).
+
+**2 — "The atlas is a per-material resource" became multi-PAGE, not
+per-material.** `SpriteBatch` allocates atlas pages lazily up to a budget (the
+merged canvas asks for 2) and `render()` issues one `drawArraysInstanced` per
+contiguous run of instances sampling the same page. Pages beat per-material
+atlases here because page assignment follows PACKING order, which is the sorted
+draw order, so runs stay long; and because the built-in `dot`/`white` texels are
+replayed onto every page at identical coordinates and carry a wildcard, so
+tinted lines, discs and fills — every connector and rectangle instance — join
+whichever run they land in and can never fragment one. A connector-and-rectangle
+scene is one draw call however it interleaves.
+
+**3 — Connector-body order had to be defended twice.** A SELECTED connector was
+promoted into the DOM `<Connector>` for its S3/A2 halo; keeping that promotion
+would have lifted its body above every node, which order-preserving selection
+forbids. The halo is emitted by the bulk now, on the connector's own instance run,
+with the DOM's 3.5× width and 0.35 opacity. The DOM connector layer keeps only the
+degenerate-dot and unroutable-badge cues, which the bulk cannot draw at all
+(it needs ≥2 path tiles). Connectors carry no `zIndex` in the schema at all — the
+canvas context menu offers the z-order commands to ITEM / LABEL / RECTANGLE only —
+so they order by layer and type rank alone, which is what the brief's
+"bring-to-front on a connector does nothing" observed and is unchanged here.
+
+**4 — Everything DOM that is not in the sort floats above the merged canvas, and
+that is now one rule rather than four accidents.** Connector label chips (already
+recorded above), text boxes, the dragged node/rectangle hybrid and the
+inline-rename session all sit after the canvas in the Renderer's child list. Two
+consequences worth stating: a text box used to paint UNDER nodes (it was
+DOM-earlier than `NodesCanvas`) and now paints over them, and the GRID moved to
+mount FIRST — it used to sit between `RectanglesCanvas` and `ConnectorsCanvas`,
+painting over rectangle fills and under everything else, a position that only
+existed while there were four canvases to sit between. A backdrop under all
+content is the reading that survives the merge. The follow-up trigger for text
+boxes is the connector-label one: pull them into the sort if a user files a
+stacking defect involving them.
+
+**5 — Rectangles had a renderer/picker divergence the merge had to settle before
+the agreement gate could assert anything true.** At equal `zIndex` the pre-merge
+`RectanglesCanvas` walked plain model order (last entry on top) while the DOM
+`<Rectangles>` layer and `hitDetection`'s rectangle branch both use REVERSED
+insertion (first entry on top). The merged canvas adopts the picker's convention.
+
+The agreement gate itself
+([`pickerAgreement.contract.test.ts`](../../packages/axoview-lib/src/utils/__tests__/pickerAgreement.contract.test.ts))
+covers the zIndex and iso-depth tiers and names the layer tier as excluded, with
+the repro shape that makes the exclusion honest; closing that is PROJ-10's
+residual, routed to the program final sweep so it does not widen this change.
+Cross-type order is proved in pixels off the preserved drawing buffer by
+[`cross-type-z-order.spec.ts`](../../packages/axoview-e2e/tests/cross-type-z-order.spec.ts),
+which is also where RND-13/15's order-preserving selection is asserted.
+
 ## §7 — Relationship to ADR 0019
 
 ADR 0019 remains the record of *why* the bulk moved off DOM/SVG and of the

@@ -297,44 +297,26 @@ test.describe('GPU-04 — the draw threshold and the hit threshold disagree', ()
 });
 
 // ---------------------------------------------------------------------------
-// GPU-13 — cross-layer z-order is fixed by DOM stacking
+// RETIRED 2026-08-02 — GPU-13, and GPU-06/07/08's premise with it
 // ---------------------------------------------------------------------------
-
-// DEDUPE NOTE: `label-entity.spec.ts` already asserts the Labels-after-Nodes
-// DOM order for that ONE pair. What is novel here is the four-layer rule and its
-// consequence: every bulk canvas shares a single stacking context, so a
-// per-element `zIndex` sorts only WITHIN its own canvas and can never lift a
-// connector above a node.
-test.describe('GPU-13 — per-element zIndex cannot cross a layer boundary', () => {
-  test('the four bulk canvases stack by mount order, all at the same zIndex', async ({
-    page,
-    app
-  }) => {
-    for (const id of BULK_LAYERS) {
-      await expect(page.locator(layerSelector(id))).toBeAttached();
-    }
-    const order = await page.evaluate((sels: string[]) => {
-      const els = sels.map(
-        (s) => document.querySelector(s) as HTMLElement | null
-      );
-      if (els.some((e) => !e)) return null;
-      const zs = els.map((e) => getComputedStyle(e!).zIndex);
-      // Pairwise: does each layer come BEFORE the next in document order?
-      const ascending = els.slice(0, -1).every((e, i) => {
-        return (e!.compareDocumentPosition(els[i + 1]!) & 4) !== 0;
-      });
-      return { zs, ascending };
-    }, BULK_LAYERS.map(layerSelector));
-
-    expect(order).not.toBeNull();
-    test.info().annotations.push({
-      type: 'GPU-13',
-      description: `zIndex=${JSON.stringify(order!.zs)} ascending=${order!.ascending}`
-    });
-    // The consequence: since every canvas carries the same stacking context,
-    // ONLY document order decides which entity type paints on top — a per-element
-    // zIndex can never lift a connector above a node.
-    expect(new Set(order!.zs).size).toBe(1);
-    expect(order!.ascending).toBe(true);
-  });
-});
+//
+// GPU-13's probe asserted the DEFECT: four bulk canvases at one CSS zIndex in
+// ascending document order, so cross-type paint order was mount order and a
+// per-element `zIndex` could not lift a connector above a node. Wave 5 merged
+// them into one context ordered by one sort (ADR 0038 §8), so the probe now
+// characterises a world that does not exist. Its claim is asserted from the
+// other side by `tests/cross-type-z-order.spec.ts`, which reads the merged
+// canvas's pixels where two entities overlap.
+//
+// **Explicit disposition for the neighbours, per the wave-4 flip-rule lesson**
+// (a fix can invalidate a neighbouring probe's PREMISE without fixing or
+// refuting it). GPU-06, GPU-07 and GPU-08 above are all one shape — "the four
+// layers were copy-adapted from one skeleton, so <invalidation / context-loss /
+// visibility> has drifted between them". There is one layer now, so the drift
+// they measure is closed by construction rather than by a fix, and their probes
+// are retired with GPU-13's. Re-open any of them, against the merged canvas, if
+// a second GPU context is ever added back.
+//
+// GPU-04 (above) is untouched by the merge — it is a draw-threshold vs
+// hit-threshold disagreement, not a cross-layer one — and stays open with its
+// known_issues entry.

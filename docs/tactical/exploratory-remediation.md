@@ -5,7 +5,7 @@
 > - [docs/exploratory/DECISIONS.md](../exploratory/DECISIONS.md) — the 22 owner rulings this plan implements (incl. the ADR amendments each ruling names)
 > - [docs/exploratory/LEDGER.md](../exploratory/LEDGER.md) — per-area bug counts; [known_issues.md](../../known_issues.md) — the 172 filed entries (`Found by: exploratory campaign <ID>`)
 >
-> **Status:** Waves 0–4 COMPLETE · Wave 5 IN PROGRESS · **Owner:** molikas · **Last updated:** 2026-08-02
+> **Status:** Waves 0–5 COMPLETE · Wave 6 NOT STARTED · **Owner:** molikas · **Last updated:** 2026-08-02
 >
 > Wave 4 is next. Read the wave 1–3 sections first — between them they carry the
 > items deliberately routed forward (HIST-03/04 and RND-13/15 to wave 5, CLIP-14
@@ -514,71 +514,39 @@ run** — otherwise a green fix reads as seven failing new specs.
 > treating them as new findings; they are not evidence of a live defect. The
 > e2e lane and every other jest area are green.
 
-### Wave 5 — Design-gated larges (rulings 2026-07-30)
+### Wave 5 — Design-gated larges (rulings 2026-07-30) ✅ COMPLETE 2026-08-02
 
-> **RESUME POINT (2026-08-02, end of session).** The history half of wave 5 is
-> **DONE and committed**: HIST-10 + HIST-04 (`cc44a8e2`), HIST-03 (`be31912f`).
-> GPU-13's **design gate is closed** — all three §4 measurements are taken and the
-> dated [ADR 0038 §8](../adr/0038-webgl-instanced-render-substrate.md) amendment is
-> written, with the reciprocal [ADR 0020](../adr/0020-engine-perf-harness-and-measurement-protocol.md)
-> addendum. **The merge implementation has not started**, by approved session
-> boundary — a partially-merged renderer never lands, so it begins fresh from here.
+> **RESUME POINT (2026-08-02, end of session).** Wave 5 is **COMPLETE**. The
+> history half (HIST-10 + HIST-04 `cc44a8e2`, HIST-03 `be31912f`) and the GPU half
+> (design gate `f33624a4`, substrate `71ca5b1b`, merge `cf81ba74`) have all landed;
+> GPU-13 and RND-13/15 close with the merge.
 >
-> **Start here: GPU-13 implementation.** Everything below is decided; none of it
-> needs another owner round-trip (standing autonomy, 2026-08-02).
+> **Start here: wave 6.** Its four items are unchanged and listed below, plus the
+> **program final sweep** item (PROJ-10's residual — thread `layers` into the
+> `HitTestScene`), which the merge deliberately did not widen into.
 >
-> 1. **The mechanism is settled: sorted draw**, one WebGL2 context, one program,
->    one VAO, depth buffer stays off. `SpriteBatch.render()` already issues exactly
->    one `drawArraysInstanced`, so a global sort cannot fragment a draw call.
-> 2. **Do not assume a single atlas.** Measured: a merged chip atlas peaks at
->    ~4 000 rows and fits the 8192 desktop clamp at 51%, but does **not** fit the
->    4096 high-DPR clamp at N=5000 — where the label atlas alone already reports
->    `atlasFull` today. The batch's atlas must stay a per-material resource; the
->    fallback costs the measured 44–140 draw calls (median run 19–76), which is far
->    above §4's ~8 revisit threshold. Numbers in `perf-results/atlas.md` and §8.
-> 3. **The sort key must be made uniform first.** Today `NodesCanvas` passes
->    `-tile.x - tile.y` as iso-depth, `LabelsCanvas` passes `0`, and
->    `ConnectorsCanvas`/`RectanglesCanvas` do not sort at all. Sorting them together
->    with today's inputs would put every rectangle and label above every node at
->    positive depth — a visible re-order of existing documents. One iso-depth
->    convention plus a type-rank tiebreaker (`rectangle < connector < node < label`)
->    is what keeps an unlayered document looking identical.
-> 4. **Selection becomes order-preserving** — only chrome floats. That changes
->    today's visible behaviour (the hybrid overlay lifts the whole element), so it
->    is the behaviour-change case: full Playwright, not targeted runs. The change
->    is to the `hybridIds` derivation in `Renderer.tsx`; drag and inline-rename
->    still need their DOM element, selection alone does not.
-> 5. **Consumer surface of the four canvas test ids — 30 references in 10 files**,
->    mapped so the merge does not discover them one red spec at a time:
->    `perf/engine-perf.spec.ts` (13), `label-entity.spec.ts` (3),
->    `preview-layer-switcher.spec.ts` (3), `renderer-overlay-parity.spec.ts` (3),
->    `canvas-node-render.spec.ts` (2), `readable-labels.spec.ts` (2),
->    `element-link-card.spec.ts` (1), `gpu-icon-recovery.spec.ts` (1),
->    `layers.spec.ts` (1), and **product code** in
->    `ExportImageDialog/waitForIconsDrawn.ts` (1) — that last one gates image
->    export on `data-all-icons-drawn` and must follow the merged canvas.
-> 6. **The anti-cheat rename already landed**, so it is not merge work:
->    `data-nodes-drawn == N` is the honesty channel and the harness asserts it
->    today, on the un-merged layer where it equals `data-draw-count`. Keep
->    publishing it from the merged renderer, and keep `data-build-count` flat
->    across a pan — `PERF_ATLAS` asserts that per layer.
-> 7. **Still to do in the merge:** the renderer/picker-agreement gate the brief
->    calls for (§5, "worth asserting"). **Scope ruled 2026-08-02** — it covers the
->    **zIndex and iso-depth tiers only**; the layer tier is excluded, because
->    `hitDetection` is handed a flat scene with no `layers` array and resolves with
->    `layerOrder: 0`. The gate's **header must name the repro shape** rather than
->    call the divergence unreachable: *a rectangle on a high-`order` layer paints
->    above one on a lower layer, but both resolve with `layerOrder: 0`, so the
->    lower-layer rectangle wins on zIndex and takes the click.* (The old "different
->    visible layers never share a tile without colliding" argument holds for NODES
->    only — collision is a node-placement rule; rectangles, labels and connectors
->    overlap freely.) Closing it is PROJ-10's residual and belongs to the **program
->    final sweep**, not this merge.
+> **Three things wave 6 inherits from the merge, none of them blocking.**
 >
-> Both briefs and their sign-off blocks remain the contract:
->
-> - [`wave5-brief-gpu-13-cross-type-depth.md`](wave5-brief-gpu-13-cross-type-depth.md)
-> - [`wave5-brief-hist-10-page-stamped-entries.md`](wave5-brief-hist-10-page-stamped-entries.md)
+> 1. **The picker still cannot see the layer tier.** The agreement gate
+>    ([`pickerAgreement.contract.test.ts`](../../packages/axoview-lib/src/utils/__tests__/pickerAgreement.contract.test.ts))
+>    covers zIndex + iso depth and PINS the layer-tier divergence rather than
+>    hiding it — §4 of that file asserts the picker returns the *wrong* rectangle,
+>    so closing PROJ-10's residual makes it go red on purpose. Widen the gate in
+>    the same change; do not delete the pin.
+> 2. **Two DOM promotions still float above the merged canvas, by decision:** the
+>    dragged node/rectangle (the `--ff-drag` compositor preview needs a real
+>    element) and the inline-rename session. So does everything DOM that is not in
+>    the sort — connector label chips (§7 Q2, out of scope with a named follow-up
+>    trigger) and text boxes (same trigger, added by the merge and recorded in ADR
+>    0038 §8's implementation note). None has a filed defect.
+> 3. **The perf A/B was NOT run.** ADR 0020's protocol requires a same-session A/B
+>    with a matching calibration index, and the pre-merge arm no longer exists in
+>    the tree — measuring it means checking out `71ca5b1b`, running, then running
+>    `cf81ba74` in the same session. The merge's own claim (draw calls 4 → 1) is
+>    structural and asserted by `PERF_ATLAS`'s `drawCalls`/`atlasPages` columns
+>    rather than by a frame-time comparison, and §5's build cadence is asserted, not
+>    reported. **Proceeding on that basis unless overruled** — run the A/B in wave 6
+>    if the owner wants a frame-time number in `decision-log.md`.
 
 - [x] **HIST-10 + HIST-04 — DONE 2026-08-02.** §6 steps 1–3 as one change, exactly
   as signed off. Entries carry an optional `viewId`, stamped at the logical
@@ -636,37 +604,45 @@ run** — otherwise a green fix reads as seven failing new specs.
   **The cap's meaning changed deliberately** from "50 entries per store" to "the
   last 50 logical actions". HIST-15's silent-cap ruling is unchanged and the new
   meaning is closer to what it describes.
-- [ ] **GPU-13 — design gate CLOSED 2026-08-02; merge implementation NOT started**
-  (approved session boundary). ~~brief drafted → owner sign-off~~ **SIGNED OFF
-  2026-08-02** — Option A, measurement-first (the measurement selects sorted-draw
-  vs depth-two-pass **inside** the merged context; it never un-merges); selection
-  **order-preserving**; connector labels **out of scope** with the documented
-  inconsistency + follow-up trigger.
+- [x] **GPU-13 — DONE 2026-08-02.** Design gate closed (`f33624a4`), substrate
+  landed (`71ca5b1b`), merge landed (`cf81ba74`). Option A exactly as signed off:
+  one WebGL2 context, sorted draw, depth buffer off; selection order-preserving;
+  connector labels out of scope with the documented inconsistency + follow-up
+  trigger. **RND-13/15 closes with it** — the Renderer restructure wave 3 said the
+  entry needed is what landed.
 
-  **All three §4 measurements taken; the dated ADR 0038 §8 amendment is written**
-  (plus the reciprocal ADR 0020 addendum). Nothing contradicted sorted draw, so no
-  owner round-trip was needed.
+  **Five corrections, all found by implementing** and all recorded in the ADR 0038
+  §8 implementation note rather than restated here:
 
-  - **1 — run lengths.** Structural, not statistical: `SpriteBatch.render()`
-    issues exactly ONE `drawArraysInstanced` — one program, one VAO, one atlas
-    bind — so a global sort cannot fragment a draw call. §2(a)'s risk was reasoned
-    from a multi-program renderer this is not. One atlas → 1 call at every N; the
-    separate-atlas fallback → 118/44/140 calls at N=1000/2000/5000, median run
-    19/76/74, all far above the ~8 revisit threshold.
-  - **2 — atlas budget.** Measured live via a new `atlasStats()` +
-    `PERF_ATLAS` scenario (`perf-results/atlas.md`). **The single-atlas assumption
-    does not hold universally**: a merged chip atlas peaks near 4 000 rows, fits
-    the 8192 desktop clamp at 51%, and does NOT fit the 4096 high-DPR clamp at
-    N=5000 — where today's label atlas *alone* already reports `atlasFull`. Node
-    chip rows collapse between N=1250 and N=1500 (the label LOD band), while
-    floating-label rows keep growing, so the worst case is not at max N.
-  - **3 — build cadence.** `data-build-count` delta across a pan is 0 on all four
-    layers at every N, and `PERF_ATLAS` **asserts** it rather than reporting it.
+  - **§8's tie order is wrong as written.** "Type rank as the tiebreaker at equal
+    keys" cannot run, because iso depth is fed inconsistently across types so the
+    keys are never equal — it produces the exact document re-ordering §8 forbids.
+    Shipped: **layer ▸ zIndex ▸ TYPE RANK ▸ iso depth**, stable.
+  - **"The atlas is a per-material resource" became multi-PAGE.** Pages beat
+    per-material atlases because page assignment follows packing order (= sorted
+    order), and because `dot`/`white` are replayed on every page as wildcards, so
+    every connector/rectangle instance joins whichever run it lands in.
+  - **The connector selection halo had to move onto the canvas.** It was the only
+    reason a selected connector was DOM-promoted, and keeping that promotion would
+    have lifted its BODY above every node.
+  - **Rectangles had a live renderer/picker divergence** at equal `zIndex` (GPU:
+    last entry on top; DOM + `hitDetection`: first entry on top). The merge adopts
+    the picker's convention — otherwise the agreement gate asserts a falsehood.
+  - **The GRID moved under the bulk.** Its old position (over rectangle fills,
+    under everything else) only existed because there were four canvases to sit
+    between.
 
-  **Landed this session so the merge does not have to carry it:** `atlasStats()`
-  on the shared substrate, the `PERF_ATLAS` diagnostic, and the
-  **`data-nodes-drawn == N` anti-cheat rename with the harness assertion repointed
-  in the same change** — no window where the harness reads a dead attribute.
+  **Consumer surface:** all ~30 test-id references repointed, including
+  `waitForIconsDrawn` (product code) and the perf harness, whose anti-cheats now
+  read per-type channels on the one canvas. Promoted:
+  [`cross-type-z-order.spec.ts`](../../packages/axoview-e2e/tests/cross-type-z-order.spec.ts)
+  (4) + [`pickerAgreement.contract.test.ts`](../../packages/axoview-lib/src/utils/__tests__/pickerAgreement.contract.test.ts)
+  (11, red-verified by reverting the picker's paint sort) +
+  [`glSpriteBatch.pages.test.ts`](../../packages/axoview-lib/src/webgl/__tests__/glSpriteBatch.pages.test.ts)
+  (8). Probes retired: `rnd-05-13-14-15-promotion.explore.spec.ts` (whole file) and
+  the GPU-13 block of `gpu-04-06-07-08-13.explore.spec.ts` — with an **explicit
+  disposition for GPU-06/07/08**, whose premise ("the four layers drifted from one
+  skeleton") is closed by construction rather than by a fix.
 
 ### Wave 6 — Program build-out (should-have)
 - [ ] Write `.claude/skills/explore.md`: APPROACH distilled + COLDSTART flow + rig-traps appendix + delta-mode area selection (`git diff` vs last campaign end commit); regenerate-baseline step; **embed the end-of-session report contract** (Notes for Claude) so every future run ends with the same four-part report.
@@ -690,6 +666,10 @@ run** — otherwise a green fix reads as seven failing new specs.
   - **Wave 4, PROMOTION: the lane is tsc-EXCLUDED, the main suite is not.** Promoting a probe verbatim surfaces type errors it never had to satisfy — including the package's es5 traps (`[...nodeList]` is a tsc error; `[...someMap]` compiles and silently yields `[]`). Budget a typecheck pass per promotion, and move any shared harness out of `__explore__` at the same time (wave 6 archives that directory).
   - **Wave 4, PROBE AUTHORING: a probe that TRANSCRIBES the code under test can never flip.** F2/VIEW-04's probe copied `AnnotationLayer.endStroke`'s commit gate into the test file (`// transcribed:`) because the real one was buried in a `useCallback` inside a pointer-driven component. The gate was then fixed and the probe stayed green — it was asserting its own copy. This is the F5 duplicate-implementation class appearing in the LANE rather than in the product. When the real predicate is unreachable, **extract it** (here: `strokeHasExtent` into `utils/annotationOps`) rather than transcribing it; the extraction is usually the right change anyway, and the promoted regression then imports the thing that shipped.
   - **Wave 4, FLIP RULE: a fix can invalidate a NEIGHBOURING probe's premise.** The RED-07/RED-14 sweep removed the only route RED-09's probe had to `unroutable: true`, so that probe went red without RED-09 being fixed or refuted. Those need an explicit disposition in the area file ("no longer reachable via X; the underlying guard is unchanged; re-open if Y"), or the finding evaporates silently. A lane failure is not automatically a flip.
+  - **Wave 5: the WebGL substrate is NOT pixel-blind to CI, and after the canvas merge it has to be read that way.** Every bulk context is created with `preserveDrawingBuffer: true` because image export depends on it (ADR 0038 §4), so a spec can `drawImage` the canvas onto a 2D scratch and read the buffer back. Cross-type paint order has no DOM position left to assert against, so `cross-type-z-order.spec.ts` samples an averaged PATCH where two entities overlap — a single texel lands on an antialiased edge or on chip text and is noisy. Helpers in [`helpers/sceneCanvas.ts`](../../packages/axoview-e2e/helpers/sceneCanvas.ts).
+  - **Wave 5: an oracle that asks "which CANVAS has pixels?" dies the day the canvases merge.** `renderer-overlay-parity.spec.ts` proved "the connector body stops painting when its layer is hidden" by asserting zero painted pixels on `axoview-connectors-canvas`; with one buffer, the nodes on the same layer paint into it too. The durable channel is the per-type COUNTER the canvas publishes (`data-connectors-drawn` and friends), not the surface. Prefer a counter to a pixel count whenever the question is "did THIS entity type draw?".
+  - **Wave 5, FLIP RULE: a probe that characterises the defect's STRUCTURE cannot be repaired, only retired.** GPU-13's probe asserted that four canvases sat at one CSS `zIndex` in ascending document order — a true statement about the broken world and a meaningless one about the fixed world. There is nothing to flip: the promoted regression has to assert the same claim from the other side (a rectangle's `zIndex` visibly lifts it above a node). Contrast the probes that assert a user-visible OUTCOME, which flip for free.
+  - **Wave 5, FLIP RULE: a merge closes neighbouring findings BY CONSTRUCTION, and that needs saying out loud.** GPU-06/07/08 were three faces of "the four bulk layers were copy-adapted from one skeleton, so <invalidation / context-loss / visibility> drifted between them". One layer cannot drift from itself. Their probes were retired with GPU-13's under an explicit disposition in the file, rather than being left to go red for a reason that is neither a fix nor a refutation — the wave-4 "a fix can invalidate a NEIGHBOURING probe's premise" lesson, met head-on for once.
   - **Wave 4, PINS: re-verify a named pin red AFTER the pass that was supposed to keep it green**, not only when it is written. A pin that asserts a symptom class can start passing for a reason unrelated to the mechanism it guards. Revert the write path deliberately and check that the pin — and *only* the pin — goes red.
 - [ ] **Program final sweep — thread `layers` into the `HitTestScene` (PROJ-10's residual).**
   `hitDetection` resolves paint order with `layerOrder: 0` because it is handed a

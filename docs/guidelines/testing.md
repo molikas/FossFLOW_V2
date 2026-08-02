@@ -106,11 +106,11 @@ Three things it establishes as testing practice:
   `0` to `N`. Verified by the value it now reports (`drawn=200/200`) — a dead
   attribute would parse to 0 and fail, not pass.
 - **A hand-rolled stub of a shared interface is a maintenance surface.**
-  `NodesCanvas.scrollSync.test.tsx` builds its own `SpriteBatch`, and adding
+  `SceneCanvas.scrollSync.test.tsx` builds its own `SpriteBatch`, and adding
   `atlasStats()` broke it — exactly as `atlasOverflowed()` had before, which that
   stub already carries a comment about. Extending the interface means extending
   the stub; the failure is loud and immediate, which is the right trade, but budget
-  for it.
+  for it. (`drawCallCount()` broke it again on the merge, as expected.)
 
 ### Exploratory remediation wave 5 — paired history trimming (2026-08-02)
 
@@ -457,7 +457,8 @@ New suites + extensions shipped with the paste-O(N) + pre-T3 render/drag wave ([
 | `utils/__tests__/findNearestUnoccupiedTile.test.ts` | lib unit | rigid-stamp placement — a row pasted on itself shifts by one offset to clear space (keeps the block's shape, never collapses to one tile); degenerate dense case stamps at the target offset |
 | `hooks/__tests__/useHistory.test.tsx` + `useHistory.realStore.test.tsx` (extended) | lib unit | scoped post-undo/redo D-8 connector re-sync — early-returns when no active-view connector path is empty (uiState store added to both wrappers); D-7 dual-stack coordination unchanged |
 | `__perf_refactor_regression__/DragItems.modes.test.ts` (extended) | lib unit | rectangle / text-box drag is CSS-var-only during the move + a single `batchUpdate*` commit on mouseup (no per-frame store write) |
-| `canvas-node-render.spec.ts` | E2E | Canvas2D node sprite centred on its tile + label connector stalk; `data-draw-count` anti-cheat reads == N at fit-to-view |
+| `canvas-node-render.spec.ts` | E2E | GPU node sprite centred on its tile + label connector stalk; `data-nodes-drawn` anti-cheat reads == N at fit-to-view |
+| `cross-type-z-order.spec.ts` | E2E | R3/GPU-13 + R4/RND-13/15 — a rectangle's `zIndex` lifts it above a node (and back), a Label outranks a node by TYPE RANK, selecting changes no pixels, renaming still promotes. Reads the merged canvas's preserved drawing buffer where two entities overlap |
 | `perf/engine-perf.spec.ts` (paste-on-top scenario) | perf harness | real Ctrl+C/Ctrl+V paste-on-top adds exactly N → 2N nodes; honest draw-count guard (see [ADR 0020](../adr/0020-engine-perf-harness-and-measurement-protocol.md)) |
 
 CI: [`perf-smoke.yml`](../../.github/workflows/perf-smoke.yml) runs a small-N `npm run perf` on PRs so a regression in the measured render/paste path trips CI.
@@ -557,9 +558,11 @@ how-to.
   ~22% (≫ the ~2–5% within-run noise), so every keep/revert is a **same-session A/B with
   a matching calibration index** — never a fresh run vs a prior-session baseline. A
   result inside the noise band is not a change. One `decision-log.md` row per hypothesis.
-- **Anti-cheat:** the canvas node layer publishes a per-frame draw count on
-  `data-draw-count`; the harness asserts it `== N` at fit-to-view (no off-screen cull
-  shrinking the benchmark). `perf-results/baseline.md` is rewritten by **every** run incl.
+- **Anti-cheat:** the merged bulk canvas publishes a PER-TYPE draw count and the
+  harness asserts `data-nodes-drawn == N` at fit-to-view (no off-screen cull
+  shrinking the benchmark). `data-draw-count` is the TOTAL over every entity type
+  since the ADR 0038 §8 canvas merge and can no longer be compared against N;
+  connectors, rectangles and both label kinds have their own channels. `perf-results/baseline.md` is rewritten by **every** run incl.
   partial/diagnostic ones — `git checkout -- perf-results/baseline.md` after any non-full
   run; only a clean full idle run updates it.
 - **Gotcha:** the rsbuild dev server desyncs from `dist/` after `build:lib` ("Can't
@@ -1046,11 +1049,37 @@ npm test --workspace=packages/axoview-lib -- --coverage # with coverage
 
 Run from `packages/axoview-lib/`. HTML coverage report at `packages/axoview-lib/coverage/lcov-report/index.html`. **Measured 2026-07-29:** statements 40.2 % · branches 28.5 % · functions 34.6 % · lines 40.2 %. Floors in [`jest.config.js`](../../packages/axoview-lib/jest.config.js) are a **ratchet**, deliberately set ~6pp under measured reality so the tested core cannot silently erode — global **34 / 23 / 29 / 34**, with `stores/reducers/` (85 stmts / 65 branches) and `schemas/` (95 / 90) carrying their own higher floors. *(This line previously read "~32 %; thresholds floored at 10 %" — both figures had gone stale; the floors were re-ratcheted from 30/20/25/30 on 2026-07-29 after coverage rose without them following, widening the intended slack to ~10pp. **Re-measure and re-tighten whenever coverage moves up materially** — that is the maintenance this gate needs to keep working.)* Aggregate KPIs (test:source ratio, LOC, lint debt, complexity baseline) and the static-analysis report locations are in [technical-review-2026-06.md §8](../reviews/technical-review-2026-06.md#8-quality-kpis-aggregate).
 
+## The bulk canvas is ONE canvas (2026-08-02, R3/GPU-13)
+
+`RectanglesCanvas → ConnectorsCanvas → NodesCanvas → LabelsCanvas` are gone.
+[`SceneCanvas`](../../packages/axoview-lib/src/components/SceneLayers/SceneCanvas.tsx)
+(`data-testid="axoview-scene-canvas"`) draws all four entity types in one WebGL2
+context, ordered by one sort (ADR 0038 §8). Three things that changes for tests:
+
+- **There is no mount order to assert.** Cross-type paint order used to be
+  readable off DOM position; it is a sort key now. Assert it in PIXELS — the
+  context is created with `preserveDrawingBuffer: true` for image export, so
+  `drawImage` onto a 2D scratch and read the buffer back.
+  [`helpers/sceneCanvas.ts`](../../packages/axoview-e2e/helpers/sceneCanvas.ts)
+  has `paintedPixels`, `canvasPatchColor` (an averaged patch, because a single
+  texel lands on antialiased edges) and `sceneCounters`.
+- **"Which layer painted this?" is a COUNTER, not a canvas.** `data-nodes-drawn`,
+  `data-connectors-drawn`, `data-rectangles-drawn`, `data-labels-drawn` (node NAME
+  chips) and `data-floating-labels-drawn` (ADR 0031 Labels). Whole-canvas painted
+  pixels can no longer answer "is the connector bulk painting?" — everything else
+  paints into the same buffer.
+- **Selection no longer promotes a node into the DOM overlay** (R4/RND-13/15).
+  A spec that wanted the DOM `<Node>` as its source of truth must promote through
+  the RENAME session (`uiState.inlineEditNodeId`) instead; `[data-drag-id="…"]`
+  being absent after a click is now correct, not a regression. Drag still promotes.
+
 ## Label counter-scale — one derivation, six consumers (2026-08-02, R5/OVL-02)
 
 `labelSettings.labelCounterScaleFor` is the **only** place the "keep labels
-readable" factor is computed. Six layers consume it — two GPU (`NodesCanvas`,
-`LabelsCanvas`), three DOM hit/proxy (`LabelHitLayer`, `NodeLabelHitLayer`,
+readable" factor is computed. Six layers consume it — two GPU emitters
+(`webgl/scene/nodeEmitter.ts`, `webgl/scene/labelEmitter.ts`; they were
+`NodesCanvas`/`LabelsCanvas` until the ADR 0038 §8 merge moved the emission
+out of the components), three DOM hit/proxy (`LabelHitLayer`, `NodeLabelHitLayer`,
 `ConnectorLabel`) and `ExpandableLabel` — and they must always move together:
 the paint layers draw the chip while the hit layers size the box that grabs it,
 so a factor that changes on one side alone puts the grab box somewhere other

@@ -14,13 +14,17 @@
  */
 import type { Page } from '@playwright/test';
 
-/** The four bulk GPU scene layers, in Renderer mount order (bottom → top). */
-export const BULK_LAYERS = [
-  'axoview-rectangles-canvas',
-  'axoview-connectors-canvas',
-  'axoview-nodes-canvas',
-  'axoview-labels-canvas'
-] as const;
+/**
+ * The bulk GPU scene layer.
+ *
+ * There were FOUR, stacked by mount order — which is exactly what R3/GPU-13
+ * filed. Wave 5 merged them into one WebGL2 context ordered by one sort (ADR
+ * 0038 §8), so this is a one-element list and "which layer painted this?" is
+ * answered by the per-type counters (`data-nodes-drawn`,
+ * `data-connectors-drawn`, `data-rectangles-drawn`, `data-labels-drawn`,
+ * `data-floating-labels-drawn`) rather than by which canvas has pixels.
+ */
+export const BULK_LAYERS = ['axoview-scene-canvas'] as const;
 
 export type BulkLayer = (typeof BULK_LAYERS)[number];
 
