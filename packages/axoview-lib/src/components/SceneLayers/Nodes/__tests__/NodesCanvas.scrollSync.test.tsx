@@ -68,8 +68,10 @@ const makeStubBatch = () =>
       size: 4096,
       usedRows: 0,
       slots: 0,
-      full: false
+      full: false,
+      pages: 1
     })),
+    drawCallCount: jest.fn(() => 1),
     instanceCount: jest.fn(() => 0),
     render: jest.fn(),
     destroy: jest.fn()

@@ -162,6 +162,16 @@ export interface UVRect {
   v0: number;
   uS: number;
   vS: number;
+  /**
+   * Which atlas PAGE holds these texels (ADR 0038 §8 — "the atlas is a
+   * per-material resource, not an assumption").
+   *
+   * `-1` is the WILDCARD: the built-in `dot` and `white` texels are packed at
+   * identical coordinates on every page, so an instance sampling them is valid
+   * against whichever page is already bound and never forces a run boundary.
+   * Every other sprite carries the page it was packed into.
+   */
+  page: number;
 }
 
 // Half-texel UV inset for a packed (x,y,w,h) device-px slot in an `atlasSize`²
@@ -177,12 +187,14 @@ export const atlasUVRect = (
   y: number,
   w: number,
   h: number,
-  atlasSize: number
+  atlasSize: number,
+  page = 0
 ): UVRect => ({
   u0: (x + 0.5) / atlasSize,
   v0: (y + 0.5) / atlasSize,
   uS: (w - 1) / atlasSize,
-  vS: (h - 1) / atlasSize
+  vS: (h - 1) / atlasSize,
+  page
 });
 
 export interface SpriteBatch {
@@ -233,13 +245,25 @@ export interface SpriteBatch {
   atlasStats(): {
     /** Atlas edge in texels, AFTER the MAX_TEXTURE_SIZE / high-DPR clamp. */
     size: number;
-    /** Rows consumed so far (0 … size). */
+    /** Rows consumed so far, summed over every allocated page (0 … size·pages). */
     usedRows: number;
     /** Distinct content-keyed sprites currently packed. */
     slots: number;
-    /** Did the last build hit the ceiling? */
+    /** Did the last build hit the ceiling (every page full)? */
     full: boolean;
+    /** Pages currently allocated (1 … maxPages). */
+    pages: number;
   };
+  /**
+   * Draw calls the last committed build will issue — one per contiguous run of
+   * instances sampling the same atlas page (ADR 0038 §8 measurement 1).
+   *
+   * 1 whenever the whole bulk fits one page, which the §8 table measures as the
+   * case at every N on the 8192 desktop clamp. It rises only where the merged
+   * content genuinely does not fit one texture, and that is the design's
+   * degradation path rather than a hypothetical.
+   */
+  drawCallCount(): number;
 
   // --- instance staging (rebuilt only on a geometry change) ---
   beginInstances(): void;
@@ -314,7 +338,19 @@ const compileShader = (
 
 export const createSpriteBatch = (
   canvas: HTMLCanvasElement,
-  atlasSize = 4096
+  atlasSize = 4096,
+  /**
+   * How many atlas PAGES this batch may allocate (ADR 0038 §8).
+   *
+   * 1 is the historical behaviour: one texture, and a build that does not fit
+   * drops sprites and asks for a compaction. The merged scene canvas passes 2
+   * because §8's measurement 2 found the merged chip set does NOT fit the 4096
+   * high-DPR clamp at large N (4 178 rows vs 4 096) — the merge must not require
+   * that everything fits one texture. A second page costs one extra bind per
+   * material run, which the same measurement shows is far above the ~8-instance
+   * revisit threshold.
+   */
+  maxPages = 1
 ): SpriteBatch | null => {
   let gl: WebGL2RenderingContext | null = null;
   try {
@@ -391,28 +427,6 @@ export const createSpriteBatch = (
     );
   }
   const GUTTER = 2; // transparent px between sub-rects so mip levels don't bleed
-  const atlasTex = gl.createTexture();
-  if (!atlasTex) return null;
-  gl.bindTexture(gl.TEXTURE_2D, atlasTex);
-  gl.texImage2D(
-    gl.TEXTURE_2D,
-    0,
-    gl.RGBA,
-    ATLAS,
-    ATLAS,
-    0,
-    gl.RGBA,
-    gl.UNSIGNED_BYTE,
-    null
-  );
-  gl.texParameteri(
-    gl.TEXTURE_2D,
-    gl.TEXTURE_MIN_FILTER,
-    gl.LINEAR_MIPMAP_LINEAR
-  );
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   // Anisotropic filtering: in ISOMETRIC view every chip/dot is sampled on a
   // SHEARED parallelogram quad, which isotropic mip/linear filtering blurs (the
   // "fuzzy in iso only" report). Aniso samples along the projected axis and keeps
@@ -420,36 +434,83 @@ export const createSpriteBatch = (
   const aniso =
     gl.getExtension('EXT_texture_filter_anisotropic') ||
     gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic');
-  if (aniso) {
-    const maxAniso = gl.getParameter(
-      aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT
-    ) as number;
-    gl.texParameterf(
-      gl.TEXTURE_2D,
-      aniso.TEXTURE_MAX_ANISOTROPY_EXT,
-      Math.min(16, maxAniso || 1)
-    );
-  }
+  const anisoMax = aniso
+    ? Math.min(
+        16,
+        (gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT) as number) || 1
+      )
+    : 0;
   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
 
-  // Shelf packer state. The stalk-dot is packed FIRST and its region is RESERVED —
-  // a compaction restores the cursor to just past it (dotShelf*), so the persistent
-  // `dot` UV survives (its texels are never overwritten).
-  let shelfX = 0;
-  let shelfY = 0;
-  let shelfH = 0;
-  let dotShelfX = 0;
-  let dotShelfY = 0;
-  let dotShelfH = 0;
-  // Set when a pack didn't fit. The NEXT beginInstances() compacts (drop the stale
-  // chip cache + repack fresh) instead of resetting MID-build — a mid-build reset
-  // would strand already-packed sprites on overwritten atlas regions (a
-  // silently-broken render). So an overflowing chip simply doesn't draw for one
-  // build, then the atlas compacts. Realistic (viewport-culled) scenes never
-  // overflow; only the culling-defeated fit-to-view harness reaches this path.
+  /**
+   * One atlas page: a texture plus its own shelf-packer cursor.
+   *
+   * ADR 0038 §8: the merged bulk must not REQUIRE that everything fits one
+   * texture (measurement 2 — the merged chip set overruns the 4096 high-DPR
+   * clamp at large N). Pages are allocated lazily, so a batch that fits one page
+   * allocates exactly one and issues exactly one draw call, as before.
+   */
+  interface AtlasPage {
+    tex: WebGLTexture;
+    shelfX: number;
+    shelfY: number;
+    shelfH: number;
+    mipDirty: boolean;
+  }
+  const pages: AtlasPage[] = [];
+  // The reserved region every page opens with (dot + white, packed in the same
+  // order on each page, so their texels land at IDENTICAL coordinates and one
+  // wildcard UV is valid against whichever page happens to be bound).
+  let reserveX = 0;
+  let reserveY = 0;
+  let reserveH = 0;
+  // Seeds a freshly allocated page with the reserved dot/white texels. Assigned
+  // once those canvases exist (below); a page beyond the first can only be
+  // allocated from a real build, which is long after that point.
+  let copyReservedTexels: (p: AtlasPage) => void = () => undefined;
+
+  const newPageTexture = (): WebGLTexture | null => {
+    const tex = gl!.createTexture();
+    if (!tex) return null;
+    gl!.bindTexture(gl!.TEXTURE_2D, tex);
+    gl!.texImage2D(
+      gl!.TEXTURE_2D,
+      0,
+      gl!.RGBA,
+      ATLAS,
+      ATLAS,
+      0,
+      gl!.RGBA,
+      gl!.UNSIGNED_BYTE,
+      null
+    );
+    gl!.texParameteri(
+      gl!.TEXTURE_2D,
+      gl!.TEXTURE_MIN_FILTER,
+      gl!.LINEAR_MIPMAP_LINEAR
+    );
+    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_MAG_FILTER, gl!.LINEAR);
+    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_WRAP_S, gl!.CLAMP_TO_EDGE);
+    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_WRAP_T, gl!.CLAMP_TO_EDGE);
+    if (aniso && anisoMax) {
+      gl!.texParameterf(
+        gl!.TEXTURE_2D,
+        aniso.TEXTURE_MAX_ANISOTROPY_EXT,
+        anisoMax
+      );
+    }
+    return tex;
+  };
+
+  // Set when a pack didn't fit ANY page. The NEXT beginInstances() compacts (drop
+  // the stale chip cache + repack fresh) instead of resetting MID-build — a
+  // mid-build reset would strand already-packed sprites on overwritten atlas
+  // regions (a silently-broken render). So an overflowing chip simply doesn't
+  // draw for one build, then the atlas compacts.
   let atlasFull = false;
-  let mipDirty = false;
+  // The page new content packs into; advances as pages fill, resets on compaction.
+  let activePage = 0;
   const uvCache = new Map<string, { uv: UVRect; version: number }>();
   // R2/GL-05: the atlas had no eviction at all, only the full reset — and the
   // leak is KEY CHURN, not stale content. `texKey` interpolates the node name
@@ -471,10 +532,16 @@ export const createSpriteBatch = (
   let lastBuildOverflowed = false;
 
   const resetAtlas = () => {
-    // Restore to just past the reserved dot region; drop the (stale) chip cache.
-    shelfX = dotShelfX;
-    shelfY = dotShelfY;
-    shelfH = dotShelfH;
+    // Restore every page to just past its reserved dot/white region; drop the
+    // (stale) chip cache. Allocated pages are KEPT: a compaction is triggered by
+    // the very pressure that needed them, so freeing and re-allocating the
+    // texture each build would thrash for nothing.
+    for (const p of pages) {
+      p.shelfX = reserveX;
+      p.shelfY = reserveY;
+      p.shelfH = reserveH;
+    }
+    activePage = 0;
     uvCache.clear();
     atlasFull = false;
     atlasStale = false;
@@ -494,30 +561,91 @@ export const createSpriteBatch = (
    */
   const shouldCompact = (dead: number, live: number) => dead > 8 && dead > live;
 
-  // Reserve a (w×h device-px) slot; returns its top-left, or null (→ atlasFull;
-  // the item is skipped this build, the atlas is compacted next build). NEVER
-  // resets mid-build.
-  const packSlot = (w: number, h: number): { x: number; y: number } | null => {
-    if (w + GUTTER > ATLAS || h + GUTTER > ATLAS) return null;
-    if (shelfX + w + GUTTER > ATLAS) {
-      shelfY += shelfH + GUTTER;
-      shelfX = 0;
-      shelfH = 0;
+  // Reserve a (w×h device-px) slot on ONE page. Returns its top-left, or null
+  // when this page has no vertical room left. NEVER resets mid-build.
+  const packOnPage = (
+    p: AtlasPage,
+    w: number,
+    h: number
+  ): { x: number; y: number } | null => {
+    if (p.shelfX + w + GUTTER > ATLAS) {
+      p.shelfY += p.shelfH + GUTTER;
+      p.shelfX = 0;
+      p.shelfH = 0;
     }
-    if (shelfY + h + GUTTER > ATLAS) {
-      atlasFull = true;
-      return null;
-    }
-    const x = shelfX;
-    const y = shelfY;
-    shelfX += w + GUTTER;
-    if (h > shelfH) shelfH = h;
+    if (p.shelfY + h + GUTTER > ATLAS) return null;
+    const x = p.shelfX;
+    const y = p.shelfY;
+    p.shelfX += w + GUTTER;
+    if (h > p.shelfH) p.shelfH = h;
     return { x, y };
   };
 
+  // Reserve a slot on the first page that will take it, allocating a further page
+  // if the budget allows. Returns null (→ atlasFull; the item is skipped this
+  // build, the atlas is compacted next build) once every permitted page is out of
+  // room, which is the pre-existing single-page behaviour when maxPages === 1.
+  const packSlot = (
+    w: number,
+    h: number
+  ): { x: number; y: number; page: number } | null => {
+    if (w + GUTTER > ATLAS || h + GUTTER > ATLAS) return null;
+    for (let i = activePage; i < maxPages; i += 1) {
+      if (i >= pages.length) {
+        const tex = newPageTexture();
+        if (!tex) break;
+        pages.push({
+          tex,
+          shelfX: reserveX,
+          shelfY: reserveY,
+          shelfH: reserveH,
+          mipDirty: false
+        });
+        // Every page opens with its own copy of the dot + white texels, packed in
+        // the same order — so their coordinates (and therefore the wildcard UVs)
+        // are identical on every page. Done here rather than in `newPageTexture`
+        // so page 0's own reservation, which DEFINES those coordinates, runs
+        // through the identical code below.
+        if (i > 0) copyReservedTexels(pages[i]);
+      }
+      const slot = packOnPage(pages[i], w, h);
+      if (slot) return { ...slot, page: i };
+      // This page is vertically exhausted; a shelf packer never recovers room, so
+      // move the cursor on permanently rather than re-probing it per sprite.
+      if (i === activePage) activePage = i + 1;
+    }
+    atlasFull = true;
+    return null;
+  };
+
   // Half-texel UV inset (pure math in atlasUVRect) bound to this atlas's size.
-  const uvOf = (x: number, y: number, w: number, h: number): UVRect =>
-    atlasUVRect(x, y, w, h, ATLAS);
+  const uvOf = (
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    page: number
+  ): UVRect => atlasUVRect(x, y, w, h, ATLAS, page);
+
+  const upload = (
+    page: number,
+    x: number,
+    y: number,
+    src: TexImageSource
+  ): void => {
+    const p = pages[page];
+    gl!.bindTexture(gl!.TEXTURE_2D, p.tex);
+    gl!.texSubImage2D(
+      gl!.TEXTURE_2D,
+      0,
+      x,
+      y,
+      gl!.RGBA,
+      gl!.UNSIGNED_BYTE,
+      src
+    );
+    p.mipDirty = true;
+  };
 
   const putCanvas = (
     key: string,
@@ -532,19 +660,9 @@ export const createSpriteBatch = (
     const h = cnv.height;
     const slot = packSlot(w, h);
     if (!slot) return null;
-    gl!.bindTexture(gl!.TEXTURE_2D, atlasTex);
-    gl!.texSubImage2D(
-      gl!.TEXTURE_2D,
-      0,
-      slot.x,
-      slot.y,
-      gl!.RGBA,
-      gl!.UNSIGNED_BYTE,
-      cnv
-    );
-    const uv = uvOf(slot.x, slot.y, w, h);
+    upload(slot.page, slot.x, slot.y, cnv);
+    const uv = uvOf(slot.x, slot.y, w, h, slot.page);
     uvCache.set(key, { uv, version });
-    mipDirty = true;
     return uv;
   };
 
@@ -559,19 +677,9 @@ export const createSpriteBatch = (
     if (hit) return hit.uv;
     const slot = packSlot(w, h);
     if (!slot) return null;
-    gl!.bindTexture(gl!.TEXTURE_2D, atlasTex);
-    gl!.texSubImage2D(
-      gl!.TEXTURE_2D,
-      0,
-      slot.x,
-      slot.y,
-      gl!.RGBA,
-      gl!.UNSIGNED_BYTE,
-      img
-    );
-    const uv = uvOf(slot.x, slot.y, w, h);
+    upload(slot.page, slot.x, slot.y, img);
+    const uv = uvOf(slot.x, slot.y, w, h, slot.page);
     uvCache.set(key, { uv, version: 0 });
-    mipDirty = true;
     return uv;
   };
 
@@ -588,12 +696,13 @@ export const createSpriteBatch = (
     dctx.arc(DOT_PX / 2, DOT_PX / 2, DOT_PX / 2 - 1, 0, Math.PI * 2);
     dctx.fill();
   }
-  const dotUV = putImage('__dot__', dotCanvas, DOT_PX, DOT_PX) ?? {
-    u0: 0,
-    v0: 0,
-    uS: 0,
-    vS: 0
-  };
+  const dotPacked = putImage('__dot__', dotCanvas, DOT_PX, DOT_PX);
+  // `page: -1` — the wildcard. See UVRect: the dot is replayed onto every page at
+  // the same coordinates, so an instance sampling it is valid against whichever
+  // page is bound and never forces a draw-call boundary.
+  const dotUV: UVRect = dotPacked
+    ? { ...dotPacked, page: -1 }
+    : { u0: 0, v0: 0, uS: 0, vS: 0, page: -1 };
   // A solid white texel for tinted solid quads / lines (connector bodies,
   // rectangle fills + borders). Sample its CENTRE so mip minification never bleeds
   // an edge in — a zero-size UV rect anchored mid-texel.
@@ -612,15 +721,41 @@ export const createSpriteBatch = (
         u0: whitePacked.u0 + whitePacked.uS / 2,
         v0: whitePacked.v0 + whitePacked.vS / 2,
         uS: 0,
-        vS: 0
+        vS: 0,
+        page: -1
       }
-    : { u0: 0, v0: 0, uS: 0, vS: 0 };
-  // Reserve the dot + white: a compaction restores the shelf cursor to here, so
-  // their texels are never overwritten and `dot`/`white` stay valid across
-  // compactions.
-  dotShelfX = shelfX;
-  dotShelfY = shelfY;
-  dotShelfH = shelfH;
+    : { u0: 0, v0: 0, uS: 0, vS: 0, page: -1 };
+  // Reserve the dot + white: a compaction restores every page's shelf cursor to
+  // here, so their texels are never overwritten and `dot`/`white` stay valid
+  // across compactions. Recorded from page 0 and replayed onto every later page,
+  // which is what makes their UVs page-independent (the `-1` wildcard above):
+  // a tinted line/disc instance therefore never forces a run boundary, whichever
+  // page its neighbours sample.
+  reserveX = pages[0].shelfX;
+  reserveY = pages[0].shelfY;
+  reserveH = pages[0].shelfH;
+  const dotSlot = { x: 0, y: 0 };
+  const whiteSlot = { x: 0, y: 0 };
+  {
+    // Recover page-0 slot origins from the packed UVs (atlasUVRect nudged them by
+    // half a texel), so a later page can be seeded at exactly the same texels.
+    const d = uvCache.get('__dot__')?.uv;
+    const w = uvCache.get('__white__')?.uv;
+    if (d) {
+      dotSlot.x = Math.round(d.u0 * ATLAS - 0.5);
+      dotSlot.y = Math.round(d.v0 * ATLAS - 0.5);
+    }
+    if (w) {
+      whiteSlot.x = Math.round(w.u0 * ATLAS - 0.5);
+      whiteSlot.y = Math.round(w.v0 * ATLAS - 0.5);
+    }
+  }
+  copyReservedTexels = (p: AtlasPage) => {
+    const idx = pages.indexOf(p);
+    if (idx < 0) return;
+    upload(idx, dotSlot.x, dotSlot.y, dotCanvas);
+    upload(idx, whiteSlot.x, whiteSlot.y, whiteCanvas);
+  };
 
   // --- geometry / instancing ---
   const vao = gl.createVertexArray();
@@ -635,9 +770,15 @@ export const createSpriteBatch = (
   gl.bindVertexArray(null);
 
   let staging = new Float32Array(FLOATS_PER_INSTANCE * 1024);
+  // Per-instance atlas page, parallel to `staging`. Not a vertex attribute: the
+  // page decides which TEXTURE is bound, which is a draw-call boundary rather
+  // than per-vertex data.
+  let stagingPages = new Int32Array(1024);
   let floatCount = 0;
   let instCount = 0;
   let instDirty = false;
+  /** Contiguous instance ranges that share one atlas page — one draw call each. */
+  let runs: Array<{ page: number; start: number; count: number }> = [];
 
   const ensureCapacity = (extra: number) => {
     if (floatCount + extra <= staging.length) return;
@@ -646,6 +787,9 @@ export const createSpriteBatch = (
     const grown = new Float32Array(next);
     grown.set(staging.subarray(0, floatCount));
     staging = grown;
+    const grownPages = new Int32Array(next / FLOATS_PER_INSTANCE);
+    grownPages.set(stagingPages.subarray(0, floatCount / FLOATS_PER_INSTANCE));
+    stagingPages = grownPages;
   };
 
   gl.disable(gl.DEPTH_TEST);
@@ -688,6 +832,7 @@ export const createSpriteBatch = (
     ) {
       ensureCapacity(FLOATS_PER_INSTANCE);
       const v = staging;
+      stagingPages[(floatCount / FLOATS_PER_INSTANCE) | 0] = uv.page;
       let i = floatCount;
       v[i++] = anchorX;
       v[i++] = anchorY;
@@ -715,6 +860,30 @@ export const createSpriteBatch = (
     commitInstances() {
       instCount = (floatCount / FLOATS_PER_INSTANCE) | 0;
       instDirty = true;
+      // Split the committed (already sorted) instance array into contiguous runs
+      // of one atlas page. Wildcard instances (`page === -1`: the dot/white
+      // texels, which every page carries at the same coordinates) join whatever
+      // run they land in, so tinted lines, discs and fills never fragment a run.
+      runs = [];
+      let cur = -1;
+      let start = 0;
+      for (let i = 0; i < instCount; i += 1) {
+        const p = stagingPages[i];
+        if (p < 0) continue;
+        if (cur < 0) cur = p;
+        else if (p !== cur) {
+          runs.push({ page: cur, start, count: i - start });
+          start = i;
+          cur = p;
+        }
+      }
+      if (instCount > 0) {
+        runs.push({
+          page: cur < 0 ? 0 : cur,
+          start,
+          count: instCount - start
+        });
+      }
       // End of build: decide what the NEXT one has to do about the atlas.
       lastBuildOverflowed = atlasFull;
       if (!atlasFull) {
@@ -731,11 +900,13 @@ export const createSpriteBatch = (
     atlasStats: () => ({
       size: ATLAS,
       // The shelf cursor IS the occupancy: rows fully consumed, plus the height
-      // of the row currently being filled.
-      usedRows: shelfY + shelfH,
+      // of the row currently being filled — summed over every allocated page.
+      usedRows: pages.reduce((n, p) => n + p.shelfY + p.shelfH, 0),
       slots: uvCache.size,
-      full: atlasFull
+      full: atlasFull,
+      pages: pages.length
     }),
+    drawCallCount: () => runs.length,
     instanceCount: () => instCount,
     render(bw, bh, zoomDpr, originXDev, originYDev, counterScale) {
       if (canvas.width !== bw || canvas.height !== bh) {
@@ -745,16 +916,17 @@ export const createSpriteBatch = (
       gl!.viewport(0, 0, bw, bh);
       gl!.clearColor(0, 0, 0, 0);
       gl!.clear(gl!.COLOR_BUFFER_BIT);
-      if (mipDirty) {
-        gl!.bindTexture(gl!.TEXTURE_2D, atlasTex);
+      for (const p of pages) {
+        if (!p.mipDirty) continue;
+        gl!.bindTexture(gl!.TEXTURE_2D, p.tex);
         gl!.generateMipmap(gl!.TEXTURE_2D);
-        mipDirty = false;
+        p.mipDirty = false;
       }
       if (instCount === 0) return;
       gl!.useProgram(prog);
       gl!.bindVertexArray(vao);
+      gl!.bindBuffer(gl!.ARRAY_BUFFER, instBuf);
       if (instDirty) {
-        gl!.bindBuffer(gl!.ARRAY_BUFFER, instBuf);
         gl!.bufferData(
           gl!.ARRAY_BUFFER,
           staging.subarray(0, floatCount),
@@ -766,13 +938,31 @@ export const createSpriteBatch = (
       gl!.uniform3f(uView, zoomDpr, originXDev, originYDev);
       gl!.uniform1f(uCounterScale, counterScale);
       gl!.activeTexture(gl!.TEXTURE0);
-      gl!.bindTexture(gl!.TEXTURE_2D, atlasTex);
       gl!.uniform1i(uAtlas, 0);
-      gl!.drawArraysInstanced(gl!.TRIANGLES, 0, 6, instCount);
+      // One draw per material run. With everything on one page this is a single
+      // `drawArraysInstanced` over the whole array — byte-identical to the
+      // pre-merge behaviour, and the case §8's measurement 1 records at every N
+      // on the 8192 clamp. Runs are walked in ORDER, so the painter's-order
+      // guarantee of the merged sort survives the split.
+      for (const run of runs) {
+        const base = run.start * ATTR_STRIDE;
+        for (let loc = 0; loc < 5; loc += 1) {
+          gl!.vertexAttribPointer(
+            loc,
+            4,
+            gl!.FLOAT,
+            false,
+            ATTR_STRIDE,
+            base + loc * 16
+          );
+        }
+        gl!.bindTexture(gl!.TEXTURE_2D, pages[run.page].tex);
+        gl!.drawArraysInstanced(gl!.TRIANGLES, 0, 6, run.count);
+      }
       gl!.bindVertexArray(null);
     },
     destroy() {
-      gl!.deleteTexture(atlasTex);
+      for (const p of pages) gl!.deleteTexture(p.tex);
       gl!.deleteBuffer(instBuf);
       gl!.deleteVertexArray(vao);
       gl!.deleteProgram(prog);

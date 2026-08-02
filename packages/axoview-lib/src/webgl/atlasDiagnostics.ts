@@ -38,4 +38,9 @@ export const publishAtlasStats = (
   canvas.dataset.atlasUsedRows = String(s.usedRows);
   canvas.dataset.atlasSlots = String(s.slots);
   canvas.dataset.atlasFull = String(s.full);
+  // ADR 0038 §8: the merged bulk keeps the atlas a per-material resource, so how
+  // many PAGES a scene needed — and therefore how many binds the draw costs — is
+  // the quantity that says whether the "one draw call" case held.
+  canvas.dataset.atlasPages = String(s.pages);
+  canvas.dataset.drawCalls = String(batch.drawCallCount());
 };
