@@ -8,6 +8,7 @@ import {
   useState
 } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { downloadBlob } from '../utils/downloadBlob';
 import { useTranslation } from 'react-i18next';
 import { flattenCollections } from '@isoflow/isopacks/dist/utils';
 import isoflowIsopack from '@isoflow/isopacks/dist/isoflow';
@@ -1103,13 +1104,11 @@ export function DiagramLifecycleProvider({
     const blob = new Blob([JSON.stringify(exportData, null, 2)], {
       type: 'application/json'
     });
-    const url = URL.createObjectURL(blob);
+    // A5/CHR-11: one implementation. This copy revoked the URL synchronously
+    // after `click()`, so on some browsers the export produced no file, no
+    // error and no toast — while the success toast below fired regardless.
     const filename = `${diagramName || 'diagram'}-${new Date().toISOString().split('T')[0]}.json`;
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, filename);
     setShowExportDialog(false);
     // F-10: confirm the silent download succeeded (H11 feedback). The browser's
     // own download chrome is easy to miss, so a short success toast closes the loop.

@@ -3,6 +3,7 @@ import { optimizeSvgDataUrl, utf8ToBase64 } from './svgOptimizer';
 import { stripDefaultIcons } from './leanSave';
 import type { Icon } from 'src/types';
 import { computeRenderTarget } from './renderTarget';
+import { downloadFile } from './downloadFile';
 import { Model, Size } from '../types';
 
 export const generateGenericFilename = (extension: string) => {
@@ -58,14 +59,9 @@ export const base64ToBlob = (
   return blob;
 };
 
-export const downloadFile = (data: Blob, filename: string) => {
-  const url = URL.createObjectURL(data);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-};
+// A5/CHR-11 — the one download helper now lives in `utils/downloadFile`.
+export { downloadFile };
+
 
 /**
  * ADR 0003 addendum (2026-08-01) — the catalog is the HOST's, so the caller

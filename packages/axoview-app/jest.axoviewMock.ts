@@ -23,3 +23,8 @@ export { sweepOrphanModelItems } from '../axoview-lib/src/utils/sweepOrphanModel
 
 // Still a stub — it triggers a browser download, which a unit test must not do.
 export const exportAsJSON = (): void => {};
+
+// A5/CHR-11 — the ONE download helper, re-exported from SOURCE so the app's
+// tests exercise the shipped implementation (revoke on a later tick, anchor
+// attached) rather than a stand-in. Its only dependency is the DOM.
+export { downloadFile } from '../axoview-lib/src/utils/downloadFile';

@@ -16,8 +16,15 @@ import { readFileSync, readdirSync } from 'fs';
 import path from 'path';
 import { supportedLanguages } from '../../i18n';
 
-const LOCALE_DIR = 'packages/axoview-app/src/i18n';
-const read = (p: string) => readFileSync(p, 'utf8');
+// RIG (2026-08-02): resolved from THIS FILE, not from the runner's cwd — the
+// same fault A4's `filetree-fex-01-to-07` carried. Repo-root-relative paths
+// worked when the lane ran from the root and broke silently when it started
+// running per-package, turning every source-scanning probe into an ENOENT that
+// PRESENTS as a finding. See the wave-6 rig-traps appendix.
+const REPO_ROOT = path.resolve(__dirname, '../../../../..');
+const LOCALE_DIR = path.resolve(__dirname, '../../i18n');
+const read = (p: string) =>
+  readFileSync(path.isAbsolute(p) ? p : path.resolve(REPO_ROOT, p), 'utf8');
 const catalogue = (lng: string): Record<string, unknown> =>
   JSON.parse(read(path.join(LOCALE_DIR, `${lng}.json`)));
 
@@ -41,7 +48,12 @@ const others = () =>
 // CHR-09 — no catalogue is complete, and the record says nine are.
 // ---------------------------------------------------------------------------
 describe('CHR-09 — every shipped locale is missing strings, including the ones documented as complete', () => {
-  it('characterization: all twelve are short, and known_issues names nine of them as covered', () => {
+  // The second half of this characterization is now STALE, deliberately: the
+  // `known_issues.md` entry no longer claims nine locales are fully covered —
+  // that correction IS the CHR-09 fix, alongside the key-set gate. What
+  // survives is the measurement itself, kept here as the standing record of the
+  // deferred translation debt.
+  it('characterization: not one of the twelve catalogues is complete', () => {
     const en = leafKeys(catalogue(EN));
     // PRECONDITION: the reference catalogue is the big one and the locale list
     // matches what the language switcher offers.
@@ -54,25 +66,14 @@ describe('CHR-09 — every shipped locale is missing strings, including the ones
       const keys = new Set(leafKeys(catalogue(lng)));
       return { lng, missing: en.filter((k) => !keys.has(k)).length };
     });
-    // Not one locale is complete.
     expect(short.every((s) => s.missing > 0)).toBe(true);
     expect(short.filter((s) => s.missing > 30)).toHaveLength(12);
 
-    // And the entry that documents this debt names the other nine as the
-    // fully-covered escape route — a claim no catalogue supports.
+    // The entry now names all twelve rather than nine as an escape route.
     const known = read('known_issues.md');
-    expect(known).toContain('Partial-coverage i18n locales (de-DE + id-ID)');
-    expect(known).toContain(
-      'switch back to English (en-US) for a fully translated experience, or to one of the fully-covered locales'.replace(
-        'switch',
-        'Switch'
-      )
-    );
-    for (const lng of ['zh-CN', 'es-ES', 'pt-BR', 'fr-FR', 'hi-IN', 'bn-BD', 'ru-RU', 'it-IT', 'tr-TR']) {
-      expect(short.find((s) => s.lng === lng)!.missing).toBeGreaterThan(30);
-    }
+    expect(known).toContain('Partial-coverage i18n locales (ALL twelve)');
+    expect(known).toContain('en-US is the only complete catalogue');
   });
-
   it.failing('CHR-09: the locales documented as fully covered are fully covered', () => {
     const en = leafKeys(catalogue(EN));
     expect(en.length).toBeGreaterThan(200); // precondition
@@ -122,50 +123,13 @@ describe('CHR-10 — catalogues carry keys en-US does not', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// CHR-11 — one download helper, five hand-written copies.
-// ---------------------------------------------------------------------------
-describe('CHR-11 — the download idiom is written five times and revokes too early', () => {
-  const COPIES = [
-    'packages/axoview-app/src/utils/downloadBlob.ts',
-    'packages/axoview-app/src/LocalStorageInspector.tsx',
-    'packages/axoview-app/src/providers/DiagramLifecycleProvider.tsx',
-    'packages/axoview-app/src/components/DiagnosticsOverlay.tsx',
-    'packages/axoview-lib/src/utils/exportOptions.ts'
-  ];
-
-  it('characterization: five copies, none attached to the document, all revoking synchronously', () => {
-    for (const p of COPIES) {
-      const src = read(p);
-      // PRECONDITION: this file really does build a download anchor.
-      expect(src).toContain('createObjectURL');
-      expect(src).toMatch(/a\.download|\.download =/);
-      // Every copy calls click() and revokes in the same synchronous block…
-      expect(src).toMatch(/a\.click\(\);\s*(\/\/[^\n]*\n\s*)?URL\.revokeObjectURL/);
-      // …and none appends the anchor to the document first.
-      expect(src).not.toMatch(/appendChild\(a\)|body\.append\(a\)/);
-    }
-    // The app has a shared helper (`utils/downloadBlob`) with exactly one
-    // caller, while three other app-side surfaces re-implement it inline and
-    // the lib keeps its own — the ADR 0047 "app/lib dual implementations of one
-    // contract" class, at five copies.
-    expect(read('packages/axoview-app/src/components/fileExplorer/ExportProjectZipDialog.tsx')).toContain(
-      'downloadBlob(blob, filename)'
-    );
-    const reusers = COPIES.filter(
-      (p) => p !== 'packages/axoview-app/src/utils/downloadBlob.ts' && read(p).includes('downloadBlob')
-    );
-    expect(reusers).toEqual([]);
-  });
-
-  it.failing('CHR-11: one implementation, revoked after the download can start', () => {
-    const impls = COPIES.filter((p) => read(p).includes('createObjectURL'));
-    expect(impls.length).toBeGreaterThan(0); // precondition
-    // Expected: a single helper (the app one delegating to the lib's, or vice
-    // versa) that appends the anchor and revokes on a later tick — the
-    // documented-safe shape. Actual: five copies, each revoking the URL in the
-    // same tick as the click, which browsers are allowed to treat as a
-    // cancelled download.
-    expect(impls).toHaveLength(1);
-  });
-});
+// CHR-11 is FIXED (wave 4, 2026-08-02) and its probe is retired — one helper in
+// `axoview-lib/src/utils/downloadFile.ts`, four copies deleted. Promoted to
+// `axoview-lib/src/utils/__tests__/downloadFile.test.ts`.
+//
+// CHR-09/CHR-10 above stay as the standing marker for the DEFERRED translation
+// debt. What wave 4 fixed is that the gap is now measured rather than
+// discovered: `src/i18n/__tests__/localeKeyParity.contract.test.ts` pins the
+// per-locale shortfall in both directions, so a new untranslated string fails
+// the build. The `known_issues.md` entry that named nine locales as "fully
+// covered" — none of which was — is corrected.

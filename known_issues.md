@@ -32,13 +32,31 @@
 
 **Status:** Open, deferred. Sweep them into `i18n/*.json` as those surfaces are next touched; the authStore case needs the notification store to accept keys instead of literals.
 
-## Partial-coverage i18n locales (de-DE + id-ID)
+## Partial-coverage i18n locales (ALL twelve)
 
-**Symptom:** German (de-DE) and Indonesian (id-ID) have stub translations covering only the initial pre-rename string set. Newer strings (added since 2026-04) fall through to English. Users selecting these locales see mixed German/English or Indonesian/English UI.
+**Corrected 2026-08-02 (A5/CHR-09).** This entry named de-DE and id-ID and
+pointed users at nine "fully-covered" locales. **None of the twelve is fully
+covered.** Measured against `en-US`'s 228 leaf keys: 34 missing for bn-BD,
+es-ES, fr-FR, hi-IN, it-IT, pl-PL, pt-BR, ru-RU and tr-TR; 35 for zh-CN; 65 for
+de-DE; 66 for id-ID. Drift also runs the other way — every catalogue carries 1–3
+keys `en-US` no longer has (CHR-10), renames the translations never followed.
 
-**Workaround:** None at the locale level. Switch back to English (en-US) for a fully translated experience, or to one of the fully-covered locales (zh-CN, es-ES, pt-BR, fr-FR, hi-IN, bn-BD, ru-RU, it-IT, tr-TR).
+**Symptom:** Newer strings fall through to English mid-screen. de-DE and id-ID
+are roughly twice as short as the rest, which is the difference this entry
+originally described; it is a difference of degree, not of kind.
 
-**Status:** Open, deferred. Resolve when translators refresh those locales. Not a productization-blocker — locale switching itself works correctly; the stubs were preserved (rather than dropped from `supportedLanguages`) so the existing user choice keeps working. Filed alongside B-13 closure (productization audit Section 5).
+**Workaround:** en-US is the only complete catalogue.
+
+**Status:** The translation debt is Open and deferred — resolve when translators
+refresh the locales. What is **Fixed in wave 4 (2026-08-02)** is the reason it
+was invisible: nothing compared key sets, so every feature that added a string
+to `en-US` widened the gap silently, and this entry's own guidance went stale
+without anyone noticing. `localeKeyParity.contract.test.ts` now pins the
+shortfall per locale in both directions, so a new untranslated string fails the
+build and closing debt means lowering a number in a file. Not a
+productization-blocker — locale switching works, and the stubs are kept (rather
+than dropped from `supportedLanguages`) so an existing user choice keeps
+working. Filed alongside B-13 closure (productization audit Section 5).
 
 ## MUI menu close logs "Blocked aria-hidden on an element because its descendant retained focus"
 
@@ -7798,10 +7816,27 @@ exists.
 
 **Workaround:** none — and the action is irreversible (it hard-reloads).
 
-**Status:** Open. Fix direction: delete session-place diagrams through the
-provider rather than by key prefix (so folders and diagrams stay coherent), and
-never sweep configuration keys. Repro:
-[`storage-hygiene-chr-01-to-04.explore.test.tsx`](packages/axoview-app/src/__explore__/A5/storage-hygiene-chr-01-to-04.explore.test.tsx).
+**Status:** Fixed in wave 4 (2026-08-02) exactly as directed — the clear goes
+through the session provider, so the diagram index and the folder tree stay
+coherent, and **configuration is never swept**. The raw-key path survives only
+as a fallback for when no provider is reachable, and it is scoped to
+`sessionStorage`'s diagram keys.
+
+The classification moved into `services/storage/storageAccounting.ts`, which
+names the two key sets the component had conflated — `sessionStorage` +
+`axoview_` (underscore) is DIAGRAMS, `localStorage` + `axoview-` (hyphen) is
+CONFIGURATION. One character apart, and every symptom in CHR-01/02/03/04 follows
+from taking the second set for the first.
+
+Three consequences worth recording. The confirm copy now says what it does
+("every diagram stored in this browser session… your folders, settings and
+Google Drive diagrams are not affected") — the old copy promised "all saved
+diagrams" and delivered the complement. The hard `window.location.reload()` is
+gone: it made an already-irreversible action look like a crash and hid whether
+anything had happened. And CHR-03 is closed by construction rather than by a
+second fix — the folders are not deleted, so no diagram is left pointing at one
+that is gone. Promoted regression:
+[`storageAccounting.test.ts`](packages/axoview-app/src/services/storage/__tests__/storageAccounting.test.ts).
 
 ## The storage gauge labels preference bytes "Axoview diagrams" and never measures the diagrams
 
@@ -7824,10 +7859,21 @@ reads in bytes, not kilobytes.
 
 **Workaround:** none.
 
-**Status:** Open. Fix direction: measure both stores, bucket by the real key
-sets, and use `navigator.storage.estimate()` where available instead of the 5 MB
-guess. Repro:
-[`storage-hygiene-chr-01-to-04.explore.test.tsx`](packages/axoview-app/src/__explore__/A5/storage-hygiene-chr-01-to-04.explore.test.tsx).
+**Status:** Fixed in wave 4 (2026-08-02) — all three, as directed. `measureStorage`
+walks both stores and buckets by the real key sets; the denominator comes from
+`navigator.storage.estimate()` where available, which is the browser's own
+answer and covers both stores, with the 5 MB constant surviving only as a
+labelled fallback (the UI shows `~` in front of it).
+
+Both stores are scanned with the SAME classifier rather than one each — a key in
+the "wrong" store is precisely the confusion this cluster is about, and
+hard-coding which store to look in would rebuild it.
+
+The lines are named for what they now measure: "Session diagrams", "Axoview
+settings and folders", "Other site data". The old label — "Axoview diagrams"
+over the configuration bytes — is what made the dialog actively misleading at
+the exact moment the user had to decide what to delete. Promoted regression:
+[`storageAccounting.test.ts`](packages/axoview-app/src/services/storage/__tests__/storageAccounting.test.ts).
 
 ## "Export All Diagrams" — the backup offered before the destructive clear — silently does nothing
 
@@ -7850,10 +7896,20 @@ URL and no anchor click.
 
 **Workaround:** export from the file explorer (Export project ZIP) instead.
 
-**Status:** Open. Fix direction: route the export through the storage provider
-(the project-ZIP exporter already does), or drop the button rather than offer a
-backup that is not one. Repro:
-[`storage-hygiene-chr-01-to-04.explore.test.tsx`](packages/axoview-app/src/__explore__/A5/storage-hygiene-chr-01-to-04.explore.test.tsx).
+**Status:** Fixed in wave 4 (2026-08-02) — routed through the storage provider,
+not dropped. The button sits beside a destructive action and is the only thing
+offered as a safety net, so removing it would leave the clear unaccompanied;
+making it real is the smaller change now that the provider is reachable from
+this component.
+
+It also **reports**. Silence is what made the original a trap rather than a
+missing feature: the user takes the backup, sees nothing, and clears anyway. An
+empty session says so, a failure says "do not clear until you have a backup",
+and a success names the count. Promoted regression:
+[`storageAccounting.test.ts`](packages/axoview-app/src/services/storage/__tests__/storageAccounting.test.ts)
+plus the download-helper pin below (CHR-11) — the export used one of the five
+broken copies, so it could have produced no file even after being pointed at the
+right data.
 
 ## The boot-time service-worker cleanup never finishes on a machine that has no service worker
 
@@ -7880,9 +7936,17 @@ microtask queue and a macrotask drain; with a resolved registration,
 
 **Workaround:** none needed today.
 
-**Status:** Open. Fix direction: `getRegistrations().then(rs => rs.forEach(r => r.unregister()))`,
-and log the rejection value rather than `.message`. Repro:
-[`boot-migration-chr-05-to-08.explore.test.ts`](packages/axoview-app/src/__explore__/A5/boot-migration-chr-05-to-08.explore.test.ts).
+**Status:** Fixed in wave 4 (2026-08-02) exactly as directed — `getRegistrations()`,
+which is the API that answers the question being asked and resolves to `[]` when
+there is nothing to unregister, and the rejection VALUE is logged rather than
+`.message`.
+
+`unregister()` returns its promise now. That is the point of the fix rather than
+a side effect: the bug was that awaiting it would hang forever on every boot, so
+"you may now await this" is the property that changed. It also covers a
+registration that exists but is not yet ACTIVE, which `ready` would have waited
+on indefinitely. Promoted regression:
+[`serviceWorkerRegistration.test.ts`](packages/axoview-app/src/__tests__/serviceWorkerRegistration.test.ts).
 
 ## A storage migration that fails partway is recorded as complete, stranding the rest of the data forever
 
@@ -7910,10 +7974,19 @@ returns `ran: false` and changes nothing.
 **Workaround:** clear `axoview_migration_v1` from localStorage by hand and
 reload.
 
-**Status:** Open. Fix direction: only write the sentinel when both passes
-completed without throwing (or record per-store progress), so a partial run is
-retried. Repro:
-[`boot-migration-chr-05-to-08.explore.test.ts`](packages/axoview-app/src/__explore__/A5/boot-migration-chr-05-to-08.explore.test.ts).
+**Status:** Fixed in wave 4 (2026-08-02) — the first option: the sentinel is
+written only when both passes completed without throwing, and `MigrationResult`
+carries `complete` so a caller can tell a full run from a partial one.
+
+Both passes are still ATTEMPTED even when the first throws. A quota failure in
+one store says nothing about the other, and migrating what can be migrated is
+strictly better than stopping — the retry picks up the rest, and the migration
+is idempotent by construction.
+
+The sentinel's own `catch` already reasoned about exactly this case ("can't set
+sentinel; migration will retry next boot"); the migration body did not. Promoted
+regression:
+[`migrationShim.test.ts`](packages/axoview-app/src/utils/__tests__/migrationShim.test.ts).
 
 ## The Docker deployment sends every API call cross-origin, where the app's own CSP blocks it
 
@@ -7941,10 +8014,21 @@ allowance; `apiBaseUrl()` returns `http://localhost:3001` for a
 **Workaround:** publish the container on a host port other than 3000
 (e.g. `"3100:80"`).
 
-**Status:** Open. Fix direction: decide the split from a build/runtime signal
-rather than the port — `process.env.NODE_ENV`, a define, or the runtime config
-`useRuntimeConfig` already fetches — and default to same-origin `/api`. Repro:
-[`boot-migration-chr-05-to-08.explore.test.ts`](packages/axoview-app/src/__explore__/A5/boot-migration-chr-05-to-08.explore.test.ts).
+**Status:** Fixed in wave 4 (2026-08-02) as directed — the split is gated on
+`process.env.NODE_ENV`, which rsbuild inlines at build time, and the default is
+same-origin.
+
+The port check is KEPT, but only to narrow the development case further: a
+development build served from somewhere other than `localhost:3000` gets
+same-origin too. The port alone could never distinguish the two, because the
+container deliberately publishes on the port developers expect — that is the
+whole finding.
+
+Same-origin as the default is the safe direction, and worth stating: a wrong
+same-origin guess produces a visible 404, while a wrong cross-origin guess
+produces a CSP violation in the console and a silently dead feature, which is
+how this survived. Promoted regression:
+[`apiBaseUrl.test.ts`](packages/axoview-app/src/utils/__tests__/apiBaseUrl.test.ts).
 
 ## Every shipped locale is missing strings — including the nine documented as fully covered
 
@@ -7970,12 +8054,24 @@ same stale-invariant class as the S1–S3 thread S-f.)
 
 **Workaround:** use en-US for complete coverage.
 
-**Status:** Open. The translation debt itself is deferred (see the two entries
-above); what is new here is that no locale is complete and the documented
-"fully-covered" list is false. Fix direction: land a key-set contract test
-(en-US as the superset, both directions) so the gap is a visible number, and
-correct the partial-coverage entry to name all twelve. Repro:
-[`i18n-download-chr-09-to-11.explore.test.ts`](packages/axoview-app/src/__explore__/A5/i18n-download-chr-09-to-11.explore.test.ts).
+**Status:** Fixed in wave 4 (2026-08-02) — both halves of the fix direction.
+The partial-coverage entry at the top of this file now names all twelve locales
+with their real numbers, and `localeKeyParity.contract.test.ts` is the key-set
+gate: `en-US` as the superset, both directions, per-locale budgets that may go
+DOWN freely and fail when they go up. The translation debt itself stays
+deferred.
+
+Budgets rather than a demand for parity, deliberately: requiring parity today
+would be a permanently red suite, which is not a gate. What the gate stops is
+the SILENT widening — a new `en-US` string with no translations now fails the
+build, and closing debt means lowering a number in a file, which is the visible
+record the entry asks for.
+
+Red-verified by planting one untranslated `en-US` string: all twelve locales
+went red with the count and the new keys named. The gate's own "can this
+comparison detect a difference at all" CONTROL earned its place on the first
+run — it caught the package's es5 `[...someSet]` trap, which had made the gate
+report twelve perfectly-translated catalogues.
 
 ## One file-download helper is written five times, and every copy revokes the URL before the download can start
 
@@ -7999,11 +8095,23 @@ Measured by source sweep across all five files.
 
 **Workaround:** none.
 
-**Status:** Open. Fix direction: one helper (lib-side, re-exported for the app)
-that appends the anchor, clicks, and revokes on a later tick; delete the four
-copies. Ships naturally with the dual-implementation class gate (ADR 0047 §3).
-Repro:
-[`i18n-download-chr-09-to-11.explore.test.ts`](packages/axoview-app/src/__explore__/A5/i18n-download-chr-09-to-11.explore.test.ts).
+**Status:** Fixed in wave 4 (2026-08-02) exactly as directed — one helper,
+lib-side (`utils/downloadFile.ts`), re-exported for the app; it appends the
+anchor, clicks, removes it, and revokes on a later tick. The four copies are
+deleted.
+
+Its own module rather than staying inside `exportOptions.ts`: that file imports
+`dom-to-image-more`, and the app's jest mock exists precisely to keep that out
+of unit tests — so leaving it there would have meant either a heavy test import
+or a STUBBED download helper, which is the same "third implementation the tests
+actually run" trap the F5 lean-save gate caught. The mock re-exports the real
+one from source.
+
+The 60-second revoke delay is a named constant because "why 60 seconds" is the
+question a reader will have: long enough for a slow disk to have started the
+write, short enough that repeated exports do not accumulate blobs. Promoted
+regression:
+[`downloadFile.test.ts`](packages/axoview-lib/src/utils/__tests__/downloadFile.test.ts).
 
 ## Duplicating (or importing) a shared diagram copies its share link, so two documents claim one public snapshot
 

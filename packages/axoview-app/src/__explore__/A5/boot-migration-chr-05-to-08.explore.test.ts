@@ -8,13 +8,20 @@
  * were created under).
  */
 import { readFileSync } from 'fs';
+import path from 'path';
 import { unregister } from '../../serviceWorkerRegistration';
 import { migrateFossflowStorageKeys } from '../../utils/migrationShim';
 import { apiBaseUrl } from '../../utils/apiBaseUrl';
 import { shareUrlFromUuid } from '../../utils/shareUrl';
 import { appDisplayBase, APP_BASENAME } from '../../appBase';
 
-const read = (p: string) => readFileSync(p, 'utf8');
+// RIG (2026-08-02): resolved from THIS FILE, not from the runner's cwd — the
+// third instance of the same fault in the lane (A4/filetree, A5/i18n-download).
+// Repo-root-relative paths worked when the lane ran from the root and throw
+// ENOENT now that it runs per-package, PRESENTING as findings. Wave-6 appendix.
+const REPO_ROOT = path.resolve(__dirname, '../../../../..');
+const read = (p: string) =>
+  readFileSync(path.isAbsolute(p) ? p : path.resolve(REPO_ROOT, p), 'utf8');
 
 /** Point window.location at a URL without navigating (jsdom has no nav). */
 function atOrigin(url: string) {
@@ -46,174 +53,27 @@ beforeEach(() => {
   sessionStorage.clear();
 });
 
-// ---------------------------------------------------------------------------
-// CHR-05 — unregister() awaits navigator.serviceWorker.ready.
-// ---------------------------------------------------------------------------
-describe('CHR-05 — the boot service-worker cleanup never completes when there is no worker', () => {
-  const withServiceWorker = (ready: Promise<unknown>) => {
-    Object.defineProperty(navigator, 'serviceWorker', {
-      configurable: true,
-      value: { ready }
-    });
-  };
-
-  it('characterization: with a registration it unregisters; with none it hangs forever', async () => {
-    // PRECONDITION: the happy path really does reach `registration.unregister()`.
-    const calls: string[] = [];
-    withServiceWorker(Promise.resolve({ unregister: () => { calls.push('unregister'); } }));
-    unregister();
-    expect(await settled(Promise.resolve())).toBe(true);
-    await Promise.resolve();
-    expect(calls).toEqual(['unregister']);
-
-    // The real case: the app ships no service worker, so unless a stale one
-    // from a prior install is active, `navigator.serviceWorker.ready` never
-    // resolves — by spec it waits for an active registration. The chain
-    // `index.tsx` starts on every boot simply never finishes.
-    const never = new Promise<unknown>(() => {});
-    withServiceWorker(never);
-    let tail = false;
-    const chain = (navigator.serviceWorker.ready as Promise<unknown>).then(() => { tail = true; });
-    unregister();
-    expect(await settled(chain)).toBe(false);
-    expect(tail).toBe(false);
-  });
-
-  it('the .catch assumes an Error, so a non-Error rejection throws inside the handler', async () => {
-    const errors: unknown[] = [];
-    const spy = jest.spyOn(console, 'error').mockImplementation((e) => { errors.push(e); });
-    withServiceWorker(Promise.reject('boom')); // a string, as some browsers reject with
-    const before = process.listenerCount('unhandledRejection');
-    unregister();
-    await new Promise((r) => setTimeout(r, 0));
-    // `error.message` on a string is `undefined` — the handler logs nothing
-    // useful, and a null/undefined rejection would throw inside the catch.
-    expect(errors).toEqual([undefined]);
-    expect(process.listenerCount('unhandledRejection')).toBe(before);
-    spy.mockRestore();
-  });
-
-  it.failing('CHR-05: the boot cleanup settles on a machine with no service worker', async () => {
-    const never = new Promise<unknown>(() => {});
-    withServiceWorker(never);
-    const chain = (navigator.serviceWorker.ready as Promise<unknown>).then(() => {});
-    unregister();
-    expect(typeof unregister).toBe('function'); // precondition
-    // Expected: use `getRegistrations()` (which resolves to `[]` when there is
-    // none) so the cleanup terminates and anything sequenced after it can run.
-    // Actual: `ready` is a promise that resolves only for an ACTIVE worker.
-    expect(await settled(chain)).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// CHR-06 — a partial migration is recorded as complete.
-// ---------------------------------------------------------------------------
-describe('CHR-06 — a failed key migration is sealed by the "done" sentinel', () => {
-  const seedLegacy = () => {
-    localStorage.setItem('fossflow-folders', JSON.stringify([{ id: 'f1' }]));
-    localStorage.setItem('fossflow-tree-manifest', '{}');
-    sessionStorage.setItem('fossflow_diagrams', JSON.stringify([{ id: 'd1' }]));
-  };
-
-  it('characterization: the sentinel is written even though the migration threw', () => {
-    seedLegacy();
-    // Quota is reached partway through the localStorage pass — the shape of a
-    // migration on a nearly-full profile, which is exactly the profile with the
-    // most legacy keys to move.
-    const realSet = Storage.prototype.setItem;
-    let writes = 0;
-    Storage.prototype.setItem = function (k: string, v: string) {
-      // Let the sentinel through; fail the second migrated key.
-      if (k.startsWith('axoview') && !k.includes('migration') && ++writes === 2) {
-        const err = new DOMException('QuotaExceededError', 'QuotaExceededError');
-        throw err;
-      }
-      return realSet.call(this, k, v);
-    };
-    let result;
-    try {
-      result = migrateFossflowStorageKeys();
-    } finally {
-      Storage.prototype.setItem = realSet;
-    }
-
-    // PRECONDITION: the run really did report success, and really was partial.
-    expect(result!.ran).toBe(true);
-    expect(localStorage.getItem('axoview_migration_v1')).toBe('done');
-    const stillLegacy = Object.keys(localStorage).filter((k) => k.startsWith('fossflow'));
-    expect(stillLegacy.length).toBeGreaterThan(0);
-
-    // Second boot: the sentinel short-circuits, so the keys left behind are
-    // never looked at again. The data is present in the profile and invisible
-    // to every reader, forever.
-    const second = migrateFossflowStorageKeys();
-    expect(second.ran).toBe(false);
-    expect(Object.keys(localStorage).filter((k) => k.startsWith('fossflow'))).toEqual(stillLegacy);
-  });
-
-  it.failing('CHR-06: a migration that could not finish is retried on the next boot', () => {
-    seedLegacy();
-    const realSet = Storage.prototype.setItem;
-    let writes = 0;
-    Storage.prototype.setItem = function (k: string, v: string) {
-      if (k.startsWith('axoview') && !k.includes('migration') && ++writes === 2) {
-        throw new DOMException('QuotaExceededError', 'QuotaExceededError');
-      }
-      return realSet.call(this, k, v);
-    };
-    try {
-      migrateFossflowStorageKeys();
-    } finally {
-      Storage.prototype.setItem = realSet;
-    }
-    expect(localStorage.getItem('axoview_migration_v1')).toBe('done'); // precondition
-    // Expected: the sentinel means "migration finished"; a throw inside
-    // `migrateStorage` means it did not, so the sentinel must not be written
-    // (the comment on the sentinel's own catch already reasons this way:
-    // "can't set sentinel; migration will retry next boot").
-    expect(migrateFossflowStorageKeys().ran).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// CHR-07 — apiBaseUrl() sniffs the environment by port.
-// ---------------------------------------------------------------------------
-describe('CHR-07 — the API base is chosen by port, which the Docker deployment shares', () => {
-  it('characterization: any localhost:3000 page targets :3001, including the container', () => {
-    atOrigin('http://localhost:3000/app');
-    // PRECONDITION: this is the intended `npm run dev` behaviour.
-    expect(apiBaseUrl()).toBe('http://localhost:3001');
-    atOrigin('https://axoview.example.com/app');
-    expect(apiBaseUrl()).toBe('');
-
-    // …but `compose.dev.yml` (what `npm run docker:run` starts) publishes nginx
-    // on the SAME host port, so the container is served from localhost:3000 too.
-    const compose = read('compose.dev.yml');
-    expect(compose).toContain('"3000:80"');
-
-    // In that deployment `/api/` is same-origin behind the nginx proxy…
-    const nginx = read('nginx.conf');
-    expect(nginx).toContain('location /api/');
-    expect(nginx).toContain('proxy_pass http://localhost:3001;');
-    // …and the document nginx serves carries a CSP whose `connect-src` is
-    // `'self'` only. A different port is a different origin, so every API call
-    // the app makes in the container is both proxy-bypassing AND CSP-blocked.
-    expect(nginx).toMatch(/connect-src 'self'/);
-    expect(nginx).not.toMatch(/connect-src[^;]*localhost:3001/);
-  });
-
-  it.failing('CHR-07: the API base is derived from something the deployments do not share', () => {
-    atOrigin('http://localhost:3000/app');
-    const nginx = read('nginx.conf');
-    expect(nginx).toContain('location /api/'); // precondition
-    // Expected: same-origin `/api` unless a dev-only signal says otherwise (a
-    // build-time env var, `process.env.NODE_ENV`, an injected runtime config —
-    // `useRuntimeConfig` already fetches one). Actual: hostname+port, and
-    // `docker compose -f compose.dev.yml up` serves on exactly that pair.
-    expect(apiBaseUrl()).toBe('');
-  });
-});
+// CHR-05, CHR-06 and CHR-07 are FIXED (wave 4, 2026-08-02) and their probes are
+// retired. Promoted to `src/__tests__/serviceWorkerRegistration.test.ts`,
+// `src/utils/__tests__/migrationShim.test.ts` and
+// `src/utils/__tests__/apiBaseUrl.test.ts`.
+//
+// Two of the three `it.failing` probes could not flip, and both are worth
+// knowing about rather than re-running:
+//
+//   - CHR-05's asserted that the `ready` CHAIN settles. The fix does not make
+//     `ready` settle — it stops using `ready`, which is the API's documented
+//     behaviour, not a bug to be worked around. A probe that names the
+//     mechanism it expects cannot flip on the fix that avoids it. (Its OTHER
+//     assertion earned its keep: it stubbed a `serviceWorker` with no
+//     `getRegistrations` and caught that the first version of the fix would
+//     have thrown synchronously out of the boot path.)
+//   - CHR-07's runs under jest, where `NODE_ENV` is `'test'`. The fix keys off
+//     a value rsbuild inlines at BUILD time, so no jest environment can
+//     observe it. Verified instead where it matters: the production bundle no
+//     longer contains the string `localhost:3001` at all — rsbuild
+//     dead-code-eliminates the branch — and `apiBaseUrl.test.ts` drives
+//     `NODE_ENV` explicitly.
 
 // ---------------------------------------------------------------------------
 // CHR-08 — share links bake in the creating origin.
