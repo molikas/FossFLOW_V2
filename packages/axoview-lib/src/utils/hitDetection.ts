@@ -91,16 +91,18 @@ const getLayerOrderOf = (layers: HitTestScene['layers']): LayerOrderOf => {
 // untouched, so the cached entry records which one it was built from and rebuilds
 // when that changes. (`SceneCanvas`'s own sort cache keys on both for the same
 // reason.)
+type HitItem = HitTestScene['items'][number];
+
 const itemTileIndexCache = new WeakMap<
   HitTestScene['items'],
-  { layers: HitTestScene['layers']; index: Map<string, string> }
+  { layers: HitTestScene['layers']; index: Map<string, HitItem> }
 >();
 
 const getItemTileIndex = (
   items: HitTestScene['items'],
   layers: HitTestScene['layers'],
   layerOrderOf: LayerOrderOf
-): Map<string, string> => {
+): Map<string, HitItem> => {
   const cached = itemTileIndexCache.get(items);
   if (cached && cached.layers === layers) return cached.index;
   // PROJ-10: built in PAINT order, so the last write for a shared tile is the
@@ -108,10 +110,14 @@ const getItemTileIndex = (
   // the raw-tile path disagree with the canvas the same way the pixel path did
   // — and with the two consulted from different call sites, they could
   // disagree with each OTHER as well.
+  //
+  // Values are the ITEM, not its id: the cross-type ranking below needs the
+  // hit's own layer/zIndex/tile, and looking those back up by id would put an
+  // O(N) scan on a path whose whole point is the O(1) Map lookup.
   const index = new Map(
     itemsInPaintOrder(items, layerOrderOf).map((item) => [
       `${item.tile.x},${item.tile.y}`,
-      item.id
+      item
     ])
   );
   itemTileIndexCache.set(items, { layers, index });
@@ -169,13 +175,13 @@ const itemAtPoint = (
   point: Coords,
   canvasMode: CanvasMode,
   layerOrderOf: LayerOrderOf
-): string | null => {
+): HitItem | null => {
   const getTilePosition = makeTilePositionFn(getStrategy(canvasMode));
   const painted = itemsInPaintOrder(items, layerOrderOf);
   for (let i = painted.length - 1; i >= 0; i -= 1) {
     const it = painted[i];
     const footprint = getRenderedTileFootprint(it, getTilePosition, canvasMode);
-    if (footprintContainsPoint(footprint, point)) return it.id;
+    if (footprintContainsPoint(footprint, point)) return it;
   }
   return null;
 };
@@ -242,11 +248,11 @@ export const getItemAtTile = ({
   const tileIndex = getItemTileIndex(scene.items, scene.layers, layerOrderOf);
   // ITEM hit: pixel-accurate against rendered footprints when we have the cursor
   // point + mode (grabs an off-grid item where it's drawn); else the raw tile
-  // index (SPATIAL-1: O(1) Map lookup, id returned directly).
-  const itemId =
-    point && canvasMode
+  // index (SPATIAL-1: O(1) Map lookup, the item returned directly).
+  const hitItem =
+    (point && canvasMode
       ? itemAtPoint(scene.items, point, canvasMode, layerOrderOf)
-      : tileIndex.get(`${tile.x},${tile.y}`);
+      : tileIndex.get(`${tile.x},${tile.y}`)) ?? null;
 
   // PROJ-10 residual — CROSS-TYPE resolution. An ITEM hit used to return here,
   // which was right while the four bulk canvases stacked by type at fixed CSS
@@ -259,17 +265,13 @@ export const getItemAtTile = ({
   // At equal layer and z-index the comparator's TYPE RANK reproduces this
   // function's historical precedence exactly (node > connector > rectangle), so
   // an unlayered document with no z-order set behaves as it always has.
-  const itemUnit: (SceneDrawOrder & { id: string }) | null = (() => {
-    if (itemId == null) return null;
-    const hit = scene.items.find((i) => i.id === itemId);
-    return {
-      id: itemId,
-      kind: 'node',
-      layerOrder: layerOrderOf(hit?.layerId),
-      zIndex: hit?.zIndex ?? 0,
-      isoDepth: hit ? -hit.tile.x - hit.tile.y : 0
-    };
-  })();
+  const itemUnit: (SceneDrawOrder & { id: string }) | null = hitItem && {
+    id: hitItem.id,
+    kind: 'node',
+    layerOrder: layerOrderOf(hitItem.layerId),
+    zIndex: hitItem.zIndex ?? 0,
+    isoDepth: -hitItem.tile.x - hitItem.tile.y
+  };
 
   // The other bulk branches are only worth evaluating when one of them could
   // actually outrank the item — otherwise a click on a node keeps its O(1)
