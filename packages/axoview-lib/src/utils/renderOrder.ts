@@ -73,11 +73,14 @@ export interface SceneDrawOrder {
  * entities is the formulation that delivers what §8 decided; corrected here
  * while implementing the merge.
  *
- * The picker (`hitDetection.ts`) resolves the same z-index and iso-depth tiers
- * from the same helper, so renderer and picker agree by construction on those
- * two. It cannot see the LAYER tier — it is handed a flat scene with no `layers`
- * array — which is PROJ-10's residual, deliberately left to the program final
- * sweep. See `pickerAgreement.contract.test.ts`.
+ * The picker (`hitDetection.ts`) resolves all three tiers from this same helper,
+ * and since 2026-08-08 it ranks ACROSS entity kinds with this same comparator —
+ * so renderer and picker agree by construction. Closing PROJ-10's residual (the
+ * layer tier, which the picker was blind to while it was handed a flat scene) is
+ * what completed that; the merge had already made layer and z-index cross a type,
+ * which the picker's fixed branch precedence could not express. Text boxes and
+ * connector label chips remain outside the sort on both sides — they are DOM
+ * above the canvas. See `pickerAgreement.contract.test.ts`.
  */
 export const compareSceneDrawOrder = (
   a: SceneDrawOrder,

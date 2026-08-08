@@ -2981,24 +2981,51 @@ honoured, the layer bucket is not. Promoted regression:
 which runs the same case with the array order BOTH ways — the flip is the bug —
 and was verified to go red without the fix.
 
-**Residual — OPEN (re-scoped 2026-08-02, R3/GPU-13 picker-gate ruling).** The
-missing layer tier was recorded above as "not a gap in practice", on the grounds
-that hidden-layer entities are excluded upstream by `isItemInteractable` and that
-two items on different visible layers never share a tile without colliding. **The
+**Residual — FIXED 2026-08-08 (wave 6, program final sweep).** The missing layer
+tier had been recorded as "not a gap in practice", on the grounds that
+hidden-layer entities are excluded upstream by `isItemInteractable` and that two
+items on different visible layers never share a tile without colliding. **The
 second half is true of NODES only** — collision is a node-placement rule.
 Rectangles, labels and connectors overlap across layers freely, so the divergence
-is reachable:
+was reachable:
 
 > A rectangle on a high-`order` layer paints above a rectangle on a lower one, but
 > the picker resolves both with `layerOrder: 0` — so the lower-layer rectangle
 > wins on `zIndex` and takes the click from the one visibly on top.
 
-The GPU-13 merge makes the renderer and the picker agree by construction on the
-zIndex and iso-depth tiers, and its agreement gate is **deliberately scoped to
-those two**, with the layer tier named as excluded and this repro shape in the
-gate's header. Closing the residual means threading `layers` into the
-`HitTestScene` — routed to the **program final sweep** as its own item so it does
-not widen the merge.
+`HitTestScene` now carries the view's `layers` (threaded through `useSceneData`,
+so every interaction mode gets it from `state.scene` with no call-site change),
+and both branches that re-derive paint order — items and rectangles — resolve the
+bucket from it. `getItemTileIndex`'s WeakMap now keys on `layers` as well as on
+`items`, because a layer reorder replaces only the former.
+
+**Re-derived while fixing, and the scope grew by one tier.** The residual was
+written before the GPU-13 merge landed, and the merge changed the thing it
+describes: with four canvases at fixed CSS z-indices, entity TYPE beat everything
+cross-type, so "the picker cannot see the layer bucket" was the whole gap. The
+merged canvas sorts every bulk kind through one `compareSceneDrawOrder`, which
+puts layer **and z-index** above type rank — so the picker's fixed branch
+precedence (items → text boxes → connectors → rectangles) could not express
+either. A rectangle with `zIndex: 9` painted over a node and the click still
+selected the node. Both are closed together: the picker now finds each branch's
+own topmost hit as before and ranks the winners with the renderer's comparator.
+At equal layer and z-index `SCENE_TYPE_RANK` reproduces the old precedence
+exactly, so an unlayered document with no z-order set behaves as it always has —
+asserted as a CONTROL in the gate.
+
+**Text boxes stay out of it, deliberately.** `Renderer` mounts them in a DOM
+`SceneLayer` above `SceneCanvas`, so a text box paints over every bulk entity
+whatever its layer says; ranking one by a layer order the renderer does not
+consult would introduce a divergence rather than close one. Wave 5 recorded text
+boxes and connector label chips as the out-of-sort set with their own follow-up
+trigger, and §5 of the gate pins the exclusion.
+
+Gate widened in the same change (its §4 pin said closing this must come here and
+do exactly that):
+[`pickerAgreement.contract.test.ts`](packages/axoview-lib/src/utils/__tests__/pickerAgreement.contract.test.ts)
+— 22 tests, §4 the layer tier and §5 cross-type. Verified able to go red four
+times over, one per moving part: the item sort's layer term, the rectangle sort's
+layer term, the cross-type ranking, and the tile-index cache's `layers` key.
 
 ## Selecting a connector attached to an off-grid node makes the wire jump at that node
 

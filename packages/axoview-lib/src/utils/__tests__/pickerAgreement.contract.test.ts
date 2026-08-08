@@ -8,25 +8,26 @@
  * asserting in a gate". This is that gate.
  *
  * ---------------------------------------------------------------------------
- * SCOPE — the zIndex and iso-depth tiers ONLY. The LAYER tier is deliberately
- * excluded, and it is excluded because the divergence is REAL, not because it
- * cannot happen (owner ruling, 2026-08-02):
+ * SCOPE — all three tiers, and cross-type (WIDENED 2026-08-08 by the program
+ * final sweep, which closed PROJ-10's residual).
  *
- *   > A rectangle on a high-`order` layer paints above a rectangle on a lower
- *   > one, but `hitDetection` resolves both with `layerOrder: 0` — so the
- *   > lower-layer rectangle wins on `zIndex` and takes the click from the one
- *   > visibly on top.
+ * This gate shipped with the GPU-13 merge scoped to the zIndex and iso-depth
+ * tiers, because `hitDetection` was handed a flat `HitTestScene` with no
+ * `layers` array and resolved every entity at `layerOrder: 0`. §4 PINNED that
+ * divergence rather than hiding it, and said in as many words that closing the
+ * residual must come here and widen the gate. This is that widening: §4 now
+ * asserts the agreement it used to assert the absence of, and §5 pins what is
+ * still — deliberately — out of the sort.
  *
- * `hitDetection` is handed a flat `HitTestScene` with no `layers` array, so the
- * layer bucket is not available to it at all. The earlier rationale — "two items
- * on different visible layers never share a tile without colliding" — holds for
- * NODES only, because collision is a node-placement rule; rectangles, labels and
- * connectors overlap across layers freely.
- *
- * Closing it means threading `layers` into the hit-test scene. That is PROJ-10's
- * residual and belongs to the PROGRAM FINAL SWEEP — deliberately NOT folded into
- * the GPU-13 merge, which must not widen. See the PROJ-10 entry in
- * known_issues.md.
+ * The re-derivation that widened it beyond the layer tier: the merge made the
+ * renderer resolve **cross-type** as well (one `compareSceneDrawOrder` sort over
+ * all four bulk kinds, so layer and z-index cross an entity type at last), while
+ * the picker still returned the first branch to hit. PROJ-10's residual was
+ * scoped before that landed, so "the picker cannot see the layer bucket"
+ * understated it — the picker could not resolve cross-type at all. Both are
+ * closed together, because at equal layer and z-index `SCENE_TYPE_RANK`
+ * reproduces the picker's historical precedence exactly (node > connector >
+ * rectangle) and the layer-only fix is the more complicated one to write.
  * ---------------------------------------------------------------------------
  */
 import fs from 'fs';
@@ -65,12 +66,24 @@ const topmostPainted = <T extends SceneDrawOrder & { id: string }>(units: T[]) =
 
 /** The picker's answer for a click on `tile`. */
 const picked = (
-  items: Array<{ id: string; tile: { x: number; y: number }; zIndex?: number }>,
-  tile: { x: number; y: number }
+  items: Array<{
+    id: string;
+    tile: { x: number; y: number };
+    zIndex?: number;
+    layerId?: string;
+  }>,
+  tile: { x: number; y: number },
+  layers?: Array<{ id: string; order: number }>
 ) =>
   getItemAtTile({
     tile,
-    scene: { items, textBoxes: [], hitConnectors: [], rectangles: [] }
+    scene: {
+      items,
+      textBoxes: [],
+      hitConnectors: [],
+      rectangles: [],
+      layers
+    }
   })?.id ?? null;
 
 describe('§1 — both sides read the same helper', () => {
@@ -222,28 +235,255 @@ describe('§3 — iso-depth tier: the same entity is painted last and picked', (
   });
 });
 
-describe('§4 — the excluded LAYER tier is excluded on purpose, and reachably so', () => {
+describe('§4 — LAYER tier: the bucket the picker used to be blind to', () => {
+  const LAYERS = [
+    { id: 'bottom', order: 0 },
+    { id: 'top', order: 1 }
+  ];
+  const tile = { x: 2, y: 2 };
+
   it('the renderer honours the layer bucket', () => {
-    const lowLayer = node('lowLayer', { x: 2, y: 2 }, 9, 0);
-    const highLayer = node('highLayer', { x: 2, y: 2 }, 0, 1);
+    const lowLayer = node('lowLayer', tile, 9, 0);
+    const highLayer = node('highLayer', tile, 0, 1);
     // Layer outranks zIndex by a million to one — that is LAYER_BUCKET.
     expect(topmostPainted([lowLayer, highLayer])).toBe('highLayer');
   });
 
-  it('the picker CANNOT, and this test pins the divergence rather than hiding it', () => {
-    // `HitTestScene` has no `layers` array, so `itemsInPaintOrder` resolves every
-    // entity with `layerOrder: 0` and the zIndex tie decides. The renderer says
-    // `highLayer`; the picker says `lowLayer`. Recorded as PROJ-10's residual and
-    // routed to the program final sweep.
-    //
-    // If a future change threads `layers` through, THIS test goes red — which is
-    // the point: closing the residual must be a deliberate act that comes here
-    // and widens the gate, not a silent one.
-    const tile = { x: 2, y: 2 };
+  it.each([
+    ['array order low→high', ['lowLayer', 'highLayer']],
+    ['array order high→low', ['highLayer', 'lowLayer']]
+  ] as const)('and so does the picker — %s', (_label, order) => {
+    // Was PROJ-10's residual: `HitTestScene` had no `layers` array, so
+    // `itemsInPaintOrder` resolved everything at `layerOrder: 0` and the zIndex
+    // tie decided — the renderer said `highLayer`, the picker said `lowLayer`.
+    // The layer on top wins even though it is the one that LOSES on zIndex,
+    // which is what makes this the layer tier and not a restatement of §2.
+    const byId = {
+      lowLayer: { id: 'lowLayer', tile, zIndex: 9, layerId: 'bottom' },
+      highLayer: { id: 'highLayer', tile, zIndex: 0, layerId: 'top' }
+    };
+    const items = order.map((k) => byId[k]);
+    const units = [
+      node('lowLayer', tile, 9, 0),
+      node('highLayer', tile, 0, 1)
+    ];
+    expect(picked(items, tile, LAYERS)).toBe('highLayer');
+    expect(picked(items, tile, LAYERS)).toBe(topmostPainted(units));
+  });
+
+  it('an unknown or absent layerId reads as order 0, on both sides', () => {
     const items = [
-      { id: 'lowLayer', tile, zIndex: 9 },
-      { id: 'highLayer', tile, zIndex: 0 }
+      { id: 'unassigned', tile, zIndex: 0 },
+      { id: 'ghostLayer', tile, zIndex: 0, layerId: 'deleted-layer' }
+    ];
+    // Neither resolves to a bucket, so the stable sort leaves array order — the
+    // renderer's `layerOrderOf` has the same `?? 0` fallback for both cases.
+    expect(picked(items, tile, LAYERS)).toBe('ghostLayer');
+  });
+
+  it.each([
+    ['array order low→high', ['lowLayer', 'highLayer']],
+    ['array order high→low', ['highLayer', 'lowLayer']]
+  ] as const)(
+    'RECTANGLE branch — the entry\'s own repro shape, %s',
+    (_label, order) => {
+      // PROJ-10's residual is written against two RECTANGLES: "a rectangle on a
+      // high-`order` layer paints above one on a lower layer, but both resolve
+      // with `layerOrder: 0`, so the lower-layer rectangle wins on zIndex and
+      // takes the click". This is that sentence, executed. The rectangle branch
+      // has re-sorted into paint order since long before the merge — it was the
+      // layer TERM in that sort that was missing.
+      const byId = {
+        lowLayer: {
+          id: 'lowLayer',
+          from: { x: 0, y: 0 },
+          to: { x: 4, y: 4 },
+          zIndex: 9,
+          layerId: 'bottom'
+        },
+        highLayer: {
+          id: 'highLayer',
+          from: { x: 0, y: 0 },
+          to: { x: 4, y: 4 },
+          zIndex: 0,
+          layerId: 'top'
+        }
+      };
+      const units = [
+        { id: 'lowLayer', kind: 'rectangle' as const, layerOrder: 0, zIndex: 9, isoDepth: 0 },
+        { id: 'highLayer', kind: 'rectangle' as const, layerOrder: 1, zIndex: 0, isoDepth: 0 }
+      ];
+      const hit = getItemAtTile({
+        tile,
+        scene: {
+          items: [],
+          textBoxes: [],
+          hitConnectors: [],
+          rectangles: order.map((k) => byId[k]),
+          layers: LAYERS
+        }
+      });
+      expect(hit).toEqual({ type: 'RECTANGLE', id: 'highLayer' });
+      expect(hit?.id).toBe(topmostPainted(units));
+    }
+  );
+
+  it('reordering the layers re-answers, even though `items` did not change', () => {
+    // The tile index is a WeakMap keyed on the `items` ARRAY REFERENCE, and it is
+    // built in paint order — so once paint order depends on layers, that cache
+    // has a second input. A layer reorder writes a new `layers` array and leaves
+    // `items` alone, which is precisely the shape that would return a stale
+    // answer. Same `items` reference through both calls, on purpose.
+    const items = [
+      { id: 'a', tile, layerId: 'bottom' },
+      { id: 'b', tile, layerId: 'top' }
+    ];
+    expect(picked(items, tile, LAYERS)).toBe('b');
+    expect(
+      picked(items, tile, [
+        { id: 'bottom', order: 1 },
+        { id: 'top', order: 0 }
+      ])
+    ).toBe('a');
+  });
+
+  it('omitting `layers` entirely keeps the pre-sweep behaviour', () => {
+    // Every partial-scene caller in the unit suites passes no `layers`, and a
+    // document with no layers has none. Both must resolve at order 0.
+    const items = [
+      { id: 'lowLayer', tile, zIndex: 9, layerId: 'bottom' },
+      { id: 'highLayer', tile, zIndex: 0, layerId: 'top' }
     ];
     expect(picked(items, tile)).toBe('lowLayer');
+  });
+});
+
+describe('§5 — CROSS-TYPE: layer and z-index cross an entity type on both sides', () => {
+  // The merge's own headline (ADR 0038 §8): one sort over all four bulk kinds,
+  // so a rectangle really can be painted over a node. The picker used to return
+  // the first BRANCH to hit — items, then text boxes, then connectors, then
+  // rectangles — which is a fixed type precedence and cannot express that.
+  const tile = { x: 2, y: 2 };
+  const rect = (
+    id: string,
+    zIndex = 0,
+    layerId?: string
+  ) => ({ id, from: { x: 0, y: 0 }, to: { x: 4, y: 4 }, zIndex, layerId });
+  const conn = (id: string, layerId?: string) => ({
+    id,
+    // `connectorPathTileToGlobal` is `origin - tile`, so this path covers `tile`.
+    path: { tiles: [{ x: -2, y: -2 }], rectangle: { from: { x: 0, y: 0 } } },
+    layerId
+  });
+  const pick = (scene: Partial<Parameters<typeof getItemAtTile>[0]['scene']>) =>
+    getItemAtTile({
+      tile,
+      scene: {
+        items: [],
+        textBoxes: [],
+        hitConnectors: [],
+        rectangles: [],
+        ...scene
+      }
+    });
+
+  it('CONTROL: at equal layer and z-index the historical precedence is unchanged', () => {
+    // The widening must be invisible to a document with no layers and no
+    // z-order — which is most of them. `SCENE_TYPE_RANK` reproduces the old
+    // branch order exactly, and this is the assertion that says so.
+    const all = {
+      items: [{ id: 'n', tile }],
+      hitConnectors: [conn('c')],
+      rectangles: [rect('r')]
+    };
+    expect(pick(all)).toEqual({ type: 'ITEM', id: 'n' });
+    expect(pick({ hitConnectors: all.hitConnectors, rectangles: all.rectangles }))
+      .toEqual({ type: 'CONNECTOR', id: 'c' });
+    expect(pick({ rectangles: all.rectangles })).toEqual({
+      type: 'RECTANGLE',
+      id: 'r'
+    });
+  });
+
+  it('a rectangle on a higher LAYER takes the click from a node below it', () => {
+    // PROJ-10's residual stated cross-type in its own repro sentence: "a
+    // rectangle on a high-`order` layer paints above one on a lower layer".
+    // With a node underneath instead, the old picker returned the node — an
+    // entity the user cannot see, because the rectangle is painted over it.
+    const layers = [
+      { id: 'bottom', order: 0 },
+      { id: 'top', order: 1 }
+    ];
+    const scene = {
+      items: [{ id: 'n', tile, layerId: 'bottom' }],
+      rectangles: [rect('r', 0, 'top')],
+      layers
+    };
+    expect(
+      topmostPainted([
+        { id: 'n', kind: 'node' as const, layerOrder: 0, zIndex: 0, isoDepth: -4 },
+        { id: 'r', kind: 'rectangle' as const, layerOrder: 1, zIndex: 0, isoDepth: 0 }
+      ])
+    ).toBe('r');
+    expect(pick(scene)).toEqual({ type: 'RECTANGLE', id: 'r' });
+  });
+
+  it('a rectangle with a higher Z-INDEX takes the click from a node below it', () => {
+    // The tier the merge changed and PROJ-10's wording predates: before it,
+    // four canvases at fixed CSS z-indices made TYPE beat z-index cross-type
+    // unconditionally. After it, `compareSceneDrawOrder` puts z-index above
+    // type rank, so this rectangle paints over the node.
+    const scene = {
+      items: [{ id: 'n', tile, zIndex: 0 }],
+      rectangles: [rect('r', 9)]
+    };
+    expect(
+      topmostPainted([
+        { id: 'n', kind: 'node' as const, layerOrder: 0, zIndex: 0, isoDepth: -4 },
+        { id: 'r', kind: 'rectangle' as const, layerOrder: 0, zIndex: 9, isoDepth: 0 }
+      ])
+    ).toBe('r');
+    expect(pick(scene)).toEqual({ type: 'RECTANGLE', id: 'r' });
+  });
+
+  it('a connector on a higher LAYER takes the click from a node below it', () => {
+    const layers = [
+      { id: 'bottom', order: 0 },
+      { id: 'top', order: 1 }
+    ];
+    const scene = {
+      items: [{ id: 'n', tile, layerId: 'bottom' }],
+      hitConnectors: [conn('c', 'top')],
+      layers
+    };
+    expect(pick(scene)).toEqual({ type: 'CONNECTOR', id: 'c' });
+  });
+
+  it('PIN — text boxes stay OUT of the cross-type ranking, and on purpose', () => {
+    // `Renderer` mounts `TextBoxes` in a DOM `SceneLayer` above `SceneCanvas`,
+    // so a text box is painted over every bulk entity whatever its layer says.
+    // Wave 5 recorded text boxes and connector label chips as the out-of-sort
+    // set with their own follow-up trigger; until they join the sort, ranking a
+    // text box by a layer order the renderer does not consult would INTRODUCE a
+    // divergence. If they ever join it, this pin goes red — which is the point.
+    const layers = [
+      { id: 'bottom', order: 0 },
+      { id: 'top', order: 1 }
+    ];
+    const textBox = {
+      id: 'tb',
+      tile,
+      size: { width: 4, height: 1 },
+      orientation: 'X' as const,
+      content: '',
+      layerId: 'bottom'
+    } as unknown as Parameters<
+      typeof getItemAtTile
+    >[0]['scene']['textBoxes'][number];
+    // A rectangle on the TOP layer does not take the click from a text box on
+    // the bottom one: the text box is genuinely the thing on screen.
+    expect(
+      pick({ textBoxes: [textBox], rectangles: [rect('r', 0, 'top')], layers })
+    ).toEqual({ type: 'TEXTBOX', id: 'tb' });
   });
 });

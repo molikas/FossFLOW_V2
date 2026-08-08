@@ -73,7 +73,7 @@ export const ViewModeInfoPopover = () => {
     (s) => s.mouse.position.tile,
     (a, b) => a.x === b.x && a.y === b.y
   );
-  const { items, textBoxes, hitConnectors, rectangles } = useScene();
+  const { items, textBoxes, hitConnectors, rectangles, layers } = useScene();
 
   // --- Pinned target (click selection in view mode) ---------------------------
   // Narrow out AddItemControls ('ADD_ITEM') so .id/.tile are available, then
@@ -107,7 +107,7 @@ export const ViewModeInfoPopover = () => {
       ? { type: 'LABEL', id: viewModeHoveredLabelId }
       : getItemAtTile({
           tile: hoverTile,
-          scene: { items, textBoxes, hitConnectors, rectangles }
+          scene: { items, textBoxes, hitConnectors, rectangles, layers }
         });
     if (timerRef.current) clearTimeout(timerRef.current);
     if (hit) {
@@ -124,6 +124,7 @@ export const ViewModeInfoPopover = () => {
     textBoxes,
     hitConnectors,
     rectangles,
+    layers,
     viewModeHoveredLabelId
   ]);
 
