@@ -666,8 +666,25 @@ run** — otherwise a green fix reads as seven failing new specs.
 ### Wave 6 — Program build-out (should-have) ✅ COMPLETE 2026-08-08
 
 > **RESUME POINT (2026-08-08).** All five items are done; the program's remaining
-> work is the **Wrap-up** section below. Three commits: `5fb66816` (PROJ-10
-> residual), `d3146980` (skill + archive + knip), `<close-out>` (this record).
+> work is the **Wrap-up** section below. Five commits: `5fb66816` (PROJ-10
+> residual), `d3146980` (skill + archive + knip), `65abe0b2` (the tile index
+> carries the item), `84a8b77a` (this record), `5aa49966` (two e2e traps).
+>
+> **Regression green.** lib **199 suites / 2346** (+1 skipped), app **50 / 555**,
+> backend **9 / 134**, worker **4 / 129**, full Playwright **286 passed / 38.4 min
+> exit 0**; `tsc` clean (lib + app), **knip exit 0**, cycles 47/47, docs lint OK.
+>
+> **That Playwright number cost two runs, and the reason is now a skill trap.**
+> The first full run came back **14 failed / 272 passed in 1.1 h** against a
+> 38 min baseline — 11 timeouts, 3 assertions, and five of them in *connector*
+> specs, which genuinely do exercise the changed picker. It was environmental:
+> two earlier runs had been aborted, and aborting a Playwright run orphans its
+> `webServer`, so the suite ran against a poisoned/contended machine. **The A/B is
+> what retired the suspicion, not the argument that the change should be inert** —
+> reverting only the three changed source files and re-running the 11 affected
+> spec files gave 31 passed / 5.0 min, restoring gave 31 passed / 4.8 min, and the
+> clean full re-run landed exactly on the baseline. Revert the FILES, not the
+> branch, so the change under test is the only variable.
 >
 > **The one thing a successor should read before anything else:** PROJ-10's
 > residual grew a tier while being fixed, and the reason generalises. The residual
