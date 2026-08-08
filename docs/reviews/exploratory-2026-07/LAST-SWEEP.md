@@ -34,25 +34,39 @@ a two-line-per-sweep log is enough to see the cadence.
 ## Scheduling notes (headless)
 
 The runtime contract is **Claude Code under the user's subscription** (ADR 0047
-§4): interactively via `/explore`, or headless via
-`claude -p "/explore"` from the repo root. Execution paths that bill a metered
-API key are out of contract.
+§4): interactively via `/explore`, or headless via `claude -p "/explore"` from
+the repo root. Execution paths that bill a metered API key are out of contract.
+
+**Verified on this machine 2026-08-08** — CLI `2.1.220`, no `ANTHROPIC_API_KEY`
+in the environment, a cold `-p` run with no conversational context resolved
+`/explore` as a project command, loaded the skill and read this file. The
+acceptance criterion in ADR 0047 is met.
+
+That run turned up the one thing that would have broken a scheduled task:
+
+> **`claude` is NOT on PATH here.** It is installed at
+> `C:\Users\molik\.local\bin\claude.exe`, and both `where claude` and bash's
+> `which claude` come back empty. A Task Scheduler action given the bare program
+> name fails with a "cannot find the file" error that reads like a broken
+> install. **Use the absolute path.**
 
 For a recurring unattended sweep, Windows Task Scheduler is the sanctioned
 wiring — a Basic Task on whatever cadence, action `Start a program`:
 
 | Field | Value |
 |---|---|
-| Program | `claude` (or the absolute path from `where claude`) |
+| Program | `C:\Users\molik\.local\bin\claude.exe` |
 | Arguments | `-p "/explore"` |
 | Start in | `c:\mytemp\axoview-minor-fix\axoview` |
 
-Two things to know before relying on it. **Headless runs cannot answer a
-question**, so the skill's headless clause applies: pick delta mode, record the
-choice in the wave file, and put anything that needed the owner into the report.
-And **a scheduled run inherits no interactive OAuth**, so any MCP connector that
-authenticates interactively is simply absent — which is fine for a sweep, since
-nothing in the method needs one.
+Three things to know before relying on it. **There is no `--max-turns`** on this
+CLI, so a scheduled sweep is bounded only by the session itself — give the task a
+"Stop the task if it runs longer than" limit rather than assuming the flag
+exists. **Headless runs cannot answer a question**, so the skill's headless
+clause applies: pick delta mode, record the choice in the wave file, and put
+anything that needed the owner into the report. And **a scheduled run inherits no
+interactive OAuth**, so any MCP connector that authenticates interactively is
+simply absent — fine for a sweep, since nothing in the method needs one.
 
 ## History
 

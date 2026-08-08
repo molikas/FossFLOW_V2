@@ -5,9 +5,15 @@
 > - [docs/reviews/exploratory-2026-07/DECISIONS.md](../reviews/exploratory-2026-07/DECISIONS.md) — the 22 owner rulings this plan implements (incl. the ADR amendments each ruling names)
 > - [docs/reviews/exploratory-2026-07/LEDGER.md](../reviews/exploratory-2026-07/LEDGER.md) — per-area bug counts; [known_issues.md](../../known_issues.md) — the 172 filed entries (`Found by: exploratory campaign <ID>`)
 >
-> **Status:** Waves 0–5 COMPLETE · Wave 6 NOT STARTED · **Owner:** molikas · **Last updated:** 2026-08-02
+> **Status:** Waves 0–6 COMPLETE · only the Wrap-up remains · **Owner:** molikas · **Last updated:** 2026-08-08
 >
-> Wave 4 is next. Read the wave 1–3 sections first — between them they carry the
+> **Successor: go straight to [Wrap-up](#wrap-up).** Every wave is done; what is
+> left is the PLAN.md line, deleting this file, and retiring the memory pointer.
+> The wave 6 section carries the two lessons worth keeping (a deferred item's
+> scope is a snapshot the deferring wave can invalidate; check a gate's exit code
+> at every wave boundary, because knip was red here for two waves unnoticed).
+>
+> *Historical, from when wave 4 was next:* read the wave 1–3 sections first — between them they carry the
 > items deliberately routed forward (HIST-03/04 and RND-13/15 to wave 5, CLIP-14
 > and STOR-14's override half to wave 4), the two CI gates the probe lane had
 > broken, and the five class gates now in place.
@@ -657,8 +663,79 @@ run** — otherwise a green fix reads as seven failing new specs.
   disposition for GPU-06/07/08**, whose premise ("the four layers drifted from one
   skeleton") is closed by construction rather than by a fix.
 
-### Wave 6 — Program build-out (should-have)
-- [ ] Write `.claude/skills/explore.md`: APPROACH distilled + COLDSTART flow + rig-traps appendix + delta-mode area selection (`git diff` vs last campaign end commit); regenerate-baseline step; **embed the end-of-session report contract** (Notes for Claude) so every future run ends with the same four-part report.
+### Wave 6 — Program build-out (should-have) ✅ COMPLETE 2026-08-08
+
+> **RESUME POINT (2026-08-08).** All five items are done; the program's remaining
+> work is the **Wrap-up** section below. Three commits: `5fb66816` (PROJ-10
+> residual), `d3146980` (skill + archive + knip), `<close-out>` (this record).
+>
+> **The one thing a successor should read before anything else:** PROJ-10's
+> residual grew a tier while being fixed, and the reason generalises. The residual
+> was scoped on 2026-08-02, *before* the GPU-13 merge landed; the merge changed the
+> very thing the residual describes (it made z-index cross an entity type), so
+> "the picker cannot see the layer bucket" understated the gap by the time anyone
+> came to close it. **A deferred item's scope is a snapshot, and the wave that
+> deferred it can invalidate it.** Re-derive before implementing — the standing
+> "evidence is reliable, diagnoses are hypotheses" lesson, applied to the *plan*
+> rather than to a campaign entry.
+>
+> **Two gate facts worth carrying:** knip had been red on this branch since wave
+> 4's harness move and no wave noticed (the same shape as wave 1's two red gates,
+> and the third instance of it in this program — **check a gate's exit code, not
+> its output, at every wave boundary**). And the widened picker gate was
+> red-verified **four times, once per moving part**, because the change had four
+> independent failure surfaces and a single red-check would have covered one.
+
+- [x] **PROJ-10 residual — DONE 2026-08-08** (`5fb66816`). `HitTestScene` carries
+  the view's `layers`, threaded through `useSceneData` so every interaction mode
+  gets it from `state.scene` with no call-site change; both branches that
+  re-derive paint order resolve the bucket from it, and the tile-index WeakMap
+  keys on `layers` too (a layer reorder replaces only that array). **Scope grew to
+  cross-type** for the reason in the resume point above: the picker now ranks its
+  branch winners with the renderer's own `compareSceneDrawOrder` instead of a
+  fixed branch precedence. At equal layer and z-index `SCENE_TYPE_RANK` reproduces
+  the old precedence exactly, so an unlayered document with no z-order set is
+  untouched — asserted as a CONTROL. Text boxes stay out (DOM above the canvas,
+  not in the merged sort; §5 of the gate pins the exclusion). The gate's own §4
+  pin said closing this must come here and widen it, and that is what happened:
+  [`pickerAgreement.contract.test.ts`](../../packages/axoview-lib/src/utils/__tests__/pickerAgreement.contract.test.ts)
+  is 22 tests now. Entry annotated Fixed with the re-derivation recorded in it.
+
+- [x] **The `/explore` skill — DONE 2026-08-08** (`d3146980`), at
+  [`.claude/commands/explore.md`](../../.claude/commands/explore.md). Note the
+  path: ADR 0047 §4 said `.claude/skills/`, which this repo does not use and
+  Claude Code does not resolve a project `/name` from — one of three deviations
+  recorded as a dated ADR 0047 addendum. Carries the distilled loop, tiers,
+  oracles and generators; delta-mode scoping; the §9 traps appendix (everything
+  queued below, plus waves 1–5's); §10 on gate authoring; and the four-part report
+  contract.
+
+- [x] **Archive — DONE 2026-08-08** (`d3146980`). Records frozen at
+  [`docs/reviews/exploratory-2026-07/`](../reviews/exploratory-2026-07/README.md)
+  via `git mv`, with a README and a LAST-SWEEP.md holding the delta anchor
+  (`9fa70364`). COLDSTART.md deleted; APPROACH.md archived rather than deleted
+  because the frozen area files and ~24 lane files cite its section numbers.
+  Inbound links repointed across 7 docs and 24 lane files; docs lint green.
+
+- [x] **Headless path — DONE 2026-08-08.** Verified on this machine: CLI
+  `2.1.220`, no `ANTHROPIC_API_KEY`, a cold `claude -p "/explore"` resolved the
+  command, loaded the skill and read the archive. **`claude` is NOT on PATH here**
+  (`where claude` is empty; it lives at `C:\Users\molik\.local\bin\claude.exe`), so
+  a Task Scheduler action must use the absolute path — that and the absence of a
+  `--max-turns` flag are recorded in LAST-SWEEP.md's scheduling notes.
+
+- [x] **Discoverability — DONE 2026-08-08.** `/explore` is a row in
+  [workflow.md](../workflow.md)'s decision table with an `/audit` vs `/explore`
+  boundary note (`/audit` finds what a rule can see; `/explore` finds what only a
+  specific guess could have found — the campaign confirmed 240 bugs while every
+  suite was green), and [testing.md](../guidelines/testing.md)'s lane section now
+  names the skill as what fills the lane.
+
+<details>
+<summary>Original wave 6 item list (kept for the queued traps-appendix contents,
+all of which are now in the skill's §9)</summary>
+
+- [x] Write `.claude/skills/explore.md`: APPROACH distilled + COLDSTART flow + rig-traps appendix + delta-mode area selection (`git diff` vs last campaign end commit); regenerate-baseline step; **embed the end-of-session report contract** (Notes for Claude) so every future run ends with the same four-part report.
 
   **Rig-traps appendix — queued contents (grow this list, don't rediscover it):**
   - The Jest two-argument `expect(value, 'msg')` trap (wave 3) — and note that wave 4 lands a *gate* for it, so the appendix should point at the gate rather than rely on memory.
@@ -685,21 +762,25 @@ run** — otherwise a green fix reads as seven failing new specs.
   - **Wave 5, FLIP RULE: a probe that characterises the defect's STRUCTURE cannot be repaired, only retired.** GPU-13's probe asserted that four canvases sat at one CSS `zIndex` in ascending document order — a true statement about the broken world and a meaningless one about the fixed world. There is nothing to flip: the promoted regression has to assert the same claim from the other side (a rectangle's `zIndex` visibly lifts it above a node). Contrast the probes that assert a user-visible OUTCOME, which flip for free.
   - **Wave 5, FLIP RULE: a merge closes neighbouring findings BY CONSTRUCTION, and that needs saying out loud.** GPU-06/07/08 were three faces of "the four bulk layers were copy-adapted from one skeleton, so <invalidation / context-loss / visibility> drifted between them". One layer cannot drift from itself. Their probes were retired with GPU-13's under an explicit disposition in the file, rather than being left to go red for a reason that is neither a fix nor a refutation — the wave-4 "a fix can invalidate a NEIGHBOURING probe's premise" lesson, met head-on for once.
   - **Wave 4, PINS: re-verify a named pin red AFTER the pass that was supposed to keep it green**, not only when it is written. A pin that asserts a symptom class can start passing for a reason unrelated to the mechanism it guards. Revert the write path deliberately and check that the pin — and *only* the pin — goes red.
-- [ ] **Program final sweep — thread `layers` into the `HitTestScene` (PROJ-10's residual).**
-  `hitDetection` resolves paint order with `layerOrder: 0` because it is handed a
-  flat scene with no `layers` array, so the picker honours zIndex and iso-depth
+- [x] **Program final sweep — thread `layers` into the `HitTestScene` (PROJ-10's residual).**
+  `hitDetection` resolved paint order with `layerOrder: 0` because it was handed a
+  flat scene with no `layers` array, so the picker honoured zIndex and iso-depth
   but not the layer bucket. Recorded through wave 3 as "not a gap in practice"; that
   rationale was **corrected 2026-08-02** — it holds for NODES only, because
   collision is a node-placement rule. Rectangles, labels and connectors overlap
-  across layers freely, so the divergence is reachable: *a rectangle on a
+  across layers freely, so the divergence was reachable: *a rectangle on a
   high-`order` layer paints above one on a lower layer, but both resolve with
   `layerOrder: 0`, so the lower-layer rectangle wins on zIndex and takes the
-  click.* GPU-13's renderer/picker-agreement gate is deliberately scoped to the two
-  tiers the picker can see, and names this shape as excluded. Its own item here
-  because it must **not** widen the merge — see the PROJ-10 entry in known_issues.
-- [ ] Headless path: verify `claude -p "/explore"` cold-start on this machine (subscription auth, no API key); document optional Task Scheduler wiring in the skill.
-- [ ] Archive: `git mv` campaign records → `docs/reviews/exploratory-2026-07/`; retire COLDSTART.md; fix inbound links (docs lint green).
-- [ ] Update workflow.md decision table (+ one line in testing.md) so `/explore` is discoverable.
+  click.* GPU-13's renderer/picker-agreement gate was deliberately scoped to the two
+  tiers the picker could see, and named this shape as excluded. **Done 2026-08-08 —
+  and it did widen, one tier further than written; see the wave-6 entry above.**
+- [x] Headless path: verified 2026-08-08 (subscription auth, no API key). Task
+  Scheduler wiring is in LAST-SWEEP.md rather than the skill — it is
+  machine-specific, and the skill is meant to survive a move.
+- [x] Archive: done 2026-08-08, docs lint green.
+- [x] Update workflow.md decision table (+ testing.md) so `/explore` is discoverable.
+
+</details>
 
 ## Wrap-up
 
