@@ -1,6 +1,6 @@
 /**
  * Shared T1 harness for area E3 probes
- * (docs/exploratory/areas/E3-scene-actions-paste.md).
+ * (docs/reviews/exploratory-2026-07/areas/E3-scene-actions-paste.md).
  *
  * E3's subject is `useSceneActions`, so probes need the real provider tree.
  * This extends the E1 harness with a paste payload builder and rAF control

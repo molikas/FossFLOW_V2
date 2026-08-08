@@ -1,6 +1,6 @@
 /** @type {import('ts-jest').JestConfigWithTsJest} */
 /**
- * Jest config for T1 exploratory probes in the APP package (docs/exploratory/
+ * Jest config for T1 exploratory probes in the APP package (docs/reviews/exploratory-2026-07/
  * APPROACH.md §7). The S/A tracks (auth store, storage providers, app shell)
  * live here, not in axoview-lib, so they need the same rig the lib got.
  *

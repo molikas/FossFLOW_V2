@@ -32,7 +32,7 @@
  *    spread yields nothing and an assertion built on it "proves" whatever the
  *    probe hoped — and `for (const x of someMap)` lowers the same way, so it
  *    iterates zero times. (`[...nodeList]` is fine — array-like.) Use
- *    `blobValues()` / `Array.from(...)` / `.forEach(...)`. No product code or
+ *    `Array.from(...)` / `.forEach(...)`. No product code or
  *    earlier probe spreads or `for...of`-iterates a Map or Set, so no shipped
  *    verdict rests on this; it cost two wrong readings here.
  */
@@ -332,11 +332,6 @@ export function renderExplorer() {
      */
     update: () => utils.rerender(<FileExplorer />)
   };
-}
-
-/** Map values as an array — see the `es5` spread trap in the header. */
-export function blobValues(p: PlaceDouble): unknown[] {
-  return Array.from(p.blobs.values());
 }
 
 /** Let queued microtasks + the two tree loads settle inside act(). */

@@ -8,7 +8,7 @@
  *  SCN-12  an invalid paste is abandoned silently
  *  SCN-13  page names are derived from views.length
  *
- * See docs/exploratory/areas/E3-scene-actions-paste.md.
+ * See docs/reviews/exploratory-2026-07/areas/E3-scene-actions-paste.md.
  */
 import { renderHook } from '@testing-library/react';
 import { installCanvasStub } from '../canvasStub';

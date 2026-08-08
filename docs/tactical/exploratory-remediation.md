@@ -2,8 +2,8 @@
 
 > **Read first:**
 > - [ADR 0047 — Exploratory Testing Program](../adr/0047-exploratory-testing-program.md) — the lane, the flip rule, class gates, the agent contract
-> - [docs/exploratory/DECISIONS.md](../exploratory/DECISIONS.md) — the 22 owner rulings this plan implements (incl. the ADR amendments each ruling names)
-> - [docs/exploratory/LEDGER.md](../exploratory/LEDGER.md) — per-area bug counts; [known_issues.md](../../known_issues.md) — the 172 filed entries (`Found by: exploratory campaign <ID>`)
+> - [docs/reviews/exploratory-2026-07/DECISIONS.md](../reviews/exploratory-2026-07/DECISIONS.md) — the 22 owner rulings this plan implements (incl. the ADR amendments each ruling names)
+> - [docs/reviews/exploratory-2026-07/LEDGER.md](../reviews/exploratory-2026-07/LEDGER.md) — per-area bug counts; [known_issues.md](../../known_issues.md) — the 172 filed entries (`Found by: exploratory campaign <ID>`)
 >
 > **Status:** Waves 0–5 COMPLETE · Wave 6 NOT STARTED · **Owner:** molikas · **Last updated:** 2026-08-02
 >
@@ -87,7 +87,7 @@ Per-wave working method: `grep "Found by:.*exploratory campaign" known_issues.md
 - [x] A5: closed at 12/10 — 10 bugs, 1 SUSPECT (CHR-08), 1 FALSIFIED (CHR-12). Scoped away from the auth seams (S1/S3 own them) onto the surfaces with zero tests: the quota-full storage escape hatch, boot utilities, deployment sniffing, locale catalogues.
 - [x] LEDGER all-DONE (27/27) and the cross-area mop-up wave run: **MOP-01** (a copied diagram carries the original's `shareUuid` — A4 × A3 × S2) and **MOP-02** (S2/SHARE-06 and A4/FEX-02 contradicted each other; the SHARE-06 entry now carries the correction). Seven other pairs examined and found already crossed — listed in the LEDGER.
 - [x] Cut `remediation/exploratory-campaign` from `master` and landed `explore/campaign` into it (merge `9fa70364`). `integration` untouched. Quarantine re-verified on the merge result with `--listTests`: app 26 / lib 155 / backend 7 / worker 4 suites and Playwright 178 tests in 75 files, **zero** exploratory files in any. Default suites green and unchanged (app 268 tests, lib 1738).
-- [x] Owner triage of the one new SUSPECT — **A5/CHR-08 ruled 2026-07-30**: optional public base URL in the runtime config with page-origin fallback (option b). Recorded as the 22nd row of [DECISIONS.md](../exploratory/DECISIONS.md); implementation rides Wave 2's share cluster.
+- [x] Owner triage of the one new SUSPECT — **A5/CHR-08 ruled 2026-07-30**: optional public base URL in the runtime config with page-origin fallback (option b). Recorded as the 22nd row of [DECISIONS.md](../reviews/exploratory-2026-07/DECISIONS.md); implementation rides Wave 2's share cluster.
 
 **Campaign totals after Wave 0:** 385 counted hypotheses, **240 bugs**, 22 product
 questions, 190 filed known_issues entries. The wave counts below were written

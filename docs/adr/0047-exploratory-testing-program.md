@@ -7,7 +7,7 @@
 
 ## Context
 
-The 2026-07 exploratory campaign ([docs/exploratory/](../exploratory/APPROACH.md)) probed 362 falsifiable hypotheses across 27 functional areas and confirmed **220 bugs and 22 product gaps** — while all 2,231 unit tests and 76 e2e specs were green. Every finding was, by construction of the campaign's novelty rule, outside existing coverage. The 22 gaps were closed with owner rulings on 2026-07-30 ([DECISIONS.md](../exploratory/DECISIONS.md)); 172 entries were filed to [known_issues.md](../../known_issues.md), each carrying a committed `test.fail()` repro probe in a quarantined test lane.
+The 2026-07 exploratory campaign ([docs/reviews/exploratory-2026-07/](../reviews/exploratory-2026-07/README.md)) probed 362 falsifiable hypotheses across 27 functional areas and confirmed **220 bugs and 22 product gaps** — while all 2,231 unit tests and 76 e2e specs were green. Every finding was, by construction of the campaign's novelty rule, outside existing coverage. The 22 gaps were closed with owner rulings on 2026-07-30 ([DECISIONS.md](../reviews/exploratory-2026-07/DECISIONS.md)); 172 entries were filed to [known_issues.md](../../known_issues.md), each carrying a committed `test.fail()` repro probe in a quarantined test lane.
 
 That result forces three durable decisions: what the probe lane *is* now that the campaign is over (scaffolding to delete, or infrastructure to keep), how probes and findings flow back into the regression suites as fixes land, and whether the exercise repeats — and if so, by whom and on whose bill. The owner decided (2026-07-30): fix **all 220** in risk-ordered waves; keep the harness; rebuild the campaign as a repeatable repo skill; **never depend on paid API access** — everything runs under a Claude subscription via Claude Code.
 
@@ -33,7 +33,7 @@ When a campaign (or any review) shows the same defect *shape* recurring across s
 
 ### 4. The recurring agent: a repo skill, run on subscription only
 
-The campaign method (hypothesis ledger, novelty rule, probe tiers, oracles — [APPROACH.md](../exploratory/APPROACH.md)) is repackaged as a versioned project skill, **`.claude/skills/explore.md`**, replacing the hand-carried COLDSTART.md prompt. Properties:
+The campaign method (hypothesis ledger, novelty rule, probe tiers, oracles — [APPROACH.md](../reviews/exploratory-2026-07/APPROACH.md)) is repackaged as a versioned project skill, **`.claude/skills/explore.md`**, replacing the hand-carried COLDSTART.md prompt. Properties:
 
 - **Stateless and ledger-driven**, like the campaign: all state in the ledger/area files of the active campaign directory; any Claude Code session can cold-start a wave.
 - **Delta-campaign mode is the default:** a new run scopes areas by `git diff` against the last campaign's end commit (plus one cross-pair mop-up wave), regenerating the coverage baseline first so the novelty rule stays honest. Full 27-area sweeps are explicit opt-in.
@@ -88,6 +88,32 @@ decisions themselves are unchanged — the close-out reinforced two of them:
 One new product question (A5/CHR-08 — which origin a share link should be
 anchored to) is recorded in the A5 area file with an industry-practice analysis
 and a recommendation, awaiting an owner ruling like the other 21.
+
+## Addendum — 2026-08-08, the skill lands and the record freezes
+
+Wave 6 built §4 and executed §5. Three notes where the build differs from the
+plan, each recorded here rather than silently:
+
+- **The skill is `.claude/commands/explore.md`, not `.claude/skills/explore.md`.**
+  §4 named a path this repo does not use: its six existing project commands
+  (`/audit`, `/docs-sweep`, `/feature`, `/notes`, `/shake-out`, `/ship`) all live
+  in `.claude/commands/`, and that is the directory Claude Code resolves a
+  project `/name` from. A skill in the named path would not have been invocable,
+  which defeats the acceptance criterion below. Everything else about §4 stands.
+- **APPROACH.md was archived, not deleted.** §5 puts it with COLDSTART.md in
+  "method docs fold into the skill", and its content did. But the frozen area
+  files and ~24 probe-lane files cite its section numbers throughout
+  (`APPROACH.md §7`, `§4`), and deleting it would break every one of those
+  citations inside a record whose whole value is being readable years later. It
+  sits in the archive marked superseded, with the README stating that the skill
+  wins where the two disagree. COLDSTART.md **was** deleted as §5 says: it was
+  purely operational, and two cold-start prompts in one tree would drift.
+- **The delta anchor needed a home.** §4's "diff against the last campaign's end
+  commit" has no meaning unless something records which commit that was, so the
+  archive carries [LAST-SWEEP.md](../reviews/exploratory-2026-07/LAST-SWEEP.md) —
+  the one file in a frozen directory that a sweep updates. Anchor is `9fa70364`,
+  the commit that landed the campaign record; everything after it is the
+  remediation program's own ~240 fixes, which no sweep has ever explored.
 
 ## Acceptance criteria
 

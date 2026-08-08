@@ -52,6 +52,14 @@ export function resetArborist(): void {
   apiCalls.length = 0;
 }
 
+// This export is the module's whole reason to exist, and knip cannot see that:
+// suites reach it as `jest.mock('react-arborist', () => require('…/arboristStub'))`
+// and `FileExplorer` then imports `{ Tree }` from the mocked module — a require()
+// inside a mock factory is invisible to static analysis, so knip reported `Tree`
+// as a dead export from the moment this file left the (knip-ignored) probe lane.
+// It is entry-listed in `knip.json` rather than exempted by rule; deleting it
+// would take every FileExplorer suite with it.
+//
 // `React.forwardRef`'s inferred prop type is `Omit<TreeProps, 'ref'>`, which
 // tsc will not widen back to TreeProps — so the cast is on the captured value
 // rather than on the component. (Only surfaced once this file moved out of the

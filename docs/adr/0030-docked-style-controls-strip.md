@@ -121,7 +121,7 @@ The strip renders **only in `EDITABLE` mode**, via `createPortal` into an app-su
 
 ### 2026-07-31 addendum — a bulk is read as a whole, not through a representative (STYL-01/02/06/08)
 
-**Owner rulings 2026-07-30** ([DECISIONS.md](../exploratory/DECISIONS.md),
+**Owner rulings 2026-07-30** ([DECISIONS.md](../reviews/exploratory-2026-07/DECISIONS.md),
 STYL-02 and STYL-08), implemented in the exploratory-remediation wave 4.
 Refines §2's homogeneous-bulk amendment, which said what the strip WRITES to
 and left what it READS unstated.

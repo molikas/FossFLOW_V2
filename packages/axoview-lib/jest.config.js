@@ -23,7 +23,7 @@ module.exports = {
     '/node_modules/',
     '/dist/',
     '\\.d\\.ts$',
-    // Exploratory-campaign probes (docs/exploratory/APPROACH.md §7). This
+    // Exploratory-campaign probes (docs/reviews/exploratory-2026-07/APPROACH.md §7). This
     // config has no `testMatch`, so Jest's defaults would otherwise sweep
     // `*.explore.test.ts` into `npm test`. They run only under
     // jest.explore.config.js (`npm run explore:unit`), which drops this line.

@@ -2,7 +2,7 @@
  * E1 probes — HIST-14 (off-grid `offset` across an undo) and HIST-15 (what the
  * 50-entry cap silently discards).
  *
- * See docs/exploratory/areas/E1-history-undo-redo.md.
+ * See docs/reviews/exploratory-2026-07/areas/E1-history-undo-redo.md.
  */
 import { setup, act, placeIcon, modelView, historyDepths } from './harness';
 

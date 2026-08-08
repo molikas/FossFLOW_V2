@@ -1,5 +1,5 @@
 /**
- * Exploratory-campaign fixture (docs/exploratory/APPROACH.md §4 — oracle
+ * Exploratory-campaign fixture (docs/reviews/exploratory-2026-07/APPROACH.md §4 — oracle
  * catalogue). Wraps the existing `canvasReadyTest` / `appTest` app fixtures
  * with the three always-on oracles every probe gets for free:
  *

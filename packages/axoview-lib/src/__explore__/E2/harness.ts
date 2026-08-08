@@ -1,5 +1,5 @@
 /**
- * Shared T1 harness for area E2 probes (docs/exploratory/areas/E2-reducers-cascades.md).
+ * Shared T1 harness for area E2 probes (docs/reviews/exploratory-2026-07/areas/E2-reducers-cascades.md).
  *
  * The reducers are pure functions over `State = { model, scene }`, so E2 needs
  * no React tree — just a state builder. Kept deliberately close to the fixtures

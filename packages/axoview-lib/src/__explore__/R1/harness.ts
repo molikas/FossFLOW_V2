@@ -1,6 +1,6 @@
 /**
  * Shared T1 harness for area R1 probes
- * (docs/exploratory/areas/R1-projection-transforms.md).
+ * (docs/reviews/exploratory-2026-07/areas/R1-projection-transforms.md).
  *
  * R1's subjects are pure functions — the two CoordinateTransformStrategy
  * objects, renderedGeometry's composition helpers and renderer.ts's projected

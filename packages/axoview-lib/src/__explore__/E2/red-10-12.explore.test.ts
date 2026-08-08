@@ -3,7 +3,7 @@
  * RED-11 (the text-box re-measure trigger set vs the fields the measurer reads)
  * and RED-12 (the shared INITIAL_SCENE_STATE seed).
  *
- * See docs/exploratory/areas/E2-reducers-cascades.md.
+ * See docs/reviews/exploratory-2026-07/areas/E2-reducers-cascades.md.
  */
 import { installCanvasStub } from '../canvasStub';
 import { view as viewReducer } from 'src/stores/reducers/view';

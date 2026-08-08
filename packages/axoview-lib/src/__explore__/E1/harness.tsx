@@ -1,5 +1,5 @@
 /**
- * Shared T1 harness for area E1 probes (docs/exploratory/areas/E1-history-undo-redo.md).
+ * Shared T1 harness for area E1 probes (docs/reviews/exploratory-2026-07/areas/E1-history-undo-redo.md).
  *
  * Deliberately mirrors `__perf_refactor_regression__/undo.dualStackSkew.test.tsx`
  * so a probe's result is directly comparable with the D-7 regression suite: same

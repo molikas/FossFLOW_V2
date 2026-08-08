@@ -346,7 +346,21 @@ of shortfall (A3/ZIP-05, ZIP-02).
 **The lane stays out of CI.** Wave 1 also excluded `src/__explore__` from both
 packages' `tsconfig.json`: `npm run lint` is `tsc --noEmit` and was sweeping the
 probes in, so the CI type-check gate had been red since the campaign branch
-merged. Probes are still type-checked per-file by ts-jest when they run.
+merged. Probes are still type-checked per-file by ts-jest when they run. Wave 6
+closed the matching knip hole (`Tree` in the promoted arborist stub is reached
+only through a `jest.mock` factory, which static analysis cannot follow) — the
+lane's two CI gates are green together for the first time. **The corollary for
+promotion: the lane is tsc- and knip-excluded and the main suite is neither**, so
+a probe promoted verbatim surfaces type errors it never had to satisfy. Budget a
+typecheck pass per promotion.
+
+**Filling the lane is `/explore`'s job** ([`.claude/commands/explore.md`](../../.claude/commands/explore.md),
+[ADR 0047](../adr/0047-exploratory-testing-program.md)) — hypothesis, probe,
+verdict, file; delta-scoped against the last-swept commit, and never a fix. The
+2026-07 campaign that produced this lane is frozen at
+[`docs/reviews/exploratory-2026-07/`](../reviews/exploratory-2026-07/README.md);
+its area files carry the rig notes that cost about ten wrong verdicts to learn,
+and the skill's §9 carries the ones that generalise.
 
 ### ADR 0023 hardening additions — off-grid rendered geometry (2026-07-23)
 

@@ -1134,7 +1134,7 @@ so when the cascade removes its target connector the surviving one is left with 
   the rest of the session. (RED-09 probed that stickiness and was FALSIFIED on
   the undo path — recovery happens, but incidentally, via HIST-06's coarse
   inverse patch rather than by a retry. No entry was filed; the disposition is
-  in `docs/exploratory/areas/E2-reducers-cascades.md`.)
+  in `docs/reviews/exploratory-2026-07/areas/E2-reducers-cascades.md`.)
 
 **Root cause:** the cascade computes its victim set from direct item references
 only and never walks the anchor graph transitively —
@@ -6886,7 +6886,7 @@ name/timestamps. Repro:
 ## Record correction — area A2's entries were never filed (2026-07-30)
 
 The 2026-07 exploratory campaign's A2 area file
-([A2-storage-places.md](docs/exploratory/areas/A2-storage-places.md)) records 13
+([A2-storage-places.md](docs/reviews/exploratory-2026-07/areas/A2-storage-places.md)) records 13
 confirmed bugs, each ending `known_issues: A2/STOR-nn`, but no A2 entry ever
 reached this register — the file goes straight from A1/LIFE-15 to A3/ZIP-01.
 Found while landing wave 1 of the remediation
@@ -6941,7 +6941,7 @@ detected correctly.
 **Workaround:** reload.
 
 **Status:** Fixed in 3af90693 (2026-07-30) — owner ruling
-([DECISIONS.md](docs/exploratory/DECISIONS.md)): cache success only. A response
+([DECISIONS.md](docs/reviews/exploratory-2026-07/DECISIONS.md)): cache success only. A response
 that was actually received is cached (4xx/5xx included — that is this deploy
 answering); a transport failure falls back for that caller alone. `inflight`
 still dedupes concurrent boot callers, so ADR 0009 D2's single-probe fast path is

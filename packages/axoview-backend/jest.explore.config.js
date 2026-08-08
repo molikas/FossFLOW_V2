@@ -1,5 +1,5 @@
 /**
- * Backend jest config for T1 exploratory probes (docs/exploratory/APPROACH.md §7).
+ * Backend jest config for T1 exploratory probes (docs/reviews/exploratory-2026-07/APPROACH.md §7).
  *
  * Zero touch to the default config: it already carries an explicit
  * `testMatch: ['<rootDir>/src/**\/__tests__/**\/*.spec.js']`, so an

@@ -6,7 +6,7 @@
  *  HIST-07  dragInProgress is per-hook-instance
  *  HIST-08  useHistory.transaction does not suppress useSceneActions history
  *
- * See docs/exploratory/areas/E1-history-undo-redo.md.
+ * See docs/reviews/exploratory-2026-07/areas/E1-history-undo-redo.md.
  */
 import React from 'react';
 import { renderHook } from '@testing-library/react';

@@ -1,5 +1,5 @@
 /**
- * T2 rig proof (docs/exploratory/APPROACH.md §7). Not a hypothesis probe — it
+ * T2 rig proof (docs/reviews/exploratory-2026-07/APPROACH.md §7). Not a hypothesis probe — it
  * exists so `npm run explore:e2e` demonstrably boots the app, attaches the
  * debug bridge, and exercises all three §4 oracles on a known-good state.
  *

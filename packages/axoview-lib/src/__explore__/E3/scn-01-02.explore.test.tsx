@@ -6,7 +6,7 @@
  *
  * `pasteItems` commits synchronously and then schedules connector routing on
  * requestAnimationFrame in 25-connector batches. Everything the user does in
- * that window races the batch. See docs/exploratory/areas/E3-scene-actions-paste.md.
+ * that window races the batch. See docs/reviews/exploratory-2026-07/areas/E3-scene-actions-paste.md.
  */
 import { installCanvasStub } from '../canvasStub';
 import {
