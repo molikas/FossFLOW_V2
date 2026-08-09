@@ -261,20 +261,63 @@ test.describe('Export image — T5 (ADR 0025)', () => {
         return nonBg / total;
       });
 
-    // POLL, do not sample once. `ExportImageDialog` captures as soon as its
-    // 400 ms icon-readiness budget elapses and RECAPTURES when the canvas
-    // reports every icon drawn (its A2 fallback), so the first image the
-    // preview shows can legitimately predate the icons — progressive
-    // refinement, by design. Reading the instant the <img> appears asserts on
-    // that intermediate frame.
-    //
-    // It looked machine-independent because it is not a race inside the
-    // product: on a fast machine the icons decode inside the 400 ms budget and
-    // the first capture is already complete, so this passed everywhere for
-    // months. On CI it does not, and the first capture is deterministically
-    // incomplete — measured at exactly 0.001 of the image, every run, while the
-    // settled image measures 0.042. Those are the two numbers ADR 0038 §8 read
-    // as run-to-run variance of a timing race; they are the two captures.
+    // ---------------------------------------------------------------------
+    // TEMPORARY CI DIAGNOSTIC — decisive test of one hypothesis, then removed.
+    // Prediction: on CI the hidden export Axoview's rAF never runs, so the
+    // icon-decode redraw never happens, readiness never flips and the recapture
+    // never fires. If so, `data-build-count` is FROZEN while we wait — and a
+    // forced read of the canvas (drawImage composites it) unfreezes it, which
+    // would explain why an earlier diagnostic that read the canvas saw the
+    // settled preview while every poll that did not has seen the first capture.
+    // ---------------------------------------------------------------------
+    const timeline = await page.evaluate(async () => {
+      const q = () => {
+        const cv = document.querySelector(
+          '[role="dialog"] [data-testid="axoview-scene-canvas"]'
+        ) as HTMLCanvasElement | null;
+        const img = document.querySelector(
+          'img[alt="preview"]'
+        ) as HTMLImageElement | null;
+        return {
+          build: cv?.dataset.buildCount ?? null,
+          drawn: cv?.dataset.allIconsDrawn ?? null,
+          srcLen: img?.src.length ?? 0
+        };
+      };
+      const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      const out: unknown[] = [];
+      for (let i = 0; i < 5; i++) {
+        out.push({ phase: 'before', t: i * 1000, ...q() });
+        await wait(1000);
+      }
+      // The intervention: composite the canvas by reading it.
+      let readPx = -1;
+      const cv = document.querySelector(
+        '[role="dialog"] [data-testid="axoview-scene-canvas"]'
+      ) as HTMLCanvasElement | null;
+      if (cv) {
+        const sc = document.createElement('canvas');
+        sc.width = cv.width;
+        sc.height = cv.height;
+        const c2 = sc.getContext('2d');
+        if (c2) {
+          c2.drawImage(cv, 0, 0);
+          const d = c2.getImageData(0, 0, sc.width, sc.height).data;
+          let n = 0;
+          for (let i = 3; i < d.length; i += 4 * 16) if (d[i] > 8) n++;
+          readPx = n;
+        }
+      }
+      out.push({ phase: 'READ_CANVAS', readPx });
+      for (let i = 0; i < 5; i++) {
+        await wait(1000);
+        out.push({ phase: 'after', t: i * 1000, ...q() });
+      }
+      return out;
+    });
+    // eslint-disable-next-line no-console
+    console.log('EXPORT_TIMELINE ' + JSON.stringify(timeline));
+
     await expect
       .poll(nonBgRatio, { timeout: 20_000 })
       .toBeGreaterThan(0.01);
