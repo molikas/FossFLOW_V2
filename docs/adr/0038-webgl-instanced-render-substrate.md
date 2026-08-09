@@ -397,28 +397,43 @@ that build had been issued, so the export dialog — which polls it and then
 captures the canvas (ADR 0025 / QA #10) — could snapshot the previous frame and
 produce a PNG with no icon nodes in it. It is written after `render()` now.
 
-> **CORRECTION — 2026-08-09.** The paragraph that stood here said "the merge did
-> not cause this", read the 0.001-vs-0.042 spread as a race the merge merely
-> exposed, and treated the readiness timing as the fix. **A CI bisect falsifies
-> all three claims.** `master` (pre-merge) passes this spec today on the same
-> runner image; `cf81ba74` — this commit — fails it; and the failure is not a
-> race at all: the ratio is **byte-identical (`0.001017293997965412`) on every
-> run and at every commit from the merge to HEAD.** A timing race varies; this
-> does not. The 0.042 reading that suggested a race came from a pre-merge run.
+> **CORRECTION — 2026-08-09, established by CI instrumentation.** The paragraph
+> that stood here read the 0.001-vs-0.042 spread on `import-export-image` #10 as
+> a timing race resolving differently run to run. **It is not a race, and those
+> are not two runs — they are the two CAPTURES.** `ExportImageDialog` captures
+> once its 400 ms readiness budget elapses and RECAPTURES when the canvas reports
+> every icon drawn. 0.001 is the first capture; 0.042 is the recaptured one. The
+> spec sampled the preview the instant the `<img>` appeared, so it asserted on
+> the intermediate frame.
 >
-> So the merge introduced a DETERMINISTIC defect in image export, and the
-> readiness fix above — correct on its own terms — was aimed at the wrong thing.
-> The exported PNG is background only: the failure screenshot shows no icon *and
-> no grid*, though "Show grid" is checked, so the merged canvas contributes
-> nothing to the composite rather than merely missing its icons. Reproduces only
-> on CI; a local run passes 4/4 even under a forced SwiftShader rasteriser.
-> Mechanism not yet established — see the known_issues entry. Recorded here
-> because this section is the reason a later reader would believe it was a race
-> and stop looking.
+> That is why it looked machine-dependent: on a fast machine the icons decode
+> inside the 400 ms budget and the first capture is already complete, so the spec
+> passed everywhere for months. On CI it does not, and the first capture is
+> deterministically incomplete — `0.001017293997965412`, byte-identical on every
+> run. **The product is behaving as designed**; the spec was racing its
+> progressive refinement, and now polls the settled outcome.
+>
+> Measured on CI rather than reasoned: at assertion time the hidden export
+> canvas is healthy (7151 painted pixels, `buildCount` 12, `nodesDrawn` 1,
+> `data-all-icons-drawn="true"`, correctly sized), and moments later the preview
+> reads 69 783 non-background pixels across the full bounding box. Nothing is
+> lost from the composite.
+>
+> **Correction 6's own fix stands but was aimed at the wrong target.** Writing
+> the flag after `render()` is right on its own terms; it was not what this spec
+> was failing on. A second attempt to fix it by reseeding the flag was made and
+> reverted (`0163c2ae`) — reasoned from the mechanism, never reproduced.
+>
+> **Residual, not fixed here:** the download button is live during the window
+> between the two captures, so a user who clicks inside it gets the incomplete
+> PNG. Recorded in known_issues.md.
 
-This is the campaign's own standing lesson landing on the campaign's own record:
-the evidence was reliable and the diagnosis was a hypothesis. The 0.001/0.042
-measurements were real; "therefore a race, therefore not the merge" was not.
+This is the campaign's own standing lesson landing on the campaign's own record,
+twice over: the evidence was reliable and the diagnosis was a hypothesis. The
+0.001/0.042 measurements were real both times; "therefore a race" was not, and
+neither was the bisect-driven "therefore the merge broke the composite" that
+briefly replaced it. What settled it was instrumenting the failing environment
+instead of arguing from the symptom.
 
 The agreement gate itself
 ([`pickerAgreement.contract.test.ts`](../../packages/axoview-lib/src/utils/__tests__/pickerAgreement.contract.test.ts))

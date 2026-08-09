@@ -219,133 +219,54 @@ test.describe('Export image — T5 (ADR 0025)', () => {
 
     // Sample the preview PNG: the top-left pixel is the background; count pixels
     // that differ from it. A captured icon yields a meaningful fraction.
-    const nonBgRatio = await page.evaluate(async () => {
-      const img = document.querySelector(
-        'img[alt="preview"]'
-      ) as HTMLImageElement | null;
-      if (!img) return -1;
-      if (!img.complete || img.naturalWidth === 0) {
-        await new Promise<void>((res) => {
-          img.onload = () => res();
-          img.onerror = () => res();
-        });
-      }
-      const c = document.createElement('canvas');
-      c.width = img.naturalWidth;
-      c.height = img.naturalHeight;
-      const ctx = c.getContext('2d');
-      if (!ctx || c.width === 0) return -1;
-      ctx.drawImage(img, 0, 0);
-      const { data } = ctx.getImageData(0, 0, c.width, c.height);
-      const [br, bg, bb, ba] = [data[0], data[1], data[2], data[3]];
-      let nonBg = 0;
-      const total = data.length / 4;
-      for (let i = 0; i < data.length; i += 4) {
-        const dr = Math.abs(data[i] - br);
-        const dg = Math.abs(data[i + 1] - bg);
-        const db = Math.abs(data[i + 2] - bb);
-        const da = Math.abs(data[i + 3] - ba);
-        if (dr + dg + db + da > 48) nonBg++;
-      }
-      return nonBg / total;
-    });
-
-    // ---------------------------------------------------------------------
-    // TEMPORARY CI DIAGNOSTIC — remove once the export defect is fixed.
-    // known_issues.md "Image export produces a background-only PNG on CI".
-    // The decisive question is whether the merged canvas HAS pixels that the
-    // composite then drops, or never drew them at all. Everything else here
-    // exists to tell those two apart.
-    // ---------------------------------------------------------------------
-    const diag = await page.evaluate(() => {
-      const paintedPixels = (cv: HTMLCanvasElement) => {
-        try {
-          const s = document.createElement('canvas');
-          s.width = cv.width;
-          s.height = cv.height;
-          const c = s.getContext('2d');
-          if (!c || !s.width) return -1;
-          c.drawImage(cv, 0, 0);
-          const { data } = c.getImageData(0, 0, s.width, s.height);
-          let n = 0;
-          for (let i = 3; i < data.length; i += 4) if (data[i] > 8) n++;
-          return n;
-        } catch (e) {
-          return `ERR ${(e as Error).message}`;
+    const nonBgRatio = () =>
+      page.evaluate(async () => {
+        const img = document.querySelector(
+          'img[alt="preview"]'
+        ) as HTMLImageElement | null;
+        if (!img) return -1;
+        if (!img.complete || img.naturalWidth === 0) {
+          await new Promise<void>((res) => {
+            img.onload = () => res();
+            img.onerror = () => res();
+          });
         }
-      };
-      const canvases = Array.from(
-        document.querySelectorAll('canvas')
-      ) as HTMLCanvasElement[];
-      const img = document.querySelector(
-        'img[alt="preview"]'
-      ) as HTMLImageElement | null;
-      return {
-        canvasCount: canvases.length,
-        canvases: canvases.map((cv) => ({
-          testid: cv.dataset.testid ?? cv.getAttribute('data-testid'),
-          inDialog: !!cv.closest('[role="dialog"]'),
-          cssW: cv.style.width,
-          cssH: cv.style.height,
-          bufW: cv.width,
-          bufH: cv.height,
-          allIconsDrawn: cv.dataset.allIconsDrawn,
-          buildCount: cv.dataset.buildCount,
-          nodesDrawn: cv.dataset.nodesDrawn,
-          painted: paintedPixels(cv)
-        })),
-        preview: img
-          ? { w: img.naturalWidth, h: img.naturalHeight, src: img.src.slice(0, 40) }
-          : null,
-        // WHERE are the non-background pixels? The count came to exactly one
-        // row's worth (1698 of 1698x983), which is either an edge seam or the
-        // whole scene squashed to 1px tall. The bounding box tells them apart.
-        previewNonBg: (() => {
-          if (!img || !img.naturalWidth) return null;
-          const c2 = document.createElement('canvas');
-          c2.width = img.naturalWidth;
-          c2.height = img.naturalHeight;
-          const cx = c2.getContext('2d');
-          if (!cx) return null;
-          cx.drawImage(img, 0, 0);
-          const { data } = cx.getImageData(0, 0, c2.width, c2.height);
-          const [br, bg, bb, ba] = [data[0], data[1], data[2], data[3]];
-          let minX = 1e9, minY = 1e9, maxX = -1, maxY = -1, n = 0;
-          const rows: Record<number, number> = {};
-          for (let i = 0; i < data.length; i += 4) {
-            const d =
-              Math.abs(data[i] - br) +
-              Math.abs(data[i + 1] - bg) +
-              Math.abs(data[i + 2] - bb) +
-              Math.abs(data[i + 3] - ba);
-            if (d > 48) {
-              const p = i / 4;
-              const x = p % c2.width;
-              const y = (p / c2.width) | 0;
-              n++;
-              rows[y] = (rows[y] ?? 0) + 1;
-              if (x < minX) minX = x;
-              if (x > maxX) maxX = x;
-              if (y < minY) minY = y;
-              if (y > maxY) maxY = y;
-            }
-          }
-          const topRows = Object.entries(rows)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 5);
-          return {
-            n,
-            bbox: { minX, minY, maxX, maxY },
-            bgPixel: [br, bg, bb, ba],
-            distinctRows: Object.keys(rows).length,
-            topRows
-          };
-        })()
-      };
-    });
-    // eslint-disable-next-line no-console
-    console.log('EXPORT_DIAG ' + JSON.stringify(diag));
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth;
+        c.height = img.naturalHeight;
+        const ctx = c.getContext('2d');
+        if (!ctx || c.width === 0) return -1;
+        ctx.drawImage(img, 0, 0);
+        const { data } = ctx.getImageData(0, 0, c.width, c.height);
+        const [br, bg, bb, ba] = [data[0], data[1], data[2], data[3]];
+        let nonBg = 0;
+        const total = data.length / 4;
+        for (let i = 0; i < data.length; i += 4) {
+          const dr = Math.abs(data[i] - br);
+          const dg = Math.abs(data[i + 1] - bg);
+          const db = Math.abs(data[i + 2] - bb);
+          const da = Math.abs(data[i + 3] - ba);
+          if (dr + dg + db + da > 48) nonBg++;
+        }
+        return nonBg / total;
+      });
 
-    expect(nonBgRatio).toBeGreaterThan(0.01);
+    // POLL, do not sample once. `ExportImageDialog` captures as soon as its
+    // 400 ms icon-readiness budget elapses and RECAPTURES when the canvas
+    // reports every icon drawn (its A2 fallback), so the first image the
+    // preview shows can legitimately predate the icons — progressive
+    // refinement, by design. Reading the instant the <img> appears asserts on
+    // that intermediate frame.
+    //
+    // It looked machine-independent because it is not a race inside the
+    // product: on a fast machine the icons decode inside the 400 ms budget and
+    // the first capture is already complete, so this passed everywhere for
+    // months. On CI it does not, and the first capture is deterministically
+    // incomplete — measured at exactly 0.001 of the image, every run, while the
+    // settled image measures 0.042. Those are the two numbers ADR 0038 §8 read
+    // as run-to-run variance of a timing race; they are the two captures.
+    await expect
+      .poll(nonBgRatio, { timeout: 20_000 })
+      .toBeGreaterThan(0.01);
   });
 });

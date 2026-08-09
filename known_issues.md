@@ -8303,43 +8303,39 @@ same guarantee. Promoted regression:
 and the SHARE-15 legs of
 [`routes.shareIntegrity.spec.js`](packages/axoview-backend/src/__tests__/routes.shareIntegrity.spec.js).
 
-## Image export produces a background-only PNG on CI (canvas contributes nothing)
+## Image export shows an incomplete preview until the recapture lands
 
-**Found by:** PR #86 CI, 2026-08-09 (bisected to the R3/GPU-13 canvas merge)
+**Found by:** PR #86 CI, 2026-08-09
 
-**Symptom:** "Export as image" renders a preview containing only the background
-colour — no icons, no grid — even though the diagram has content and "Show grid"
-is checked. `import-export-image.spec.ts` #10 measures **0.001** non-background
-pixels against a 0.01 floor.
+**Symptom:** For a short window after "Export as image" opens, the preview shows
+an incomplete render — on a slow machine, essentially just the background. It
+corrects itself a moment later. **The Download button is live throughout**, so a
+user who clicks inside that window gets the incomplete PNG.
 
-**Reproduces on GitHub Actions only.** A local run passes 4/4, including under a
-forced software rasteriser (`--use-gl=swiftshader --use-angle=swiftshader
---disable-gpu`), so "CI has no GPU" is not the explanation.
+**Root cause:** by design, and only half-finished. `ExportImageDialog` captures
+as soon as its 400 ms icon-readiness budget elapses and RECAPTURES when the
+canvas reports every icon drawn (the A2 fallback). That progressive refinement is
+deliberate — it stops a stuck icon hanging the export — but nothing tells the
+user, or the download handler, that the image on screen is provisional.
 
-**It is deterministic, not a race.** The measured ratio is byte-identical —
-`0.001017293997965412` — across every CI run and every commit from the merge to
-HEAD. This matters because [ADR 0038](docs/adr/0038-webgl-instanced-render-substrate.md)
-§8 correction 6 originally read the same test's 0.001-vs-0.042 spread as a timing
-race that the merge merely exposed, and fixed the readiness signal accordingly.
-That diagnosis is corrected in place: a race varies, and this does not.
+**Measured on CI** (instrumented, 2026-08-09): the first capture reads 0.001 of
+the image as non-background, the settled one reads 0.042; the hidden export
+canvas is healthy throughout (7151 painted pixels, `data-all-icons-drawn="true"`,
+correctly sized). Nothing is lost from the composite — it is purely the timing of
+which capture you look at.
 
-**Bisect:** `master` (pre-merge) passes on the same runner image today;
-`cf81ba74` (the merge itself) fails with the identical value. The merge caused
-it. Its export-side diff is only comment and test-id repoints
-(`axoview-nodes-canvas` → `axoview-scene-canvas` in `waitForIconsDrawn`); the
-substance is the 164-line `Renderer.tsx` restructure, which also moved the grid
-under the bulk — consistent with the grid being absent from the capture too.
+**This is what `import-export-image.spec.ts` #10 was failing on**, and it is
+worth recording why it took three attempts. The spec sampled the preview the
+instant the `<img>` appeared, so it asserted on the first capture. On a fast
+machine the icons decode inside the 400 ms budget and that capture is already
+complete, which is why it passed locally and everywhere for months. Two fixes
+were attempted from the symptom — the readiness-flag write site (wave 5) and its
+seed (reverted in `0163c2ae`) — and neither could have worked, because the
+product was never broken. The spec now polls the settled outcome. See the
+2026-08-09 correction in [ADR 0038](docs/adr/0038-webgl-instanced-render-substrate.md) §8.
 
-**Root cause:** NOT ESTABLISHED. The evidence says the merged canvas contributes
-no pixels to the `dom-to-image` composite in the CI environment. Candidate
-directions, none verified: a stacking/`zIndex` change in the restructured
-`Renderer` that the dom-to-image clone resolves differently from the live
-browser; the hidden export Axoview's WebGL2 context not surviving the clone's
-`toDataURL`; or a capture that runs against the wrong canvas element. **A fix was
-attempted and reverted (`0163c2ae`) because it was reasoned rather than
-reproduced — do not re-attempt without a red-then-green signal.**
+**Workaround:** wait a moment before downloading a large or icon-heavy diagram.
 
-**Workaround:** none in-product. The export path is unaffected in local and
-deployed browsers as far as current evidence shows; only CI reproduces it.
-
-**Status:** Open
+**Status:** Open — the capture race is closed for the test, but the product
+should either disable Download until the recapture settles or show that the
+preview is still refining.
