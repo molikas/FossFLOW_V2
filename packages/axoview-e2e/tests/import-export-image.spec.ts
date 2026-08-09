@@ -240,13 +240,23 @@ test.describe('Export image — T5 (ADR 0025)', () => {
         const { data } = ctx.getImageData(0, 0, c.width, c.height);
         const [br, bg, bb, ba] = [data[0], data[1], data[2], data[3]];
         let nonBg = 0;
-        const total = data.length / 4;
-        for (let i = 0; i < data.length; i += 4) {
+        let total = 0;
+        // STRIDE-SAMPLE, every 16th pixel. This runs inside a poll, and at full
+        // resolution it is a 1.67M-iteration loop per call (1698x983 at 2x DPI)
+        // that blocks the page's main thread — which is the same thread the
+        // dialog's recapture needs. Measuring at full rate starved the very
+        // update being waited for: the value sat at the first capture for the
+        // whole 20 s on CI, while a single off-poll read moments later showed
+        // the settled image. A 1-in-16 sample is ~100k iterations, and the two
+        // outcomes it separates are 0.001 and 0.042 — 40x apart, so sampling
+        // error cannot reach the 0.01 threshold.
+        for (let i = 0; i < data.length; i += 4 * 16) {
           const dr = Math.abs(data[i] - br);
           const dg = Math.abs(data[i + 1] - bg);
           const db = Math.abs(data[i + 2] - bb);
           const da = Math.abs(data[i + 3] - ba);
           if (dr + dg + db + da > 48) nonBg++;
+          total++;
         }
         return nonBg / total;
       });
