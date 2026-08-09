@@ -1,5 +1,5 @@
 /**
- * Backend jest config for T1 exploratory probes (docs/reviews/exploratory-2026-07/APPROACH.md §7).
+ * Backend jest config for T1 exploratory probes (campaign APPROACH.md §7, retired to git history — method now in .claude/commands/explore.md).
  *
  * Zero touch to the default config: it already carries an explicit
  * `testMatch: ['<rootDir>/src/**\/__tests__/**\/*.spec.js']`, so an
@@ -14,5 +14,8 @@ import base from './jest.config.js';
 export default {
   ...base,
   testMatch: ['<rootDir>/src/**/__explore__/**/*.explore.spec.js'],
+  // Empty is the lane's normal between-campaigns state (probes promote out on
+  // fix, per the ADR 0047 flip rule) — an empty lane must not read as red.
+  passWithNoTests: true,
   coverageThreshold: undefined
 };

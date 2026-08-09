@@ -8,7 +8,7 @@
  *  CLIP-08  a preserveViewport load leaves the previous diagram's selection
  *  CLIP-09  deleteLayer leaves the layer id in previewLayerOverrides
  *
- * See docs/reviews/exploratory-2026-07/areas/E4-clipboard-schemas-load.md.
+ * See the retired E4-clipboard-schemas-load area file (git history) — summary in docs/reviews/exploratory-2026-07.md.
  */
 import { renderHook } from '@testing-library/react';
 import { installCanvasStub } from '../canvasStub';

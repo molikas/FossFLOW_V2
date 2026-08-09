@@ -1,7 +1,8 @@
 /** @type {import('ts-jest').JestConfigWithTsJest} */
 /**
- * Jest config for T1 exploratory probes in the APP package (docs/reviews/exploratory-2026-07/
- * APPROACH.md §7). The S/A tracks (auth store, storage providers, app shell)
+ * Jest config for T1 exploratory probes in the APP package (campaign
+ * APPROACH.md §7, retired to git history — method now in
+ * .claude/commands/explore.md). The S/A tracks (auth store, storage providers, app shell)
  * live here, not in axoview-lib, so they need the same rig the lib got.
  *
  * Extends the default app config and changes exactly three things:

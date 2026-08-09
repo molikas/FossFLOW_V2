@@ -6,7 +6,7 @@
  *  SCN-15  computePathsAsync writes into whatever scene is live when its batch
  *          fires, so a page switch mid-routing lands page 1's paths in page 2
  *
- * See docs/reviews/exploratory-2026-07/areas/E3-scene-actions-paste.md.
+ * See the retired E3-scene-actions-paste area file (git history) — summary in docs/reviews/exploratory-2026-07.md.
  */
 import { installCanvasStub } from '../canvasStub';
 import {

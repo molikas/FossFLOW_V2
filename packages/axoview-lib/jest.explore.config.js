@@ -1,6 +1,6 @@
 /** @type {import('ts-jest').JestConfigWithTsJest} */
 /**
- * Jest config for T1 exploratory probes (docs/reviews/exploratory-2026-07/APPROACH.md §7).
+ * Jest config for T1 exploratory probes (campaign APPROACH.md §7, retired to git history — method now in .claude/commands/explore.md).
  *
  * Extends the default lib config and changes exactly three things:
  *   1. `testMatch` narrowed to `**\/__explore__\/**\/*.explore.test.{ts,tsx}` —

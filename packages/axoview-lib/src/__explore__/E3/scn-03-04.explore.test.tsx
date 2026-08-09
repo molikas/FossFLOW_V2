@@ -7,7 +7,7 @@
  * ids through `idMap` but rebuilds anchors with `{...anchor, ref}`, keeping the
  * original `anchor.id`.
  *
- * See docs/reviews/exploratory-2026-07/areas/E3-scene-actions-paste.md.
+ * See the retired E3-scene-actions-paste area file (git history) — summary in docs/reviews/exploratory-2026-07.md.
  */
 import React from 'react';
 import { renderHook } from '@testing-library/react';

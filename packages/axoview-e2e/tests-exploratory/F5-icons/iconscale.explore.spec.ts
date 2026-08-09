@@ -69,11 +69,13 @@ test.describe('F5 / an enlarged icon vs the hit test', () => {
 
     // The node is painted on the bulk GPU canvas (its DOM shell is zero-sized —
     // COLDSTART), so measure the DRAWN extent with the read-back pixel oracle:
-    // the painted bounding box on the nodes canvas, in CSS px.
+    // the painted bounding box on the merged scene canvas, in CSS px. (The
+    // per-type canvases were collapsed by the GPU-13 merge; on this one-node
+    // diagram the scene canvas paints exactly what the nodes canvas used to.)
     const paintedBox = () =>
       page.evaluate(() => {
         const gl = document.querySelector(
-          '[data-testid="axoview-nodes-canvas"]'
+          '[data-testid="axoview-scene-canvas"]'
         ) as HTMLCanvasElement | null;
         if (!gl || !gl.width || !gl.height) return null;
         const scratch = document.createElement('canvas');
@@ -110,7 +112,7 @@ test.describe('F5 / an enlarged icon vs the hit test', () => {
       });
 
     // PRECONDITION: the layer really painted something at 1x.
-    expect(await paintedPixels(page, 'axoview-nodes-canvas')).toBeGreaterThan(0);
+    expect(await paintedPixels(page, 'axoview-scene-canvas')).toBeGreaterThan(0);
     const before = await paintedBox();
     await setIconScale(page, nodeId, 2.5);
     await page.waitForTimeout(600);

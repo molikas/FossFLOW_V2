@@ -1,5 +1,5 @@
 /**
- * T1 rig proof (docs/reviews/exploratory-2026-07/APPROACH.md §7). Not a hypothesis probe — it
+ * T1 rig proof (campaign APPROACH.md §7, retired to git history — method now in .claude/commands/explore.md). Not a hypothesis probe — it
  * exists so `npm run explore:unit` demonstrably runs, resolves the lib's module
  * aliases, and is invisible to `npm test`.
  */

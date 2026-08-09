@@ -10,7 +10,7 @@
  *  CLIP-14  a pasted node whose icon the target model lacks
  *  CLIP-15  tile-coordinate sanity
  *
- * See docs/reviews/exploratory-2026-07/areas/E4-clipboard-schemas-load.md.
+ * See the retired E4-clipboard-schemas-load area file (git history) — summary in docs/reviews/exploratory-2026-07.md.
  */
 import { renderHook } from '@testing-library/react';
 import { installCanvasStub } from '../canvasStub';

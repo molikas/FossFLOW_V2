@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 /**
  * Playwright config for the EXPLORATORY campaign
- * (docs/reviews/exploratory-2026-07/APPROACH.md §7).
+ * (campaign APPROACH.md §7, retired to git history — method now in .claude/commands/explore.md).
  *
  * Quarantined from CI and from `npm run test:e2e`: the default config's
  * `testDir: './tests'` never sees `./tests-exploratory`, and no workflow

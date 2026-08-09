@@ -6,7 +6,7 @@
  *  SCN-07  the batch updaters' "drag-only" contract is unenforced
  *  SCN-08  previewConnectorPaths writes past an open transaction
  *
- * See docs/reviews/exploratory-2026-07/areas/E3-scene-actions-paste.md.
+ * See the retired E3-scene-actions-paste area file (git history) — summary in docs/reviews/exploratory-2026-07.md.
  */
 import { installCanvasStub } from '../canvasStub';
 import {

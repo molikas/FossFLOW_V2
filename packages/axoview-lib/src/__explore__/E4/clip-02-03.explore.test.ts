@@ -7,7 +7,7 @@
  *
  * All three go through the real stack: `modelSchema.safeParse`, whose
  * `superRefine` runs `validateModel`. See
- * docs/reviews/exploratory-2026-07/areas/E4-clipboard-schemas-load.md.
+ * the retired E4-clipboard-schemas-load area file (git history) — summary in docs/reviews/exploratory-2026-07.md.
  */
 import { modelSchema } from 'src/schemas/model';
 import { validateView } from 'src/schemas/validation';
