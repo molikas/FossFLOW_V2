@@ -488,19 +488,8 @@ export const SceneCanvas = memo(
        * for that build had not been issued yet — a window in which a capture sees
        * the PREVIOUS frame and drops the icons. The signal is a claim about the
        * paint, so it is written after `render()`.
-       *
-       * **Seeded `false`, and that is load-bearing.** Moving the write out of
-       * `buildInstances` (2026-08-02) also made it run on EVERY draw, including
-       * draws where no build ran — so a `true` seed published "ready" before any
-       * build had looked at a single node. `nodeEmitter`'s own flag is
-       * vacuously true until a node with a pending icon clears it, so the seed is
-       * the only thing standing between "we have not measured yet" and a claim
-       * that we have. `waitForIconsDrawn` resolves on the first `true` it sees and
-       * the caller then SKIPS its recapture, so a premature `true` is not a
-       * missed frame — it is a permanently blank export. Not ready until a build
-       * says so.
        */
-      let allIconsDrawnPending = false;
+      let allIconsDrawnPending = true;
 
       const buildInstances = (b: SpriteBatch) => {
         const ui = uiApi.getState();
