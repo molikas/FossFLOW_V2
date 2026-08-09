@@ -428,12 +428,58 @@ produce a PNG with no icon nodes in it. It is written after `render()` now.
 > between the two captures, so a user who clicks inside it gets the incomplete
 > PNG. Recorded in known_issues.md.
 
+> **SECOND CORRECTION — 2026-08-09, later the same day, established by a second
+> round of CI instrumentation (run 31330358840) plus a local reproduction.** The
+> correction above got the captures right and the verdict wrong: **the product
+> was NOT behaving as designed.** "0.042 is the recaptured one" assumed the
+> recapture always runs. It does not. `data-all-icons-drawn` is vacuously
+> `"true"` on any paint whose build saw no node with a *pending* icon — including
+> the hidden export Axoview's mount-time paints that precede its content build
+> (`nodeEmitter.stats.allIconsDrawn` initialises `true` and only a pending icon
+> clears it; an early build simply never looks). When the dialog's first
+> readiness poll lands on such a frame it resolves `iconsReady=true`, captures a
+> background-only frame, and takes the `if (iconsReady) return` short-circuit —
+> **the recapture is skipped permanently** and the blank preview is final, not
+> provisional. The timeline that proved it: `data-all-icons-drawn="true"` with
+> the preview src frozen at the first capture for the whole observation window,
+> canvas healthy throughout.
+>
+> It was also never machine-dependent — it is **order-dependent**. Running spec
+> #10 alone passes on the same machine where running the file in sequence
+> (#9→#18→#19→#10) reproduces CI's byte-identical 0.001. Every prior local
+> "passes 4/4" was a solo run; "CI-only" was an artifact of never running the
+> full file locally.
+>
+> Fixed in two measured rounds, because the readiness lie had two layers:
+>
+> 1. `4f518bbc` — **content honesty.** `waitForIconsDrawn` readiness requires
+>    `data-nodes-drawn` ≥ 1 whenever the exported view has items (vacuity is no
+>    longer satisfiable before the content build), and the recovery recapture
+>    runs unconditionally once a capture went out not-ready, on a 5 s budget.
+>    The reseeding attempt reverted in `0163c2ae` could never have worked:
+>    `buildInstances` overwrites the seed from `nodeEmitter.stats` on every
+>    build.
+> 2. `4abca8f7` — **size honesty.** With round 1 in place CI still failed, and
+>    the capture-time instrumentation (PROBE10, run 31332531270) showed why:
+>    every attribute was now HONESTLY true — `build=2, nodes=1, drawn=true`,
+>    context not lost — about a paint into a **1×1 backing store**. Before the
+>    hidden export container's ResizeObserver → `rendererSize` update lands, the
+>    GL draws the whole scene into one pixel; `toDataURL` serializes 142 bytes
+>    of nothing and dom-to-image composites the deterministic 48 210-byte blank.
+>    That is also the order-dependence in one clause: a warm cache (ordered spec
+>    run) flips content readiness before the resize; a cold solo run flips it
+>    after. Readiness now additionally requires `canvas.width/height > 1` — a
+>    degenerate buffer is not a capturable frame, however truthful its dataset.
+
 This is the campaign's own standing lesson landing on the campaign's own record,
 twice over: the evidence was reliable and the diagnosis was a hypothesis. The
 0.001/0.042 measurements were real both times; "therefore a race" was not, and
 neither was the bisect-driven "therefore the merge broke the composite" that
-briefly replaced it. What settled it was instrumenting the failing environment
-instead of arguing from the symptom.
+briefly replaced it — nor, in the end, was "therefore the spec was racing a
+healthy product": the first correction stopped at the diagnosis that fit the
+data it had, and the decisive fact (the recapture never fired) took a second
+instrumentation round to surface. What settled it, both times, was instrumenting
+the failing environment instead of arguing from the symptom.
 
 The agreement gate itself
 ([`pickerAgreement.contract.test.ts`](../../packages/axoview-lib/src/utils/__tests__/pickerAgreement.contract.test.ts))

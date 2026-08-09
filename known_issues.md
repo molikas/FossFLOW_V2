@@ -8303,26 +8303,42 @@ same guarantee. Promoted regression:
 and the SHARE-15 legs of
 [`routes.shareIntegrity.spec.js`](packages/axoview-backend/src/__tests__/routes.shareIntegrity.spec.js).
 
-## Image export shows an incomplete preview until the recapture lands
+## Image export could show a permanently incomplete preview — FIXED (residual below)
 
 **Found by:** PR #86 CI, 2026-08-09
 
-**Symptom:** For a short window after "Export as image" opens, the preview shows
-an incomplete render — on a slow machine, essentially just the background. It
-corrects itself a moment later. **The Download button is live throughout**, so a
-user who clicks inside that window gets the incomplete PNG.
+**Symptom (as first understood):** For a short window after "Export as image"
+opens, the preview shows an incomplete render — on a slow machine, essentially
+just the background — and corrects itself a moment later.
 
-**Root cause:** by design, and only half-finished. `ExportImageDialog` captures
-as soon as its 400 ms icon-readiness budget elapses and RECAPTURES when the
-canvas reports every icon drawn (the A2 fallback). That progressive refinement is
-deliberate — it stops a stuck icon hanging the export — but nothing tells the
-user, or the download handler, that the image on screen is provisional.
+**Corrected the same day, by two instrumentation rounds:** the incomplete
+preview could be FINAL, not provisional — the capture-readiness signal lied in
+two independent ways, each able to approve a blank capture AND (because
+readiness read true) skip the recovery recapture permanently via
+`if (iconsReady) return`:
 
-**Measured on CI** (instrumented, 2026-08-09): the first capture reads 0.001 of
-the image as non-background, the settled one reads 0.042; the hidden export
-canvas is healthy throughout (7151 painted pixels, `data-all-icons-drawn="true"`,
-correctly sized). Nothing is lost from the composite — it is purely the timing of
-which capture you look at.
+1. **Vacuous content readiness** — `data-all-icons-drawn` is `"true"` on any
+   paint whose build saw no node with a pending icon, including mount-time
+   paints that precede the export scene's content build.
+2. **Degenerate buffer** — before the hidden export container's ResizeObserver
+   → `rendererSize` update lands, the canvas backing store is 1×1, and every
+   readiness attribute can be honestly true about a paint into that one pixel
+   (measured: `build=2, nodes=1, drawn=true`, `toDataURL` → 142 bytes).
+
+Order-dependent, not machine-dependent: a warm cache (running the
+import-export-image spec file in sequence) flips readiness before the resize
+lands; cold solo runs flip it after — which is why #10 passed alone everywhere
+and failed in ordered runs. See ADR 0038 §8, second 2026-08-09 correction.
+
+**Fixed** in `4f518bbc` + `4abca8f7`: readiness additionally requires ≥1 drawn
+node whenever the exported view has items AND a backing store larger than 1×1;
+the recovery recapture runs unconditionally (5 s budget) once a capture went
+out not-ready.
+
+**Residual — still open:** during the window between a not-ready first capture
+and its replacement, **the Download button is live**, so a user who clicks
+inside that window still gets the provisional PNG. Nothing tells the user or the
+download handler that the on-screen image is not yet settled.
 
 **This is what `import-export-image.spec.ts` #10 was failing on**, and it is
 worth recording why it took three attempts. The spec sampled the preview the
