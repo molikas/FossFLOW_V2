@@ -139,6 +139,46 @@ plan, each recorded here rather than silently:
   the commit that landed the campaign record; everything after it is the
   remediation program's own ~240 fixes, which no sweep has ever explored.
 
+## Addendum — 2026-08-09, record lifecycle amended: one frozen doc per campaign
+
+Applied while slimming PR #86 for review, on the owner's ruling that the
+program's **mechanism stays** (lane, configs, oracles, named rigs, `/explore`,
+class gates, promoted regressions) and its **execution residue goes**. Three
+policies, all already executed for the 2026-07 campaign:
+
+1. **§5 is amended: a closed campaign freezes to ONE file, not a directory.**
+   The record compresses to `docs/reviews/exploratory-<YYYY-MM>.md` in the
+   frozen-review style — heat map (area × hypotheses × bugs × dominant defect
+   classes), one paragraph per area, the owner rulings verbatim, the program
+   lessons, and the delta anchor a future sweep updates. The working tree
+   (ledger, area files, method doc, coverage baseline) is **deleted — git
+   history is the archive**. This supersedes the 2026-08-08 addendum's
+   "APPROACH.md archived, not deleted" note: with the area files gone, the
+   citations that justified keeping it went with them, and it is deleted too.
+   The 2026-07 campaign's tree was compressed to
+   [exploratory-2026-07.md](../reviews/exploratory-2026-07.md) on 2026-08-09;
+   the `/explore` skill's close-out step now produces this format directly, so
+   no future campaign rebuilds the tree.
+2. **Between campaigns the lane holds only open-bug repros and the named
+   reusable rigs.** Probes for Fixed entries are deleted when the flip rule
+   promotes their regression (§2 already implied this; now explicit), and
+   FALSIFIED characterizations are deleted at campaign close — a curated few
+   may be promoted to a main suite instead, never left in the lane. An empty
+   per-package lane is the normal resting state and must not read as red
+   (`passWithNoTests` in the explore configs).
+3. **The review series keeps the latest assessment plus landmark records**
+   (owner ruling, recorded in [docs/README.md](../README.md)). Superseded
+   per-wave snapshots retire to git history; load-bearing fragments migrate
+   into the living docs before deletion.
+
+One consequence of the 2026-08-09 lane sweep worth recording: two kept probes
+(GPU-15, ICON-08) had gone red not because their bugs moved but because they
+still addressed the pre-merge per-type canvases — a merge closes neighbouring
+probes' premises *by construction* (§ the skill's flip-rule notes), and a
+frozen lane rots against a moving substrate exactly the way §"Negative /
+risks" predicted. Delta sweeps touching the lane every cycle remain the
+mitigation.
+
 ## Acceptance criteria
 
 - **Contract:** default `npm test` per package and the main Playwright config discover zero files from `__explore__/` / `tests-exploratory/` (quarantine holds — re-verify with `--listTests` after any config change).

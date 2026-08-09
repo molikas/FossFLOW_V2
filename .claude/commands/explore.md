@@ -242,6 +242,36 @@ When a wave's finding is a *class* rather than an instance, the fix wave will wa
 
 ---
 
+## 11. Campaign close-out — the archive step (ADR 0047 §5, as amended 2026-08-09)
+
+A **wave** ends by updating the frozen review's delta-anchor section (§2). A
+**campaign** (a full multi-area program with its own working directory of
+ledger + area files) ends by compressing, never by freezing the tree:
+
+1. Write ONE file, `docs/reviews/exploratory-<YYYY-MM>.md`, in the
+   frozen-review style of [exploratory-2026-07.md](../../docs/reviews/exploratory-2026-07.md):
+   the **heat map** (area × hypotheses counted × bugs × known_issues entries ×
+   dominant defect classes — derive entry counts from `grep "Found by:"
+   known_issues.md`), one short paragraph per area naming its bug **classes**
+   (not per-bug detail — known_issues.md carries that) plus any record
+   corrections, the owner rulings **verbatim**, the program lessons, and the
+   **delta anchor** with its sweep history (this section a future sweep
+   updates).
+2. **Delete the working tree** — ledger, area files, method notes, the
+   regenerated coverage baseline. Git history is the archive; do not move
+   files into `docs/reviews/`, and do not keep APPROACH-style method docs (the
+   method lives in this skill).
+3. Repoint every inbound link (known_issues.md, testing.md, the ADRs, this
+   skill) to the new doc or de-link to plain text, in the same change.
+4. Sweep the lane to its standing state: probes for **Fixed** entries deleted
+   (the flip rule already promoted their regressions), **FALSIFIED**
+   characterizations deleted (promote a curated few to a main suite if they
+   have regression value — never leave them in the lane), **Open** repros
+   stay, plus the named rigs (§9's stubs/harnesses and `_rig/`) and anything a
+   kept probe imports. Re-verify quarantine in both directions, tsc, knip, and
+   that every explore script exits 0 (an empty per-package lane passes via
+   `passWithNoTests`).
+
 ## Notes for Claude
 
 **End-of-session report contract (owner-mandated).** The final message of every session has exactly four parts, in this order, and nothing else:
