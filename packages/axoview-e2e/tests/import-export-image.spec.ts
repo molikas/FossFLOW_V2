@@ -250,6 +250,58 @@ test.describe('Export image — T5 (ADR 0025)', () => {
       return nonBg / total;
     });
 
+    // ---------------------------------------------------------------------
+    // TEMPORARY CI DIAGNOSTIC — remove once the export defect is fixed.
+    // known_issues.md "Image export produces a background-only PNG on CI".
+    // The decisive question is whether the merged canvas HAS pixels that the
+    // composite then drops, or never drew them at all. Everything else here
+    // exists to tell those two apart.
+    // ---------------------------------------------------------------------
+    const diag = await page.evaluate(() => {
+      const paintedPixels = (cv: HTMLCanvasElement) => {
+        try {
+          const s = document.createElement('canvas');
+          s.width = cv.width;
+          s.height = cv.height;
+          const c = s.getContext('2d');
+          if (!c || !s.width) return -1;
+          c.drawImage(cv, 0, 0);
+          const { data } = c.getImageData(0, 0, s.width, s.height);
+          let n = 0;
+          for (let i = 3; i < data.length; i += 4) if (data[i] > 8) n++;
+          return n;
+        } catch (e) {
+          return `ERR ${(e as Error).message}`;
+        }
+      };
+      const canvases = Array.from(
+        document.querySelectorAll('canvas')
+      ) as HTMLCanvasElement[];
+      const img = document.querySelector(
+        'img[alt="preview"]'
+      ) as HTMLImageElement | null;
+      return {
+        canvasCount: canvases.length,
+        canvases: canvases.map((cv) => ({
+          testid: cv.dataset.testid ?? cv.getAttribute('data-testid'),
+          inDialog: !!cv.closest('[role="dialog"]'),
+          cssW: cv.style.width,
+          cssH: cv.style.height,
+          bufW: cv.width,
+          bufH: cv.height,
+          allIconsDrawn: cv.dataset.allIconsDrawn,
+          buildCount: cv.dataset.buildCount,
+          nodesDrawn: cv.dataset.nodesDrawn,
+          painted: paintedPixels(cv)
+        })),
+        preview: img
+          ? { w: img.naturalWidth, h: img.naturalHeight, src: img.src.slice(0, 40) }
+          : null
+      };
+    });
+    // eslint-disable-next-line no-console
+    console.log('EXPORT_DIAG ' + JSON.stringify(diag));
+
     expect(nonBgRatio).toBeGreaterThan(0.01);
   });
 });
