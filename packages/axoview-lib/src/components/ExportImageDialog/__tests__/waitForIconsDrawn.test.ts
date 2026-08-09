@@ -81,4 +81,57 @@ describe('waitForIconsDrawn (QA #10)', () => {
     frame();
     await expect(result).resolves.toBe(true);
   });
+
+  // CI regression (run 31330358840): `data-all-icons-drawn` is vacuously "true"
+  // on paints whose build predates the export scene's content — no node with a
+  // pending icon has been seen, so nothing held the flag down. A poll landing on
+  // such a frame approved a background-only capture and, by resolving true, made
+  // the caller skip its recapture: the blank preview stuck permanently. With
+  // `minNodesDrawn`, "ready" additionally requires the build to have included
+  // the expected nodes.
+  describe('minNodesDrawn (vacuous-readiness guard)', () => {
+    it('does NOT resolve on a vacuously-ready canvas that has drawn no nodes', async () => {
+      const canvas = drawnCanvas(); // allIconsDrawn="true", data-nodes-drawn absent
+      let settled: boolean | 'pending' = 'pending';
+      void waitForIconsDrawn(containerWith(canvas), 1000, 1).then((v) => {
+        settled = v;
+      });
+
+      frame(); // the buggy predicate resolved true right here
+      await Promise.resolve();
+      expect(settled).toBe('pending');
+
+      canvas.dataset.nodesDrawn = '0'; // an explicit empty build is just as vacuous
+      frame();
+      await Promise.resolve();
+      expect(settled).toBe('pending');
+    });
+
+    it('resolves true once the build has drawn the expected nodes', async () => {
+      const canvas = drawnCanvas();
+      const result = waitForIconsDrawn(containerWith(canvas), 1000, 1);
+
+      frame(); // vacuous frame — must not settle
+      canvas.dataset.nodesDrawn = '1'; // content build lands
+      frame();
+
+      await expect(result).resolves.toBe(true);
+    });
+
+    it('resolves false on timeout while nodes never draw (recapture then replaces the frame)', async () => {
+      const canvas = drawnCanvas();
+      canvas.dataset.nodesDrawn = '0';
+      const result = waitForIconsDrawn(containerWith(canvas), 50, 1);
+      frame(100);
+      await expect(result).resolves.toBe(false);
+    });
+
+    it('minNodesDrawn of 0 (the default) keeps the icons-only predicate', async () => {
+      const canvas = drawnCanvas();
+      canvas.dataset.nodesDrawn = '0';
+      const result = waitForIconsDrawn(containerWith(canvas), 1000, 0);
+      frame();
+      await expect(result).resolves.toBe(true);
+    });
+  });
 });

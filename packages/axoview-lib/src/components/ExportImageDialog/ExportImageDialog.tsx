@@ -251,6 +251,27 @@ export const ExportImageDialog = memo(({ onClose }: Props) => {
     return getUnprojectedBounds();
   }, [getUnprojectedBounds]);
 
+  // QA #10 (CI): `data-all-icons-drawn` is vacuously "true" on any paint whose
+  // build saw no node with a pending icon — including the hidden Axoview's
+  // mount-time paints that precede its content build. Readiness alone can
+  // therefore approve a background-only capture AND skip the recapture (the
+  // permanently-blank CI preview, measured in run 31330358840). The capture
+  // waits additionally require ≥1 drawn node whenever the exported view has any
+  // items. ≥1 rather than the item count: items on hidden layers never draw,
+  // and builds are atomic over layer-visible nodes (no viewport culling), so a
+  // single drawn node proves the content build happened. Routed through a ref,
+  // like exportImageRef, so the capture effect keeps [axoviewReadySignal] as
+  // its only dependency.
+  const exportedView =
+    model.views.find((v) => {
+      return v.id === currentView;
+    }) ?? model.views[0];
+  const minNodesForCapture = (exportedView?.items.length ?? 0) > 0 ? 1 : 0;
+  const minNodesForCaptureRef = useRef(minNodesForCapture);
+  useEffect(() => {
+    minNodesForCaptureRef.current = minNodesForCapture;
+  }, [minNodesForCapture]);
+
   // Clamp the requested scale against the browser's canvas limits (ADR 0025 §2).
   // The same calculator runs inside exportAsImage/exportAsSVG; here it drives the
   // user-visible "size was reduced" notice so the cap is never silent (#18).
@@ -644,30 +665,37 @@ export const ExportImageDialog = memo(({ onClose }: Props) => {
     // the icons finish.
     const ICONS_READY_TIMEOUT_MS = 400;
     // Longer budget for the post-capture recovery: slow icon decodes (large
-    // sprites / many nodes) may exceed the initial window; give them more room
-    // before giving up on a better frame.
-    const ICONS_RECAPTURE_TIMEOUT_MS = 2000;
+    // sprites / many nodes) and a cold CI runner's first content build may
+    // exceed the initial window; give them room before settling for the frame
+    // that is there. Still bounded — the export can never hang on it.
+    const ICONS_RECAPTURE_TIMEOUT_MS = 5000;
 
     const run = async () => {
       const iconsReady = await waitForIconsDrawn(
         containerRef.current,
-        ICONS_READY_TIMEOUT_MS
+        ICONS_READY_TIMEOUT_MS,
+        minNodesForCaptureRef.current
       );
       if (cancelled) return;
       // Await the capture so the recapture below can't race the in-flight
       // exportImage (which guards on isExporting.current) or clobber its result.
       await exportImageRef.current();
-      // A2 recapture fallback: the first capture fired before the icon layer was
-      // ready (the wait timed out), so the snapshot may be missing icons. Keep
-      // waiting for the canvas to report all icons drawn, then capture once more
-      // to replace the incomplete image. Bounded by ICONS_RECAPTURE_TIMEOUT_MS so
+      // A2 recapture fallback: the first capture fired before the scene was
+      // ready (the wait timed out), so the snapshot may be missing content. Keep
+      // waiting for the canvas to report ready, then capture once more to
+      // replace the incomplete image. Bounded by ICONS_RECAPTURE_TIMEOUT_MS so
       // it always resolves and stops.
       if (iconsReady || cancelled) return;
-      const nowReady = await waitForIconsDrawn(
+      await waitForIconsDrawn(
         containerRef.current,
-        ICONS_RECAPTURE_TIMEOUT_MS
+        ICONS_RECAPTURE_TIMEOUT_MS,
+        minNodesForCaptureRef.current
       );
-      if (cancelled || !nowReady) return;
+      if (cancelled) return;
+      // Recapture even if readiness never flipped: the first capture is known
+      // not-ready, so the freshest frame is never a worse replacement — and when
+      // readiness is simply late (slow runner), waiting out the budget and NOT
+      // recapturing is exactly the bug that froze a blank preview for good.
       await exportImageRef.current();
     };
     run();

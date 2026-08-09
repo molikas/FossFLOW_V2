@@ -14,9 +14,20 @@
 // Resolves true once the canvas is mounted AND reports ready; false once the
 // timeout elapses (so export never hangs — the caller captures anyway, then
 // recaptures). See ExportImageDialog's capture effect.
+//
+// `minNodesDrawn` (QA #10, CI regression on the merged canvas): `data-all-icons-drawn`
+// is VACUOUSLY "true" on any paint whose build saw no node with a pending icon —
+// including the mount-time paints that precede the export scene's content build.
+// A poll that lands on one of those frames reported "ready", the caller captured
+// a background-only frame AND (because ready was true) skipped its recapture, so
+// the blank stuck for good. Deterministic on CI, where the first content build
+// consistently loses that race (measured: EXPORT_TIMELINE, run 31330358840).
+// Requiring `data-nodes-drawn` ≥ the caller's expectation makes "all icons drawn"
+// unable to mean "no build has looked at an icon yet".
 export const waitForIconsDrawn = (
   container: HTMLElement | null,
-  timeoutMs: number
+  timeoutMs: number,
+  minNodesDrawn = 0
 ): Promise<boolean> =>
   new Promise((resolve) => {
     const start = performance.now();
@@ -25,8 +36,13 @@ export const waitForIconsDrawn = (
         '[data-testid="axoview-scene-canvas"]'
       );
       // Ready only when the canvas is mounted AND a frame painted with every
-      // icon bitmap available.
-      if (canvas && canvas.dataset.allIconsDrawn === 'true') {
+      // icon bitmap available AND that build actually included the nodes the
+      // caller expects (absent `data-nodes-drawn` counts as 0 — not yet built).
+      if (
+        canvas &&
+        canvas.dataset.allIconsDrawn === 'true' &&
+        Number(canvas.dataset.nodesDrawn ?? '0') >= minNodesDrawn
+      ) {
         resolve(true);
         return;
       }
