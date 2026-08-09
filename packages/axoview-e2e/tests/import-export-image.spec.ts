@@ -296,7 +296,51 @@ test.describe('Export image — T5 (ADR 0025)', () => {
         })),
         preview: img
           ? { w: img.naturalWidth, h: img.naturalHeight, src: img.src.slice(0, 40) }
-          : null
+          : null,
+        // WHERE are the non-background pixels? The count came to exactly one
+        // row's worth (1698 of 1698x983), which is either an edge seam or the
+        // whole scene squashed to 1px tall. The bounding box tells them apart.
+        previewNonBg: (() => {
+          if (!img || !img.naturalWidth) return null;
+          const c2 = document.createElement('canvas');
+          c2.width = img.naturalWidth;
+          c2.height = img.naturalHeight;
+          const cx = c2.getContext('2d');
+          if (!cx) return null;
+          cx.drawImage(img, 0, 0);
+          const { data } = cx.getImageData(0, 0, c2.width, c2.height);
+          const [br, bg, bb, ba] = [data[0], data[1], data[2], data[3]];
+          let minX = 1e9, minY = 1e9, maxX = -1, maxY = -1, n = 0;
+          const rows: Record<number, number> = {};
+          for (let i = 0; i < data.length; i += 4) {
+            const d =
+              Math.abs(data[i] - br) +
+              Math.abs(data[i + 1] - bg) +
+              Math.abs(data[i + 2] - bb) +
+              Math.abs(data[i + 3] - ba);
+            if (d > 48) {
+              const p = i / 4;
+              const x = p % c2.width;
+              const y = (p / c2.width) | 0;
+              n++;
+              rows[y] = (rows[y] ?? 0) + 1;
+              if (x < minX) minX = x;
+              if (x > maxX) maxX = x;
+              if (y < minY) minY = y;
+              if (y > maxY) maxY = y;
+            }
+          }
+          const topRows = Object.entries(rows)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5);
+          return {
+            n,
+            bbox: { minX, minY, maxX, maxY },
+            bgPixel: [br, bg, bb, ba],
+            distinctRows: Object.keys(rows).length,
+            topRows
+          };
+        })()
       };
     });
     // eslint-disable-next-line no-console
