@@ -213,81 +213,6 @@ test.describe('Export image — T5 (ADR 0025)', () => {
     await placeIcon(page, { x: 380, y: 280 });
     await expect.poll(() => getModelItemCount(page), { timeout: 5_000 }).toBe(1);
 
-    // TEMP LOCAL PROBE — do not commit. Installed before the dialog exists.
-    test.setTimeout(90_000);
-    await page.evaluate(() => {
-      const w = window as unknown as { __probe?: unknown[] };
-      const log: unknown[] = [];
-      w.__probe = log;
-      const t0 = performance.now();
-      const ctxByCanvas = new WeakMap<HTMLCanvasElement, RenderingContext>();
-      const origGetContext = HTMLCanvasElement.prototype.getContext;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (HTMLCanvasElement.prototype as any).getContext = function patched(
-        this: HTMLCanvasElement,
-        type: string,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ...args: any[]
-      ) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const ctx = (origGetContext as any).call(this, type, ...args);
-        if (ctx && (type === 'webgl2' || type === 'webgl')) {
-          if (!ctxByCanvas.has(this)) {
-            log.push({
-              ev: 'ctx-create',
-              t: Math.round(performance.now() - t0),
-              inDialog: !!this.closest('[role="dialog"]')
-            });
-            this.addEventListener('webglcontextlost', () => {
-              log.push({
-                ev: 'CTX-LOST',
-                t: Math.round(performance.now() - t0),
-                inDialog: !!this.closest('[role="dialog"]')
-              });
-            });
-          }
-          ctxByCanvas.set(this, ctx);
-        }
-        return ctx;
-      };
-      const origToDataURL = HTMLCanvasElement.prototype.toDataURL;
-      HTMLCanvasElement.prototype.toDataURL = function patchedToDataURL(
-        this: HTMLCanvasElement,
-        ...args: Parameters<HTMLCanvasElement['toDataURL']>
-      ) {
-        const res = origToDataURL.apply(this, args);
-        const ctx = ctxByCanvas.get(this) as WebGL2RenderingContext | undefined;
-        log.push({
-          ev: 'toDataURL',
-          t: Math.round(performance.now() - t0),
-          testid: this.dataset.testid ?? null,
-          w: this.width,
-          h: this.height,
-          build: this.dataset.buildCount ?? null,
-          nodes: this.dataset.nodesDrawn ?? null,
-          drawn: this.dataset.allIconsDrawn ?? null,
-          lost: ctx ? ctx.isContextLost() : null,
-          len: res.length
-        });
-        return res;
-      };
-      const sampler = setInterval(() => {
-        const img = document.querySelector(
-          'img[alt="preview"]'
-        ) as HTMLImageElement | null;
-        const last = log[log.length - 1] as { ev?: string; srcLen?: number };
-        const srcLen = img?.src.length ?? 0;
-        if (!(last?.ev === 'img' && last.srcLen === srcLen)) {
-          log.push({
-            ev: 'img',
-            t: Math.round(performance.now() - t0),
-            srcLen
-          });
-        }
-      }, 150);
-      setTimeout(() => clearInterval(sampler), 60_000);
-    });
-
     await openImageDialogAndWaitReady(page);
     await expect(svgButton(page)).toBeEnabled({ timeout: 20_000 });
     await expect(page.getByAltText('preview')).toBeVisible({ timeout: 20_000 });
@@ -340,17 +265,12 @@ test.describe('Export image — T5 (ADR 0025)', () => {
     // decoded) and RE-captures if the first snapshot ran before that — so the
     // settled preview must show the icon. Poll (not a one-shot read): the
     // replacement capture lands asynchronously after the dialog opens.
-    try {
-      await expect
-        .poll(nonBgRatio, { timeout: 20_000 })
-        .toBeGreaterThan(0.01);
-    } finally {
-      // TEMP LOCAL PROBE — do not commit.
-      const probeLog = await page.evaluate(() => {
-        return (window as unknown as { __probe?: unknown[] }).__probe ?? [];
-      });
-      // eslint-disable-next-line no-console
-      console.log('PROBE10 ' + JSON.stringify(probeLog));
-    }
+    // The dialog captures once readiness is real (content built, icons decoded,
+    // backing store at its real size — see waitForIconsDrawn) and RE-captures
+    // if the first snapshot went out before that. Poll (not a one-shot read):
+    // the replacement capture lands asynchronously after the dialog opens.
+    await expect
+      .poll(nonBgRatio, { timeout: 20_000 })
+      .toBeGreaterThan(0.01);
   });
 });
