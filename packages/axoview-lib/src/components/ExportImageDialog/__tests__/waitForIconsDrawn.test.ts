@@ -35,8 +35,10 @@ describe('waitForIconsDrawn (QA #10)', () => {
   const containerWith = (canvas: HTMLElement | null): HTMLElement =>
     ({ querySelector: () => canvas }) as unknown as HTMLElement;
 
-  const drawnCanvas = (): HTMLElement => {
-    const el = document.createElement('div');
+  // A real <canvas> (jsdom default backing store 300×150): the predicate reads
+  // `canvas.width/height` — a 1×1 buffer must not count as capturable.
+  const drawnCanvas = (): HTMLCanvasElement => {
+    const el = document.createElement('canvas');
     el.dataset.allIconsDrawn = 'true';
     return el;
   };
@@ -132,6 +134,55 @@ describe('waitForIconsDrawn (QA #10)', () => {
       const result = waitForIconsDrawn(containerWith(canvas), 1000, 0);
       frame();
       await expect(result).resolves.toBe(true);
+    });
+  });
+
+  // CI regression, second round (PROBE10, run 31332531270): before the hidden
+  // export container's ResizeObserver → rendererSize update lands, the canvas
+  // backing store is 1×1 — and every dataset attribute can be HONESTLY true
+  // about a paint into that one pixel (build=2, nodes=1, drawn=true was
+  // measured). toDataURL on it serializes 142 bytes of nothing, which is the
+  // deterministic blank CI preview. A degenerate buffer must not count as
+  // capturable, however truthful its attributes.
+  describe('backing-store guard (1×1 canvas)', () => {
+    it('does NOT resolve while the backing store is 1×1, even with honest attributes', async () => {
+      const canvas = drawnCanvas();
+      canvas.width = 1;
+      canvas.height = 1;
+      canvas.dataset.nodesDrawn = '1';
+      let settled: boolean | 'pending' = 'pending';
+      void waitForIconsDrawn(containerWith(canvas), 1000, 1).then((v) => {
+        settled = v;
+      });
+
+      frame(); // the round-1 predicate resolved true right here
+      await Promise.resolve();
+      expect(settled).toBe('pending');
+    });
+
+    it('resolves true once the buffer takes its real size', async () => {
+      const canvas = drawnCanvas();
+      canvas.width = 1;
+      canvas.height = 1;
+      canvas.dataset.nodesDrawn = '1';
+      const result = waitForIconsDrawn(containerWith(canvas), 1000, 1);
+
+      frame(); // degenerate frame — must not settle
+      canvas.width = 849; // rendererSize lands, the paint resizes the store
+      canvas.height = 491;
+      frame();
+
+      await expect(result).resolves.toBe(true);
+    });
+
+    it('resolves false on timeout while the buffer stays degenerate (recapture then replaces the frame)', async () => {
+      const canvas = drawnCanvas();
+      canvas.width = 1;
+      canvas.height = 1;
+      canvas.dataset.nodesDrawn = '1';
+      const result = waitForIconsDrawn(containerWith(canvas), 50, 1);
+      frame(100);
+      await expect(result).resolves.toBe(false);
     });
   });
 });

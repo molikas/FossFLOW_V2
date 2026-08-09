@@ -32,14 +32,27 @@ export const waitForIconsDrawn = (
   new Promise((resolve) => {
     const start = performance.now();
     const poll = () => {
-      const canvas = container?.querySelector<HTMLElement>(
+      const canvas = container?.querySelector<HTMLCanvasElement>(
         '[data-testid="axoview-scene-canvas"]'
       );
-      // Ready only when the canvas is mounted AND a frame painted with every
-      // icon bitmap available AND that build actually included the nodes the
-      // caller expects (absent `data-nodes-drawn` counts as 0 — not yet built).
+      // Ready only when the canvas is mounted AND its backing store is real AND
+      // a frame painted with every icon bitmap available AND that build actually
+      // included the nodes the caller expects (absent `data-nodes-drawn` counts
+      // as 0 — not yet built).
+      //
+      // The backing-store clause (QA #10, second CI round — PROBE10, run
+      // 31332531270): every dataset attribute can be HONESTLY true about a paint
+      // into the 1×1 buffer the canvas holds before the hidden export
+      // container's ResizeObserver → rendererSize update lands. The GL happily
+      // draws the whole scene into one pixel: build=2, nodes=1, drawn=true —
+      // and toDataURL serializes 142 bytes of nothing, which is exactly the
+      // deterministic blank CI preview. Warm caches (an ordered spec run) flip
+      // readiness before the resize; cold solo runs flip it after — the
+      // order-dependence in one clause. A 1×1 buffer is not a capturable frame.
       if (
         canvas &&
+        canvas.width > 1 &&
+        canvas.height > 1 &&
         canvas.dataset.allIconsDrawn === 'true' &&
         Number(canvas.dataset.nodesDrawn ?? '0') >= minNodesDrawn
       ) {
