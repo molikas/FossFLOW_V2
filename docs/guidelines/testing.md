@@ -61,8 +61,9 @@ To scale further, raise the shard count (`SHARD_TOTAL` + the matrix list in the 
 **HIST-10 + HIST-04, one change** — [`useHistory.pageStamp.test.tsx`](../../packages/axoview-lib/src/hooks/__tests__/useHistory.pageStamp.test.tsx)
 (15 cases, real stores) and [`undo-page-navigation.spec.ts`](../../packages/axoview-e2e/tests/undo-page-navigation.spec.ts)
 (5 cases). History entries carry the page they were recorded on; undo/redo
-switches to it. Design + owner sign-off:
-[`wave5-brief-hist-10-page-stamped-entries.md`](../tactical/wave5-brief-hist-10-page-stamped-entries.md).
+switches to it. Design + owner sign-off: the HIST-10 wave-5 sign-off in
+[exploratory-2026-07.md](../reviews/exploratory-2026-07.md#hist-10--page-stamped-history-entries)
+(the full brief is retired to git history).
 
 Four things worth carrying forward:
 
