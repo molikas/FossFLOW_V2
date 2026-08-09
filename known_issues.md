@@ -8302,3 +8302,44 @@ same guarantee. Promoted regression:
 [`importedBlob.test.ts`](packages/axoview-app/src/services/storage/__tests__/importedBlob.test.ts)
 and the SHARE-15 legs of
 [`routes.shareIntegrity.spec.js`](packages/axoview-backend/src/__tests__/routes.shareIntegrity.spec.js).
+
+## Image export produces a background-only PNG on CI (canvas contributes nothing)
+
+**Found by:** PR #86 CI, 2026-08-09 (bisected to the R3/GPU-13 canvas merge)
+
+**Symptom:** "Export as image" renders a preview containing only the background
+colour — no icons, no grid — even though the diagram has content and "Show grid"
+is checked. `import-export-image.spec.ts` #10 measures **0.001** non-background
+pixels against a 0.01 floor.
+
+**Reproduces on GitHub Actions only.** A local run passes 4/4, including under a
+forced software rasteriser (`--use-gl=swiftshader --use-angle=swiftshader
+--disable-gpu`), so "CI has no GPU" is not the explanation.
+
+**It is deterministic, not a race.** The measured ratio is byte-identical —
+`0.001017293997965412` — across every CI run and every commit from the merge to
+HEAD. This matters because [ADR 0038](docs/adr/0038-webgl-instanced-render-substrate.md)
+§8 correction 6 originally read the same test's 0.001-vs-0.042 spread as a timing
+race that the merge merely exposed, and fixed the readiness signal accordingly.
+That diagnosis is corrected in place: a race varies, and this does not.
+
+**Bisect:** `master` (pre-merge) passes on the same runner image today;
+`cf81ba74` (the merge itself) fails with the identical value. The merge caused
+it. Its export-side diff is only comment and test-id repoints
+(`axoview-nodes-canvas` → `axoview-scene-canvas` in `waitForIconsDrawn`); the
+substance is the 164-line `Renderer.tsx` restructure, which also moved the grid
+under the bulk — consistent with the grid being absent from the capture too.
+
+**Root cause:** NOT ESTABLISHED. The evidence says the merged canvas contributes
+no pixels to the `dom-to-image` composite in the CI environment. Candidate
+directions, none verified: a stacking/`zIndex` change in the restructured
+`Renderer` that the dom-to-image clone resolves differently from the live
+browser; the hidden export Axoview's WebGL2 context not surviving the clone's
+`toDataURL`; or a capture that runs against the wrong canvas element. **A fix was
+attempted and reverted (`0163c2ae`) because it was reasoned rather than
+reproduced — do not re-attempt without a red-then-green signal.**
+
+**Workaround:** none in-product. The export path is unaffected in local and
+deployed browsers as far as current evidence shows; only CI reproduces it.
+
+**Status:** Open

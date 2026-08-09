@@ -395,13 +395,30 @@ insertion (first entry on top). The merged canvas adopts the picker's convention
 about the BUILD.** It was set inside `buildInstances`, before the draw call for
 that build had been issued, so the export dialog — which polls it and then
 captures the canvas (ADR 0025 / QA #10) — could snapshot the previous frame and
-produce a PNG with no icon nodes in it. It is written after `render()` now. The
-merge did not cause this: the window is small and the export's 400 ms readiness
-budget was already marginal against the hidden Renderer's mount, so the race
-resolved differently run to run (`import-export-image`'s #10 case measured 0.001
-non-background pixels one run and 0.042 the next, against a 0.01 floor). It is
-the kind of thing a merge exposes — the first build now packs four entity types
-plus the arrow and ring sprites, which is enough to move the timing.
+produce a PNG with no icon nodes in it. It is written after `render()` now.
+
+> **CORRECTION — 2026-08-09.** The paragraph that stood here said "the merge did
+> not cause this", read the 0.001-vs-0.042 spread as a race the merge merely
+> exposed, and treated the readiness timing as the fix. **A CI bisect falsifies
+> all three claims.** `master` (pre-merge) passes this spec today on the same
+> runner image; `cf81ba74` — this commit — fails it; and the failure is not a
+> race at all: the ratio is **byte-identical (`0.001017293997965412`) on every
+> run and at every commit from the merge to HEAD.** A timing race varies; this
+> does not. The 0.042 reading that suggested a race came from a pre-merge run.
+>
+> So the merge introduced a DETERMINISTIC defect in image export, and the
+> readiness fix above — correct on its own terms — was aimed at the wrong thing.
+> The exported PNG is background only: the failure screenshot shows no icon *and
+> no grid*, though "Show grid" is checked, so the merged canvas contributes
+> nothing to the composite rather than merely missing its icons. Reproduces only
+> on CI; a local run passes 4/4 even under a forced SwiftShader rasteriser.
+> Mechanism not yet established — see the known_issues entry. Recorded here
+> because this section is the reason a later reader would believe it was a race
+> and stop looking.
+
+This is the campaign's own standing lesson landing on the campaign's own record:
+the evidence was reliable and the diagnosis was a hypothesis. The 0.001/0.042
+measurements were real; "therefore a race, therefore not the merge" was not.
 
 The agreement gate itself
 ([`pickerAgreement.contract.test.ts`](../../packages/axoview-lib/src/utils/__tests__/pickerAgreement.contract.test.ts))
