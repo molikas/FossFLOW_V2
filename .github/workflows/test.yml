@@ -85,7 +85,7 @@ jobs:
       # Strict type-check (lib + app tsc --noEmit via workspace lint scripts).
       # Added 2026-07-05: both the v1.1 perf-fixture drift and the app's four
       # latent type errors sat ungated because CI ran only eslint — see
-      # technical-review-2026-07 §8c/§14b. Runs AFTER the build on purpose:
+      # the retired technical-review-2026-07 §8c/§14b (git history). Runs AFTER the build on purpose:
       # the app's tsc resolves `axoview` from the lib's dist declarations,
       # which only exist once build:lib has emitted them.
       - name: Type check

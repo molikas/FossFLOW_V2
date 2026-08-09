@@ -1,6 +1,6 @@
 # Axoview Technical Review — 2026-07-29 (post-3.7.0 whole-system audit)
 
-> **Status:** Whole-system review measured against `master` @ `fc72732b` (v**3.7.0**), the shake-out that closed PR #84. Unlike the [2026-07-08 review](technical-review-2026-07-08.md) — a scoped companion on the WebGL2 fold — this one re-runs the full `/audit` gate set across all five packages and adversarially re-verifies the *gates themselves*. §4 records the fixes applied in this same session.
+> **Status:** Whole-system review measured against `master` @ `fc72732b` (v**3.7.0**), the shake-out that closed PR #84. Unlike the 2026-07-08 review (a scoped companion on the WebGL2 fold; retired — git history), this one re-runs the full `/audit` gate set across all five packages and adversarially re-verifies the *gates themselves*. §4 records the fixes applied in this same session.
 >
 > **Headline:** the product code is in strong shape. The defects found this session are concentrated in the **measurement layer** — two of the audit's own gates were reporting results that were not true.
 
@@ -279,7 +279,7 @@ someone to "fix" healthy code:
 | Alarm | Reported | Reality |
 |---|---|---|
 | `id="ax-splash"` count **0** → "cold-start splash removed, High" | grep targeted `public/index.html` | ADR 0040 made that the **marketing landing** — a page that correctly has no app splash and no scripts. The editor shell moved to `app-shell.html`, where the splash is present and emits correctly into `build/app.html`. **Check path corrected.** |
-| **20** `console.*` → "stray, strip before commit, High" | grep lumped `log`/`warn`/`debug` together | **Zero** were `console.log`. All 20 were deliberate diagnostics — the four WebGL canvases' null-batch warnings (added by the [2026-07-08 review](technical-review-2026-07-08.md) *specifically to kill a silent-blank failure*), error boundaries, `svgOptimizer` fallbacks, invalid-data discards. Acting on this would have argued for deleting a fix a previous review had just landed. **Check split**: `console.log` stays High; `warn`/`debug` are review-only. |
+| **20** `console.*` → "stray, strip before commit, High" | grep lumped `log`/`warn`/`debug` together | **Zero** were `console.log`. All 20 were deliberate diagnostics — the four WebGL canvases' null-batch warnings (added by the 2026-07-08 review — retired, git history — *specifically to kill a silent-blank failure*), error boundaries, `svgOptimizer` fallbacks, invalid-data discards. Acting on this would have argued for deleting a fix a previous review had just landed. **Check split**: `console.log` stays High; `warn`/`debug` are review-only. |
 
 **Standing debt confirmed (pre-existing, not from this session):**
 
@@ -296,4 +296,4 @@ that were lying** (madge, bundle, splash-path, console-grep). All four are fixed
 
 ---
 
-*Measured 2026-07-29 against `master` @ `fc72732b` (v3.7.0) plus this session's fix commits. Companion to [2026-07-08](technical-review-2026-07-08.md) (WebGL2 fold) and [2026-07](technical-review-2026-07.md) (quarterly).*
+*Measured 2026-07-29 against `master` @ `fc72732b` (v3.7.0) plus this session's fix commits. Companion to the 2026-07-08 (WebGL2 fold) and 2026-07 (quarterly) reviews — both retired to git history.*

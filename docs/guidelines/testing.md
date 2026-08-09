@@ -428,7 +428,7 @@ New/extended suites shipped with [ADRs 0035–0037](../adr/) (app `+40` unit acr
 
 ### v1.1 close-out gates (2026-06-10)
 
-Two CI gates hardened at the v1.1 close-out (`@typescript-eslint/no-explicit-any` → `error`; Knip → hard-fail). The full CI-gate inventory + lint-debt detail — including the latent ~17 `tsc --noEmit` fixture-type errors confined to `__perf_refactor_regression__/*.test.ts(x)` — lives in [technical-review-2026-06.md §8b/§8e/§11](../reviews/technical-review-2026-06.md#8-quality-kpis-aggregate); not restated here.
+Two CI gates hardened at the v1.1 close-out (`@typescript-eslint/no-explicit-any` → `error`; Knip → hard-fail). The v1.1-era detail lived in the 2026-06 review §8b/§8e/§11 (retired 2026-08-09 — git history), migrated here in brief: a ten-gate inventory (ESLint hard-fail with `no-explicit-any` at `error`, lib-only Jest coverage floor, build-output shape, worker bundle ≤ 1 MB, commitlint, CodeQL, Knip — then still soft-fail — Playwright, Dependabot, Node 22/24 matrix); lint debt down 196 → 44 warnings across the v1.1 wave; and a then-latent ~17 `tsc --noEmit` type errors confined to `__perf_refactor_regression__/*.test.ts(x)` — since fixed, and strict type-check now gates CI via the workspace lint scripts. The **current** gate inventory is [test.yml](../../.github/workflows/test.yml) itself plus the 2026-07-29 ratchets in [architecture.md §5](architecture.md#5-tests-gaps--quality).
 
 ### Phase 6 additions — Presentation & Annotation (2026-06-12)
 
@@ -1062,7 +1062,7 @@ The highest-regression-risk paths still without a real-module regression test:
 
 > **Productization regression-coverage note (2026-07-05):** a full `master..integration` fix-commit audit confirmed the cycle's regressions are largely covered; the two highest-risk uncovered gaps (RECT-1 drag-chrome, the text-box schema S1-brick class) were closed with the unit suites above. The four rows just added are the remaining **e2e-only** gaps — catalogued (not silently dropped) with the exact spec + assertion so they can be closed as a fast follow.
 
-The full standing-gap register (with risk/complexity) is in [known_issues.md](../../known_issues.md) and [technical-review-2026-06.md §11](../reviews/technical-review-2026-06.md#11-open-known-issues); the architectural framing is in [architecture.md §5](architecture.md#5-tests-gaps--quality).
+The full standing-gap register (with risk/complexity) is in [known_issues.md](../../known_issues.md); the architectural framing is in [architecture.md §5](architecture.md#5-tests-gaps--quality). (The 2026-06 review's §11 point-in-time register is retired — git history.)
 
 ---
 
@@ -1074,7 +1074,7 @@ npx jest <pattern> --no-coverage                       # one suite, e.g. Cursor.
 npm test --workspace=packages/axoview-lib -- --coverage # with coverage
 ```
 
-Run from `packages/axoview-lib/`. HTML coverage report at `packages/axoview-lib/coverage/lcov-report/index.html`. **Measured 2026-07-29:** statements 40.2 % · branches 28.5 % · functions 34.6 % · lines 40.2 %. Floors in [`jest.config.js`](../../packages/axoview-lib/jest.config.js) are a **ratchet**, deliberately set ~6pp under measured reality so the tested core cannot silently erode — global **34 / 23 / 29 / 34**, with `stores/reducers/` (85 stmts / 65 branches) and `schemas/` (95 / 90) carrying their own higher floors. *(This line previously read "~32 %; thresholds floored at 10 %" — both figures had gone stale; the floors were re-ratcheted from 30/20/25/30 on 2026-07-29 after coverage rose without them following, widening the intended slack to ~10pp. **Re-measure and re-tighten whenever coverage moves up materially** — that is the maintenance this gate needs to keep working.)* Aggregate KPIs (test:source ratio, LOC, lint debt, complexity baseline) and the static-analysis report locations are in [technical-review-2026-06.md §8](../reviews/technical-review-2026-06.md#8-quality-kpis-aggregate).
+Run from `packages/axoview-lib/`. HTML coverage report at `packages/axoview-lib/coverage/lcov-report/index.html`. **Measured 2026-07-29:** statements 40.2 % · branches 28.5 % · functions 34.6 % · lines 40.2 %. Floors in [`jest.config.js`](../../packages/axoview-lib/jest.config.js) are a **ratchet**, deliberately set ~6pp under measured reality so the tested core cannot silently erode — global **34 / 23 / 29 / 34**, with `stores/reducers/` (85 stmts / 65 branches) and `schemas/` (95 / 90) carrying their own higher floors. *(This line previously read "~32 %; thresholds floored at 10 %" — both figures had gone stale; the floors were re-ratcheted from 30/20/25/30 on 2026-07-29 after coverage rose without them following, widening the intended slack to ~10pp. **Re-measure and re-tighten whenever coverage moves up materially** — that is the maintenance this gate needs to keep working.)* Aggregate KPIs live in the [2026-07-29 review](../reviews/technical-review-2026-07-29.md) (health scorecard §1a, `/audit` pass §9) — the standing full-audit baseline; the older per-wave KPI series (2026-05/06/07 reviews) is retired to git history.
 
 ## The bulk canvas is ONE canvas (2026-08-02, R3/GPU-13)
 

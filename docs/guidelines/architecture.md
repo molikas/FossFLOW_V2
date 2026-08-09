@@ -10,9 +10,9 @@
 | You want… | Read |
 |---|---|
 | The *decision* behind a contract (why it works this way) | [docs/adr/](../adr/) — 41 ADRs |
-| Deep architecture narrative, sequence diagrams, file-by-file inventory | [technical-review-2026-06.md](../reviews/technical-review-2026-06.md) — still the fullest system narrative (frozen at v2.0.1) |
-| Quality KPIs, `/audit` scorecard, risk register | [technical-review-2026-07.md](../reviews/technical-review-2026-07.md) — the most recent *comprehensive* baseline (frozen at v3.0.3) |
-| The WebGL2 render-substrate fold in depth | [technical-review-2026-07-08.md](../reviews/technical-review-2026-07-08.md) (scoped) + [ADR 0038](../adr/0038-webgl-instanced-render-substrate.md) |
+| Quality KPIs, `/audit` scorecard, gate audit | [technical-review-2026-07-29.md](../reviews/technical-review-2026-07-29.md) — the standing full-audit baseline (v3.7.0) |
+| Deep architecture narrative, sequence diagrams, file-by-file inventory | the retired 2026-06 review — git history (the review series keeps latest + landmarks; see [docs/README.md](../README.md)). §2 below is the maintained orientation |
+| The WebGL2 render-substrate fold in depth | [ADR 0038](../adr/0038-webgl-instanced-render-substrate.md) (the scoped 2026-07-08 review is retired — git history) |
 | The full regression-suite catalogue (every suite, its contract, gaps) | [testing.md](testing.md) |
 | Open runtime issues, deferred fixes, perf cliffs | [known_issues.md](../../known_issues.md) + [perf-troubleshooting.md](perf-troubleshooting.md) |
 | GPU/canvas pixel-fidelity rules | [canvas-rendering-guidelines.md](canvas-rendering-guidelines.md) |
@@ -165,7 +165,7 @@ Starting mode from `getStartingMode()` in `utils`.
 
 ## 2. Architecture Map
 
-> The store topology, package graph, component tree, and sequence flows are diagrammed in depth in [technical-review-2026-06.md §3–§4](../reviews/technical-review-2026-06.md#3-architecture-overview). This section is the orientation summary; technical-review links back here for the formal mode + store definitions.
+> The store topology, package graph, component tree, and sequence flows were diagrammed in depth in the retired 2026-06 review §3–§4 (git history). This section is the maintained orientation summary and the formal mode + store definitions.
 
 ### 2a. Store Layer
 
@@ -185,7 +185,7 @@ History stores **diffs** (Immer `{ patches, inversePatches }` pairs), not snapsh
 
 ### 2b. Mode State Machine
 
-**11 mode types** (the canonical formal definition; [technical-review §3e](../reviews/technical-review-2026-06.md#3e-interaction-modes) links here):
+**11 mode types** (the canonical formal definition):
 
 `INTERACTIONS_DISABLED` · `CURSOR` · `DRAG_ITEMS` · `PAN` · `PLACE_ICON` · `CONNECTOR` · `RECTANGLE.DRAW` · `RECTANGLE.TRANSFORM` · `TEXTBOX` · `LASSO` · `FREEHAND_LASSO`
 
@@ -243,7 +243,7 @@ Model and scene stores each keep an independent `{ past, future, maxHistorySize:
 
 ### 2h. Component Tree
 
-Full mermaid tree in [technical-review §3d](../reviews/technical-review-2026-06.md#3d-component-tree-high-level-lib-side). Provider order (from `Axoview.tsx`): Theme → Locale → Model → Scene → UiState → Clipboard → CanvasMode → LayerContext → App(inner), with `LeftDockSlot` / `RightSidebarSlot` / `BottomDockSlot` as absolute-positioned siblings.
+Full mermaid tree in the retired 2026-06 review §3d (git history). Provider order (from `Axoview.tsx`): Theme → Locale → Model → Scene → UiState → Clipboard → CanvasMode → LayerContext → App(inner), with `LeftDockSlot` / `RightSidebarSlot` / `BottomDockSlot` as absolute-positioned siblings.
 
 **The one ordering insight that matters:** in `Renderer.tsx` the transparent `interactionsRef` interaction div sits **below** the Nodes + TransformControls SceneLayers, so `e.target === interactionsRef.current` is true only for empty-canvas clicks — the basis of the `isRendererInteraction` guard ([§2b](#2b-mode-state-machine)). `UiOverlay` is a sibling of `Renderer` and absolutely positions all UI relative to `rendererSize`.
 
@@ -289,11 +289,11 @@ Completeness is enforced by `i18n.localeCompleteness.test.ts` (every locale file
 - **`AppStorageContext`** — the only place that touches storage init (`isServerStorage`, `isInitialized`, `StorageManager`). Boot does a single `GET /api/config` probe with an **800 ms `AbortSignal.timeout`** (caps Chrome/Windows dual-stack connect latency); `serverStorage` selects server-backed vs sessionStorage. An inline splash in `public/index.html` covers the cold-start gap.
 - **`DiagramLifecycleProvider`** — diagram state, save / Save As / load / delete, keyboard shortcuts, `beforeunload` guard, icon-pack manager, save/discard/load + the ADR-0011 error dialogs.
 
-> ⚠️ **Correction (technical-review-2026-06 §3b):** the "103-line pure-composition `App.tsx`" this section once claimed is **stale** — `App.tsx` is ~442 LOC and carries the React Router tree, error/export/import dialogs, and icon-usage scanning. Treat [technical-review §3b](../reviews/technical-review-2026-06.md#3b-package-responsibilities) as the current word on package responsibilities and LOC.
+> ⚠️ **Correction (from the 2026-06 review §3b, retired — git history):** the "103-line pure-composition `App.tsx`" this section once claimed is **stale** — `App.tsx` is ~442 LOC and carries the React Router tree, error/export/import dialogs, and icon-usage scanning.
 
 ### 2m. Deployment & API Contract
 
-Three targets (local dev, Docker, Cloudflare Pages) from one codebase, sharing one `/api/*` HTTP contract; the frontend is byte-identical at the network boundary. **The durable contract is locked in [ADR 0009 — Deployment Topology](../adr/0009-deployment-topology.md) and [ADR 0010 — Session Backend Contract](../adr/0010-session-backend-contract.md).** Current-state route list, the key-based `StorageAdapter` interface, auth modes, and the Hono/Express split are in [technical-review §5–§6](../reviews/technical-review-2026-06.md#5-deployment-topology); the from-scratch walkthrough is in [deployment.md](../deployment.md). This doc no longer restates them.
+Three targets (local dev, Docker, Cloudflare Pages) from one codebase, sharing one `/api/*` HTTP contract; the frontend is byte-identical at the network boundary. **The durable contract is locked in [ADR 0009 — Deployment Topology](../adr/0009-deployment-topology.md) and [ADR 0010 — Session Backend Contract](../adr/0010-session-backend-contract.md).** Current-state route list, the key-based `StorageAdapter` interface, auth modes, and the Hono/Express split were diagrammed in the retired 2026-06 review §5–§6 (git history); the from-scratch walkthrough is in [deployment.md](../deployment.md). This doc no longer restates them.
 
 Two routing facts post-date that frozen review and are **not** in it:
 
@@ -325,7 +325,7 @@ Shipped 2026-07-05/06 — three ADRs lock it: [0035](../adr/0035-google-identity
 
 ## 3. Performance Architecture
 
-The codebase has been through several perf passes; the **diagnostic narratives and current state live in [perf-troubleshooting.md](perf-troubleshooting.md)** and the runtime-metrics baseline in [technical-review §8g](../reviews/technical-review-2026-06.md#8g-production-runtime-metrics). The structural fixes still in force:
+The codebase has been through several perf passes; the **diagnostic narratives and current state live in [perf-troubleshooting.md](perf-troubleshooting.md)** and the runtime-metrics baseline in the retired 2026-06 review §8g (git history). The structural fixes still in force:
 
 - **O(1) item lookup** — module-level `WeakMap<items[], Map<id,item>>` cache (`useModelItem`, `getItemAtTile`).
 - **Patch-pair history** — diffs not snapshots ([§2g](#2g-history-system)).
@@ -384,7 +384,7 @@ Durable "don't re-introduce this" knowledge — non-obvious fixes whose *why* is
 
 ## 5. Tests, Gaps & Quality
 
-The per-suite test catalogue, layer breakdown, classifications (VALID / SEMI-VALID), and current coverage gaps are maintained in **[docs/guidelines/testing.md](testing.md)** — that is the source of truth for counts and what each suite pins. Aggregate KPIs (test inventory, CI gate inventory, LOC, test:source ratio, lint debt, cognitive-complexity baseline) are in **[technical-review-2026-06.md §8](../reviews/technical-review-2026-06.md#8-quality-kpis-aggregate)**.
+The per-suite test catalogue, layer breakdown, classifications (VALID / SEMI-VALID), and current coverage gaps are maintained in **[docs/guidelines/testing.md](testing.md)** — that is the source of truth for counts and what each suite pins. Aggregate KPIs live in the **[2026-07-29 review](../reviews/technical-review-2026-07-29.md)** (health scorecard §1a, `/audit` pass §9); the older per-wave KPI series (2026-05/06/07 reviews) is retired to git history.
 
 Current totals (measured 2026-07-15): lib 1522 (+1 skipped) / 149 suites · app 266 / 26 · backend 102 / 7 · worker 124 / 4 — **2014 passing across 186 suites** · E2E 75 spec files. The v1.1 wave closed the server-runtime test gap (the only **high**-severity item the post-v1.0.0 review named). [testing.md](testing.md) is the authoritative catalogue; re-measure there rather than trusting this line.
 
@@ -400,8 +400,8 @@ Current totals (measured 2026-07-15): lib 1522 (+1 skipped) / 149 suites · app 
 
 The load-bearing pattern is the **denominator assertion**: `check:cycles` verifies the module graph actually contains ≥280 files before it trusts the cycle count, because the bug it replaced was a truthful "no cycles" reported over 16 of 293 files (madge could not resolve the `src/…` alias without `--ts-config`). Any gate that can be starved of input must assert its input volume. Both scripts exit **2** ("gate broken") rather than **0** when they measure nothing — a green over an empty measurement is the failure mode, not a pass.
 
-Prettier was **removed** as a gate in the same change: 156 drifting files, never in CI, and `prettier` already sat in Knip's `ignoreDependencies`. A measurement with no consumer trains people to skim past red. The v1.1 Sonar wave drove down cyclomatic complexity across the hot files (capstone `useInteractionManager.ts` 131 → <16) behind the ADR-0006 selection contract and the `__perf_refactor_regression__` baseline as guardrails. Full CI-gate + lint-debt detail: [technical-review §8b/§8e](../reviews/technical-review-2026-06.md#8-quality-kpis-aggregate).
+Prettier was **removed** as a gate in the same change: 156 drifting files, never in CI, and `prettier` already sat in Knip's `ignoreDependencies`. A measurement with no consumer trains people to skim past red. The v1.1 Sonar wave drove down cyclomatic complexity across the hot files (capstone `useInteractionManager.ts` 131 → <16) behind the ADR-0006 selection contract and the `__perf_refactor_regression__` baseline as guardrails. Full CI-gate + lint-debt detail: the v1.1-era inventory migrated into [testing.md](testing.md) ("v1.1 close-out gates"); the current gates are [test.yml](../../.github/workflows/test.yml) + the ratchets above.
 
-**Standing functional gaps** (carried, product-decision pending): `createView` not undoable · `updateViewItem` throws mid-drag (no catch in `DragItems`) · connector-only clipboard centroid = `{0,0}` · `deleteModelItem` sparse array · touch `mouseup` zeroed coordinates · imported icons scoped per-diagram. Tracked with full risk/complexity in [known_issues.md](../../known_issues.md) and [technical-review §11](../reviews/technical-review-2026-06.md#11-open-known-issues).
+**Standing functional gaps** (carried, product-decision pending): `createView` not undoable · `updateViewItem` throws mid-drag (no catch in `DragItems`) · connector-only clipboard centroid = `{0,0}` · `deleteModelItem` sparse array · touch `mouseup` zeroed coordinates · imported icons scoped per-diagram. Tracked with full risk/complexity in [known_issues.md](../../known_issues.md).
 
 *End of document. This is the orientation map; the deep references it points to are the source of truth.*

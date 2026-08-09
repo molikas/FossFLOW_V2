@@ -53,14 +53,13 @@ Read these before touching the relevant surface. Each is a quick-reference, not 
 
 Deep snapshots cut on a date and left immutable. Read for the comprehensive narrative the living docs deliberately don't restate, or to see what a past state looked like. **Each is true as of its freeze point — never as current state.**
 
+**Retention rule (owner, 2026-08-09): the series keeps the latest assessment plus landmark records; superseded per-wave snapshots are retired to git history.** (Retired under that rule: the 2026-05, 2026-06, 2026-07 and 2026-07-08 reviews.)
+
 | Doc | Covers | What it is |
 |---|---|---|
-| [technical-review-2026-07-08.md](reviews/technical-review-2026-07-08.md) | WebGL2 substrate fold · [ADR 0038](adr/0038-webgl-instanced-render-substrate.md) · v3.5.0 (PR #63) | **Newest snapshot**, but *scoped* — the GPU fold only, not a full-system review. Verdict, anti-cheat integrity, context-loss fixes, deferrals. |
-| [technical-review-2026-07.md](reviews/technical-review-2026-07.md) | Labels / text-styling wave · v3.0.3 (v3.1.0 candidate, PR #58) | The most recent **comprehensive** baseline. Delta on 2026-06; first to fold in the full `/audit` report — health scorecard, UX-consistency / perf hot-path / coherence sweeps, risk register, P1–P3 recommendations. |
-| [technical-review-2026-06.md](reviews/technical-review-2026-06.md) | post-v1.1 · v2.0.1 | Still the full-depth **architecture narrative** (system + sequence diagrams, deployment topology, file-by-file inventory) that the later reviews deliberately do not restate. |
-| [technical-review-2026-05.md](reviews/technical-review-2026-05.md) | post-M10 · v1.0.0 | The original baseline. Kept for historical comparison. |
-
-> **Currency (2026-07-15).** The released line is **v3.7.0** (2026-07-14); the newest review above froze at v3.5.0. **No review yet covers** Google Drive storage (v3.2.0, ADRs 0035–0037), marketing landing / SEO (v3.6.0, ADRs 0040–0041), or Drive-native sharing (v3.7.0, ADRs 0042–0043). For those surfaces read the ADRs + the living references; a comprehensive baseline review covering all three is the largest outstanding docs debt.
+| [technical-review-2026-07-29.md](reviews/technical-review-2026-07-29.md) | Whole-system audit · `master` @ v3.7.0 | **The latest assessment.** Re-runs the full `/audit` gate set across all five packages and adversarially re-verifies the gates themselves; health scorecard, findings + same-session fixes, the three checks promoted into CI. |
+| [exploratory-2026-07.md](reviews/exploratory-2026-07.md) | The exploratory campaign + remediation program · [ADR 0047](adr/0047-exploratory-testing-program.md) | **Landmark.** 385 hypotheses / 240 bugs across 27 areas, in one file: heat map, per-area defect classes, the 22 owner rulings, the wave-5 sign-offs, and the delta anchor `/explore` sweeps diff against. |
+| [phaser-render-engine-evaluation-2026-07-19.md](reviews/phaser-render-engine-evaluation-2026-07-19.md) | Render-engine adopt-vs-keep evaluation | **Landmark.** The measured **NO-GO** on replacing the bespoke WebGL2 substrate ([ADR 0038](adr/0038-webgl-instanced-render-substrate.md)) with Phaser 4 — its pan/zoom cost is O(visible objects) per frame where the substrate is O(1). The durable record of a reverted spike. |
 
 **Lineage:** [upstream-changelog.md](upstream-changelog.md) — the verbatim pre-fork `stan-smith/FossFLOW` changelog, preserved for traceability and not maintained going forward. Frozen, but kept at `docs/` root rather than in `reviews/` because it is upstream history, not a review of this codebase.
 
