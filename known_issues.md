@@ -6889,8 +6889,9 @@ The 2026-07 exploratory campaign's A2 area file
 ([A2-storage-places.md](docs/reviews/exploratory-2026-07/areas/A2-storage-places.md)) records 13
 confirmed bugs, each ending `known_issues: A2/STOR-nn`, but no A2 entry ever
 reached this register — the file goes straight from A1/LIFE-15 to A3/ZIP-01.
-Found while landing wave 1 of the remediation
-([exploratory-remediation.md](docs/tactical/exploratory-remediation.md)). The
+Found while landing wave 1 of the remediation program (the retired tactical
+`docs/tactical/exploratory-remediation.md`; see [ADR 0047](docs/adr/0047-exploratory-testing-program.md)
+and git history). The
 area file is the evidence of record for those findings; entries are filed here
 as each is fixed. **All 13 are now filed** — STOR-11 and STOR-12 with the
 single-source-of-truth cluster, the other eleven with the storage cluster

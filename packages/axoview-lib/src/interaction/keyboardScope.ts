@@ -11,7 +11,8 @@
 // the surface the user is typing at right now*. Both are consulted by the
 // dispatcher; neither re-tests the other's condition.
 //
-// See ADR 0047 §3 and docs/tactical/exploratory-remediation.md.
+// See ADR 0047 §3, and docs/reviews/exploratory-2026-07/ for the campaign
+// record this class came out of.
 
 /**
  * Is a modal dialog currently up? (I1/PTR-05.)

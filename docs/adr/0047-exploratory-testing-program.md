@@ -56,7 +56,7 @@ When remediation begins (campaign closed — all 27 areas DONE), the campaign's 
 
 - A permanent quarantined lane can rot silently (probes drifting from product reality). Mitigation: delta campaigns touch the lane every cycle, and the flip rule keeps it draining.
 - Headless subscription runs share the owner's rate limits with interactive work; long sweeps must be scheduled accordingly (the campaign's incremental-ledger discipline already tolerates session death).
-- "Fix all 220" is a large program; the risk of drift is carried by the tactical ([exploratory-remediation.md](../tactical/exploratory-remediation.md)), not this ADR.
+- "Fix all 220" is a large program; the risk of drift is carried by the tactical (`docs/tactical/exploratory-remediation.md` — retired 2026-08-09 when the program closed; git history is the record), not this ADR.
 
 ## Implementation notes (non-binding)
 
@@ -67,8 +67,8 @@ When remediation begins (campaign closed — all 27 areas DONE), the campaign's 
 ## Addendum — 2026-07-30, campaign close-out
 
 This ADR was written while two areas were still open (A4 at 7/10, A5 at 0/10).
-Wave 0 of [the remediation tactical](../tactical/exploratory-remediation.md)
-closed both and ran the mop-up wave, so the Context's figures are superseded by:
+Wave 0 of the remediation tactical (`docs/tactical/exploratory-remediation.md`,
+retired 2026-08-09) closed both and ran the mop-up wave, so the Context's figures are superseded by:
 **385 counted hypotheses across 27 areas + 1 cross-area mop-up wave, 240
 confirmed bugs, 22 product questions, 190 filed known_issues entries.** The
 decisions themselves are unchanged — the close-out reinforced two of them:
@@ -88,6 +88,28 @@ decisions themselves are unchanged — the close-out reinforced two of them:
 One new product question (A5/CHR-08 — which origin a share link should be
 anchored to) is recorded in the A5 area file with an industry-practice analysis
 and a recommendation, awaiting an owner ruling like the other 21.
+
+## Addendum — 2026-08-09, program closed
+
+All seven waves are shipped and the tactical is retired; this ADR and
+[docs/reviews/exploratory-2026-07/](../reviews/exploratory-2026-07/README.md) are
+the durable record, with the per-wave detail in git history.
+
+**Every acceptance criterion below is met.** The lane's quarantine holds and is
+now green on *both* its CI gates for the first time — wave 6 found `npx knip` had
+been failing since wave 4 moved a harness out of `__explore__`, two waves after
+`tsc --noEmit` had been fixed the same way. The pattern is worth naming: **a gate
+this ADR excludes the lane from is a gate nobody watches.** Check exit codes, not
+output, at every wave boundary.
+
+**What the program actually cost and returned:** 240 confirmed bugs fixed across
+waves 1–6, 22 owner rulings implemented, a dozen recorded root causes *corrected*
+while being fixed, ~15 class gates landed (each verified able to go red), and one
+substrate restructure (the four-canvas merge) that a bug cluster justified but no
+performance argument would have. The final sweep closed the picker's half of that
+merge. Full regression at close: lib 199 suites / 2346, app 50 / 555, backend
+9 / 134, worker 4 / 129, Playwright 286 / 38.4 min, tsc + knip + cycles + docs
+lint clean.
 
 ## Addendum — 2026-08-08, the skill lands and the record freezes
 
