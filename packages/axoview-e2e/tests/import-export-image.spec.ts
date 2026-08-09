@@ -213,6 +213,81 @@ test.describe('Export image — T5 (ADR 0025)', () => {
     await placeIcon(page, { x: 380, y: 280 });
     await expect.poll(() => getModelItemCount(page), { timeout: 5_000 }).toBe(1);
 
+    // TEMP LOCAL PROBE — do not commit. Installed before the dialog exists.
+    test.setTimeout(90_000);
+    await page.evaluate(() => {
+      const w = window as unknown as { __probe?: unknown[] };
+      const log: unknown[] = [];
+      w.__probe = log;
+      const t0 = performance.now();
+      const ctxByCanvas = new WeakMap<HTMLCanvasElement, RenderingContext>();
+      const origGetContext = HTMLCanvasElement.prototype.getContext;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (HTMLCanvasElement.prototype as any).getContext = function patched(
+        this: HTMLCanvasElement,
+        type: string,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ...args: any[]
+      ) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ctx = (origGetContext as any).call(this, type, ...args);
+        if (ctx && (type === 'webgl2' || type === 'webgl')) {
+          if (!ctxByCanvas.has(this)) {
+            log.push({
+              ev: 'ctx-create',
+              t: Math.round(performance.now() - t0),
+              inDialog: !!this.closest('[role="dialog"]')
+            });
+            this.addEventListener('webglcontextlost', () => {
+              log.push({
+                ev: 'CTX-LOST',
+                t: Math.round(performance.now() - t0),
+                inDialog: !!this.closest('[role="dialog"]')
+              });
+            });
+          }
+          ctxByCanvas.set(this, ctx);
+        }
+        return ctx;
+      };
+      const origToDataURL = HTMLCanvasElement.prototype.toDataURL;
+      HTMLCanvasElement.prototype.toDataURL = function patchedToDataURL(
+        this: HTMLCanvasElement,
+        ...args: Parameters<HTMLCanvasElement['toDataURL']>
+      ) {
+        const res = origToDataURL.apply(this, args);
+        const ctx = ctxByCanvas.get(this) as WebGL2RenderingContext | undefined;
+        log.push({
+          ev: 'toDataURL',
+          t: Math.round(performance.now() - t0),
+          testid: this.dataset.testid ?? null,
+          w: this.width,
+          h: this.height,
+          build: this.dataset.buildCount ?? null,
+          nodes: this.dataset.nodesDrawn ?? null,
+          drawn: this.dataset.allIconsDrawn ?? null,
+          lost: ctx ? ctx.isContextLost() : null,
+          len: res.length
+        });
+        return res;
+      };
+      const sampler = setInterval(() => {
+        const img = document.querySelector(
+          'img[alt="preview"]'
+        ) as HTMLImageElement | null;
+        const last = log[log.length - 1] as { ev?: string; srcLen?: number };
+        const srcLen = img?.src.length ?? 0;
+        if (!(last?.ev === 'img' && last.srcLen === srcLen)) {
+          log.push({
+            ev: 'img',
+            t: Math.round(performance.now() - t0),
+            srcLen
+          });
+        }
+      }, 150);
+      setTimeout(() => clearInterval(sampler), 60_000);
+    });
+
     await openImageDialogAndWaitReady(page);
     await expect(svgButton(page)).toBeEnabled({ timeout: 20_000 });
     await expect(page.getByAltText('preview')).toBeVisible({ timeout: 20_000 });
@@ -261,65 +336,21 @@ test.describe('Export image — T5 (ADR 0025)', () => {
         return nonBg / total;
       });
 
-    // ---------------------------------------------------------------------
-    // TEMPORARY CI DIAGNOSTIC — decisive test of one hypothesis, then removed.
-    // Prediction: on CI the hidden export Axoview's rAF never runs, so the
-    // icon-decode redraw never happens, readiness never flips and the recapture
-    // never fires. If so, `data-build-count` is FROZEN while we wait — and a
-    // forced read of the canvas (drawImage composites it) unfreezes it, which
-    // would explain why an earlier diagnostic that read the canvas saw the
-    // settled preview while every poll that did not has seen the first capture.
-    // ---------------------------------------------------------------------
-    const timeline = await page.evaluate(async () => {
-      const q = () => {
-        const cv = document.querySelector(
-          '[role="dialog"] [data-testid="axoview-scene-canvas"]'
-        ) as HTMLCanvasElement | null;
-        const img = document.querySelector(
-          'img[alt="preview"]'
-        ) as HTMLImageElement | null;
-        return {
-          build: cv?.dataset.buildCount ?? null,
-          drawn: cv?.dataset.allIconsDrawn ?? null,
-          srcLen: img?.src.length ?? 0
-        };
-      };
-      const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
-      const out: unknown[] = [];
-      for (let i = 0; i < 5; i++) {
-        out.push({ phase: 'before', t: i * 1000, ...q() });
-        await wait(1000);
-      }
-      // The intervention: composite the canvas by reading it.
-      let readPx = -1;
-      const cv = document.querySelector(
-        '[role="dialog"] [data-testid="axoview-scene-canvas"]'
-      ) as HTMLCanvasElement | null;
-      if (cv) {
-        const sc = document.createElement('canvas');
-        sc.width = cv.width;
-        sc.height = cv.height;
-        const c2 = sc.getContext('2d');
-        if (c2) {
-          c2.drawImage(cv, 0, 0);
-          const d = c2.getImageData(0, 0, sc.width, sc.height).data;
-          let n = 0;
-          for (let i = 3; i < d.length; i += 4 * 16) if (d[i] > 8) n++;
-          readPx = n;
-        }
-      }
-      out.push({ phase: 'READ_CANVAS', readPx });
-      for (let i = 0; i < 5; i++) {
-        await wait(1000);
-        out.push({ phase: 'after', t: i * 1000, ...q() });
-      }
-      return out;
-    });
-    // eslint-disable-next-line no-console
-    console.log('EXPORT_TIMELINE ' + JSON.stringify(timeline));
-
-    await expect
-      .poll(nonBgRatio, { timeout: 20_000 })
-      .toBeGreaterThan(0.01);
+    // The dialog captures once readiness is real (≥1 node drawn + icons
+    // decoded) and RE-captures if the first snapshot ran before that — so the
+    // settled preview must show the icon. Poll (not a one-shot read): the
+    // replacement capture lands asynchronously after the dialog opens.
+    try {
+      await expect
+        .poll(nonBgRatio, { timeout: 20_000 })
+        .toBeGreaterThan(0.01);
+    } finally {
+      // TEMP LOCAL PROBE — do not commit.
+      const probeLog = await page.evaluate(() => {
+        return (window as unknown as { __probe?: unknown[] }).__probe ?? [];
+      });
+      // eslint-disable-next-line no-console
+      console.log('PROBE10 ' + JSON.stringify(probeLog));
+    }
   });
 });
