@@ -9,7 +9,14 @@
     "",
     "`reviewBy` does not fail the build; it prints a loud warning once passed, so",
     "an acceptance cannot quietly become permanent. Established by the 2026-07-29",
-    "review — see docs/reviews/technical-review-2026-07-29.md §3 finding 4."
+    "review — see docs/reviews/technical-review-2026-07-29.md §3 finding 4.",
+    "",
+    "2026-08-09 review pass (exploratory-program close-out /audit): 12 advisories",
+    "had accumulated unreviewed since the last pass and the gate had been red on",
+    "master for some time. Each was verified against real usage — imports checked,",
+    "not advisory text read — and none is exploitable here. The stale react-router",
+    "entry (GHSA-qwww-vcr4-c8h2) was removed: the advisory no longer matches, so",
+    "keeping it would have made the list lie about what it is protecting."
   ],
   "allow": [
     {
@@ -20,17 +27,6 @@
       "why": "Axoview DOES call the affected getSemanticHTML(), but every call site pipes the result through sanitizeHtml() before it is stored (TextBoxInlineEditor.tsx:115,134), the model is re-sanitized on load (useInitialDataManager.ts:85), and the sole dangerouslySetInnerHTML sink re-sanitizes at render (TextBox.tsx:254,336). ADR 0029's defence-in-depth absorbs the payload.",
       "noForwardFix": "npm's only remedy is a BREAKING downgrade to react-quill-new@3.7.0.",
       "tripwire": "If the ADR 0029 sanitize is removed from ANY of those three points, this becomes live stored-XSS. renderedGeometry-style contract coverage on sanitizeHtml call sites would make that unmissable.",
-      "acceptedOn": "2026-07-29",
-      "reviewBy": "2026-10-29"
-    },
-    {
-      "id": "GHSA-qwww-vcr4-c8h2",
-      "package": "react-router",
-      "title": "React Router RSC-mode CSRF bypass",
-      "shipped": true,
-      "why": "The vulnerable code path is RSC mode. Axoview is a client-only SPA (rsbuild, no server components, no React Router server actions), so the path does not exist in the build.",
-      "noForwardFix": "Advisory range is 7.12.0 - 8.2.0 with no patched release in range; npm offers only a downgrade to 7.11.0.",
-      "tripwire": "Adopting React Router RSC mode or server actions.",
       "acceptedOn": "2026-07-29",
       "reviewBy": "2026-10-29"
     },
@@ -53,6 +49,126 @@
       "tripwire": "brace-expansion appearing under a runtime dependency.",
       "acceptedOn": "2026-07-29",
       "reviewBy": "2026-10-29"
+    },
+    {
+      "id": "GHSA-rgw5-rvv9-x895",
+      "package": "brace-expansion",
+      "title": "brace-expansion: DoS via unbounded intermediate arrays, bypassing the CVE-2026-14257 mitigation",
+      "shipped": false,
+      "why": "Test/build tooling only. `npm ls` puts it under jest → @jest/reporters → glob (axoview-app) and under the backend's dev tree; no workspace lists it as a runtime dependency (worker deps are hono alone; backend deps are cors/dotenv/express/helmet). The patterns it expands are our own glob literals in configs, never user input.",
+      "tripwire": "brace-expansion appearing under a runtime dependency, or any code path expanding a user-supplied brace pattern.",
+      "acceptedOn": "2026-08-09",
+      "reviewBy": "2026-11-09"
+    },
+    {
+      "id": "GHSA-55q2-fjhq-7xh7",
+      "package": "dompurify",
+      "title": "DOMPurify: IN_PLACE hook removal leaves a detached subtree executable, causing XSS",
+      "shipped": true,
+      "why": "DOMPurify is a shipped lib dependency, but the advisory needs two things this codebase never does: sanitizing with the IN_PLACE option, and removing a hook mid-flight. `IN_PLACE` appears nowhere in the repo, and utils/sanitizeHtml.ts registers exactly one hook (`addHook('afterSanitizeAttributes')`) at module scope and never calls removeHook/removeAllHooks. The precondition cannot be assembled.",
+      "tripwire": "Any use of the IN_PLACE option, or any call to removeHook/removeAllHooks — most likely if sanitizeHtml ever grows a second, conditionally-registered hook.",
+      "acceptedOn": "2026-08-09",
+      "reviewBy": "2026-11-09"
+    },
+    {
+      "id": "GHSA-8j4g-w8fx-2239",
+      "package": "hono",
+      "title": "Hono: ReDoS in CORS middleware via Access-Control-Request-Headers",
+      "shipped": true,
+      "why": "Hono ships in the worker, but the CORS middleware does not. The worker imports exactly three things from hono — `Hono`, `hono/body-limit`, `hono/secure-headers` (src/app.ts:1-3) plus the `Context`/`Next` types in src/auth.ts. `hono/cors` is never imported, so the vulnerable middleware is not in the bundle.",
+      "tripwire": "An `import ... from 'hono/cors'` anywhere in packages/axoview-worker.",
+      "acceptedOn": "2026-08-09",
+      "reviewBy": "2026-11-09"
+    },
+    {
+      "id": "GHSA-f23p-vx2j-j53r",
+      "package": "hono",
+      "title": "Hono: memo() retains SSR output across requests, leading to cross-user data disclosure",
+      "shipped": true,
+      "why": "The worker is a JSON API with no server-side rendering: it imports no hono/jsx surface and calls no memo(). Verified by the same import audit as the CORS entry — only Hono, body-limit and secure-headers are imported.",
+      "tripwire": "Introducing hono/jsx or any SSR rendering in the worker.",
+      "acceptedOn": "2026-08-09",
+      "reviewBy": "2026-11-09"
+    },
+    {
+      "id": "GHSA-79qm-7rj5-m7r9",
+      "package": "hono",
+      "title": "Hono: Proxy Helper does not remove response headers listed in the Connection header",
+      "shipped": true,
+      "why": "The worker does run an anonymous Drive read-proxy (ADR 0042 §2), but it is hand-written over fetch with an explicit response-header allowlist — it does not use Hono's `proxy()` helper, which is never imported. The advisory is scoped to that helper.",
+      "tripwire": "Replacing the hand-rolled read-proxy with `import { proxy } from 'hono/proxy'`.",
+      "acceptedOn": "2026-08-09",
+      "reviewBy": "2026-11-09"
+    },
+    {
+      "id": "GHSA-54fx-42gc-7vw4",
+      "package": "hono",
+      "title": "Hono: Algorithmic Complexity DoS in Language Middleware",
+      "shipped": true,
+      "why": "The language middleware is not imported. The worker performs no content negotiation — i18n is entirely client-side in axoview-app. Same import audit as the other three Hono entries.",
+      "tripwire": "An `import ... from 'hono/language'` in the worker.",
+      "acceptedOn": "2026-08-09",
+      "reviewBy": "2026-11-09"
+    },
+    {
+      "id": "GHSA-5p4m-2wfm-xmqj",
+      "package": "js-yaml",
+      "title": "JS-YAML: Quadratic CPU consumption in !!omap resolution (3.x and 4.x)",
+      "shipped": false,
+      "why": "Test tooling only: js-yaml@3.15.0 is reached through ts-jest → @jest/transform in axoview-app. It parses Jest's own configuration at test time, never user input, and is not present in any shipped bundle.",
+      "tripwire": "js-yaml appearing under a runtime dependency, or any product code parsing user-supplied YAML.",
+      "acceptedOn": "2026-08-09",
+      "reviewBy": "2026-11-09"
+    },
+    {
+      "id": "GHSA-8xcm-r25x-g524",
+      "package": "undici",
+      "title": "undici vulnerable to downstream response desynchronization via retry interceptor",
+      "shipped": false,
+      "why": "undici@7.28.0 is dev tooling — it arrives via wrangler → miniflare, the LOCAL Worker emulator. Production Workers run on Cloudflare's own runtime fetch, not npm undici, and no workspace declares undici as a runtime dependency. It never handles production traffic.",
+      "tripwire": "undici becoming a runtime dependency of the worker or backend, or miniflare being used to serve anything but local development.",
+      "acceptedOn": "2026-08-09",
+      "reviewBy": "2026-11-09"
+    },
+    {
+      "id": "GHSA-4cwx-7wf7-3272",
+      "package": "undici",
+      "title": "undici vulnerable to cross-user information disclosure and parse-time crash via degenerate private cache directives",
+      "shipped": false,
+      "why": "Same reachability as GHSA-8xcm-r25x-g524: wrangler/miniflare dev tooling only. There is no multi-user cache in a local emulator run, so the cross-user half of the advisory has no analogue here.",
+      "tripwire": "undici becoming a runtime dependency of the worker or backend.",
+      "acceptedOn": "2026-08-09",
+      "reviewBy": "2026-11-09"
+    },
+    {
+      "id": "GHSA-m8rv-5g2x-5cg5",
+      "package": "undici",
+      "title": "undici vulnerable to CRLF Injection via blob-like body 'type' property",
+      "shipped": false,
+      "why": "Same reachability as the other undici entries: wrangler/miniflare dev tooling only, never in a shipped bundle and never handling production requests.",
+      "tripwire": "undici becoming a runtime dependency of the worker or backend.",
+      "acceptedOn": "2026-08-09",
+      "reviewBy": "2026-11-09"
+    },
+    {
+      "id": "GHSA-jr45-8vmc-qm54",
+      "package": "undici",
+      "title": "undici vulnerable to cross-user information disclosure via whitespace around equals in Cache-Control directives",
+      "shipped": false,
+      "why": "Same reachability as the other undici entries: wrangler/miniflare dev tooling only.",
+      "tripwire": "undici becoming a runtime dependency of the worker or backend.",
+      "acceptedOn": "2026-08-09",
+      "reviewBy": "2026-11-09"
+    },
+    {
+      "id": "GHSA-v3r7-h72x-cjcm",
+      "package": "undici",
+      "title": "undici vulnerable to cookie attribute injection via unsanitized domain and unparsed setCookie fields",
+      "shipped": false,
+      "why": "Same reachability as the other undici entries: wrangler/miniflare dev tooling only. Axoview sets no cookies through undici — the worker's auth is bearer-token based (ADR 0043).",
+      "tripwire": "undici becoming a runtime dependency of the worker or backend, or cookie-based auth being introduced.",
+      "acceptedOn": "2026-08-09",
+      "reviewBy": "2026-11-09"
     }
   ]
 }
