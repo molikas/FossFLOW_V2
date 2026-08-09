@@ -1,15 +1,27 @@
 # Regression Test Suite Reference
 
-**Last updated:** 2026-07-31 (exploratory remediation wave 3 — interaction & rendering correctness)
-**Unit / integration totals** (measured 2026-07-31 via per-workspace `npm test`):
+**Last updated:** 2026-08-09 (exploratory remediation **CLOSED** — waves 4–6: consistency & decided UX, the two design-gated larges, the program build-out)
+**Unit / integration totals** (measured 2026-08-08 via per-workspace `npm test`):
 
 | Workspace | Passing | Suites |
 |---|---|---|
-| `axoview-lib` | 2022 (+1 skipped) | 175 |
-| `axoview-app` | 423 | 39 |
+| `axoview-lib` | 2346 (+1 skipped) | 199 |
+| `axoview-app` | 555 | 50 |
 | `axoview-backend` | 134 | 9 |
 | `axoview-worker` | 129 | 4 |
-| **Total** | **2708 (+1 skipped)** | **227** |
+| **Total** | **3164 (+1 skipped)** | **262** |
+
+**End-to-end:** 286 Playwright specs, 38.4 min, exit 0 (2026-08-08).
+
+*(Waves 4–6 of the exploratory remediation, 2026-08-02 → 2026-08-08: lib `+324` /
+`+24` suites, app `+132` / `+11`. Same flip rule as every wave — promoted probes
+plus the wave's class gates. **Wave 6 closed the program**: the picker now
+resolves the layer tier and cross-type through the renderer's own comparator
+(`pickerAgreement.contract.test.ts`, 22 tests, red-verified once per moving
+part), and the method became the [`/explore`](../../.claude/commands/explore.md)
+skill. Two CI gates worth knowing about: the lane is excluded from `tsc --noEmit`
+**and** from knip, and each exclusion has been silently red at some point —
+**check a gate's exit code, not its output.**)*
 
 *(Wave 3 of the exploratory remediation, 2026-07-31: lib `+188` / `+13` suites —
 the whole delta is lib, because the I-block and R-block are both lib code. All
