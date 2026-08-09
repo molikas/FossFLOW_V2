@@ -98,7 +98,7 @@ The single shared component replaces:
 
 ### 2026-07-31 addendum — one representation for "no colour" (STYL-03)
 
-**Owner ruling 2026-07-30** ([DECISIONS.md](../reviews/exploratory-2026-07/DECISIONS.md), STYL-03),
+**Owner ruling 2026-07-30** ([rulings table](../reviews/exploratory-2026-07.md#owner-rulings-2026-07-30), STYL-03),
 implemented in the exploratory-remediation wave 4. The accepted text above is
 left as shipped; this addendum is the binding rule for the storage form of "no
 colour", which §3 above left implicit.

@@ -20,7 +20,7 @@ import type { EditorModeEnum } from 'src/types/common';
 // what it is — a new keyboard shortcut or element panel cannot inherit "live in
 // read-only" by omission the way this whole class did.
 //
-// See ADR 0047 §3 (class gates), and docs/reviews/exploratory-2026-07/ for the
+// See ADR 0047 §3 (class gates), and docs/reviews/exploratory-2026-07.md for the
 // campaign record this class came out of.
 
 export type EditorMode = keyof typeof EditorModeEnum;

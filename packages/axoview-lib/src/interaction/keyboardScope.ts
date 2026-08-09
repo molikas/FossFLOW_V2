@@ -11,7 +11,7 @@
 // the surface the user is typing at right now*. Both are consulted by the
 // dispatcher; neither re-tests the other's condition.
 //
-// See ADR 0047 §3, and docs/reviews/exploratory-2026-07/ for the campaign
+// See ADR 0047 §3, and docs/reviews/exploratory-2026-07.md for the campaign
 // record this class came out of.
 
 /**

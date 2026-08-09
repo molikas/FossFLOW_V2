@@ -122,7 +122,7 @@ with the modifier held. Axoview was the outlier *because* it had taught the rule
 **Industry practice (researched 2026-07-29).** Shift+drag extends the selection
 in Figma, Miro, Lucidchart, draw.io, Illustrator, Sketch, Inkscape and Blender;
 Finder and Windows File Explorer do it with Cmd/Ctrl+drag. Owner ruling
-2026-07-30 ([DECISIONS.md](../reviews/exploratory-2026-07/DECISIONS.md)): adopt.
+2026-07-30 ([rulings table](../reviews/exploratory-2026-07.md#owner-rulings-2026-07-30)): adopt.
 
 **Scope.** A UNION, not a toggle. A *subtract* modifier (Alt/Option in the Adobe
 family, Ctrl in Blender) is a common second tier but is not baseline and was not

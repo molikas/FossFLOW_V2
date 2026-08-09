@@ -5,7 +5,7 @@ Run one wave of hypothesis-driven exploratory testing: predict specific failures
 **Use this when** the goal is *finding* defects nobody has reported — after a feature lands, before a release, or on a schedule.
 **Don't use this when:** you want a metrics/architecture report (`/audit`), you have a list of known bugs to fix (`/shake-out`), or you want the working diff reviewed (`/code-review`). This skill **finds and files**; it does not fix.
 
-The campaign's own records are archived at [`docs/reviews/exploratory-2026-07/`](../../docs/reviews/exploratory-2026-07/) — method, ledger, 27 area files, coverage baseline, owner decisions. They are the worked examples for everything below; read the area file whose prefix matches whatever you are probing before predicting its behaviour.
+The campaign's record is the single frozen review [`docs/reviews/exploratory-2026-07.md`](../../docs/reviews/exploratory-2026-07.md) — heat map, per-area defect classes, standing threads, owner rulings, delta anchor. The per-hypothesis area files are retired to git history; read the record's paragraph for whatever you are probing before predicting its behaviour, and `git show` a retired area file only when you need its full verdict table.
 
 `$ARGUMENTS`, if given, names the scope: an area id (`R3`), a subsystem (`layers panel`), or a commit range. If empty, use **delta mode** (§2).
 
@@ -20,7 +20,7 @@ PROPOSE → NOVELTY-CHECK → PROBE → VERDICT → RECORD
 ```
 
 1. **Propose.** A hypothesis is a *falsifiable prediction of a specific failure*, not a test wish. Template: *"under conditions C, operation O produces incorrect result R / violates invariant I."* "Connectors work correctly" is not a hypothesis; *"a connector anchored to a node keeps pointing at the node's old tile after an arrow-key nudge, because the sync path is only wired for drag"* is. Write every hypothesis into the wave file as `PROPOSED` **before** probing any of them — proposing after you have seen a probe's output is how a wave drifts into confirming what it already found.
-2. **Novelty-check.** A hypothesis counts only if no existing test already asserts the behaviour. Grep `packages/axoview-e2e/tests/` and `**/__tests__/`, and check the archived [coverage-baseline.md](../../docs/reviews/exploratory-2026-07/coverage-baseline.md) (read sections — it is ~110 KB). Record the 1–3 nearest existing tests and one line on why they miss it. Covered already → `DUPLICATE`, does not count.
+2. **Novelty-check.** A hypothesis counts only if no existing test already asserts the behaviour. Grep `packages/axoview-e2e/tests/` and `**/__tests__/`, and check the coverage baseline for the areas in scope (a regenerated artifact — the campaign's `coverage-baseline.md` is retired to git history; §2 says when to re-derive it). Record the 1–3 nearest existing tests and one line on why they miss it. Covered already → `DUPLICATE`, does not count.
 3. **Probe.** The cheapest executable check that could falsify it (§5). Timebox ~45 min; past that, record `DEFERRED` with the blocker. Breadth beats depth.
 4. **Verdict.** `BUG` (file it, §8) · `SUSPECT` (questionable, no ADR says which way — goes to product questions, counts) · `FALSIFIED` (disproven; counts — a genuinely-probed wrong guess is paid-for knowledge) · `DUPLICATE` (does not count) · `DEFERRED` (does not count until probed).
 5. **Record.** Update the wave file **after every verdict**, not at session end. Sessions die; unrecorded work is lost work.
@@ -37,21 +37,21 @@ PROPOSE → NOVELTY-CHECK → PROBE → VERDICT → RECORD
 
 **Delta mode (the default, and the one that makes this repeatable).** The campaign covered all 27 areas once; a standing sweep should hunt where the code has *changed* since.
 
-1. Read the anchor in [`docs/reviews/exploratory-2026-07/LAST-SWEEP.md`](../../docs/reviews/exploratory-2026-07/LAST-SWEEP.md) — the commit the previous sweep ran to.
+1. Read the anchor in the [delta-anchor section](../../docs/reviews/exploratory-2026-07.md#delta-anchor--last-sweep) of the frozen review — the commit the previous sweep ran to.
 2. `git diff --stat <anchor>..HEAD -- packages/*/src` and `git log --oneline <anchor>..HEAD`.
-3. Map the changed files onto the area inventory (the archived [LEDGER.md](../../docs/reviews/exploratory-2026-07/LEDGER.md) lists all 27 with their code paths). Pick the 1–3 areas with the most churn, and prefer a **seam** — a change that lands in two areas at once is where the campaign's bugs clustered.
-4. At the end, update `LAST-SWEEP.md` with the new anchor, the date, and the areas covered.
+3. Map the changed files onto the area inventory (the frozen review's heat map lists all 27 areas with their scope). Pick the 1–3 areas with the most churn, and prefer a **seam** — a change that lands in two areas at once is where the campaign's bugs clustered.
+4. At the end, update the frozen review's delta-anchor section with the new anchor, the date, and the areas covered (append the old row to its sweep history).
 
-**Full-area mode.** `$ARGUMENTS` names an area or subsystem: read its archived area file end to end (scope, seed seams, matched invariants, known coverage gaps, and every hypothesis already ruled on there), then propose only *novel* ones. The archived table is the dedupe reference — an ID that already carries a verdict is not available for reuse.
+**Full-area mode.** `$ARGUMENTS` names an area or subsystem: read its paragraph in the frozen review, then `git show` its retired area file (scope, seed seams, matched invariants, known coverage gaps, and every hypothesis already ruled on there) and propose only *novel* ones. The retired table is the dedupe reference — an ID that already carries a verdict is not available for reuse.
 
-**Regenerate the baseline** when the delta is large (say >150 changed source files) or the last sweep is more than a quarter old: re-derive the coverage map for the areas in scope — which files have direct tests, which are only exercised transitively, which invariants the ADRs state — and write the corrections into the archived `coverage-baseline.md` rather than starting a new file. **Verify a harvested invariant against the source before building a probe on it**; two in the original harvest were stale, and one named a function with no caller at all.
+**Regenerate the baseline** when the delta is large (say >150 changed source files) or the last sweep is more than a quarter old: re-derive the coverage map for the areas in scope — which files have direct tests, which are only exercised transitively, which invariants the ADRs state — and write it as `coverage-baseline.md` in the campaign's own working directory (it is a regenerated artifact; the previous campaign's copy is retired with its tree, never hand-maintained forward). **Verify a harvested invariant against the source before building a probe on it**; two in the original harvest were stale, and one named a function with no caller at all.
 
 ---
 
 ## 3. Read first
 
 1. This file.
-2. The archived area file for whatever you are probing — the rig notes in it cost ~10 wrong verdicts to learn.
+2. The frozen review's paragraph for whatever you are probing (and, when you need the verdict detail, its retired area file via git history) — the rig notes cost ~10 wrong verdicts to learn.
 3. `known_issues.md` — an entry already at `Status: Open` is not a new finding. Confirming one is fine; re-filing it is not.
 4. `docs/guidelines/testing.md` for the lane's place in the suite; `docs/adr/` for the contract a hypothesis claims is violated.
 
@@ -123,7 +123,7 @@ Apply per area until the quota is comfortably exceeded:
 6. **Persistence sweep.** Every schema field a recent wave added × lean-save × zip × share/display path.
 7. **Anomaly capture** (§1).
 
-**Standing cross-area threads.** The campaign's durable findings — "one fact stored twice with different lifetimes", "a per-surface opt-in that nothing enumerates", "one geometry, two derivations", "the exit ramps are one function written several times", "identity and range integrity are unvalidated" — are recorded in the archived area files and LEDGER. A new area should ask whether its surface reproduces them rather than re-deriving them.
+**Standing cross-area threads.** The campaign's durable findings — "one fact stored twice with different lifetimes", "a per-surface opt-in that nothing enumerates", "one geometry, two derivations", "the exit ramps are one function written several times", "identity and range integrity are unvalidated" — are recorded in the frozen review's standing-threads section. A new area should ask whether its surface reproduces them rather than re-deriving them.
 
 ---
 
@@ -258,4 +258,4 @@ Findings, corrections and lessons are written into their homes (the wave file, `
 - **The evidence is reliable; the DIAGNOSES are hypotheses.** The remediation waves corrected a dozen recorded root causes while fixing them. Re-derive the cause, then correct the entry in place.
 - **A frozen record and the register drift.** One area's thirteen confirmed bugs each ended `known_issues: <ID>` in the area file and not one had reached `known_issues.md`. Check both ends before trusting a count.
 
-**Headless.** This skill runs under `claude -p "/explore"` with no interactive input. In that mode: never ask a clarifying question — pick delta mode, record the choice in the wave file, and put anything that needed an owner into the report's part 4. See the archive's `LAST-SWEEP.md` for the scheduling notes.
+**Headless.** This skill runs under `claude -p "/explore"` with no interactive input. In that mode: never ask a clarifying question — pick delta mode, record the choice in the wave file, and put anything that needed an owner into the report's part 4. See the frozen review's delta-anchor section for the scheduling notes.

@@ -7,7 +7,7 @@
 
 ## Context
 
-The 2026-07 exploratory campaign ([docs/reviews/exploratory-2026-07/](../reviews/exploratory-2026-07/README.md)) probed 362 falsifiable hypotheses across 27 functional areas and confirmed **220 bugs and 22 product gaps** — while all 2,231 unit tests and 76 e2e specs were green. Every finding was, by construction of the campaign's novelty rule, outside existing coverage. The 22 gaps were closed with owner rulings on 2026-07-30 ([DECISIONS.md](../reviews/exploratory-2026-07/DECISIONS.md)); 172 entries were filed to [known_issues.md](../../known_issues.md), each carrying a committed `test.fail()` repro probe in a quarantined test lane.
+The 2026-07 exploratory campaign ([docs/reviews/exploratory-2026-07.md](../reviews/exploratory-2026-07.md)) probed 362 falsifiable hypotheses across 27 functional areas and confirmed **220 bugs and 22 product gaps** — while all 2,231 unit tests and 76 e2e specs were green. Every finding was, by construction of the campaign's novelty rule, outside existing coverage. The 22 gaps were closed with owner rulings on 2026-07-30 ([rulings table](../reviews/exploratory-2026-07.md#owner-rulings-2026-07-30)); 172 entries were filed to [known_issues.md](../../known_issues.md), each carrying a committed `test.fail()` repro probe in a quarantined test lane.
 
 That result forces three durable decisions: what the probe lane *is* now that the campaign is over (scaffolding to delete, or infrastructure to keep), how probes and findings flow back into the regression suites as fixes land, and whether the exercise repeats — and if so, by whom and on whose bill. The owner decided (2026-07-30): fix **all 220** in risk-ordered waves; keep the harness; rebuild the campaign as a repeatable repo skill; **never depend on paid API access** — everything runs under a Claude subscription via Claude Code.
 
@@ -33,7 +33,7 @@ When a campaign (or any review) shows the same defect *shape* recurring across s
 
 ### 4. The recurring agent: a repo skill, run on subscription only
 
-The campaign method (hypothesis ledger, novelty rule, probe tiers, oracles — [APPROACH.md](../reviews/exploratory-2026-07/APPROACH.md)) is repackaged as a versioned project skill, **`.claude/skills/explore.md`**, replacing the hand-carried COLDSTART.md prompt. Properties:
+The campaign method (hypothesis ledger, novelty rule, probe tiers, oracles — APPROACH.md, retired to git history with the campaign tree) is repackaged as a versioned project skill, **`.claude/skills/explore.md`**, replacing the hand-carried COLDSTART.md prompt. Properties:
 
 - **Stateless and ledger-driven**, like the campaign: all state in the ledger/area files of the active campaign directory; any Claude Code session can cold-start a wave.
 - **Delta-campaign mode is the default:** a new run scopes areas by `git diff` against the last campaign's end commit (plus one cross-pair mop-up wave), regenerating the coverage baseline first so the novelty rule stays honest. Full 27-area sweeps are explicit opt-in.
@@ -92,7 +92,7 @@ and a recommendation, awaiting an owner ruling like the other 21.
 ## Addendum — 2026-08-09, program closed
 
 All seven waves are shipped and the tactical is retired; this ADR and
-[docs/reviews/exploratory-2026-07/](../reviews/exploratory-2026-07/README.md) are
+[docs/reviews/exploratory-2026-07.md](../reviews/exploratory-2026-07.md) are
 the durable record, with the per-wave detail in git history.
 
 **Every acceptance criterion below is met.** The lane's quarantine holds and is
@@ -132,8 +132,10 @@ plan, each recorded here rather than silently:
   purely operational, and two cold-start prompts in one tree would drift.
 - **The delta anchor needed a home.** §4's "diff against the last campaign's end
   commit" has no meaning unless something records which commit that was, so the
-  archive carries [LAST-SWEEP.md](../reviews/exploratory-2026-07/LAST-SWEEP.md) —
-  the one file in a frozen directory that a sweep updates. Anchor is `9fa70364`,
+  archive carries a LAST-SWEEP record (since 2026-08-09: the
+  [delta-anchor section](../reviews/exploratory-2026-07.md#delta-anchor--last-sweep)
+  of the single-file review) —
+  the one part of a frozen record that a sweep updates. Anchor is `9fa70364`,
   the commit that landed the campaign record; everything after it is the
   remediation program's own ~240 fixes, which no sweep has ever explored.
 

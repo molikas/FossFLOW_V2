@@ -202,7 +202,7 @@ The deck editors already had the Docs loop natively (snow's tooltip shows target
 ### 2026-07-31 addendum — the edit session is one action, and one cancel (TXT-04/06/07/08)
 
 Implemented in the exploratory-remediation wave 4, incorporating the TXT-07
-owner ruling ([DECISIONS.md](../reviews/exploratory-2026-07/DECISIONS.md)). §1's empty-entity
+owner ruling ([rulings table](../reviews/exploratory-2026-07.md#owner-rulings-2026-07-30)). §1's empty-entity
 lifecycle and §2's dual scope are unchanged in substance; this addendum fixes
 what they left unstated about the session's BOUNDARY — where it begins and ends,
 what belongs to it, and what a cancel takes with it.

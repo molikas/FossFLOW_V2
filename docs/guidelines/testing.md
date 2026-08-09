@@ -370,9 +370,10 @@ typecheck pass per promotion.
 [ADR 0047](../adr/0047-exploratory-testing-program.md)) — hypothesis, probe,
 verdict, file; delta-scoped against the last-swept commit, and never a fix. The
 2026-07 campaign that produced this lane is frozen at
-[`docs/reviews/exploratory-2026-07/`](../reviews/exploratory-2026-07/README.md);
-its area files carry the rig notes that cost about ten wrong verdicts to learn,
-and the skill's §9 carries the ones that generalise.
+[`docs/reviews/exploratory-2026-07.md`](../reviews/exploratory-2026-07.md) —
+one file: heat map, per-area defect classes, owner rulings, the delta anchor.
+The per-hypothesis area files are retired to git history; the rig notes that
+generalise live in the skill's §9.
 
 ### ADR 0023 hardening additions — off-grid rendered geometry (2026-07-23)
 
