@@ -601,6 +601,7 @@ const locale: LocaleProps = {
     pastedOne: 'Вставлен {count} объект',
     pastedOther: 'Вставлено объектов: {count}',
     nothingToPaste: 'Нечего вставить',
+    couldNotPaste: 'Не удалось вставить — скопированное содержимое несовместимо с этой диаграммой',
     routingConnectors: 'Вставка… трассировка соединителей ({percent}%)'
   },
   // D13 — default page name; {count} interpolated.

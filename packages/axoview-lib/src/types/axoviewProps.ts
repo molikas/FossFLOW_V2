@@ -611,6 +611,9 @@ export interface LocaleProps {
     pastedOne: string;
     pastedOther: string;
     nothingToPaste: string;
+    // E3/SCN-12 — shown when the assembled paste fails validation and is
+    // rejected whole (Ctrl+V used to appear to do nothing).
+    couldNotPaste: string;
     routingConnectors: string;
   };
   // D13 — default page name. Interpolated via `{count}` (never concatenated)

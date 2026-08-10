@@ -22,5 +22,9 @@ module.exports = {
   testPathIgnorePatterns: (base.testPathIgnorePatterns ?? []).filter(
     (p) => p !== '/__explore__/'
   ),
+  // Empty is the lane's normal between-campaigns state (ADR 0047, 2026-08-10):
+  // there is no `__explore__` tree until a campaign recreates one, so an empty
+  // run must exit 0, not red.
+  passWithNoTests: true,
   coverageThreshold: undefined
 };

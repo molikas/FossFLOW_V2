@@ -603,6 +603,7 @@ const locale: LocaleProps = {
     pastedOne: 'Wklejono {count} element',
     pastedOther: 'Wklejono {count} elementów',
     nothingToPaste: 'Nie ma czego wkleić',
+    couldNotPaste: 'Nie można wkleić — skopiowana zawartość jest niezgodna z tym diagramem',
     routingConnectors: 'Wklejanie… trasowanie łączników ({percent}%)'
   },
   // D13 — default page name; {count} interpolated.

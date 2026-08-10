@@ -45,7 +45,9 @@ jest.mock('../ClipboardContext', () => ({
 const mockSetMode = jest.fn();
 const mockSetNotification = jest.fn();
 const mockSetItemControls = jest.fn();
-const mockPasteItems = jest.fn();
+// pasteItems reports whether the paste committed (E3/SCN-12); the happy-path
+// tests model a successful commit.
+const mockPasteItems = jest.fn().mockReturnValue(true);
 const mockDeleteSelectedItems = jest.fn();
 const mockDeleteViewItem = jest.fn();
 const mockDeleteConnector = jest.fn();

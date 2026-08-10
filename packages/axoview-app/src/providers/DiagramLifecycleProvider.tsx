@@ -121,7 +121,7 @@ interface PendingConfirm {
   onDiscard?: () => void;
 }
 
-interface DiagramLifecycleContextValue {
+export interface DiagramLifecycleContextValue {
   // Diagram state
   diagramName: string;
   setDiagramName: (name: string) => void;
@@ -820,7 +820,22 @@ export function DiagramLifecycleProvider({
   useEffect(() => {
     const savedDiagrams = localStorage.getItem('axoview-diagrams');
     if (savedDiagrams) {
-      setDiagrams(JSON.parse(savedDiagrams));
+      // A1/LIFE-10: an interrupted write, a quota failure mid-write or a hand
+      // edit leaves a non-JSON value here, and this parse used to be the one
+      // unguarded one — the throw escaped the effect, the root ErrorBoundary
+      // swapped the whole app for the crash screen, and refreshing reproduced
+      // it forever because nothing cleared the bad value. Recover the way the
+      // `axoview-last-opened-data` reader always has: warn, remove, boot with
+      // an empty list.
+      try {
+        setDiagrams(JSON.parse(savedDiagrams));
+      } catch (e) {
+        console.warn(
+          'Corrupt axoview-diagrams value — discarding it and booting with an empty list:',
+          e
+        );
+        localStorage.removeItem('axoview-diagrams');
+      }
       setIsDiagramsInitialized(true);
     }
     const lastOpenedId = localStorage.getItem('axoview-last-opened');
@@ -1029,12 +1044,27 @@ export function DiagramLifecycleProvider({
   // ---------------------------------------------------------------------------
   const executeLoad = useCallback(
     async (diagram: SavedDiagram) => {
-      await iconPackManager.loadPacksForDiagram(diagram.data);
-      const importedIcons: Icon[] = (diagram.data.icons || []).filter(
+      // A1/LIFE-15: the restored session list is the STRIPPED copy — the
+      // persist effect writes `icons: []` to stay inside the localStorage
+      // budget — so loading `diagram.data` straight from it rendered every
+      // imported icon as a tombstone. The storage provider still holds the
+      // complete blob; ask it (as `openDiagramById` always has) and use the
+      // list entry only for name/timestamps. Fall back to the list copy for a
+      // diagram the provider does not have (e.g. never persisted).
+      let data = diagram.data;
+      if (storage) {
+        try {
+          data = (await storage.loadDiagram(diagram.id)) as DiagramData;
+        } catch {
+          data = diagram.data;
+        }
+      }
+      await iconPackManager.loadPacksForDiagram(data);
+      const importedIcons: Icon[] = (data.icons || []).filter(
         (icon) => icon.collection === 'imported'
       );
       const dataWithIcons: DiagramData = {
-        ...diagram.data,
+        ...data,
         icons: [...iconPackManager.loadedIcons, ...importedIcons]
       };
       setCurrentDiagram(diagram);
@@ -1046,12 +1076,12 @@ export function DiagramLifecycleProvider({
       axoviewRef.current?.load(dataWithIcons as InitialData);
       try {
         localStorage.setItem('axoview-last-opened', diagram.id);
-        localStorage.setItem('axoview-last-opened-data', JSON.stringify(diagram.data));
+        localStorage.setItem('axoview-last-opened-data', JSON.stringify(data));
       } catch (e) {
         console.error('Failed to save last opened:', e);
       }
     },
-    [iconPackManager]
+    [iconPackManager, storage]
   );
 
   const loadDiagram = useCallback(
@@ -1073,15 +1103,28 @@ export function DiagramLifecycleProvider({
       setPendingConfirm({
         message: t('alert.confirmDelete'),
         onConfirm: () => {
+          // A1/LIFE-13: this used to be only a state filter — the row left the
+          // list while the stored diagram survived (nothing reclaimed from the
+          // session budget) and the boot pointer kept naming the deleted id.
+          // Route through the same provider call the file explorer's delete
+          // uses (thread S-a: one ritual, not two), and clear the last-opened
+          // pair when it names the deleted diagram.
+          void storage
+            ?.deleteDiagram(id, false)
+            .catch((e) => console.error('Failed to delete diagram:', e));
           setDiagrams(diagrams.filter((d) => d.id !== id));
           if (currentDiagram?.id === id) {
             setCurrentDiagram(null);
             setDiagramName('');
           }
+          if (localStorage.getItem('axoview-last-opened') === id) {
+            localStorage.removeItem('axoview-last-opened');
+            localStorage.removeItem('axoview-last-opened-data');
+          }
         }
       });
     },
-    [diagrams, currentDiagram, t]
+    [diagrams, currentDiagram, t, storage]
   );
 
   const exportDiagram = useCallback(() => {
@@ -1479,6 +1522,14 @@ export function DiagramLifecycleProvider({
   // Toolbar save actions
   // ---------------------------------------------------------------------------
   const handleSaveClick = useCallback(async () => {
+    // A1/LIFE-11: the read-only routes (/display/<id>, /display/p/<uuid>)
+    // must not save. The EDIT path was already inert here
+    // (handleModelUpdated returns early), but this save path was not — Ctrl+S
+    // wrote through the provider and toasted "saved" on a page the app
+    // presents as non-editable; on the public-share route it PUT against the
+    // share uuid as if it were a diagram id. Thread C (EXPLORABLE_READONLY
+    // exposing a mutating path), on the app shell.
+    if (isReadonlyUrl) return;
     if (remoteStorageActive && storage) {
       if (currentDiagram) {
         // The flush reports its own outcome. Reading `autoSave.saveStatus` back
@@ -1514,7 +1565,7 @@ export function DiagramLifecycleProvider({
         setShowSaveDialog(true);
       }
     }
-  }, [remoteStorageActive, storage, currentDiagram, autoSave, buildSaveData, saveDiagram]);
+  }, [isReadonlyUrl, remoteStorageActive, storage, currentDiagram, autoSave, buildSaveData, saveDiagram]);
 
   // Keep the retry ref pointed at the latest handleSaveClick so SaveErrorDialog's
   // "Try again" re-runs the canonical save entry without re-binding retrySave.
@@ -1523,12 +1574,15 @@ export function DiagramLifecycleProvider({
   }, [handleSaveClick]);
 
   const handleOpenClick = useCallback(() => {
+    // A1/LIFE-11 symmetry: Ctrl+O opens the load/manager dialog, whose every
+    // action assumes an editable route.
+    if (isReadonlyUrl) return;
     if (remoteStorageActive) {
       setShowDiagramManager(true);
     } else {
       setShowLoadDialog(true);
     }
-  }, [remoteStorageActive]);
+  }, [isReadonlyUrl, remoteStorageActive]);
 
   // ---------------------------------------------------------------------------
   // Keyboard shortcuts

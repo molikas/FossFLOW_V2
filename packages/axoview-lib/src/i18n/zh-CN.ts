@@ -570,6 +570,7 @@ const locale: LocaleProps = {
     pastedOne: '已粘贴 {count} 个项目',
     pastedOther: '已粘贴 {count} 个项目',
     nothingToPaste: '没有可粘贴的内容',
+    couldNotPaste: '无法粘贴——复制的内容与此图不兼容',
     routingConnectors: '正在粘贴…正在布线连接线（{percent}%）'
   },
   // D13 — default page name; {count} interpolated.

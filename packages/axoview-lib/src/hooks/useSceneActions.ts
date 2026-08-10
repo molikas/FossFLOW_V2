@@ -17,7 +17,7 @@ import {
   Coords
 } from 'src/types';
 import { PastePayload } from 'src/clipboard/clipboard';
-import { useUiStateStore } from 'src/stores/uiStateStore';
+import { useUiStateStore, useUiStateStoreApi } from 'src/stores/uiStateStore';
 import { useModelStoreApi } from 'src/stores/modelStore';
 import { useSceneStoreApi, type EditSession } from 'src/stores/sceneStore';
 import * as reducers from 'src/stores/reducers';
@@ -33,7 +33,8 @@ import { useTranslation } from 'src/stores/localeStore';
 
 export const useSceneActions = () => {
   const { changeView } = useView();
-  const currentViewId = useUiStateStore((state) => state.view);
+  const rawViewId = useUiStateStore((state) => state.view);
+  const uiStateStoreApi = useUiStateStoreApi();
   // D13 — default page name is localised at creation time (mirrors how
   // LayersPanel applies layersPanel.layerN). The name is stored model data, so
   // it's generated here, at the creation surface, rather than at display.
@@ -41,6 +42,23 @@ export const useSceneActions = () => {
 
   const modelStoreApi = useModelStoreApi();
   const sceneStoreApi = useSceneStoreApi();
+
+  // E3/SCN-09: the READ facade (useSceneData.currentView) silently falls back
+  // to views[0] when `ui.view` names a view the model no longer has (the state
+  // a page delete's undo used to leave behind). The write facade keyed off the
+  // RAW id, so the canvas rendered page 1 while every edit threw "not found".
+  // Reads and writes must resolve the SAME view: apply the same fallback here.
+  // (Deliberately not a subscription to model.views — the value is consumed
+  // inside event callbacks, and this hook re-renders on every `ui.view` change,
+  // which covers every route into the dangling state.)
+  const currentViewId = (() => {
+    if (!rawViewId) return rawViewId;
+    const views = modelStoreApi.getState().views;
+    if (!views?.length || views.some((v) => v.id === rawViewId)) {
+      return rawViewId;
+    }
+    return views[0].id;
+  })();
 
   // E1/HIST-07, E1/HIST-08: "is a transaction open?", "is a drag open?" and the
   // batched pending state are properties of the EDITING SESSION, not of one
@@ -188,11 +206,32 @@ export const useSceneActions = () => {
   // mouseup commit path through the normal reducer.
   // -------------------------------------------------------------------------
 
+  // E3/SCN-07: the "DRAG ONLY" contract above lived in a comment. Called
+  // outside a drag bracket the move really landed — visible, with no history
+  // entry and no validateView — so any new caller reaching for the fast path
+  // (a keyboard nudge, an alignment command) silently produced un-undoable
+  // edits. The drag flag lives in the shared editSession now (E1/HIST-07), so
+  // the contract is enforceable: outside a bracket the fast path is a no-op
+  // with a dev warning, and the caller must use the reducer path instead.
+  const assertDragBracket = useCallback(
+    (caller: string): boolean => {
+      if (session.dragInProgress) return true;
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(
+          `[axoview] ${caller} is drag-only (call beginDragTransaction first) — ignored. Use the reducer actions for a standalone edit.`
+        );
+      }
+      return false;
+    },
+    [session]
+  );
+
   const batchUpdateViewItemTiles = useCallback(
     // `offset` (ADR 0023) rides the same drag commit: present (incl. cleared to
     // undefined when re-snapping) on every touched item so the off-grid residual
     // and the integer tile stay in lockstep.
     (updates: { id: string; tile: Coords; offset?: Coords }[]) => {
+      if (!assertDragBracket('batchUpdateViewItemTiles')) return;
       if (!currentViewId || updates.length === 0) return;
 
       const state = getState();
@@ -250,7 +289,7 @@ export const useSceneActions = () => {
 
       setState(newState);
     },
-    [currentViewId, getState, setState]
+    [currentViewId, getState, setState, assertDragBracket]
   );
 
   // -------------------------------------------------------------------------
@@ -271,6 +310,7 @@ export const useSceneActions = () => {
 
   const batchUpdateRectangles = useCallback(
     (updates: { id: string; from: Coords; to: Coords; offset?: Coords }[]) => {
+      if (!assertDragBracket('batchUpdateRectangles')) return;
       if (!currentViewId || updates.length === 0) return;
 
       const state = getState();
@@ -297,11 +337,12 @@ export const useSceneActions = () => {
         scene: state.scene
       });
     },
-    [currentViewId, getState, setState]
+    [currentViewId, getState, setState, assertDragBracket]
   );
 
   const batchUpdateTextBoxTiles = useCallback(
     (updates: { id: string; tile: Coords; offset?: Coords }[]) => {
+      if (!assertDragBracket('batchUpdateTextBoxTiles')) return;
       if (!currentViewId || updates.length === 0) return;
 
       const state = getState();
@@ -328,13 +369,14 @@ export const useSceneActions = () => {
         scene: state.scene
       });
     },
-    [currentViewId, getState, setState]
+    [currentViewId, getState, setState, assertDragBracket]
   );
 
   // Labels (ADR 0031) are model-only — no scene size to touch. Mirrors
   // batchUpdateTextBoxTiles for the DragItems group-move commit.
   const batchUpdateLabelTiles = useCallback(
     (updates: { id: string; tile: Coords; offset?: Coords }[]) => {
+      if (!assertDragBracket('batchUpdateLabelTiles')) return;
       if (!currentViewId || updates.length === 0) return;
 
       const state = getState();
@@ -360,7 +402,7 @@ export const useSceneActions = () => {
         scene: state.scene
       });
     },
-    [currentViewId, getState, setState]
+    [currentViewId, getState, setState, assertDragBracket]
   );
 
   // -------------------------------------------------------------------------
@@ -912,8 +954,20 @@ export const useSceneActions = () => {
       if (!currentViewId || selectedItems.length === 0) return;
 
       transaction(() => {
+        // E3/SCN-11: ITEM refs get the same liveness guard the other four ref
+        // types always had. A selection can legitimately carry a dead id (a
+        // stale selection, a double-press of Delete racing the first commit),
+        // and `deleteViewItem` throws on it — which aborted the WHOLE
+        // multi-delete and let the exception escape into the key handler. A
+        // dead ref in a selection is skipped, never fatal.
+        const viewBefore = getState().model.views.find(
+          (v) => v.id === currentViewId
+        );
+        const existingItems = new Set(
+          (viewBefore?.items ?? []).map((i) => i.id)
+        );
         selectedItems
-          .filter((ref) => ref.type === 'ITEM')
+          .filter((ref) => ref.type === 'ITEM' && existingItems.has(ref.id))
           .forEach((ref) => deleteViewItem(ref.id));
 
         const liveView = getState().model.views.find(
@@ -1023,8 +1077,18 @@ export const useSceneActions = () => {
       const BATCH_SIZE = 25;
       const total = connectorIds.length;
       let offset = 0;
+      // E3/SCN-15: the scene store is per-ACTIVE-view, but these rAF batches
+      // write into whatever scene is live when they fire — so a page switch
+      // mid-routing cached the old page's connector paths in the new page's
+      // scene (phantom `scene.connectors[id]` entries with no owner in the
+      // active view; the async sibling of D-9). The view this routing belongs
+      // to is captured at schedule time; a batch firing after the view moved
+      // on is dropped — `changeView`'s SYNC_SCENE has already rebuilt the
+      // scene for wherever the user went, and coming back rebuilds it again.
+      const scheduledViewId = currentViewId;
 
       const processNextBatch = () => {
+        if (uiStateStoreApi.getState().view !== scheduledViewId) return;
         const batch = connectorIds.slice(offset, offset + BATCH_SIZE);
         if (batch.length === 0) return;
         offset += BATCH_SIZE;
@@ -1066,7 +1130,7 @@ export const useSceneActions = () => {
 
       requestAnimationFrame(processNextBatch);
     },
-    [currentViewId, sceneStoreApi, modelStoreApi]
+    [currentViewId, sceneStoreApi, modelStoreApi, uiStateStoreApi]
   );
 
   // Bulk paste — ONE structural assembly of the N-scale arrays, validated once.
@@ -1086,8 +1150,8 @@ export const useSceneActions = () => {
     (
       payload: PastePayload,
       onPathProgress?: (done: number, total: number) => void
-    ) => {
-      if (!currentViewId) return;
+    ): boolean => {
+      if (!currentViewId) return false;
 
       const viewId = currentViewId;
       let applied = false;
@@ -1099,6 +1163,29 @@ export const useSceneActions = () => {
         if (viewIdx !== -1) {
           const view = state.model.views[viewIdx];
 
+          // E3/SCN-14: the paste TARGET view's layer set is authoritative. A
+          // copied entity's `layerId` names a layer on the page it came FROM;
+          // carried across pages it is a dangling ref that visibility and
+          // locking silently ignore and the Layers panel cannot repair. Strip
+          // it (the entity lands unassigned — the same repair `repairModel`
+          // applies on load) whenever the target has no such layer. This is
+          // the chokepoint every duplication path funnels through, so the
+          // class cannot come back through another one.
+          const targetLayerIds = new Set(
+            (view.layers ?? []).map((l) => l.id)
+          );
+          const stripForeignLayer = <T extends { layerId?: string }>(
+            entity: T
+          ): T =>
+            entity.layerId && !targetLayerIds.has(entity.layerId)
+              ? { ...entity, layerId: undefined }
+              : entity;
+
+          const pastedConnectors = payload.connectors.map(stripForeignLayer);
+          const pastedRectangles = payload.rectangles.map(stripForeignLayer);
+          const pastedTextBoxes = payload.textBoxes.map(stripForeignLayer);
+          const pastedLabels = (payload.labels ?? []).map(stripForeignLayer);
+
           // Build plain (non-frozen) arrays — concat/slice/map return fresh
           // arrays, so we never mutate the immer-frozen store state.
           const newModelItems = state.model.items.concat(
@@ -1106,16 +1193,16 @@ export const useSceneActions = () => {
           );
           // Pasted view items prepend — matches the old createViewItem unshift.
           const newViewItems = payload.items
-            .map((ci) => ci.viewItem)
+            .map((ci) => stripForeignLayer(ci.viewItem))
             .concat(view.items ?? []);
           // Connectors prepend — matches the old createConnector unshift.
-          const newViewConnectors = payload.connectors.concat(
+          const newViewConnectors = pastedConnectors.concat(
             view.connectors ?? []
           );
           // Provisional empty paths — matches createConnector(skipPathfinding);
           // computePathsAsync fills them in after commit.
           const newSceneConnectors = { ...state.scene.connectors };
-          for (const c of payload.connectors) {
+          for (const c of pastedConnectors) {
             newSceneConnectors[c.id] = {
               path: {
                 tiles: [],
@@ -1146,7 +1233,21 @@ export const useSceneActions = () => {
           // text boxes, or path routing) rather than committing a partial paste.
           // Warn-and-skip instead of throw, since this runs in a startTransition
           // callback.
-          const issues = validateView(newView, { model: newState.model });
+          //
+          // E3/SCN-06: validate the COMPLETE pasted content. The single check
+          // used to run on the items+connectors view only, with rectangles,
+          // text boxes and labels layered on through their reducers AFTER it —
+          // so a pasted rectangle with a dangling colour ref landed unchecked
+          // and the "all-or-nothing" the comment above promises covered only
+          // half the paste. The probe view is validation-only; the reducers
+          // below still perform the actual layering.
+          const probeView: View = {
+            ...newView,
+            rectangles: [...(view.rectangles ?? []), ...pastedRectangles],
+            textBoxes: [...(view.textBoxes ?? []), ...pastedTextBoxes],
+            labels: [...(view.labels ?? []), ...pastedLabels]
+          };
+          const issues = validateView(probeView, { model: newState.model });
           if (issues.length > 0) {
             console.warn(
               '[axoview] paste produced an invalid view; skipping',
@@ -1157,9 +1258,9 @@ export const useSceneActions = () => {
             // Rectangles / text boxes are not N-scale — keep the existing
             // reducers (they layer on top of the pending state set above). Run
             // them only on a valid paste so the operation stays all-or-nothing.
-            [...payload.rectangles].reverse().forEach((r) => createRectangle(r));
-            payload.textBoxes.forEach((tb) => createTextBox(tb));
-            (payload.labels ?? []).forEach((l) => createLabel(l));
+            [...pastedRectangles].reverse().forEach((r) => createRectangle(r));
+            pastedTextBoxes.forEach((tb) => createTextBox(tb));
+            pastedLabels.forEach((l) => createLabel(l));
             applied = true;
           }
         }
@@ -1172,6 +1273,9 @@ export const useSceneActions = () => {
           onPathProgress
         );
       }
+      // E3/SCN-12: the caller surfaces a rejected paste to the user — the
+      // console.warn above is not a user-facing signal.
+      return applied;
     },
     [
       currentViewId,

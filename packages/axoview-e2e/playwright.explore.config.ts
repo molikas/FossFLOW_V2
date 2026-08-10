@@ -18,6 +18,11 @@ import { defineConfig, devices } from '@playwright/test';
  * Convention: probes are named `<area>-<nn>.explore.spec.ts` under
  * `tests-exploratory/<area>/`; touch probes are named `touch-*.explore.spec.ts`
  * so the project split picks them up.
+ *
+ * Between campaigns `tests-exploratory/` does not exist (ADR 0047, 2026-08-10):
+ * `/explore` recreates it during a campaign and empties it at close-out.
+ * Playwright reports 0 tests over a missing testDir, which is the intended
+ * empty state.
  */
 export default defineConfig({
   testDir: './tests-exploratory',

@@ -9,8 +9,8 @@
  * publish, that gives three independent answers to "what did this layer
  * actually do?" without a single screenshot comparison.
  *
- * Not a spec file — the explore Playwright config's `testDir` only picks up
- * `*.explore.spec.ts`.
+ * Shared GL read-back oracles for the render-block e2e specs. (Formerly the
+ * exploratory lane rig; moved to helpers/ at the 2026-08-10 lane dissolution.)
  */
 import type { Page } from '@playwright/test';
 

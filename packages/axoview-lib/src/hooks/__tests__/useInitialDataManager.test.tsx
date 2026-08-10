@@ -77,6 +77,9 @@ describe('useInitialDataManager - Orphaned Connector Handling', () => {
         setIconCategoriesState: jest.fn(),
         setFreshlyLoadedCategoryIds: jest.fn(),
         setSelectedIds: jest.fn(),
+        // E4/CLIP-08 — the load path clears the panel target alongside the
+        // selection on every load.
+        setItemControls: jest.fn(),
         setNotification: jest.fn(),
         resetUiState: jest.fn()
       },

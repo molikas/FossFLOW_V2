@@ -595,6 +595,7 @@ const locale: LocaleProps = {
     pastedOne: '{count}টি আইটেম পেস্ট করা হয়েছে',
     pastedOther: '{count}টি আইটেম পেস্ট করা হয়েছে',
     nothingToPaste: 'পেস্ট করার কিছু নেই',
+    couldNotPaste: 'পেস্ট করা যায়নি — কপি করা বিষয়বস্তু এই ডায়াগ্রামের সাথে বেমানান',
     routingConnectors: 'পেস্ট করা হচ্ছে… কানেক্টর রুট করা হচ্ছে ({percent}%)'
   },
   // D13 — default page name; {count} interpolated.

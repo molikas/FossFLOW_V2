@@ -228,18 +228,22 @@ export const useInitialDataManager = () => {
 
         // Reset scroll/zoom for a clean slate on each load, unless the caller
         // explicitly preserves the current viewport (e.g. icon-pack updates).
-        // Selection is reset on the same condition — selectedIds carried over
-        // from the previous diagram point at items that no longer exist in
-        // the new model, leaving the properties panel "open but blank" instead
-        // of showing the no-selection placeholder.
         if (!options?.preserveViewport) {
           uiStateActions.setScroll({
             position: CoordsUtils.zero(),
             offset: CoordsUtils.zero()
           });
           uiStateActions.setZoom(INITIAL_UI_STATE.zoom);
-          uiStateActions.setSelectedIds([]);
         }
+        // E4/CLIP-08: the selection is cleared on EVERY load — it used to sit
+        // behind the preserveViewport guard, but the two answer different
+        // questions: the viewport can survive an icon-pack-swap reload, a
+        // selection naming the previous model's ids cannot (INV-2 — the
+        // delete path then threw on it, and the properties panel rendered
+        // "open but blank"). The layer-context invalidation prunes dead refs
+        // as a backstop; the load path states its intent explicitly.
+        uiStateActions.setSelectedIds([]);
+        uiStateActions.setItemControls(null);
 
         const activeViewId = uiStateStoreApi.getState().view;
         const targetViewId =

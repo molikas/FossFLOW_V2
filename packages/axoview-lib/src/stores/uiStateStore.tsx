@@ -648,6 +648,20 @@ const initialState = () => {
           set({ linkedDiagrams });
         },
         setNotification: (notification) => {
+          // E4/CLIP-10 (ADR 0011): an unread ERROR is never displaced by an
+          // informational toast. Progress/success messages are routine
+          // (routing N%, pasted N items) and were burying failure reports —
+          // a failed save under a paste toast is unsaved work the user was
+          // told nothing about. A non-error arriving while an error shows is
+          // dropped; errors and explicit clears (null) always land.
+          const current = get().notification;
+          if (
+            notification &&
+            current?.severity === 'error' &&
+            notification.severity !== 'error'
+          ) {
+            return;
+          }
           set({ notification });
         },
         setActiveLeftTab: (activeLeftTab) => {

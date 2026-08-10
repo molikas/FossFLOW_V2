@@ -196,6 +196,66 @@ describe('out-of-range coordinates (CLIP-15)', () => {
   });
 });
 
+describe('unresolvable anchor-to-anchor refs (CLIP-02)', () => {
+  // Verified at the 2026-08-10 mop-up: the load path (item-ref filter →
+  // repairModelIdentity → safeParse) already heals this shape — the sweep
+  // landed with RED-07/14's load half. This pins the exact CLIP-02 scenario:
+  // the load filter drops a connector with a bad ITEM ref, orphaning a
+  // survivor's anchor-to-anchor ref; one bad connector must never make the
+  // whole diagram refuse to open.
+  it('a survivor referencing a dropped connector is healed and the model parses', () => {
+    const model = base({
+      connectors: [
+        {
+          id: 'conn-survivor',
+          color: 'c1',
+          anchors: [
+            { id: 'surv-a1', ref: { tile: { x: 2, y: 2 } } },
+            { id: 'surv-a2', ref: { anchor: 'anchor-that-is-gone' } }
+          ]
+        }
+      ]
+    });
+
+    const { data, report } = repairModelIdentity(model);
+
+    // The dangling ref is swept; the connector left with <2 anchors goes too.
+    expect(report.danglingAnchorRefs).toBeGreaterThan(0);
+    expect(viewOf(data).connectors).toEqual([]);
+    // The diagram OPENS — the whole point of repair-don't-reject.
+    expect(modelSchema.safeParse(data).success).toBe(true);
+  });
+
+  it('iterates to a fixed point across a chain of anchor refs', () => {
+    const model = base({
+      connectors: [
+        {
+          id: 'conn-1',
+          color: 'c1',
+          anchors: [
+            { id: 'c1-a1', ref: { tile: { x: 1, y: 1 } } },
+            { id: 'c1-a2', ref: { anchor: 'gone' } }
+          ]
+        },
+        {
+          id: 'conn-2',
+          color: 'c1',
+          anchors: [
+            { id: 'c2-a1', ref: { tile: { x: 4, y: 4 } } },
+            // Chained: points at conn-1's anchor, which the sweep removes.
+            { id: 'c2-a2', ref: { anchor: 'c1-a1' } }
+          ]
+        }
+      ]
+    });
+
+    const { data } = repairModelIdentity(model);
+
+    expect(viewOf(data).connectors).toEqual([]);
+    expect(modelSchema.safeParse(data).success).toBe(true);
+  });
+});
+
 describe('the repair is reported, never silent', () => {
   it('describes each kind of repair', () => {
     expect(

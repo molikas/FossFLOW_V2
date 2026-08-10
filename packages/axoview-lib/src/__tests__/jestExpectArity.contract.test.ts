@@ -13,18 +13,21 @@
  * like evidence, and the campaign's whole value is that its evidence is
  * trustworthy.
  *
- * WHY THIS GATE EXISTS AT ALL, given the lane is currently clean. Three reasons,
+ * WHY THIS GATE EXISTS AT ALL, given no lane is present today. Three reasons,
  * and they are the owner's:
- *   1. the explore lane is PERMANENT (ADR 0047 §1), not campaign scaffolding;
+ *   1. the explore MECHANISM is permanent (ADR 0047); between campaigns the
+ *      lane is empty (2026-08-10 amendment), but a campaign RECREATES the
+ *      `__explore__` trees, and this gate covers them by construction — the
+ *      sweep walks the whole `src` tree, so any lane a campaign adds is scanned;
  *   2. future delta campaigns will write NEW Jest probes, by agents that have
  *      just been reading Playwright specs;
  *   3. this class has already produced one false CONFIRMED verdict, so its
  *      prior is not hypothetical.
  *
- * SCOPE — the lane is scanned as DATA, not executed. The lane stays excluded
- * from `npm test`, from `tsc --noEmit` and from knip (ADR 0047 §1 quarantine);
- * reading its files with `fs` breaks none of that, and it is the only way a
- * main-suite gate can protect a quarantined tree.
+ * SCOPE — any lane files present are scanned as DATA, not executed. The lane
+ * stays excluded from `npm test`, from `tsc --noEmit` and from knip (ADR 0047
+ * quarantine); reading its files with `fs` breaks none of that, and it is the
+ * only way a main-suite gate can protect a quarantined tree.
  *
  * Playwright specs are deliberately NOT scanned: the two-argument form is
  * legal there and used ~180 times, including the campaign's own e2e invariant
@@ -257,16 +260,18 @@ describe('class gate §2 — no Jest-context test uses the two-argument form', (
   it('CONTROL: the sweep actually found the test files', () => {
     // A path typo would make this whole gate vacuously green.
     expect(files.length).toBeGreaterThan(150);
-    expect(files.some((f) => f.includes('__explore__'))).toBe(true);
     expect(files.every((f) => !f.includes('axoview-e2e'))).toBe(true);
   });
 
-  it('CONTROL: the quarantined lane is scanned as DATA, and is reachable', () => {
+  it('CONTROL: any campaign lane present is scanned as DATA, and is reachable', () => {
+    // Between campaigns there is no lane (ADR 0047, 2026-08-10) — the sweep
+    // walks all of `src`, so it covers an `__explore__` tree whenever a
+    // campaign recreates one, without requiring one to exist now. When one is
+    // present, reading it must not require it to compile or run.
     const lane = files.filter((f) => f.includes('__explore__'));
-    expect(lane.length).toBeGreaterThan(0);
-    // Reading it must not require it to compile or run — this is the whole
-    // point of scanning rather than executing (ADR 0047 §1).
-    expect(() => fs.readFileSync(lane[0], 'utf8')).not.toThrow();
+    for (const file of lane) {
+      expect(() => fs.readFileSync(file, 'utf8')).not.toThrow();
+    }
   });
 
   it('no file passes a message as a second argument to expect', () => {

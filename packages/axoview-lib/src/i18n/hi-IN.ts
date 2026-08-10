@@ -594,6 +594,7 @@ const locale: LocaleProps = {
     pastedOne: '{count} आइटम पेस्ट किया गया',
     pastedOther: '{count} आइटम पेस्ट किए गए',
     nothingToPaste: 'पेस्ट करने के लिए कुछ नहीं',
+    couldNotPaste: 'पेस्ट नहीं हो सका — कॉपी की गई सामग्री इस आरेख के साथ संगत नहीं है',
     routingConnectors: 'पेस्ट हो रहा है… कनेक्टर रूट हो रहे हैं ({percent}%)'
   },
   // D13 — default page name; {count} interpolated.

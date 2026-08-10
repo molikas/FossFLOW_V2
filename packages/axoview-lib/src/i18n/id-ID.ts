@@ -595,6 +595,7 @@ const locale: LocaleProps = {
     pastedOne: '{count} item ditempel',
     pastedOther: '{count} item ditempel',
     nothingToPaste: 'Tidak ada yang bisa ditempel',
+    couldNotPaste: 'Tidak dapat menempel — konten yang disalin tidak kompatibel dengan diagram ini',
     routingConnectors: 'Menempel… merutekan konektor ({percent}%)'
   },
   // D13 — default page name; {count} interpolated.

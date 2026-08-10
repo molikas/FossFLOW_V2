@@ -605,6 +605,7 @@ const locale: LocaleProps = {
     pastedOne: '{count} elemento incollato',
     pastedOther: '{count} elementi incollati',
     nothingToPaste: 'Niente da incollare',
+    couldNotPaste: 'Impossibile incollare — il contenuto copiato non è compatibile con questo diagramma',
     routingConnectors: 'Incollaggio… instradamento connettori ({percent}%)'
   },
   // D13 — default page name; {count} interpolated.
