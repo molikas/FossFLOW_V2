@@ -7,7 +7,11 @@ import {
   decrementZoom,
   getStartingMode
 } from 'src/utils';
-import { UiStateStore } from 'src/types';
+import { UiStateStore, AnnotationOp, AnnotationStroke } from 'src/types';
+import {
+  applyAnnotationOp,
+  revertAnnotationOp
+} from 'src/utils/annotationOps';
 import { INITIAL_UI_STATE } from 'src/config';
 import { DEFAULT_ZOOM_SETTINGS } from 'src/config/zoomSettings';
 import { DEFAULT_LABEL_SETTINGS } from 'src/config/labelSettings';
@@ -89,6 +93,8 @@ const initialState = () => {
       iconScaleDrag: null,
       selectedConnectorLabel: null,
       inlineEditLabelId: null,
+      inlineEditNodeId: null,
+      activeLayerId: null,
       viewModeHoveredLabelId: null,
       editingTextBoxId: null,
       editingTextBoxSize: null,
@@ -99,7 +105,8 @@ const initialState = () => {
         color: ANNOTATION_COLOR_PRESETS[0],
         thickness: 4,
         strokes: [],
-        redoStack: []
+        past: [],
+        future: []
       },
 
       actions: {
@@ -107,10 +114,24 @@ const initialState = () => {
           // A new view has its own layers — drop any preview override so a
           // solo'd/hidden layer id from the previous view can't leak across.
           // (hide-labels is now a GLOBAL toggle, not per-view, so it persists.)
-          set({
+          //
+          // F2/VIEW-01/02: the annotation ink goes too. Strokes are stored in
+          // scene-canvas coordinates, so against a different page they sit at
+          // positions that mean nothing — and with the pen palette closed there
+          // is no visible Clear to remove them with. ADR 0014 calls the overlay
+          // ephemeral; this is the transition that makes that true. The
+          // edit<->present toggle deliberately still KEEPS them (setEditorMode),
+          // because that one does not change the content underneath.
+          set((state) => ({
             view,
-            previewLayerOverrides: { hiddenLayerIds: [], soloLayerId: null }
-          });
+            previewLayerOverrides: { hiddenLayerIds: [], soloLayerId: null },
+            annotation: {
+              ...state.annotation,
+              strokes: [],
+              past: [],
+              future: []
+            }
+          }));
         },
         setEditorMode: (mode) => {
           // Leaving (or entering) preview clears the ephemeral preview overrides
@@ -138,16 +159,26 @@ const initialState = () => {
           set({ freshlyLoadedCategoryIds: ids });
         },
         resetUiState: () => {
-          set({
-            mode: getStartingMode(get().editorMode),
+          set((state) => ({
+            mode: getStartingMode(state.editorMode),
             scroll: {
               position: CoordsUtils.zero(),
               offset: CoordsUtils.zero()
             },
             itemControls: null,
             selectedIds: [],
-            zoom: INITIAL_UI_STATE.zoom
-          });
+            zoom: INITIAL_UI_STATE.zoom,
+            // F2/VIEW-01/02 — the other transition that changes what is under
+            // the ink. This is the only reset `useInitialDataManager` calls on
+            // load, and it did not own the annotation slice, so strokes drawn
+            // over one diagram stayed on screen over the next one.
+            annotation: {
+              ...state.annotation,
+              strokes: [],
+              past: [],
+              future: []
+            }
+          }));
         },
         setMode: (mode) => {
           set({ mode });
@@ -342,7 +373,24 @@ const initialState = () => {
           // UI-only view-only toggle: hides the on-canvas presentation chrome
           // (layer switcher, annotation palette, bottom dock) for a clean
           // screenshot. Cleared on mode switch above.
-          set({ hideViewControls });
+          //
+          // F2/VIEW-09 (b) — hiding the chrome DISARMS the annotation tool.
+          // `<AnnotationLayer />` is mounted unconditionally while the palette
+          // sits behind `!hideViewControls`, so hiding the chrome with a draw
+          // tool armed left a full-canvas overlay at `pointer-events: auto`
+          // with its pen and tool row gone: the canvas was unusable and the
+          // only way out was the undocumented Escape/V key. Nothing in the app
+          // calls this setter today (symptom (a) of the same entry), but it is
+          // on the public action surface, so an embedder can reach the trap.
+          //
+          // Disarming rather than keeping the palette mounted: the point of the
+          // toggle is a clean screenshot, and a mounted palette defeats it.
+          set((state) => ({
+            hideViewControls,
+            annotation: hideViewControls
+              ? { ...state.annotation, tool: 'select' as const }
+              : state.annotation
+          }));
         },
         setExportHideLabels: (exportHideLabels) => {
           // UI-only image-export toggle (ADR 0025 §3): suppresses name labels in
@@ -362,7 +410,7 @@ const initialState = () => {
           set({ labelDrag: null });
         },
         setLabelMove: (id, tile, offset) => {
-          // Transient floating-Label move preview (ADR 0031). LabelsCanvas reads
+          // Transient floating-Label move preview (ADR 0031). SceneCanvas reads
           // this to redraw the dragged chip following the pointer with NO model
           // write, so the LabelHitLayer proxy divs don't re-render each frame.
           // Committed to the model once, on release.
@@ -374,7 +422,7 @@ const initialState = () => {
         setLabelMoves: (moves) => {
           // Transient GROUP floating-Label move preview (ADR 0031): the
           // multi-selection-drag counterpart of setLabelMove. DragItems writes
-          // the whole dragged-label set once per frame; LabelsCanvas redraws each
+          // the whole dragged-label set once per frame; SceneCanvas redraws each
           // keyed chip at its preview tile/offset with NO model write. Committed
           // to the model once, on release.
           set({ labelMoves: moves });
@@ -395,6 +443,22 @@ const initialState = () => {
         },
         setInlineEditLabelId: (id) => {
           set({ inlineEditLabelId: id });
+        },
+        // R4/RND-13/15: the canvas inline-RENAME intent for a node. Selection no
+        // longer promotes a node into the DOM overlay (order-preserving
+        // selection, ADR 0038 §8), so renaming — which needs a real
+        // contentEditable — is what promotes it now, and the intent has to be
+        // store state: the `inlineEditNodeName` window event fires synchronously,
+        // and a node that has not mounted yet cannot hear it.
+        setInlineEditNodeId: (id) => {
+          set({ inlineEditNodeId: id });
+        },
+        // F4/LAY-03 — the layer new elements are placed onto. There was no
+        // active-layer concept anywhere in the store, so every new element
+        // landed unassigned and had to be dragged across afterwards; on a
+        // diagram organised into layers that pile grew with every edit.
+        setActiveLayerId: (id) => {
+          set({ activeLayerId: id });
         },
         setViewModeHoveredLabelId: (id) => {
           // View-mode chip hover for the info popover (notes parity). Written
@@ -461,54 +525,117 @@ const initialState = () => {
         setAnnotationThickness: (thickness) => {
           set({ annotation: { ...get().annotation, thickness } });
         },
+        // F2/VIEW-07 + VIEW-13 — every mutation goes through the operation
+        // log, so undo can invert an erase or a clear at its own position
+        // instead of eating the tail. The inversion rules live in
+        // `utils/annotationOps`; these five only decide what to record.
         addAnnotationStroke: (stroke) => {
           const { annotation } = get();
-          // A new stroke invalidates the redo stack (linear history).
+          const op: AnnotationOp = {
+            kind: 'add',
+            stroke,
+            index: annotation.strokes.length
+          };
           set({
             annotation: {
               ...annotation,
-              strokes: [...annotation.strokes, stroke],
-              redoStack: []
+              strokes: applyAnnotationOp(annotation.strokes, op),
+              past: [...annotation.past, op],
+              // A new operation invalidates the redo branch (linear history).
+              future: []
             }
           });
         },
         undoAnnotationStroke: () => {
           const { annotation } = get();
-          const last = annotation.strokes.at(-1);
-          if (!last) return;
+          const op = annotation.past.at(-1);
+          if (!op) return;
           set({
             annotation: {
               ...annotation,
-              strokes: annotation.strokes.slice(0, -1),
-              redoStack: [...annotation.redoStack, last]
+              strokes: revertAnnotationOp(annotation.strokes, op),
+              past: annotation.past.slice(0, -1),
+              future: [op, ...annotation.future]
             }
           });
         },
         redoAnnotationStroke: () => {
           const { annotation } = get();
-          const next = annotation.redoStack.at(-1);
-          if (!next) return;
+          const op = annotation.future[0];
+          if (!op) return;
           set({
             annotation: {
               ...annotation,
-              strokes: [...annotation.strokes, next],
-              redoStack: annotation.redoStack.slice(0, -1)
+              strokes: applyAnnotationOp(annotation.strokes, op),
+              past: [...annotation.past, op],
+              future: annotation.future.slice(1)
             }
           });
         },
         eraseAnnotationStroke: (id) => {
           const { annotation } = get();
+          const index = annotation.strokes.findIndex((s) => s.id === id);
+          // Nothing erased is not an operation — recording one would put an
+          // inert entry on the log and cost a real Undo press to get past.
+          if (index === -1) return;
+          const op: AnnotationOp = {
+            kind: 'erase',
+            stroke: annotation.strokes[index],
+            index
+          };
           set({
             annotation: {
               ...annotation,
-              strokes: annotation.strokes.filter((s) => s.id !== id),
-              redoStack: []
+              strokes: applyAnnotationOp(annotation.strokes, op),
+              past: [...annotation.past, op],
+              future: []
+            }
+          });
+        },
+        reprojectAnnotationStrokes: (mapPoint) => {
+          // F2/VIEW-03 — applied to the live strokes AND to every stroke held
+          // in the operation log, because an undo/redo after the switch must
+          // put the stroke back where the content is NOW, not where it was
+          // under the previous projection. The log is history, not an archive
+          // of old coordinates.
+          const { annotation } = get();
+          if (annotation.strokes.length === 0 && annotation.past.length === 0) {
+            return;
+          }
+          const mapStroke = (stroke: AnnotationStroke): AnnotationStroke => ({
+            ...stroke,
+            points: stroke.points.map(mapPoint)
+          });
+          const mapOp = (op: AnnotationOp): AnnotationOp => {
+            if (op.kind === 'clear') {
+              return { ...op, strokes: op.strokes.map(mapStroke) };
+            }
+            return { ...op, stroke: mapStroke(op.stroke) };
+          };
+          set({
+            annotation: {
+              ...annotation,
+              strokes: annotation.strokes.map(mapStroke),
+              past: annotation.past.map(mapOp),
+              future: annotation.future.map(mapOp)
             }
           });
         },
         clearAnnotations: () => {
+          const { annotation } = get();
+          // Same rule: clearing nothing is not an operation.
+          if (annotation.strokes.length === 0) return;
+          const op: AnnotationOp = {
+            kind: 'clear',
+            strokes: annotation.strokes
+          };
           set({
-            annotation: { ...get().annotation, strokes: [], redoStack: [] }
+            annotation: {
+              ...annotation,
+              strokes: applyAnnotationOp(annotation.strokes, op),
+              past: [...annotation.past, op],
+              future: []
+            }
           });
         },
         setIconPackManager: (iconPackManager) => {
@@ -521,6 +648,20 @@ const initialState = () => {
           set({ linkedDiagrams });
         },
         setNotification: (notification) => {
+          // E4/CLIP-10 (ADR 0011): an unread ERROR is never displaced by an
+          // informational toast. Progress/success messages are routine
+          // (routing N%, pasted N items) and were burying failure reports —
+          // a failed save under a paste toast is unsaved work the user was
+          // told nothing about. A non-error arriving while an error shows is
+          // dropped; errors and explicit clears (null) always land.
+          const current = get().notification;
+          if (
+            notification &&
+            current?.severity === 'error' &&
+            notification.severity !== 'error'
+          ) {
+            return;
+          }
           set({ notification });
         },
         setActiveLeftTab: (activeLeftTab) => {

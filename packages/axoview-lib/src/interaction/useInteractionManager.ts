@@ -6,7 +6,8 @@ import {
   State,
   SlimMouseEvent,
   Mouse,
-  ItemReference
+  ItemReference,
+  Coords
 } from 'src/types';
 import { DialogTypeEnum, ItemControls } from 'src/types/ui';
 import {
@@ -20,15 +21,22 @@ import { useScene } from 'src/hooks/useScene';
 import { useHistory } from 'src/hooks/useHistory';
 import { useCanvasMode } from 'src/contexts/CanvasModeContext';
 import { TOOL_HOTKEYS } from 'src/config/hotkeys';
-import { resolveToolHotkey } from './toolHotkeys';
-import { handleEscapeKey } from './handleEscapeKey';
+import { resolveToolHotkey, resolveZOrderDirection } from './toolHotkeys';
+import { handleEscapeKey, handleConnectorEscape } from './handleEscapeKey';
 import { handleDeleteOrBackspace, isEditableTarget } from './handleDeleteKey';
 import { handleArrowKey } from './handleArrowKey';
+import {
+  canUseKeyboardSurface,
+  type CanvasKeyboardSurface
+} from './readonlyPolicy';
+import { isModalDialogOpen, hasLiveTextSelection } from './keyboardScope';
+import { isPointOverCanvas } from 'src/utils/canvasDropTarget';
+import { suppressLongPressGestureEnd } from 'src/utils/longPressMenu';
 import type { ScreenToTileFn } from 'src/utils/renderer';
 import { useLayerContext } from 'src/hooks/useLayerContext';
 import { collectSelectableRefs } from 'src/utils/selectableRefs';
 import { Cursor } from './modes/Cursor';
-import { DragItems } from './modes/DragItems';
+import { DragItems, abortDragItems } from './modes/DragItems';
 import { DrawRectangle } from './modes/Rectangle/DrawRectangle';
 import { TransformRectangle } from './modes/Rectangle/TransformRectangle';
 import { Connector } from './modes/Connector';
@@ -40,8 +48,8 @@ import { TransformNode } from './modes/Node/TransformNode';
 import { Label } from './modes/Label';
 import { Lasso } from './modes/Lasso';
 import { FreehandLasso } from './modes/FreehandLasso';
-import { ReconnectAnchor } from './modes/ReconnectAnchor';
-import { exceedsTapSlop } from 'src/config/tapGesture';
+import { ReconnectAnchor, abortReconnectAnchor } from './modes/ReconnectAnchor';
+import { exceedsTapSlop, LONG_PRESS_MS } from 'src/config/tapGesture';
 import { MIN_ZOOM, MAX_ZOOM } from 'src/config';
 import { usePanHandlers } from './usePanHandlers';
 import { useRAFThrottle } from './useRAFThrottle';
@@ -71,47 +79,9 @@ const modes: { [k in string]: ModeActions } = {
 type PointerKind = 'mouse' | 'touch' | 'pen';
 
 // Hold duration before a stationary touch becomes a long-press (node → context
-// menu; empty → lasso). Slightly under the OS ~500ms callout so our menu wins.
-const LONG_PRESS_MS = 450;
-
-// ADR 0027 touch reconciliation: a long-press opens the context menu DURING the
-// hold, while the finger is still down. When the finger lifts, the browser
-// synthesises a compatibility mouse sequence (mousedown → mouseup → click) at
-// the press point. Portaled to <body>, the MUI Menu backdrop sits under that
-// point, so that synthesised mousedown/click immediately dismisses the
-// just-opened menu (the "verify on a device" risk ADR 0027 flagged). The
-// spec-compliant cure is to cancel the terminating `touchend`, which suppresses
-// the whole compat-mouse sequence; we also swallow a stray backdrop
-// mousedown/click in the capture phase as a belt-and-suspenders fallback for
-// environments that synthesise the click without a cancelable touchend. The
-// menu therefore survives the lift; a later, deliberate tap-away (a fresh touch
-// sequence) still dismisses it. Everything self-removes after the first
-// terminating event or 700 ms, so it can never eat a real interaction.
-const suppressLongPressGestureEnd = () => {
-  let timer: ReturnType<typeof setTimeout>;
-  const cleanup = () => {
-    window.removeEventListener('touchend', onTouchEnd, true);
-    window.removeEventListener('mousedown', onBackdropMouse, true);
-    window.removeEventListener('click', onBackdropMouse, true);
-    clearTimeout(timer);
-  };
-  const onTouchEnd = (ev: TouchEvent) => {
-    // Cancel the compat-mouse sequence the lift would otherwise synthesise.
-    if (ev.cancelable) ev.preventDefault();
-  };
-  const onBackdropMouse = (ev: MouseEvent) => {
-    if ((ev.target as HTMLElement | null)?.closest('.MuiBackdrop-root')) {
-      ev.stopPropagation();
-      ev.preventDefault();
-    }
-    // The click is the last event of the sequence — clean up once it lands.
-    if (ev.type === 'click') cleanup();
-  };
-  window.addEventListener('touchend', onTouchEnd, { capture: true, passive: false });
-  window.addEventListener('mousedown', onBackdropMouse, true);
-  window.addEventListener('click', onBackdropMouse, true);
-  timer = setTimeout(cleanup, 700);
-};
+// menu; empty → lasso) is `LONG_PRESS_MS` in config/tapGesture — slightly under
+// the OS ~500 ms callout so our menu wins. It lives there because the label
+// hit-proxies time the same hold themselves (I2/TCH-09).
 
 // Max gap between two taps on the SAME item for the second to count as a
 // double-tap (→ open the details panel, ADR 0022 §5). Debounced against the
@@ -206,6 +176,8 @@ interface KeydownDeps {
   deleteLabel: SceneApi['deleteLabel'];
   updateViewItem: SceneApi['updateViewItem'];
   commitDragTransaction: SceneApi['commitDragTransaction'];
+  /** I4/CONN-01 — Escape restores a live endpoint reconnect. See EscapeDeps. */
+  abortReconnect: () => boolean;
   // Mode-aware screen→tile (useCanvasMode), used by the keydown helpers' tile
   // resolution.
   screenToTile: ScreenToTileFn;
@@ -220,6 +192,22 @@ interface KeydownDeps {
 // multi-selection visual + drag work. Reads scene/layer state via refs so the
 // keydown effect's dep array stays stable (M-1 perf invariant). ADR-0006.
 const handleSelectAll = (uiState: State['uiState'], deps: KeydownDeps) => {
+  // I1/PTR-08: Ctrl+A force-switches to CURSOR, and it used to do so with an
+  // in-flight connector still half-drawn — the provisional connector survived
+  // (both anchors on the same node), a later Escape could no longer clear it
+  // because the mode had moved on, and Ctrl+A then folded the orphan into the
+  // selection. Only Esc and the right-click restore ran the abort. Aborting
+  // first is the same call Esc makes, and it no-ops when nothing is in flight.
+  //
+  // The id is captured BEFORE the abort because `sceneRef.current` is a
+  // render-time snapshot: `collectSelectableRefs` below would still see the
+  // entity `handleConnectorEscape` just deleted and select it anyway.
+  const inFlightConnectorId =
+    uiState.mode.type === 'CONNECTOR' ? uiState.mode.id : null;
+  const abortedConnectorId = handleConnectorEscape(uiState, deps)
+    ? inFlightConnectorId
+    : null;
+
   const { lockedIds, visibleIds, layers } = deps.layerContextRef.current;
   const refs = collectSelectableRefs(
     deps.sceneRef.current,
@@ -235,53 +223,87 @@ const handleSelectAll = (uiState: State['uiState'], deps: KeydownDeps) => {
       mousedownItem: null
     });
   }
-  uiState.actions.setSelectedIds(refs);
+  uiState.actions.setSelectedIds(
+    abortedConnectorId
+      ? refs.filter((ref) => ref.id !== abortedConnectorId)
+      : refs
+  );
 };
 
 // Undo / redo (Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z).
+//
+// I1/PTR-10: an undo taken DURING a live drag used to be unrecoverable. The
+// drag itself writes nothing (the preview is CSS-only), so the undo landed on
+// the action before it — but the gesture's pending mouseup then committed
+// `batchUpdateViewItemTiles` from the preview maps, and that counted as a new
+// action, which clears the redo stack. One Ctrl+Z during a drag and the undone
+// work could never be brought back.
+//
+// The gesture is therefore ABORTED before the undo runs (the convention Figma
+// and friends follow: a history keystroke mid-drag cancels the drag). Clearing
+// the preview maps is what matters — the pending mouseup then has nothing to
+// commit, so redo survives. Dropping back to CURSOR makes the abort visible
+// instead of leaving the canvas in a drag mode with no preview.
 const handleHistoryShortcuts = (
   e: KeyboardEvent,
   isCtrlOrCmd: boolean,
   key: string,
+  uiState: State['uiState'],
   deps: KeydownDeps
 ) => {
   if (!isCtrlOrCmd) return;
 
-  if (key === 'z' && !e.shiftKey) {
-    e.preventDefault();
-    if (deps.canUndo) {
-      deps.undo();
-    }
+  const isUndo = key === 'z' && !e.shiftKey;
+  const isRedo = key === 'y' || (key === 'z' && e.shiftKey);
+  if (!isUndo && !isRedo) return;
+
+  if (uiState.mode.type === 'DRAG_ITEMS') {
+    abortDragItems(deps.sceneRef.current, uiState);
+    uiState.actions.setMode({
+      type: 'CURSOR',
+      showCursor: true,
+      mousedownItem: null
+    });
   }
 
-  if (key === 'y' || (key === 'z' && e.shiftKey)) {
-    e.preventDefault();
-    if (deps.canRedo) {
-      deps.redo();
-    }
+  e.preventDefault();
+  if (isUndo && deps.canUndo) {
+    deps.undo();
+  }
+  if (isRedo && deps.canRedo) {
+    deps.redo();
   }
 };
 
-// Clipboard (Ctrl+X / Ctrl+C / Ctrl+V).
+// Clipboard (Ctrl+X / Ctrl+C / Ctrl+V). Copy is a `viewer` surface and cut/paste
+// are `editor` ones (readonlyPolicy), so the two halves are gated separately —
+// a read-only viewer can still lift content out, but cannot write any back.
 const handleClipboardShortcuts = (
   e: KeyboardEvent,
   isCtrlOrCmd: boolean,
   key: string,
-  deps: KeydownDeps
+  deps: KeydownDeps,
+  allowCutPaste: boolean
 ) => {
   if (!isCtrlOrCmd) return;
 
-  if (key === 'x') {
+  if (key === 'x' && allowCutPaste) {
     e.preventDefault();
     deps.handleCut();
   }
 
   if (key === 'c') {
+    // I1/PTR-12: Ctrl+C used to preventDefault unconditionally, so a text
+    // selection anywhere the app doesn't own an input — a dialog body, a panel
+    // label, a notes preview — was never copied: no native `copy` event fired,
+    // the canvas copy ran instead, and the user got no feedback either way.
+    // A live selection wins; an idle Ctrl+C still copies the canvas selection.
+    if (hasLiveTextSelection()) return;
     e.preventDefault();
     deps.handleCopy();
   }
 
-  if (key === 'v') {
+  if (key === 'v' && allowCutPaste) {
     e.preventDefault();
     deps.handlePaste();
   }
@@ -290,10 +312,13 @@ const handleClipboardShortcuts = (
 // F1 opens help; F2 hands off to canvas inline-rename — but only when the
 // keystroke originated inside the renderer (MQA #13: F2 from the file-explorer
 // tree row must not steal focus into a selected canvas node's editor).
+// (`help` is a `viewer` surface and `inlineRename` an `editor` one — the caller
+// passes the latter's verdict in, so every editor surface is gated in one place.)
 const handleFunctionKeys = (
   e: KeyboardEvent,
   uiState: State['uiState'],
-  deps: KeydownDeps
+  deps: KeydownDeps,
+  allowInlineRename: boolean
 ) => {
   if (e.key === 'F1') {
     e.preventDefault();
@@ -314,17 +339,21 @@ const handleFunctionKeys = (
       !focusTarget ||
       focusTarget === document.body ||
       (renderer ? renderer.contains(focusTarget) : false);
-    if (uiState.editorMode !== 'EDITABLE' || !cameFromRenderer) return;
+    if (!allowInlineRename || !cameFromRenderer) return;
     if (ctrl?.type === 'LABEL') {
       // Floating Label inline-edit is driven by uiState (LabelHitLayer renders
       // the contentEditable), not the node/connector inlineEditNodeName event.
       e.preventDefault();
       uiState.actions.setInlineEditLabelId(ctrl.id);
-    } else if (
-      ctrl?.type === 'ITEM' ||
-      ctrl?.type === 'TEXTBOX' ||
-      ctrl?.type === 'CONNECTOR'
-    ) {
+    } else if (ctrl?.type === 'ITEM') {
+      // R4/RND-13/15: a NODE rename is driven by uiState too, for the same
+      // reason a Label's is — the node is not in the DOM until the rename
+      // promotes it, so a synchronous window event would arrive before there is
+      // anything listening. Text boxes and connector labels are always DOM and
+      // keep the event.
+      e.preventDefault();
+      uiState.actions.setInlineEditNodeId(ctrl.id);
+    } else if (ctrl?.type === 'TEXTBOX' || ctrl?.type === 'CONNECTOR') {
       e.preventDefault();
       window.dispatchEvent(
         new CustomEvent('inlineEditNodeName', { detail: { id: ctrl.id } })
@@ -339,11 +368,19 @@ const handleToolHotkeys = (
   isCtrlOrCmd: boolean,
   uiState: State['uiState'],
   key: string,
-  _deps: KeydownDeps
+  deps: KeydownDeps
 ) => {
   const action = resolveToolHotkey(isCtrlOrCmd, key, TOOL_HOTKEYS);
   if (!action) return;
   e.preventDefault();
+
+  // I1/PTR-07: switching tools mid-gesture performed no abort — pressing `r`
+  // during a connector draw just setMode()d, stranding the provisional
+  // connector in the model with BOTH anchors on the same node and no way to
+  // clear it (Escape no longer applies once the mode has moved on). Esc and the
+  // right-click restore were the only paths that aborted. This is that same
+  // call; it no-ops unless a connection is actually in flight.
+  handleConnectorEscape(uiState, deps);
 
   switch (action) {
     case 'select':
@@ -416,13 +453,18 @@ const handleToolHotkeys = (
 // Z-order (E2): Ctrl+] / Ctrl+[ nudge forward / backward; Ctrl+Shift+] /
 // Ctrl+Shift+[ jump to front / back (absolute). Applies to the controlled
 // ITEM, RECTANGLE, or LABEL — each reorders within its own peer collection.
+//
+// I1/PTR-14: the bracket used to be matched as `e.key === ']'`, which no real
+// keyboard produces while Shift is held — `resolveZOrderDirection` (toolHotkeys)
+// owns the key identity now.
 const handleZOrderShortcut = (
   e: KeyboardEvent,
   isCtrlOrCmd: boolean,
   uiState: State['uiState'],
   deps: KeydownDeps
 ) => {
-  if (!isCtrlOrCmd || (e.key !== ']' && e.key !== '[')) return;
+  const direction = isCtrlOrCmd ? resolveZOrderDirection(e) : null;
+  if (!direction) return;
   const ctrl = uiState.itemControls;
   if (
     ctrl?.type !== 'ITEM' &&
@@ -438,7 +480,7 @@ const handleZOrderShortcut = (
     : undefined;
   if (!currentView) return;
 
-  const toFront = e.key === ']';
+  const toFront = direction === 'front';
   const scene = deps.sceneRef.current;
 
   const reorder = (
@@ -570,6 +612,13 @@ export const useInteractionManager = () => {
       deleteLabel,
       updateViewItem,
       commitDragTransaction,
+      // I4/CONN-01: Escape restores a live endpoint reconnect. The mode owns the
+      // snapshot (it is the only thing that knows where the anchor started), so
+      // the dispatcher just hands the delegate the ability to ask for it.
+      abortReconnect: () =>
+        abortReconnectAnchor({
+          scene: sceneRef.current
+        } as unknown as State),
       screenToTile
     };
 
@@ -580,35 +629,88 @@ export const useInteractionManager = () => {
     // the original sequential `if` blocks did.
     const handleKeyDown = (e: KeyboardEvent) => {
       const uiState = uiStateApi.getState();
+      // I1/PTR-01..03: only `handleFunctionKeys` ever consulted `editorMode`, so
+      // every other shortcut mutated a read-only diagram. Each delegate now asks
+      // the surface table (readonlyPolicy) instead — `viewer` surfaces run in
+      // every mode, `editor` surfaces only in EDITABLE.
+      const allow = (surface: CanvasKeyboardSurface) =>
+        canUseKeyboardSurface(surface, uiState.editorMode);
 
-      if (handleEscapeKey(e, uiState, deps)) return;
-      if (handleDeleteOrBackspace(e, uiState, deps)) return;
+      // E1/HIST-06: a drag bracket is closed by the mouseup, and the mode's exit
+      // runs lazily on the NEXT mouse event — so a lost mouseup (release outside
+      // the window, alt-tab, the browser context menu stealing the event)
+      // followed by a keyboard-only action leaves the bracket open. Every later
+      // edit then applies with NO history entry while `canUndo()` still returns
+      // true, and the next Ctrl+Z reverts the pre-drag action, destroying them.
+      // Committing here is the same "no-op when no drag is open" call
+      // `usePanHandlers` and `handleEscapeKey` already make.
+      deps.sceneRef.current.commitDragTransaction();
+
+      // I1/PTR-05: a modal dialog owns the keyboard. The canvas listener is
+      // window-bound, so before this it fired straight through one — F1 opened
+      // Help and the next Delete destroyed the selected node behind the
+      // still-open dialog, invisibly. MUI traps focus, not window keydown, and
+      // only F2 had a "did this come from the renderer" test. Stand down
+      // entirely: Escape belongs to the dialog too, and a tool hotkey armed
+      // under a modal is a mode the user never asked for. The drag-bracket
+      // safety net above runs first so a leaked bracket is still closed.
+      if (isModalDialogOpen()) return;
+
+      if (handleEscapeKey(e, uiState, deps, uiState.editorMode)) return;
+      if (allow('delete') && handleDeleteOrBackspace(e, uiState, deps)) return;
       if (isEditableTarget(e.target as HTMLElement)) return;
 
       const isCtrlOrCmd = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
 
-      handleHistoryShortcuts(e, isCtrlOrCmd, key, deps);
-      handleClipboardShortcuts(e, isCtrlOrCmd, key, deps);
+      if (allow('history')) {
+        handleHistoryShortcuts(e, isCtrlOrCmd, key, uiState, deps);
+      }
+      handleClipboardShortcuts(e, isCtrlOrCmd, key, deps, allow('cutPaste'));
 
       // Ctrl+A: select all visible + unlocked items in the active view. ADR-0006.
       if (isCtrlOrCmd && key === 'a') {
+        if (!allow('selectAll')) return;
         e.preventDefault();
         handleSelectAll(uiState, deps);
         return;
       }
 
-      handleFunctionKeys(e, uiState, deps);
-      handleToolHotkeys(e, isCtrlOrCmd, uiState, key, deps);
-      handleZOrderShortcut(e, isCtrlOrCmd, uiState, deps);
-      handleArrowKey(e, uiState, {
-        getScene: () => deps.sceneRef.current,
-        beginDragTransaction: deps.sceneRef.current.beginDragTransaction,
-        commitDragTransaction: deps.sceneRef.current.commitDragTransaction,
-        batchUpdateViewItemTiles: deps.sceneRef.current.batchUpdateViewItemTiles,
-        batchUpdateRectangles: deps.sceneRef.current.batchUpdateRectangles,
-        batchUpdateTextBoxTiles: deps.sceneRef.current.batchUpdateTextBoxTiles
-      });
+      handleFunctionKeys(e, uiState, deps, allow('inlineRename'));
+      if (allow('toolHotkeys')) {
+        handleToolHotkeys(e, isCtrlOrCmd, uiState, key, deps);
+      }
+      if (allow('zOrder')) handleZOrderShortcut(e, isCtrlOrCmd, uiState, deps);
+      handleArrowKey(
+        e,
+        uiState,
+        {
+          getScene: () => deps.sceneRef.current,
+          // I1/PTR-11: the nudge used to trust an in-code comment claiming
+          // `selectedIds` cannot hold locked or hidden refs — RED-15 falsified
+          // it (locking a layer does not re-validate an existing selection), so
+          // the arrows moved items on a locked layer one tile per press while
+          // the mouse drag, which asks this same predicate, refused them.
+          isItemInteractable: (ref) => {
+            const { lockedIds, visibleIds, layers } =
+              deps.layerContextRef.current;
+            return (
+              !lockedIds.has(ref.id) &&
+              (layers.length === 0 || visibleIds.has(ref.id))
+            );
+          },
+          beginDragTransaction: deps.sceneRef.current.beginDragTransaction,
+          commitDragTransaction: deps.sceneRef.current.commitDragTransaction,
+          batchUpdateViewItemTiles:
+            deps.sceneRef.current.batchUpdateViewItemTiles,
+          batchUpdateRectangles: deps.sceneRef.current.batchUpdateRectangles,
+          batchUpdateTextBoxTiles: deps.sceneRef.current.batchUpdateTextBoxTiles,
+          // R5/OVL-14: floating Labels nudge like every other tile-anchored
+          // entity now. Same batch updater DragItems.mouseup commits with.
+          batchUpdateLabelTiles: deps.sceneRef.current.batchUpdateLabelTiles
+        },
+        allow('arrowNudge')
+      );
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -741,6 +843,18 @@ export const useInteractionManager = () => {
       // (ADR 0018 D-12), so route non-mouse pointers straight to the dispatcher.
       const isMousePointer = pointerTypeRef.current === 'mouse';
 
+      // I5/CTX-15: a down/up must land AFTER any move still parked in the RAF
+      // throttle. `getMouse` rebuilds `mousedown` from the event type — a
+      // 'mousemove' carries forward the mousedown that was current when it was
+      // SCHEDULED, so a frame arriving after the press wrote `mousedown: null`
+      // back over the press position. Every mode that reads `mouse.mousedown`
+      // then behaves as if no press happened; for `Pan.mouseup` in
+      // EXPLORABLE_READONLY that is the whole read-only click, so a viewer's
+      // click on a content-bearing node opened nothing. Flushing first keeps the
+      // three events in the order the user produced them. (The non-pan path
+      // below already flushed — the early-returning pan branches did not.)
+      if (e.type !== 'mousemove') flushUpdate();
+
       if (isMousePointer && e.type === 'mousedown' && handlePanMouseDown(e)) {
         // Still update mouse state so Pan mode can track mousedown position for drag
         const uiState = uiStateApi.getState();
@@ -783,7 +897,6 @@ export const useInteractionManager = () => {
           processMouseUpdate(update.mouse, update.event);
         });
       } else {
-        flushUpdate();
         processMouseUpdate(nextMouse, e);
       }
     },
@@ -1022,6 +1135,53 @@ export const useInteractionManager = () => {
       if (touchRaf === null) touchRaf = requestAnimationFrame(runTouchFrame);
     };
 
+    /**
+     * What a double-TAP opens — the touch twin of `onDoubleClick`.
+     *
+     * I2/TCH-12: the two had drifted. `onDoubleClick` drops a TEXT BOX into its
+     * on-canvas edit session (ADR 0034 §1) and a LABEL into its inline editor
+     * (LabelHitLayer's own double-click does that for the mouse); the touch
+     * double-tap only ever called `setItemControls`, so a double-tap on a text
+     * box opened the Details deck and touch had NO route into editing text on
+     * the canvas at all. The branches are mirrored here rather than shared with
+     * `onDoubleClick` because that handler resolves its own target by tile hit
+     * test — the touch machine already knows which item was tapped.
+     */
+    const openTouchDoubleTapTarget = (
+      downItem: ItemReference,
+      downTile: Coords
+    ) => {
+      const ui = uiStateApi.getState();
+      if (ui.editorMode !== 'EDITABLE') {
+        ui.actions.setItemControls({
+          type: downItem.type,
+          id: downItem.id
+        } as ItemControls);
+        return;
+      }
+      if (downItem.type === 'TEXTBOX') {
+        ui.actions.setItemControls(
+          { type: 'TEXTBOX', id: downItem.id },
+          { openPanel: false }
+        );
+        ui.actions.setEditingTextBoxId(downItem.id);
+        return;
+      }
+      if (downItem.type === 'LABEL') {
+        ui.actions.setItemControls(
+          { type: 'LABEL', id: downItem.id },
+          { openPanel: false }
+        );
+        ui.actions.setInlineEditLabelId(downItem.id);
+        return;
+      }
+      const controls: ItemControls =
+        downItem.type === 'CONNECTOR'
+          ? { type: 'CONNECTOR', id: downItem.id, tile: downTile }
+          : { type: downItem.type, id: downItem.id };
+      ui.actions.setItemControls(controls);
+    };
+
     const clearLongPress = () => {
       const ts = touchStateRef.current;
       if (ts.longPressTimer !== null) {
@@ -1208,7 +1368,20 @@ export const useInteractionManager = () => {
 
     const onTouchPointerMove = (e: PointerEvent) => {
       const ts = touchStateRef.current;
-      if (!ts.pointers.has(e.pointerId)) return;
+      if (!ts.pointers.has(e.pointerId)) {
+        // I2/TCH-04: a pen HOVERS. It is routed into the touch machine (which is
+        // the right home for its press gestures — pen and finger share the
+        // long-press, pinch and tap semantics), and that machine discards every
+        // move from a pointer that never pressed, because a finger cannot hover.
+        // So pen hover set no `hoveredItem`, painted no hover outline and showed
+        // no cursor, while a mouse at the same point did all three. Forward a
+        // bare hover move for it: `Cursor.mousemove` skips the hover path while a
+        // press is live, so this cannot disturb a gesture.
+        if (e.pointerType === 'pen' && ts.phase === 'idle') {
+          onMouseEvent(toSlim(e, 'mousemove'));
+        }
+        return;
+      }
       ts.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
       // Any real movement cancels a pending hold (it's a drag, not a long-press).
@@ -1255,7 +1428,22 @@ export const useInteractionManager = () => {
       if (ts.phase === 'pan' || ts.phase === 'pinch') scheduleTouchFrame();
     };
 
-    const onTouchPointerUp = (e: PointerEvent) => {
+    /**
+     * The single end-of-pointer path for the touch/pen machine — a lift
+     * (`cancelled: false`) or an OS takeover (`cancelled: true`).
+     *
+     * I2/TCH-06 + TCH-14: these were two hand-maintained handlers, and the
+     * cancel copy had drifted. `onTouchPointerUp` demoted pinch → pan when one
+     * finger remained and maintained the double-tap bookkeeping;
+     * `onTouchPointerCancel` did neither — so cancelling one finger mid-pinch
+     * froze the survivor until it lifted (TCH-14), and a press cancelled
+     * between two taps stitched them into a spurious double-tap (TCH-06, ruled
+     * 2026-07-30: Android `GestureDetector` and iOS `UITapGestureRecognizer`
+     * both abort a multi-tap sequence on cancel). One helper, with the two
+     * genuine differences named at their branch, is the fix the ruling asked
+     * for.
+     */
+    const endPointer = (e: PointerEvent, { cancelled }: { cancelled: boolean }) => {
       const ts = touchStateRef.current;
       const wasPhase = ts.phase;
       clearLongPress();
@@ -1263,12 +1451,31 @@ export const useInteractionManager = () => {
       releaseCapture(e);
 
       if (wasPhase === 'menu') {
-        // Long-press already opened the menu; the lift just ends the press.
+        // The long-press already opened the menu and consumed the gesture; the
+        // lift just ends the press. I2/TCH-02: it did so WITHOUT closing the
+        // press bookkeeping the forwarded `mousedown` opened, so
+        // `uiState.mouse.mousedown` and `mode.mousedownItem` stayed populated
+        // with nothing touching the screen — and `Cursor.entry` replays
+        // `mousedown` whenever `mousedownItem` is set, so the stale press was
+        // live input for the next mode transition. Clear it directly rather
+        // than forwarding a `mouseup`: the mode must not re-run its selection
+        // or drag-commit logic for a gesture the menu already took over.
+        const ui = uiStateApi.getState();
+        if (ui.mouse.mousedown) {
+          ui.actions.setMouse({ ...ui.mouse, mousedown: null });
+        }
+        if (ui.mode.type === 'CURSOR' && ui.mode.mousedownItem) {
+          ui.actions.setMode({ ...ui.mode, mousedownItem: null });
+        }
         ts.phase = 'idle';
+        ts.itemDownTarget = null;
         return;
       }
+
       if (wasPhase === 'pinch') {
-        // Lift back to one finger → resume single-finger pan. All gone → idle.
+        // Back to one finger → resume single-finger pan. All gone → idle.
+        // TCH-14: `runTouchFrame` needs two pointers, so without this demotion
+        // a cancelled finger left the survivor in `pinch` and the canvas frozen.
         if (ts.pointers.size === 1) {
           const remaining = [...ts.pointers.values()][0];
           ts.phase = 'pan';
@@ -1278,31 +1485,30 @@ export const useInteractionManager = () => {
         }
         return;
       }
+
       if (wasPhase === 'item') {
         // Complete the gesture: Cursor.mouseup selects (no move) or commits the
         // drag; RECONNECT_ANCHOR commits the reconnect; Lasso.mouseup commits an
-        // auto-lasso marquee.
+        // auto-lasso marquee. A cancel ends it the same way — commit where it is.
         forwardMouse(e, 'mouseup', interactionsEl);
         // Double-tap on an item → open its details panel (ADR 0022 §5). Only a
         // stationary tap on an interactable item counts; a drag (move past slop)
         // or an auto-lasso marquee resets the streak. The mouseup above already
         // (re-)selected it; this just escalates the second tap to "open".
+        // TCH-06: a CANCELLED press is not a tap — the OS took the gesture away
+        // (palm rejection, notification, app switch), so it breaks the streak.
         const movedItem = exceedsTapSlop(ts.downScreen, {
           x: e.clientX,
           y: e.clientY
         });
-        if (!ts.autoLasso && !movedItem && ts.downItem) {
+        if (!cancelled && !ts.autoLasso && !movedItem && ts.downItem) {
           const now = Date.now();
           const sameItem =
             !!ts.lastTapItem &&
             ts.lastTapItem.id === ts.downItem.id &&
             ts.lastTapItem.type === ts.downItem.type;
           if (sameItem && now - ts.lastTapTime < DOUBLE_TAP_MS) {
-            const controls: ItemControls =
-              ts.downItem.type === 'CONNECTOR'
-                ? { type: 'CONNECTOR', id: ts.downItem.id, tile: ts.downTile }
-                : { type: ts.downItem.type, id: ts.downItem.id };
-            uiStateApi.getState().actions.setItemControls(controls);
+            openTouchDoubleTapTarget(ts.downItem, ts.downTile);
             ts.lastTapTime = 0;
             ts.lastTapItem = null;
           } else {
@@ -1326,33 +1532,34 @@ export const useInteractionManager = () => {
         ts.itemDownTarget = null;
         return;
       }
+
       if (wasPhase === 'pan') {
         if (ts.pointers.size === 0) ts.phase = 'idle';
         return;
       }
+
       if (wasPhase === 'palette') {
         // Elements-panel drag (started off-canvas, placement armed). A real drag
         // that lifts OVER the canvas drops/places the icon there; off the canvas
         // cancels. A no-move tap leaves the placement armed for a later canvas
         // tap (the tap-then-tap-canvas flow is unchanged).
+        //
+        // A cancel is handled the same way on purpose: some browsers fire
+        // pointercancel when the touch leaves the panel even with capture +
+        // touch-action:none, so a moved cancel over the canvas is still a drop
+        // (#1 robustness). It does NOT disarm the placement — the user did not
+        // choose to end the gesture.
         ts.phase = 'idle';
         const moved = exceedsTapSlop(ts.downScreen, {
           x: e.clientX,
           y: e.clientY
         });
         if (!moved) return;
-        const rect = rendererEl?.getBoundingClientRect();
-        const overCanvas =
-          !!rect &&
-          e.clientX >= rect.left &&
-          e.clientX <= rect.right &&
-          e.clientY >= rect.top &&
-          e.clientY <= rect.bottom;
-        if (overCanvas) {
+        if (isPointOverCanvas(rendererEl, e.clientX, e.clientY)) {
           forwardMouse(e, 'mousemove', interactionsEl);
           forwardMouse(e, 'mousedown', interactionsEl);
           forwardMouse(e, 'mouseup', interactionsEl);
-        } else {
+        } else if (!cancelled) {
           const ui = uiStateApi.getState();
           if (ui.mode.type === 'PLACE_ICON') {
             ui.actions.setMode({
@@ -1364,51 +1571,31 @@ export const useInteractionManager = () => {
         }
         return;
       }
+
       if (wasPhase === 'pan-pending') {
         // Tap on empty canvas → clear selection. Forward a click (no move → no
-        // lasso); Cursor.mouseup with no item clears.
-        forwardMouse(e, 'mousemove', interactionsEl);
-        forwardMouse(e, 'mousedown', interactionsEl);
-        forwardMouse(e, 'mouseup', interactionsEl);
-        ts.phase = 'idle';
-      }
-    };
-
-    const onTouchPointerCancel = (e: PointerEvent) => {
-      const ts = touchStateRef.current;
-      const wasPhase = ts.phase;
-      clearLongPress();
-      ts.pointers.delete(e.pointerId);
-      releaseCapture(e);
-      // End an in-flight item gesture cleanly (commit where it is).
-      if (wasPhase === 'item') forwardMouse(e, 'mouseup', interactionsEl);
-      // Palette drag: some browsers fire pointercancel when the touch leaves the
-      // panel even with capture + touch-action:none. Treat a moved cancel over
-      // the canvas as a drop so drag-from-panel still places (#1 robustness).
-      if (wasPhase === 'palette') {
-        const moved = exceedsTapSlop(ts.downScreen, {
-          x: e.clientX,
-          y: e.clientY
-        });
-        const rect = rendererEl?.getBoundingClientRect();
-        const overCanvas =
-          !!rect &&
-          e.clientX >= rect.left &&
-          e.clientX <= rect.right &&
-          e.clientY >= rect.top &&
-          e.clientY <= rect.bottom;
-        if (moved && overCanvas) {
+        // lasso); Cursor.mouseup with no item clears. A cancelled press is not a
+        // tap, so it clears nothing.
+        if (!cancelled) {
           forwardMouse(e, 'mousemove', interactionsEl);
           forwardMouse(e, 'mousedown', interactionsEl);
           forwardMouse(e, 'mouseup', interactionsEl);
         }
+        ts.phase = 'idle';
+        return;
       }
+
       if (ts.pointers.size === 0) {
         ts.phase = 'idle';
         ts.itemDownTarget = null;
         ts.autoLasso = false;
       }
     };
+
+    const onTouchPointerUp = (e: PointerEvent) => endPointer(e, { cancelled: false });
+
+    const onTouchPointerCancel = (e: PointerEvent) =>
+      endPointer(e, { cancelled: true });
 
     // True when the pointerdown landed on the canvas (the interactions box, a
     // node, an anchor — anything inside the Renderer container). Listeners are

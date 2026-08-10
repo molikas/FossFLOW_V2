@@ -1,7 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { ViewItem } from 'src/types';
 import { DEFAULT_LABEL_HEIGHT, DEFAULT_FONT_FAMILY } from 'src/config';
-import { LABEL_BASE_FONT_PX } from 'src/config/labelSettings';
+import {
+  LABEL_BASE_FONT_PX,
+  isNodeLabelDrawn,
+  labelCounterScaleFor
+} from 'src/config/labelSettings';
 import { useCanvasMode } from 'src/contexts/CanvasModeContext';
 import { useLayerContext } from 'src/hooks/useLayerContext';
 import { useModelStore } from 'src/stores/modelStore';
@@ -11,6 +15,7 @@ import { resolveDraggedOffset } from 'src/utils/labelPosition';
 import { getRenderedTilePosition } from 'src/utils/renderedGeometry';
 import {
   LABEL_DRAG_SLOP_PX,
+  createLabelLongPress,
   openLabelContextMenu,
   shouldBeginLabelDrag
 } from 'src/utils/labelPointerContract';
@@ -39,10 +44,13 @@ import {
 // canvas node per frame (~10 fps at 1000 visible nodes; perf-results/decision-log
 // Track P) — the regression this fix removes.
 
-// Below this zoom labels are too small to grab precisely; skip the layer (also
-// bounds the div count — at very low zoom the whole diagram can be on screen).
-const HIT_MIN_ZOOM = 0.4;
-// Mirror Label/NodesCanvas chip padding (theme.spacing(1.5) / spacing(1)) and
+// R3/GPU-05: this used to be a fixed 0.4 while the CHIP draws below
+// LABEL_LOD_ZOOM (0.25) whenever "keep labels readable" is on — so the
+// accessibility setting whose purpose is keeping labels legible when zoomed out
+// was the one manufacturing visible-but-inert ones. The gate follows the DRAW
+// decision now, from the shared predicate. Nothing may be painted at a zoom
+// where it cannot be hit.
+// Mirror Label/SceneCanvas chip padding (theme.spacing(1.5) / spacing(1)) and
 // the 250px max chip width, so the hit box matches the drawn name chip.
 const CHIP_PAD_X = 12;
 const CHIP_PAD_Y = 8;
@@ -97,15 +105,25 @@ export const NodeLabelHitLayer = ({ nodes }: Props) => {
   const { updateViewItem } = useSceneActions();
   // Coarse zoom + mode gates — boolean selectors so this only re-renders when
   // the gate flips, not on every zoom tick.
-  const active = useUiStateStore(
-    (s) => s.editorMode === 'EDITABLE' && s.zoom >= HIT_MIN_ZOOM
+  // R5/OVL-06: this used to be EDITABLE-only, so in present mode a node's name
+  // chip was completely inert while a floating Label's stayed hoverable — a
+  // linked node's card could not be raised from its name. `LabelHitLayer` had
+  // already made the split (hover-only proxies in view mode, with no press
+  // handlers and no stopPropagation, so a pan started over the chip still pans);
+  // this layer is its sibling and now makes the same one.
+  const editorMode = useUiStateStore((s) => s.editorMode);
+  const editable = editorMode === 'EDITABLE';
+  const viewMode = editorMode === 'EXPLORABLE_READONLY';
+  const lodVisible = useUiStateStore((s) =>
+    isNodeLabelDrawn(s.zoom, s.readableLabels)
   );
+  const active = (editable || viewMode) && lodVisible;
   const modelItems = useModelStore((s) => s.items);
-  // Layer visibility: a node on a hidden layer is not drawn (NodesCanvas), so it
+  // Layer visibility: a node on a hidden layer is not drawn (SceneCanvas), so it
   // must expose no invisible drag/rename hit-proxy either. `layers.length === 0`
   // is the no-layer-system escape hatch — NOT `visibleIds.size`, which is also
   // empty when every node sits on a hidden layer.
-  const { visibleIds, layers } = useLayerContext();
+  const { visibleIds, lockedIds, layers } = useLayerContext();
 
   // ADR 0032 amendment: the on-canvas chip shows `label` (fallback `name`), so
   // size the hit box from that text to match the drawn chip. Carries headerLink
@@ -122,6 +140,14 @@ export const NodeLabelHitLayer = ({ nodes }: Props) => {
   }, [modelItems]);
 
   const dragRef = useRef<DragState | null>(null);
+  // I2/TCH-09 (sibling half): a finger has no right button, so the chip's menu
+  // is reached by holding. This proxy swallows the press, so the canvas gesture
+  // machine's long-press never sees it — the layer has to time its own. The
+  // floating-Label proxy is where the campaign found this; the two are kept in
+  // lockstep by `labelPointerContract` on purpose.
+  const longPressRef = useRef<ReturnType<typeof createLabelLongPress> | null>(
+    null
+  );
 
   const onWindowMove = useCallback(
     (e: PointerEvent) => {
@@ -130,7 +156,9 @@ export const NodeLabelHitLayer = ({ nodes }: Props) => {
       if (!d.started) {
         if (Math.abs(e.clientY - d.startClientY) < LABEL_DRAG_SLOP_PX) return;
         d.started = true;
-        // Past slop: promote the node into the DOM overlay (via labelDrag), so the
+        // Past slop this is a move, not a hold.
+        longPressRef.current?.cancel();
+        // Promote the node into the DOM overlay (via labelDrag), so the
         // label now moves as a single-node DOM re-render. A plain click never gets
         // here, so it neither promotes nor commits.
         uiStoreApi.getState().actions.setLabelDrag(d.id, d.startOffset);
@@ -153,6 +181,8 @@ export const NodeLabelHitLayer = ({ nodes }: Props) => {
   const onWindowUp = useCallback(() => {
     const d = dragRef.current;
     dragRef.current = null;
+    longPressRef.current?.cancel();
+    longPressRef.current = null;
     window.removeEventListener('pointermove', onWindowMove);
     window.removeEventListener('pointerup', onWindowUp);
     window.removeEventListener('pointercancel', onWindowUp);
@@ -167,21 +197,21 @@ export const NodeLabelHitLayer = ({ nodes }: Props) => {
   // Double-click a node's on-canvas label to edit it (parity with connector
   // labels, which are DOM and already double-click-editable). At rest a node
   // label is Canvas2D with no DOM element, so the edit gesture never reached it;
-  // this proxy sits over the label, so a double-click here selects the node
-  // (promoting it into the DOM overlay) and then asks that overlay to enter
-  // inline-rename via the same event F2 uses. Dispatched on the next frame so
-  // the just-mounted node is listening.
+  // this proxy sits over the label, so a double-click here selects the node and
+  // opens the rename session on it.
+  //
+  // R4/RND-13/15: selection no longer promotes the node into the DOM overlay —
+  // the RENAME does — so this writes `inlineEditNodeId` rather than dispatching
+  // the `inlineEditNodeName` event on the next frame. The rAF was there because
+  // the event needed the freshly-mounted node to be listening; a store write
+  // needs no such handshake, and the mounted editor reads the id.
   const onLabelDoubleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>, node: ViewItem) => {
       e.stopPropagation();
       const ui = uiStoreApi.getState();
       if (ui.editorMode !== 'EDITABLE') return;
       ui.actions.setSelectedIds?.([{ type: 'ITEM', id: node.id }]);
-      requestAnimationFrame(() => {
-        window.dispatchEvent(
-          new CustomEvent('inlineEditNodeName', { detail: { id: node.id } })
-        );
-      });
+      ui.actions.setInlineEditNodeId(node.id);
     },
     [uiStoreApi]
   );
@@ -215,11 +245,26 @@ export const NodeLabelHitLayer = ({ nodes }: Props) => {
         started: false,
         lastOffset: startOffset
       };
+      // Touch/pen: a stationary hold opens the NODE's item menu, the same one
+      // the right-click path opens. Dropping the drag state first means the lift
+      // that follows commits nothing — the hold replaced the reposition.
+      const longPress = createLabelLongPress((point) => {
+        dragRef.current = null;
+        const actions = uiStoreApi.getState().actions;
+        actions.setSelectedIds?.([{ type: 'ITEM', id: node.id }]);
+        actions.openContextMenu({
+          anchor: point,
+          variant: 'item',
+          target: { type: 'ITEM', id: node.id }
+        });
+      });
+      longPressRef.current = longPress;
+      longPress.start(e);
       window.addEventListener('pointermove', onWindowMove);
       window.addEventListener('pointerup', onWindowUp);
       window.addEventListener('pointercancel', onWindowUp);
     },
-    [onWindowMove, onWindowUp]
+    [onWindowMove, onWindowUp, uiStoreApi]
   );
 
   // Safety net: if the layer unmounts mid-drag, drop the window listeners and any
@@ -236,13 +281,71 @@ export const NodeLabelHitLayer = ({ nodes }: Props) => {
     };
   }, [onWindowMove, onWindowUp, uiStoreApi]);
 
+  // R5/OVL-12: "keep labels readable" counter-scales the DRAWN chip about its
+  // centre (ADR 0015), and this proxy did not follow — so with the setting on at
+  // low zoom the grab box stayed at the un-scaled size while the chip grew,
+  // leaving the enlarged chip's outer margin dead to the pointer. Same mechanism
+  // `LabelHitLayer` uses: a direct store subscription publishes the factor on a
+  // `display: contents` wrapper (no per-zoom React re-render) and each proxy
+  // composes it into `transform: scale(...)` about the same centre.
+  const counterScaleRef = useRef<HTMLDivElement>(null);
+  /**
+   * R5/OVL-02 — the factor is PER PROXY now, not one value on the wrapper.
+   *
+   * It used to be a single `--axoview-label-scale` published on this
+   * `display: contents` wrapper and inherited by every proxy, which was exactly
+   * right while the factor came from the module-default font size and cannot
+   * survive it becoming per-label. Each proxy carries its own font size in
+   * `data-label-font`, and the subscription walks them — so this keeps the
+   * property that matters: pan/zoom updates the DOM directly and never
+   * re-renders React (the §8.8 pattern).
+   *
+   * The proxies must track the CHIPS exactly; a factor that moved on one side
+   * alone would put the grab box somewhere other than the thing it proxies,
+   * which is R5/OVL-12 reintroduced from the other side.
+   */
+  const applyCounterScale = useCallback(() => {
+    const root = counterScaleRef.current;
+    if (!root) return;
+    const { zoom, readableLabels } = uiStoreApi.getState();
+    const proxies = root.querySelectorAll<HTMLElement>('[data-label-font]');
+    for (let i = 0; i < proxies.length; i++) {
+      const el = proxies[i];
+      const font = Number(el.dataset.labelFont);
+      el.style.setProperty(
+        '--axoview-label-scale',
+        String(labelCounterScaleFor(zoom, readableLabels, font))
+      );
+    }
+  }, [uiStoreApi]);
+  useEffect(() => {
+    applyCounterScale();
+    return uiStoreApi.subscribe((s, p) => {
+      if (s.zoom === p.zoom && s.readableLabels === p.readableLabels) return;
+      applyCounterScale();
+    });
+  }, [uiStoreApi, applyCounterScale]);
+  // Re-apply after every commit so a wrapper that just mounted (this layer
+  // returns null when inactive) carries the current scale immediately.
+  useEffect(() => {
+    applyCounterScale();
+  });
+
   if (!active) return null;
 
   return (
-    <>
+    <div ref={counterScaleRef} style={{ display: 'contents' }}>
       {nodes.map((node) => {
         if (node.showLabel === false) return null;
         if (layers.length > 0 && !visibleIds.has(node.id)) return null;
+        // R5/OVL-13: a LOCKED layer still exposed its nodes' label drag and
+        // rename handles — the fourth instance of "the gesture paths consult
+        // isItemInteractable and this affordance layer does not".
+        // `LabelHitLayer` gates edit gestures on `lockedIds`; this one did not.
+        // Edit-mode only: the view-mode proxy is a pure hover surface, and the
+        // tile hit-test the other element types hover through never consults
+        // `lockedIds`, so parity keeps a locked node's link card reachable.
+        if (editable && lockedIds.has(node.id)) return null;
         const meta = metaById.get(node.id);
         if (!meta) return null;
         const { name, headerLink } = meta;
@@ -261,10 +364,19 @@ export const NodeLabelHitLayer = ({ nodes }: Props) => {
           <div
             key={node.id}
             data-axoview-id="canvas-label-hit"
+            // R5/OVL-02: the counter-scale subscription reads this to compute
+            // THIS proxy's factor, so the grab box tracks its own chip.
+            data-label-font={fontSize}
             data-label-hit-id={node.id}
-            onPointerDown={(e) => onPointerDown(e, node)}
-            onDoubleClick={(e) => onLabelDoubleClick(e, node)}
-            onContextMenu={(e) => onContextMenu(e, node)}
+            onPointerDown={
+              editable ? (e) => onPointerDown(e, node) : undefined
+            }
+            onDoubleClick={
+              editable ? (e) => onLabelDoubleClick(e, node) : undefined
+            }
+            onContextMenu={
+              editable ? (e) => onContextMenu(e, node) : undefined
+            }
             // Hovering a LINKED, unselected node's name raises the element link
             // card as a view chip (ADR 0034 addendum 2026-07-05) — parity with
             // the floating Label hit-proxy and the selected node's own DOM
@@ -306,12 +418,21 @@ export const NodeLabelHitLayer = ({ nodes }: Props) => {
               width: chip.width,
               height: chip.height,
               pointerEvents: 'auto',
-              cursor: headerLink ? 'pointer' : 'grab',
-              touchAction: 'none'
+              // 'grab' advertises the edit-mode label drag; a view-mode chip is
+              // not grabbable, so it keeps the pointer/default.
+              cursor: headerLink ? 'pointer' : editable ? 'grab' : 'default',
+              touchAction: 'none',
+              // Congruent with the counter-scaled chip: the proxy is centred on
+              // the chip rect, so scaling about its centre keeps the whole drawn
+              // chip grabbable when readable-labels enlarges it. 1× when off.
+              // R5/OVL-02: the variable is set on THIS element from its own
+              // `data-label-font`, not inherited from the wrapper.
+              transform: 'scale(var(--axoview-label-scale, 1))',
+              transformOrigin: 'center'
             }}
           />
         );
       })}
-    </>
+    </div>
   );
 };

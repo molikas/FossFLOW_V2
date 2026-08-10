@@ -12,10 +12,8 @@ import { useCanvasMode } from 'src/contexts/CanvasModeContext';
 import { PROJECTED_TILE_SIZE, UNPROJECTED_TILE_SIZE } from 'src/config';
 import {
   LABEL_BASE_FONT_PX,
-  LABEL_MIN_READABLE_PX,
-  LABEL_MAX_COUNTER_SCALE
+  labelCounterScaleFor
 } from 'src/config/labelSettings';
-import { computeLabelCounterScale } from 'src/utils/labelScale';
 import { Label } from 'src/components/Label/Label';
 import { Connector, ConnectorLabel as ConnectorLabelType, Coords } from 'src/types';
 import { useSceneActions } from 'src/hooks/useSceneActions';
@@ -170,6 +168,10 @@ const ConnectorTextLabel = ({
   const linkActive = linked && !interactive;
   return (
     <Box
+      // R5/OVL-02: the counter-scale subscription on the parent reads this and
+      // sets `--axoview-label-scale` on THIS element, so each connector label
+      // gets a factor derived from its own font size.
+      data-label-font={label.fontSize ?? LABEL_BASE_FONT_PX}
       sx={{
         position: 'absolute',
         pointerEvents: interactive || linkActive ? 'auto' : 'none',
@@ -671,22 +673,28 @@ export const ConnectorLabel = memo(({ connector }: Props) => {
   // which Label composes into its chip transform (about the attachment origin, so
   // the stalk stays pinned). Set on a display:contents wrapper so every label and
   // the inline editor inherit it. No-op (1) when the toggle is off.
+  //
+  // R5/OVL-02: the wrapper covers EVERY label on this connector, so one shared
+  // variable cannot carry a per-label factor. Each label element stamps its own
+  // font size in `data-label-font` and the subscription sets the variable on
+  // that element — which keeps the property that matters (pan/zoom writes the
+  // DOM directly, no React re-render) while making the factor per label.
   const counterScaleRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const apply = () => {
-      if (!counterScaleRef.current) return;
+      const root = counterScaleRef.current;
+      if (!root) return;
       const { zoom, readableLabels } = uiStoreApi.getState();
-      counterScaleRef.current.style.setProperty(
-        '--axoview-label-scale',
-        String(
-          computeLabelCounterScale(zoom, {
-            enabled: readableLabels,
-            baseFontPx: LABEL_BASE_FONT_PX,
-            minReadablePx: LABEL_MIN_READABLE_PX,
-            maxCounterScale: LABEL_MAX_COUNTER_SCALE
-          })
-        )
-      );
+      const targets = root.querySelectorAll<HTMLElement>('[data-label-font]');
+      for (let i = 0; i < targets.length; i++) {
+        const el = targets[i];
+        el.style.setProperty(
+          '--axoview-label-scale',
+          String(
+            labelCounterScaleFor(zoom, readableLabels, Number(el.dataset.labelFont))
+          )
+        );
+      }
     };
     apply();
     return uiStoreApi.subscribe((s, p) => {

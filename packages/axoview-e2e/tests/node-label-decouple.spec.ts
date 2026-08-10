@@ -8,15 +8,20 @@
  *   2. decouple — changing the identity `name` does NOT move the canvas text
  *      once a `label` exists.
  *
- * The at-rest chip is Canvas2D (no DOM text), so the node is selected to promote
- * it into the DOM overlay (`[data-testid="node-label"]`) where the text is
- * readable. Field writes go through the model store bridge (actions.set), the
- * same model the Details "Label" field and a Layers rename write to.
+ * The chip is drawn on the GPU (no DOM text), so the node is promoted into the
+ * DOM overlay (`[data-testid="node-label"]`) to read it. R4/RND-13/15: SELECTION
+ * no longer promotes — the rename session does — so that goes through
+ * `helpers/nodeOverlay`, which carries the reason. `<Node>` resolves the text as
+ * `label ?? name`, the same resolution `webgl/scene/nodeEmitter.ts` uses, which
+ * is what makes reading the overlay a fair reading of the canvas. Field writes
+ * go through the model store bridge (actions.set), the same model the Details
+ * "Label" field and a Layers rename write to.
  */
 import { canvasReadyTest as test, expect } from '../fixtures/app.fixture';
 import { CanvasPOM } from '../pom/CanvasPOM';
 import { placeIconViaMouse } from '../helpers/place';
 import { getModelItemCount } from '../helpers/store';
+import { promotedLabelText } from '../helpers/nodeOverlay';
 
 type Page = import('@playwright/test').Page;
 
@@ -49,8 +54,10 @@ const patchItem = (page: Page, id: string, patch: Record<string, unknown>) =>
     { id, patch }
   );
 
-const domLabelText = (page: Page) =>
-  page.locator('[data-testid="node-label"]').first().innerText();
+const domLabelText = async (page: Page) => {
+  const id = (await firstItem(page))!.id;
+  return promotedLabelText(page, id);
+};
 
 test.describe('Node label ↔ name decouple — Slice S2 (#4)', () => {
   test('on-canvas label reads `label` and is decoupled from identity `name`', async ({

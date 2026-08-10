@@ -316,6 +316,9 @@ export interface LocaleProps {
     linkSearchPlaceholder: string;
   };
   topBarStyleControls: {
+    // Readout for an absolute control whose bulk members disagree (STYL-08
+    // ruling — never show `selectedIds[0]`'s value for the whole selection).
+    mixed: string;
     noColor: string;
     pickColorFromScreen: string;
     customColor: string;
@@ -582,6 +585,13 @@ export interface LocaleProps {
   // Unassigned group header (with a {count} placeholder) + its drop hint, and
   // the default "Layer {count}" name (interpolated, never concatenated).
   layersPanel: {
+    // F4/LAY-05 + E2/RED-13 ruling — the delete-layer confirm.
+    deleteLayerTitle: string;
+    deleteLayerBody: string;
+    deleteLayerHiddenWarning: string;
+    deleteLayerCancel: string;
+    deleteLayerKeep: string;
+    deleteLayerDeleteContents: string;
     header: string;
     addLayer: string;
     deleteSelectedLayer: string;
@@ -619,6 +629,13 @@ export interface IconUsageReport {
   diagramId: string;
   diagramName: string;
   count: number;
+  /**
+   * F5/ICON-06: the diagram is in the TRASH. Its reference is still live —
+   * a trashed diagram is restorable — so it counts for a DELETE gate even
+   * though it is hidden from an ordinary usage report. The dialog labels
+   * these rows so the count stays honest AND the copy stays clear.
+   */
+  inTrash?: boolean;
 }
 
 /**

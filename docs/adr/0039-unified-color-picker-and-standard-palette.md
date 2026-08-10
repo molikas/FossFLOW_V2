@@ -93,3 +93,47 @@ The single shared component replaces:
 
 - **Unit test:** a `ColorPickerBody` test covering — grid renders all palette swatches; clicking a swatch fires `onChange` with that hex; the active swatch is marked when `value` matches; "＋ Custom" reveals the hex/hue-sat input; Transparent appears **only** when `allowNoColor` and fires `onNoColor`; Transparent is **absent** for text color. The retired `ColorSelector` test is removed.
 - **Manual verification:** on each surface (text color, rectangle fill + border, text/label background, connector color) — the grid opens with no toggle; a grid click applies immediately and persists through save/reload; a stored legacy `color: <presetId>` diagram still renders and shows its swatch active; the eyedropper picks a screen color; Transparent clears a fill but is unavailable on text color. Verified in a real browser (per the WebGL/UI verification rule), not just jsdom.
+
+---
+
+### 2026-07-31 addendum — one representation for "no colour" (STYL-03)
+
+**Owner ruling 2026-07-30** ([rulings table](../reviews/exploratory-2026-07.md#owner-rulings-2026-07-30), STYL-03),
+implemented in the exploratory-remediation wave 4. The accepted text above is
+left as shipped; this addendum is the binding rule for the storage form of "no
+colour", which §3 above left implicit.
+
+**What the campaign found.** "No colour" had two storage forms across sibling
+controls of the same picker. Rectangle fill and rectangle border wrote the
+literal string `'transparent'`; label background, text-box background and
+text-box border deleted the field. Nothing broke — `ColorPickerBody` understands
+both and both rendered as no-fill — but one concept with two representations is
+drift waiting to become a bug the moment a consumer normalises one to the other.
+
+**The rule.**
+
+> **Absent is "no colour", everywhere except where absent already means
+> something else.** The `'transparent'` sentinel is READ forever (diagrams
+> written before this addendum carry it) and WRITTEN in exactly one place.
+
+- **Rectangle fill** — absent. Clearing the fill deletes **both** `customColor`
+  and the legacy `color` preset id. Deleting only `customColor` would let the
+  dormant preset repaint the fill the user just cleared (`resolveHex` falls back
+  to it), which is the STYL-04 hazard turned live. A picked colour likewise
+  clears the preset, so a rectangle's fill has one source of truth.
+- **Label background, text-box background, text-box border** — absent, unchanged.
+- **Rectangle border** — the **one documented exception**: the sentinel stays.
+  An absent `borderColor` derives a stroke from the fill (the legacy look), so
+  absent and "no border" are genuinely different states there. This is what
+  `absentIsNoColor={false}` already encodes at that call site.
+
+**Reader consequence.** An absent rectangle fill now renders **outline-only and
+hit-testable** — exactly what the sentinel renders — rather than nothing at all.
+`Rectangle.tsx` and `RectanglesCanvas.tsx` (the DOM and GPU paths, which must
+agree) both derive `isTransparent = !fillValue || fillValue === 'transparent'`.
+A colourless rectangle was previously unreachable from the app (`DrawRectangle`
+always seeds `colors[0].id`) and only arrived by import or hand-edit, where
+"invisible but present" was the worse of the two readings.
+
+**Gate.** [`bulk-format-mixed.spec.ts`](../../packages/axoview-e2e/tests/bulk-format-mixed.spec.ts)
+drives the real No-colour swatch and asserts both fields end absent.

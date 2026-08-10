@@ -17,29 +17,28 @@ import {
   LABEL_CHIP_PAD_Y,
   LABEL_CHIP_RADIUS
 } from 'src/utils/labelChip';
-import { computeLabelCounterScale } from 'src/utils/labelScale';
 import { getRenderedTilePosition } from 'src/utils/renderedGeometry';
 import {
   LABEL_DRAG_SLOP_PX,
+  createLabelLongPress,
   openLabelContextMenu,
   shouldBeginLabelDrag
 } from 'src/utils/labelPointerContract';
 import {
   LABEL_BASE_FONT_PX,
-  LABEL_MIN_READABLE_PX,
-  LABEL_MAX_COUNTER_SCALE
+  labelCounterScaleFor
 } from 'src/config/labelSettings';
 
 // ---------------------------------------------------------------------------
 // LabelHitLayer (ADR 0031 §4) — the pixel-accurate DOM hit-proxy over the
-// Canvas2D LabelsCanvas paint (mirrors NodeLabelHitLayer). One invisible div per
+// Canvas2D SceneCanvas paint (mirrors NodeLabelHitLayer). One invisible div per
 // visible label, sized to its chip, so the FULL chip width is selectable (not a
 // single anchor tile) and a connector passing UNDER the chip stays selectable
 // where the chip isn't — labels are deliberately NOT in the tile hit-test
 // (hitDetection.ts), the proxy owns label hits.
 //
 // A press selects the label; a drag past slop moves it via the transient
-// `labelMove` preview (LabelsCanvas redraws the chip following the pointer with
+// `labelMove` preview (SceneCanvas redraws the chip following the pointer with
 // NO per-frame model write, so the proxy divs don't thrash), committing the new
 // position ONCE on release (one undo). The divs live in a <SceneLayer>, so they
 // are positioned in canvas-px — the same space getTilePosition + the canvas draw
@@ -52,9 +51,18 @@ import {
 // No press handlers and no stopPropagation there, so pan-over-chip still works.
 // ---------------------------------------------------------------------------
 
-// Below this zoom chips are too small to grab precisely; skip the layer (also
-// bounds the div count at low zoom). Mirrors NodeLabelHitLayer.
-const HIT_MIN_ZOOM = 0.4;
+// R3/GPU-04: there used to be a `HIT_MIN_ZOOM = 0.4` gate here — "below this
+// zoom chips are too small to grab precisely; also bounds the div count". But
+// `SceneCanvas` paints floating Label chips with NO zoom gate at all, so below
+// 0.4 a Label was visible and completely inert: not selectable, not draggable,
+// no context menu, with nothing on screen to say why. Draw visibility and hit
+// visibility were decided in two files with two different thresholds.
+//
+// The rule (config/labelSettings): nothing may be painted at a zoom where it
+// cannot be hit. The draw side has no threshold, so neither does this one. The
+// div-count concern the old comment names is real but bounded the same way it
+// always was — one proxy per VISIBLE label — and "hard to grab" beats
+// "impossible to grab while visible".
 
 // Module-level offscreen 2D context for chip measurement (matches the canvas
 // renderer's measureText). One per module; never attached to the DOM.
@@ -81,7 +89,7 @@ const fallbackChip = (text: string, fontSize: number): LabelChipLayout => {
 
 // Inline contentEditable editor for a floating Label (double-click / F2). It
 // overlays the chip at the same canvas-px rect the hit-proxy uses; while it is
-// mounted LabelsCanvas skips painting this label (uiState.inlineEditLabelId) so
+// mounted SceneCanvas skips painting this label (uiState.inlineEditLabelId) so
 // the text isn't drawn twice. Left-click-away / Enter commit; right-click-away /
 // Escape cancel (useInlineRename's shared contract).
 const LabelInlineEditor = ({
@@ -99,23 +107,47 @@ const LabelInlineEditor = ({
   fontSize: number;
   onDone: () => void;
 }) => {
-  const { updateLabel } = useSceneActions();
+  const { updateLabel, deleteLabel } = useSceneActions();
+  const uiActions = useUiStateStore((s) => s.actions);
+  // TXT-07 ruling (owner 2026-07-30) — FULL text-box lifecycle parity. The two
+  // gestures used to do the opposite of what the text box one tool over does:
+  // Escape right after placement left a literal "Label" chip on the canvas, and
+  // clearing an existing Label's text then committing silently restored the old
+  // text with no feedback at all. Now: an emptied Label is DELETED on commit
+  // (undoable, like the empty text box), and a Label abandoned during its FIRST
+  // edit session is discarded (placement seeds `text: ''`, so "never committed"
+  // is exactly "empty" — the same signal the text box uses).
+  const discard = useCallback(() => {
+    uiActions.setSelectedIds([]);
+    deleteLabel(label.id);
+    onDone();
+  }, [uiActions, deleteLabel, label.id, onDone]);
+
   const commit = useCallback(
     (raw: string) => {
       const text = raw.replace(/\n+$/, '');
-      // Empty text has no reason to draw — revert (keep the old text) rather than
-      // leaving a blank chip; the user can delete the label with Delete instead.
-      if (text.trim() && text !== label.text) {
-        updateLabel(label.id, { text });
+      if (!text.trim()) {
+        discard();
+        return;
       }
+      if (text !== label.text) updateLabel(label.id, { text });
       onDone();
     },
-    [updateLabel, label.id, label.text, onDone]
+    [updateLabel, label.id, label.text, onDone, discard]
   );
+  const cancel = useCallback(() => {
+    // A Label that has never held text is a placement in progress, not an
+    // element the user chose to keep — the exact text-box contract.
+    if (!(label.text ?? '').trim()) {
+      discard();
+      return;
+    }
+    onDone();
+  }, [label.text, discard, onDone]);
   const inline = useInlineRename({
     active: true,
     commit,
-    cancel: onDone,
+    cancel,
     multiline: true
   });
   return (
@@ -227,24 +259,29 @@ export const LabelHitLayer = ({ labels }: Props) => {
   // Coarse zoom gate — boolean selector so this only re-renders when the gate
   // flips, not on every zoom tick. editorMode is a rarely-changing string, so
   // subscribing to it directly keeps the same re-render profile.
-  const zoomActive = useUiStateStore((s) => s.zoom >= HIT_MIN_ZOOM);
   const editorMode = useUiStateStore((s) => s.editorMode);
-  // The inline editor must mount even below HIT_MIN_ZOOM — place-and-type, F2
-  // and double-click all set inlineEditLabelId, but the whole layer used to
-  // return null at low zoom, so those silently no-op'd. Gate the editor on edit
-  // mode only; the hit proxies still gate on `active` (zoom) to bound div count.
   const editable = editorMode === 'EDITABLE';
   // View mode (EXPLORABLE_READONLY) mounts HOVER-ONLY proxies: labels are
   // deliberately out of the tile hit-test (ADR 0031 §4), so without a proxy a
   // chip with notes could never hover-show the info popover (notes parity,
   // 2026-07-13). Select / drag / inline-edit / context-menu stay edit-only.
   const viewMode = editorMode === 'EXPLORABLE_READONLY';
-  const active = (editable || viewMode) && zoomActive;
+  // GPU-04: no zoom term — the chips this layer proxies have none either.
+  const active = editable || viewMode;
   const inlineEditLabelId = useUiStateStore((s) => s.inlineEditLabelId);
 
   const dragRef = useRef<DragState | null>(null);
+  // I2/TCH-09: a finger has no right button, so the chip's context menu is
+  // reached by holding. The canvas gesture machine cannot supply that hold here
+  // — labels are outside the tile hit-test (ADR 0031 §4) AND this proxy swallows
+  // the press, so the window-level pointerdown the machine listens on never
+  // fires. Before this a long press on a floating Label produced NOTHING: no
+  // menu, and not even the hold-on-empty auto-lasso fallback.
+  const longPressRef = useRef<ReturnType<typeof createLabelLongPress> | null>(
+    null
+  );
 
-  // "Keep labels readable" (ADR 0015): the WebGL chip in LabelsCanvas counter-
+  // "Keep labels readable" (ADR 0015): the WebGL chip in SceneCanvas counter-
   // scales about its centre when zoomed out, so the DOM hit proxy (and inline
   // editor) must scale by the SAME factor about the same centre or the enlarged
   // chip's outer margin goes dead to pointer events. Mirror ExpandableLabel — a
@@ -252,20 +289,34 @@ export const LabelHitLayer = ({ labels }: Props) => {
   // --axoview-label-scale on a display:contents wrapper; each proxy / editor
   // composes it into `transform: scale(...)`. No-op (1) when the toggle is off.
   const counterScaleRef = useRef<HTMLDivElement>(null);
+  /**
+   * R5/OVL-02 — the factor is PER PROXY now, not one value on the wrapper.
+   *
+   * It used to be a single `--axoview-label-scale` published on this
+   * `display: contents` wrapper and inherited by every proxy, which was exactly
+   * right while the factor was computed from the module-default font size and
+   * cannot survive it becoming per-label. Each proxy carries its own font size
+   * in `data-label-font`, and the subscription walks them — so this keeps the
+   * property that matters: pan/zoom updates the DOM directly and never
+   * re-renders React (the §8.8 pattern).
+   *
+   * The proxies must track the CHIPS exactly; a factor that moved on one side
+   * alone would put the grab box somewhere other than the thing it proxies,
+   * which is R5/OVL-12 reintroduced from the other side.
+   */
   const applyCounterScale = useCallback(() => {
-    if (!counterScaleRef.current) return;
+    const root = counterScaleRef.current;
+    if (!root) return;
     const { zoom, readableLabels } = uiStoreApi.getState();
-    counterScaleRef.current.style.setProperty(
-      '--axoview-label-scale',
-      String(
-        computeLabelCounterScale(zoom, {
-          enabled: readableLabels,
-          baseFontPx: LABEL_BASE_FONT_PX,
-          minReadablePx: LABEL_MIN_READABLE_PX,
-          maxCounterScale: LABEL_MAX_COUNTER_SCALE
-        })
-      )
-    );
+    const proxies = root.querySelectorAll<HTMLElement>('[data-label-font]');
+    for (let i = 0; i < proxies.length; i++) {
+      const el = proxies[i];
+      const font = Number(el.dataset.labelFont);
+      el.style.setProperty(
+        '--axoview-label-scale',
+        String(labelCounterScaleFor(zoom, readableLabels, font))
+      );
+    }
   }, [uiStoreApi]);
   useEffect(() => {
     applyCounterScale();
@@ -275,7 +326,7 @@ export const LabelHitLayer = ({ labels }: Props) => {
     });
   }, [uiStoreApi, applyCounterScale]);
   // Re-apply after every commit so a wrapper that just mounted (this layer is
-  // null below HIT_MIN_ZOOM, so crossing that gate remounts it) carries the
+  // null when the layer is inactive, so crossing that gate remounts it) carries the
   // current scale immediately, not one zoom tick late.
   useEffect(() => {
     applyCounterScale();
@@ -308,7 +359,7 @@ export const LabelHitLayer = ({ labels }: Props) => {
     [uiStoreApi]
   );
   // If the proxies stop rendering while a chip is hovered (zoom crosses
-  // HIT_MIN_ZOOM under the cursor, editor-mode switch), no pointerleave fires —
+  // editor-mode switch), no pointerleave fires —
   // clear the published hover so the popover can't stick to a vanished chip.
   const viewProxiesLive = viewMode && active;
   useEffect(() => {
@@ -367,6 +418,8 @@ export const LabelHitLayer = ({ labels }: Props) => {
         if (Math.abs(dx) < LABEL_DRAG_SLOP_PX && Math.abs(dy) < LABEL_DRAG_SLOP_PX)
           return;
         d.started = true;
+        // Past slop this is a move, not a hold.
+        longPressRef.current?.cancel();
       }
       e.preventDefault();
       const zoom = uiStoreApi.getState().zoom || 1;
@@ -388,6 +441,8 @@ export const LabelHitLayer = ({ labels }: Props) => {
   const onWindowUp = useCallback(() => {
     const d = dragRef.current;
     dragRef.current = null;
+    longPressRef.current?.cancel();
+    longPressRef.current = null;
     window.removeEventListener('pointermove', onWindowMove);
     window.removeEventListener('pointerup', onWindowUp);
     window.removeEventListener('pointercancel', onWindowUp);
@@ -425,6 +480,24 @@ export const LabelHitLayer = ({ labels }: Props) => {
         started: false,
         last: label.offset ?? { x: 0, y: 0 }
       };
+      // Touch/pen: a stationary hold opens the same item menu a right-click
+      // does (TCH-09). Dropping the drag state first means the lift that follows
+      // commits nothing — the hold replaced the move.
+      const longPress = createLabelLongPress((point) => {
+        dragRef.current = null;
+        const actions = uiStoreApi.getState().actions;
+        actions.setItemControls(
+          { type: 'LABEL', id: label.id },
+          { openPanel: false }
+        );
+        actions.openContextMenu({
+          anchor: point,
+          variant: 'item',
+          target: { type: 'LABEL', id: label.id }
+        });
+      });
+      longPressRef.current = longPress;
+      longPress.start(e);
       window.addEventListener('pointermove', onWindowMove);
       window.addEventListener('pointerup', onWindowUp);
       window.addEventListener('pointercancel', onWindowUp);
@@ -448,9 +521,7 @@ export const LabelHitLayer = ({ labels }: Props) => {
 
   // EDITABLE gets the full gesture surface; EXPLORABLE_READONLY gets hover-only
   // proxies (see `viewMode` above). NON_INTERACTIVE renders nothing.
-  if (!editable && !viewMode) return null;
-  // Low zoom with nothing being edited → render nothing (proxies are zoom-gated).
-  if (!active && inlineEditLabelId == null) return null;
+  if (!active) return null;
 
   return (
     <div ref={counterScaleRef} style={{ display: 'contents' }}>
@@ -458,9 +529,6 @@ export const LabelHitLayer = ({ labels }: Props) => {
         // The inline editor is edit-mode chrome: a stale inlineEditLabelId
         // (mode switched mid-edit) must never mount a contentEditable in view.
         const editing = editable && label.id === inlineEditLabelId;
-        // Below HIT_MIN_ZOOM only the label being edited mounts (its inline
-        // editor); the pixel-accurate hit proxies stay gated on zoom.
-        if (!active && !editing) return null;
         if (!editing) {
           if (layers.length > 0 && !visibleIds.has(label.id)) return null;
           // Locked layers gate EDIT gestures only — the view-mode proxy is a
@@ -505,6 +573,9 @@ export const LabelHitLayer = ({ labels }: Props) => {
             key={label.id}
             data-axoview-id="canvas-label-hit"
             data-label-hit-id={label.id}
+            // R5/OVL-02: the counter-scale subscription reads this to compute
+            // THIS proxy's factor, so the grab box tracks its own chip.
+            data-label-font={fontSize}
             // View mode is HOVER-ONLY: no press/double-click/context handlers
             // and no stopPropagation, so presses bubble to the window-level pan
             // handlers (usePanHandlers) — panning keeps working over a chip.

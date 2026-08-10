@@ -1,5 +1,10 @@
 import { setWindowCursor, generateId } from 'src/utils';
-import { resolvePlacement, cursorTileResidual } from 'src/utils/resolvePlacement';
+import {
+  resolvePlacement,
+  cursorTileResidual,
+  activeLayerPatch
+} from 'src/utils/resolvePlacement';
+import { isCanvasDrop } from 'src/utils/canvasDropTarget';
 import { TEXTBOX_DEFAULTS } from 'src/config';
 import { exceedsTapSlop } from 'src/config/tapGesture';
 import { ModeActions } from 'src/types';
@@ -17,20 +22,30 @@ export const TextBox: ModeActions = {
     setWindowCursor('default');
   },
   mousemove: () => {},
-  mouseup: ({ uiState, scene, isRendererInteraction }) => {
+  mouseup: ({ uiState, scene, isRendererInteraction, rendererRef }) => {
     if (uiState.mode.type !== 'TEXTBOX') return;
 
     // Distinguish the arming tap on the deck card (no renderer release, no move →
     // just arm) from a real placement: a canvas tap (renderer release) or a
-    // drag from the panel onto the canvas (past tap-slop). Same gating PlaceIcon
-    // uses so the panel click only arms.
+    // drag from the panel that ENDS OVER the canvas. Same gating PlaceIcon uses
+    // so the panel click only arms. (I5/CTX-01: "did the pointer travel?" alone
+    // dropped elements behind the panel the drag was released over.)
     const moved =
       !!uiState.mouse.mousedown &&
       exceedsTapSlop(
         uiState.mouse.mousedown.screen,
         uiState.mouse.position.screen
       );
-    if (!isRendererInteraction && !moved) return;
+    if (
+      !isCanvasDrop(
+        rendererRef,
+        isRendererInteraction,
+        uiState.mouse.position.screen,
+        moved
+      )
+    ) {
+      return;
+    }
 
     const globalSnap = uiState.snapToGrid ?? true;
     const tile = uiState.mouse.position.tile;
@@ -47,11 +62,22 @@ export const TextBox: ModeActions = {
     const placement = resolvePlacement(tile, residual, undefined, globalSnap);
 
     const id = generateId();
+    // TXT-04 — open the session's history bracket BEFORE the create, so
+    // placement and the empty-box discard are one logical action rather than
+    // two. With two entries, a single Ctrl+Z after abandoning a fresh box
+    // landed between them and resurrected an invisible 1×1 ghost that every
+    // save, export, lasso and Ctrl+A then carried. `TextBox.tsx` closes the
+    // bracket on commit / cancel / discard (and on unmount, so a page switch
+    // mid-session cannot leave it open); `beginDragTransaction` is idempotent,
+    // so the component re-opening it for its own session is harmless.
+    scene.beginDragTransaction();
     scene.createTextBox({
       ...TEXTBOX_DEFAULTS,
       id,
       tile: placement.tile,
-      offset: placement.offset
+      offset: placement.offset,
+      // F4/LAY-03: join the layer the panel has selected, if any.
+      ...activeLayerPatch(uiState.activeLayerId, scene.currentView?.layers)
     });
 
     // Place-and-type (owner 2026-07-02): select the box so the top strip targets

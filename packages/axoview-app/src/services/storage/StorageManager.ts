@@ -58,10 +58,15 @@ export class StorageManager implements StorageProvider {
    */
   setServerStorage(available: boolean): void {
     this.serverStorageAvailable = available;
-    const provider = this.getActiveProvider();
-    if ('usingServer' in provider) {
-      (provider as StorageProvider & { usingServer: boolean }).usingServer = available;
-    }
+    // Every registered provider, not just the active one (A2/STOR-10): whether
+    // the deploy is server-backed is a property of the deploy, and pushing it
+    // onto whichever provider happened to be active when boot finished left the
+    // others answering from a mode they were never told about.
+    this.registry.forEach((provider) => {
+      if ('usingServer' in provider) {
+        (provider as StorageProvider & { usingServer: boolean }).usingServer = available;
+      }
+    });
   }
 
   // ---------------------------------------------------------------------------

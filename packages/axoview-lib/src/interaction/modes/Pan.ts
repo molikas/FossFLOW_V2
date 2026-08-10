@@ -53,7 +53,25 @@ const nodeHasReadonlyContent = (modelItem: ModelItem | undefined): boolean =>
 // (NodePanel readOnly). Click on empty area — or on a node with no content —
 // dismisses the panel. Treated as a click only when the up tile equals the
 // down tile (no drag). Right-click drag is handled by usePanHandlers.
-const handleReadonlyClick: ModeActions['mouseup'] = ({ uiState, scene, model }) => {
+const handleReadonlyClick: ModeActions['mouseup'] = ({
+  uiState,
+  scene,
+  model,
+  isRendererInteraction
+}) => {
+  // The pointer listener is WINDOW-bound (ADR 0018), so this sees mouseups over
+  // the right sidebar, the toolbar and every portaled overlay too — and a tile
+  // is resolvable for any screen point, so an off-canvas release looks exactly
+  // like a click on empty canvas and would dismiss the panel. That is not
+  // hypothetical: it unmounted the read-only NodePanel's linked-diagram link
+  // mid-click, so the link's own handler never ran (J5.3).
+  //
+  // This branch only became reachable when I5/CTX-15 stopped a stale RAF
+  // mousemove from clearing `mouse.mousedown` — before that, the guard below
+  // returned early on every release and the whole path was dead. `Pan.mousedown`
+  // has always checked `isRendererInteraction`; the mouseup half needs it too.
+  if (!isRendererInteraction) return;
+
   const mousedownTile = uiState.mouse.mousedown?.tile;
   const currentTile = uiState.mouse.position.tile;
   if (!mousedownTile || !CoordsUtils.isEqual(mousedownTile, currentTile)) return;

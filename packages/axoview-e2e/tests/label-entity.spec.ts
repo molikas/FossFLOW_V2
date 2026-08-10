@@ -4,16 +4,20 @@
  * Covers the binary KR2 behaviours the extraction exists to deliver:
  *   - placement: arming the Label tool + clicking drops exactly ONE Label
  *     (Label.mouseup → scene.createLabel; its own mode, not a textBox variant).
- *   - render / z-order: the placed Label paints on LabelsCanvas, which is mounted
- *     DOM-AFTER NodesCanvas — so a label over a node renders ABOVE it (the
- *     cross-layer z-order fix; the variant chip on the DOM-earlier TextBoxes
- *     layer was always occluded).
+ *   - render / z-order: the placed Label paints on the merged bulk canvas ABOVE
+ *     nodes at the same layer/z-index — the `label` TYPE RANK in
+ *     `compareSceneDrawOrder`. R3/GPU-13 (ADR 0038 §8) merged the four bulk
+ *     canvases, so this "asserts the sort, not DOM order" as the amendment
+ *     requires: there is no mount order left to read. The cross-type ORDERING
+ *     itself is proven pixel-wise by `cross-type-z-order.spec.ts`; here the
+ *     assertion is that the merged canvas drew the chip at all.
  *   - full-chip select: the pixel-accurate LabelHitLayer proxy spans the whole
  *     chip, so a press anywhere on it selects the Label (not just the anchor
  *     tile, the old variant's limitation).
  */
 import { canvasReadyTest as test, expect } from '../fixtures/app.fixture';
 import { CanvasPOM, CanvasPoint } from '../pom/CanvasPOM';
+import { sceneCounters } from '../helpers/sceneCanvas';
 
 const getViewLabelCount = (page: import('@playwright/test').Page) =>
   page.evaluate(() => {
@@ -86,33 +90,16 @@ test.describe('Floating Label entity (ADR 0031)', () => {
     await expect.poll(() => getViewLabelCount(page), { timeout: 5_000 }).toBe(1);
     await commitPlacementEdit(page);
 
-    // The Label layer is mounted AFTER the node layer in the DOM, so it paints
-    // on top (the z-order fix — a label tile placed over a node renders above it).
-    const labelsAfterNodes = await page.evaluate(() => {
-      const nodes = document.querySelector('[data-testid="axoview-nodes-canvas"]');
-      const labels = document.querySelector(
-        '[data-testid="axoview-labels-canvas"]'
-      );
-      if (!nodes || !labels) return null;
-      return Boolean(
-        nodes.compareDocumentPosition(labels) &
-          Node.DOCUMENT_POSITION_FOLLOWING
-      );
-    });
-    expect(labelsAfterNodes).toBe(true);
-
-    // The Canvas2D draw-count anti-cheat proves the label actually painted.
+    // ADR 0031 §2 is a SORT-KEY property now, not a mount-order one: `label` is
+    // the highest type rank in `compareSceneDrawOrder`, so a Label paints above a
+    // node at the same layer and z-index. There is one canvas, so there is no DOM
+    // order to compare — the ordering is proven pixel-wise in
+    // `cross-type-z-order.spec.ts`, and what this spec owes is that the merged
+    // canvas actually drew the chip.
     await expect
-      .poll(
-        () =>
-          page.evaluate(() => {
-            const c = document.querySelector(
-              '[data-testid="axoview-labels-canvas"]'
-            ) as HTMLCanvasElement | null;
-            return c ? parseInt(c.dataset.drawCount ?? '0', 10) : 0;
-          }),
-        { timeout: 5_000 }
-      )
+      .poll(() => sceneCounters(page).then((c) => c.floatingLabelsDrawn ?? 0), {
+        timeout: 5_000
+      })
       .toBeGreaterThanOrEqual(1);
   });
 

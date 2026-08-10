@@ -1,6 +1,7 @@
 import { produce } from 'immer';
 import { TextBox } from 'src/types';
 import { getItemByIdOrThrow, getTextBoxDimensions } from 'src/utils';
+import { isNoOpUpdate } from './noOpUpdate';
 import { State, ViewReducerContext } from './types';
 
 export const syncTextBox = (
@@ -24,6 +25,19 @@ export const updateTextBox = (
   { viewId, state }: ViewReducerContext
 ): State => {
   const view = getItemByIdOrThrow(state.model.views, viewId);
+
+  // RED-06 — see noOpUpdate.ts. Also keeps the re-measure below from running on
+  // a write that cannot have changed the geometry.
+  const existing = view.value.textBoxes?.find((tb) => tb.id === id);
+  if (
+    existing &&
+    isNoOpUpdate(
+      existing as unknown as Record<string, unknown>,
+      updates as Record<string, unknown>
+    )
+  ) {
+    return state;
+  }
 
   const newState = produce(state, (draft) => {
     const { textBoxes } = draft.model.views[view.index];
@@ -74,7 +88,12 @@ export const createTextBox = (
     }
   });
 
-  return updateTextBox(newTextBox, { viewId, state: newState });
+  // Measure the new box directly rather than by re-dispatching an update of
+  // every field it was just created with. That round trip only ever existed to
+  // reach `syncTextBox`, and since RED-06 gave `updateTextBox` a no-op guard it
+  // would have depended on `tile` being an object to survive that guard —
+  // a load-bearing accident. Say what is meant instead.
+  return syncTextBox(newTextBox.id, { viewId, state: newState });
 };
 
 export const deleteTextBox = (

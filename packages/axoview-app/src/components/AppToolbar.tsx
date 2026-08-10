@@ -38,6 +38,7 @@ import { shareUrlFromUuid } from '../utils/shareUrl';
 import {
   drivePreviewUrl,
   getAccessOverview,
+  isShared,
   AccessOverview
 } from '../services/drive/driveSharing';
 import { DriveShareManageDialog } from './DriveShareManageDialog';
@@ -214,26 +215,39 @@ export function AppToolbar() {
     try {
       await navigator.clipboard.writeText(drivePreviewUrl(fileId));
       // Only worth "success" if the link will actually open for a recipient.
-      // With access restricted (no anyone-link, nobody added), warn instead —
-      // unless the ACL couldn't be read (driveOverview null), where we don't
-      // cry wolf.
-      const shared =
-        driveOverview?.summary === 'anyone-with-link' ||
-        (driveOverview?.peopleCount ?? 0) > 0;
-      notify(
-        shared || !driveOverview
-          ? {
-              severity: 'success',
-              message: t('share.drive.manage.copiedToast', 'Preview link copied to clipboard')
-            }
-          : {
-              severity: 'warning',
-              message: t(
-                'share.drive.manage.copiedRestricted',
-                'Link copied — but only people with access can open it. Set General access to "Anyone with the link" to let anyone view.'
-              )
-            }
-      );
+      //
+      // S3/DRV-06: there are THREE answers here, not two. This used to choose
+      // with `shared || !driveOverview` — the `!driveOverview` disjunct being a
+      // deliberate "don't cry wolf" clause for a failed `getAccessOverview`.
+      // But that made an UNKNOWN ACL report as a GOOD one, and unknown is
+      // exactly the case where the app does not know whether the link works.
+      // The Manage-access dialog computed the same question over a null
+      // permissions array and warned, so the two surfaces disagreed on
+      // precisely the unknown case. Neither confident answer is honest — say so.
+      if (!driveOverview) {
+        notify({
+          severity: 'info',
+          message: t(
+            'share.drive.manage.copiedUnknownAccess',
+            "Link copied. We couldn't check who has access — open Manage access to be sure."
+          )
+        });
+      } else {
+        notify(
+          isShared(driveOverview)
+            ? {
+                severity: 'success',
+                message: t('share.drive.manage.copiedToast', 'Preview link copied to clipboard')
+              }
+            : {
+                severity: 'warning',
+                message: t(
+                  'share.drive.manage.copiedRestricted',
+                  'Link copied — but only people with access can open it. Set General access to "Anyone with the link" to let anyone view.'
+                )
+              }
+        );
+      }
     } catch {
       // Clipboard blocked (insecure context) — nothing copied; stay silent.
     }

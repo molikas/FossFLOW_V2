@@ -21,10 +21,12 @@ module.exports = {
     '^react/jsx-dev-runtime$': path.join(rootNodeModules, 'react/jsx-dev-runtime'),
     '\\.(css|less|scss|sass)$': path.join(__dirname, 'jest.cssMock.js'),
     '\\.(svg|png|jpg|jpeg|gif|webp)$': path.join(__dirname, 'jest.assetMock.js'),
-    '^axoview$': path.join(__dirname, 'jest.axoviewMock.js')
+    '^axoview$': path.join(__dirname, 'jest.axoviewMock.ts')
   },
   setupFilesAfterEnv: [path.join(__dirname, 'jest.setup.js')],
-  testPathIgnorePatterns: ['/node_modules/', '/build/', '\\.d\\.ts$'],
+  // '/__explore__/' quarantines the exploratory-campaign probes (APPROACH.md §7)
+  // from `npm test`; jest.explore.config.js drops exactly that entry.
+  testPathIgnorePatterns: ['/node_modules/', '/build/', '\\.d\\.ts$', '/__explore__/'],
   coverageDirectory: 'coverage',
   collectCoverageFrom: [
     'src/**/*.{ts,tsx}',

@@ -99,9 +99,18 @@ baseTest.describe('Share — J13 (Local-mode share-uuid error)', () => {
     await dialogs.localModeShareError().waitFor({ state: 'visible', timeout: 10_000 });
     // The locked copy from ADR 0011 — verify the user sees a real
     // explanation, not just an empty dialog frame.
+    //
+    // S2/SHARE-12 rewrote it for the reader who actually arrives here: the
+    // RECIPIENT of someone else's link, who owns no deployment. The old text
+    // ("this share link needs a session backend… deploy via Docker or
+    // Cloudflare") was operator-facing, and its Cloudflare half was false — the
+    // worker hardcodes `serverStorage: false` and has no snapshot handler at
+    // all. Assert the explanation the recipient can act on, and that the false
+    // advice is gone.
     await expect(dialogs.localModeShareError()).toContainText(
-      'session backend'
+      'different Axoview site'
     );
+    await expect(dialogs.localModeShareError()).not.toContainText('Cloudflare');
 
     await dialogs.dismissLocalModeShareError();
 

@@ -116,3 +116,54 @@ The strip renders **only in `EDITABLE` mode**, via `createPortal` into an app-su
 - **Manual:** select one item of each type → the correct strip controls enable; select zero or two → all disabled with "why" tooltips; arm the connector tool with nothing selected → color/line controls edit pre-draw defaults and the next connector inherits them.
 - **Manual:** Delete is reachable for every item type via the context menu (no Style-tab dependency).
 - **Build + lib/app typecheck clean.**
+
+---
+
+### 2026-07-31 addendum — a bulk is read as a whole, not through a representative (STYL-01/02/06/08)
+
+**Owner rulings 2026-07-30** ([rulings table](../reviews/exploratory-2026-07.md#owner-rulings-2026-07-30),
+STYL-02 and STYL-08), implemented in the exploratory-remediation wave 4.
+Refines §2's homogeneous-bulk amendment, which said what the strip WRITES to
+and left what it READS unstated.
+
+**The class it closes.** The strip resolved a representative
+(`sel = bulk.ids[0]`, i.e. `selectedIds[0]`) and derived every displayed value
+from that ONE member while writing to all of them. That is correct for an
+absolute value and wrong for anything derived, and it produced four filed bugs
+at once: a B/I/U/S press carried the representative's whole four-field quartet
+to every member, wiping formats nobody touched (**STYL-01**); the press
+DIRECTION came from the representative, so a mixed selection normalised to its
+opposite (**STYL-02**, and **STYL-06** through the text-box content path); and
+because `selectedIds[0]` is scene order for a lasso and array order for
+Ctrl+A, the same set of items styled differently depending on how it was
+selected (**STYL-08**).
+
+**The rule.**
+
+1. **A toggle asks the whole selection.** Its state is a tri-state —
+   `all → on`, `none → off`, otherwise `mixed`, rendered with
+   `aria-pressed="mixed"` (ARIA's third value) and a dashed outline. One press
+   applies to everyone unless everyone already has the format:
+   `next = state !== 'on'`. This is the Word / Docs / Slides / Figma / Lucid
+   contract.
+2. **A toggle writes exactly the field it was pressed for.** The three label
+   types' four booleans live in three naming schemes (ADR 0033), so the patch is
+   built through one map per type rather than by hand.
+3. **An absolute control shows the shared value, or "Mixed".** Never
+   `bulk.ids[0]`'s value. Sliders render `Mixed` in their readout, colour bars
+   render a striped swatch, and exclusive toggle groups select nothing.
+
+The representative survives only as "which type-keyed hook is live" — it no
+longer decides any value.
+
+**Where it lives.** [`utils/bulkStyleTarget.ts`](../../packages/axoview-lib/src/utils/bulkStyleTarget.ts)
+(`deriveTriState`, `nextToggleValue`, `deriveSharedValue`, the three field maps
+and `formatFieldPatch`); the strip consumes them via `targetIdsFor` / `sharedOf`.
+
+**Gate.** [`bulkStyleFanOut.contract.test.ts`](../../packages/axoview-lib/src/utils/__tests__/bulkStyleFanOut.contract.test.ts)
+— field-map completeness against the schemas, a source scan proving the strip
+never hand-writes a format field, and an order-independence sweep. Section §4 of
+the same file gates the sibling-drift class STYL-05 came from: every writer in
+the text-box Border popover goes through one seeded helper, because a text box
+with no `borderColor` has no border at all and an unseeded write is invisible
+but still stored.

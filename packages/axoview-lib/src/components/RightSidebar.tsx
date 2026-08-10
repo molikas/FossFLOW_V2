@@ -14,11 +14,20 @@ interface Props {
 export const RightSidebar = ({ open, editorMode }: Props) => {
   const { t } = useTranslation('rightSidebar');
   const itemControls = useUiStateStore((s) => s.itemControls);
+  const storeEditorMode = useUiStateStore((s) => s.editorMode);
   const setRightSidebarOpen = useUiStateStore(
     (s) => s.actions.setRightSidebarOpen
   );
 
-  const readOnly = editorMode === EditorModeEnum.EXPLORABLE_READONLY;
+  // Two sources describe the same fact: the `editorMode` PROP that Axoview
+  // threads down, and the store field that same prop is synced into
+  // (`Axoview.tsx` is its only production writer, so they normally agree — the
+  // window is the first paint before the sync effect runs, plus any consumer
+  // that drives the store directly). A read-only gate must not be defeated by
+  // whichever copy is stale, so either saying "view mode" is enough. F2/VIEW-11.
+  const readOnly =
+    editorMode === EditorModeEnum.EXPLORABLE_READONLY ||
+    storeEditorMode === EditorModeEnum.EXPLORABLE_READONLY;
   const hasSelection = itemControls !== null;
 
   return (

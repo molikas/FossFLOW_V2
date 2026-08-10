@@ -319,6 +319,20 @@ export const useCopyPaste = () => {
     clipboardData.textBoxes.forEach((tb) => idMap.set(tb.id, generateId()));
     (clipboardData.labels ?? []).forEach((l) => idMap.set(l.id, generateId()));
 
+    // E3/SCN-03: anchor ids are their own identity namespace and every
+    // anchor-to-anchor ref and CONNECTOR_ANCHOR selection ref resolves by id
+    // across the WHOLE view — carrying them over verbatim left two anchors
+    // with one id, so a single waypoint delete spliced both connectors
+    // (SCN-04) and the original's waypoint became unaddressable. Pasted
+    // anchors get fresh ids through the same kind of map as everything else.
+    const anchorIdMap = new Map<string, string>();
+    clipboardData.connectors.forEach((c) =>
+      c.anchors.forEach((a) => anchorIdMap.set(a.id, generateId()))
+    );
+
+    // (Foreign `layerId`s are stripped inside `pasteItems` — the chokepoint
+    // every duplication path funnels through. E3/SCN-14.)
+
     // Build remapped items. Route each through the one placement chokepoint:
     // the `...ci.viewItem` spread preserves a copied item's own snap/collides/
     // offset, and resolvePlacement clears a stale offset when the item snaps so
@@ -352,34 +366,59 @@ export const useCopyPaste = () => {
       if (!originalTileMap.has(vi.id)) originalTileMap.set(vi.id, vi.tile);
     }
 
-    // Remap connector anchors — remap known items, detach anchors pointing at items not in clipboard
-    const newConnectors: Connector[] = clipboardData.connectors.map((c) => ({
-      ...c,
-      id: idMap.get(c.id) ?? generateId(),
-      anchors: c.anchors.map((anchor) => {
-        if (anchor.ref?.item) {
-          if (idMap.has(anchor.ref.item)) {
-            return { ...anchor, ref: { item: idMap.get(anchor.ref.item)! } };
-          }
-          // Detach anchor: convert to tile ref using the item's known position
-          const tile = originalTileMap.get(anchor.ref.item) ?? mouseTile;
-          return { ...anchor, ref: { tile } };
-        }
-        // Tile waypoint: apply paste offset so intermediate points move with the connector
-        if (anchor.ref?.tile) {
-          return {
-            ...anchor,
-            ref: {
-              tile: {
-                x: anchor.ref.tile.x + offset.x,
-                y: anchor.ref.tile.y + offset.y
-              }
+    // Remap connector anchors — fresh anchor ids (SCN-03), remap known
+    // items/anchors, detach refs pointing outside the clipboard set.
+    const newConnectors: Connector[] = clipboardData.connectors.map(
+      (c) => ({
+        ...c,
+        id: idMap.get(c.id) ?? generateId(),
+        anchors: c.anchors.map((anchor) => {
+          const newAnchorId = anchorIdMap.get(anchor.id) ?? generateId();
+          if (anchor.ref?.item) {
+            if (idMap.has(anchor.ref.item)) {
+              return {
+                ...anchor,
+                id: newAnchorId,
+                ref: { item: idMap.get(anchor.ref.item)! }
+              };
             }
-          };
-        }
-        return anchor;
+            // Detach anchor: convert to tile ref using the item's known position
+            const tile = originalTileMap.get(anchor.ref.item) ?? mouseTile;
+            return { ...anchor, id: newAnchorId, ref: { tile } };
+          }
+          // Anchor-to-anchor ref: inside the pasted set it follows the same
+          // map (SCN-03); outside it, detach to the paste point — keeping the
+          // original id would tether the clone to the source connector, and on
+          // a cross-page paste it would dangle. (A cross-set anchor-to-anchor
+          // ref is a rare shape; landing its detached waypoint at the paste
+          // point rather than the source anchor's exact tile is acceptable.)
+          if (anchor.ref?.anchor) {
+            if (anchorIdMap.has(anchor.ref.anchor)) {
+              return {
+                ...anchor,
+                id: newAnchorId,
+                ref: { anchor: anchorIdMap.get(anchor.ref.anchor)! }
+              };
+            }
+            return { ...anchor, id: newAnchorId, ref: { tile: mouseTile } };
+          }
+          // Tile waypoint: apply paste offset so intermediate points move with the connector
+          if (anchor.ref?.tile) {
+            return {
+              ...anchor,
+              id: newAnchorId,
+              ref: {
+                tile: {
+                  x: anchor.ref.tile.x + offset.x,
+                  y: anchor.ref.tile.y + offset.y
+                }
+              }
+            };
+          }
+          return { ...anchor, id: newAnchorId };
+        })
       })
-    }));
+    );
 
     // Offset rectangles
     const newRectangles: Rectangle[] = clipboardData.rectangles.map((r) => ({
@@ -433,7 +472,7 @@ export const useCopyPaste = () => {
     // Wrap the store write in startTransition so React can deprioritize the resulting
     // render and remain responsive to user input during large paste operations.
     startTransition(() => {
-      scene.pasteItems(
+      const applied = scene.pasteItems(
         {
           items: newItems,
           connectors: newConnectors,
@@ -443,6 +482,29 @@ export const useCopyPaste = () => {
         },
         onPathProgress
       );
+
+      // E3/SCN-12: an invalid payload used to be abandoned with only a
+      // console.warn — Ctrl+V appeared to do nothing. Surface it with the SAME
+      // warning the empty-clipboard path uses (the entry's fix direction, and
+      // no new boot-critical i18n weight): from the user's seat the paste
+      // yielded nothing either way (UX §6.3: failures are surfaced, not left in
+      // devtools). Never claim success for a paste that was rejected.
+      if (!applied) {
+        showNotification(t('nothingToPaste'), 'warning');
+        return;
+      }
+
+      if (!isLargePaste) {
+        showNotification(
+          formatCount('pastedOne', 'pastedOther', pastedCount),
+          'success'
+        );
+      } else {
+        showNotification(
+          t('routingConnectors').replace('{percent}', '0'),
+          'info'
+        );
+      }
     });
 
     uiState.actions.setMode({
@@ -451,18 +513,6 @@ export const useCopyPaste = () => {
       mousedownItem: null
     });
     uiState.actions.setItemControls(null);
-
-    if (!isLargePaste) {
-      showNotification(
-        formatCount('pastedOne', 'pastedOther', pastedCount),
-        'success'
-      );
-    } else {
-      showNotification(
-        t('routingConnectors').replace('{percent}', '0'),
-        'info'
-      );
-    }
   }, [showNotification, uiStateApi, scene, clipboard, t, formatCount]);
 
   return { handleCopy, handleCut, handlePaste };

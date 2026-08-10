@@ -17,13 +17,15 @@ import {
   Coords
 } from 'src/types';
 import { PastePayload } from 'src/clipboard/clipboard';
-import { useUiStateStore } from 'src/stores/uiStateStore';
+import { useUiStateStore, useUiStateStoreApi } from 'src/stores/uiStateStore';
 import { useModelStoreApi } from 'src/stores/modelStore';
-import { useSceneStoreApi } from 'src/stores/sceneStore';
+import { useSceneStoreApi, type EditSession } from 'src/stores/sceneStore';
 import * as reducers from 'src/stores/reducers';
 import type { State } from 'src/stores/reducers/types';
 import { validateView } from 'src/schemas/validation';
 import { generateId, getConnectorPath } from 'src/utils';
+// Deep import (not the barrel) so this stays out of the utils cycle graph.
+import { nextPageName } from 'src/utils/pageName';
 import { useView } from 'src/hooks/useView';
 import { VIEW_DEFAULTS } from 'src/config';
 import { allocateHistorySequence } from 'src/stores/historySequence';
@@ -31,29 +33,61 @@ import { useTranslation } from 'src/stores/localeStore';
 
 export const useSceneActions = () => {
   const { changeView } = useView();
-  const currentViewId = useUiStateStore((state) => state.view);
+  const rawViewId = useUiStateStore((state) => state.view);
+  const uiStateStoreApi = useUiStateStoreApi();
   // D13 — default page name is localised at creation time (mirrors how
   // LayersPanel applies layersPanel.layerN). The name is stored model data, so
   // it's generated here, at the creation surface, rather than at display.
   const { t } = useTranslation('page');
 
-  const transactionInProgress = useRef(false);
-  const pendingStateRef = useRef<State | null>(null);
-  // Live-drag transaction: state writes pass through to stores in real time, but
-  // history records only one entry (begin → commit). See beginDragTransaction.
-  const dragInProgress = useRef(false);
-
   const modelStoreApi = useModelStoreApi();
   const sceneStoreApi = useSceneStoreApi();
+
+  // E3/SCN-09: the READ facade (useSceneData.currentView) silently falls back
+  // to views[0] when `ui.view` names a view the model no longer has (the state
+  // a page delete's undo used to leave behind). The write facade keyed off the
+  // RAW id, so the canvas rendered page 1 while every edit threw "not found".
+  // Reads and writes must resolve the SAME view: apply the same fallback here.
+  // (Deliberately not a subscription to model.views — the value is consumed
+  // inside event callbacks, and this hook re-renders on every `ui.view` change,
+  // which covers every route into the dangling state.)
+  const currentViewId = (() => {
+    if (!rawViewId) return rawViewId;
+    const views = modelStoreApi.getState().views;
+    if (!views?.length || views.some((v) => v.id === rawViewId)) {
+      return rawViewId;
+    }
+    return views[0].id;
+  })();
+
+  // E1/HIST-07, E1/HIST-08: "is a transaction open?", "is a drag open?" and the
+  // batched pending state are properties of the EDITING SESSION, not of one
+  // hook instance. They used to be `useRef`s here, so a second `useSceneActions`
+  // under the same providers — another component's, or `useHistory`'s — could
+  // not see either bracket: a foreign mid-drag write re-armed the pre-snapshot
+  // (undo landed mid-drag), and scene CRUD wrapped in `useHistory.transaction`
+  // pushed one history entry each instead of one in total. The scene store is
+  // created once per provider, so its `editSession` has exactly the right scope.
+  //
+  // The `?? fallback` keeps the mocked-store unit tests working (they hand the
+  // hook a partial store with no `actions`), the same accommodation
+  // `useHistory` makes for `peekUndoSeq`. Under real providers the store always
+  // supplies it, which is the only configuration the brackets have to span.
+  const fallbackSession = useRef<EditSession>({
+    transactionInProgress: false,
+    dragInProgress: false,
+    pendingState: null
+  });
+  const session =
+    sceneStoreApi.getState()?.actions?.editSession ?? fallbackSession.current;
 
   // -------------------------------------------------------------------------
   // Internal transaction utilities
   // -------------------------------------------------------------------------
 
   const getState = useCallback((): State => {
-    if (transactionInProgress.current && pendingStateRef.current) {
-      return pendingStateRef.current;
-    }
+    const pending = session.pendingState as State | null;
+    if (session.transactionInProgress && pending) return pending;
     const model = modelStoreApi.getState();
     const scene = sceneStoreApi.getState();
     return {
@@ -72,8 +106,8 @@ export const useSceneActions = () => {
 
   const setState = useCallback(
     (newState: State) => {
-      if (transactionInProgress.current) {
-        pendingStateRef.current = newState;
+      if (session.transactionInProgress) {
+        session.pendingState = newState;
         return;
       }
       modelStoreApi.getState().actions.set(newState.model, true);
@@ -83,16 +117,44 @@ export const useSceneActions = () => {
   );
 
   const saveToHistoryBeforeChange = useCallback(() => {
-    if (transactionInProgress.current) return;
+    if (session.transactionInProgress) return;
     // While a live drag is open, the pre-snapshot was captured at begin; per-tick
     // saves would overwrite it and lose the original starting state.
-    if (dragInProgress.current) return;
+    if (session.dragInProgress) return;
     // One logical action across both stores — allocate a single shared seq so
-    // its model+scene entries stamp the same value (D-7).
-    allocateHistorySequence();
+    // its model+scene entries stamp the same value (D-7), and record the page
+    // it is being performed on so undo/redo can navigate back to it (HIST-10).
+    allocateHistorySequence(currentViewId);
+    // E1/HIST-02: a new action branches history, so BOTH futures are stale. The
+    // store whose patch set for this action turns out to be empty never pushes
+    // an entry, and so never cleared its own — leaving `canRedo` true and a
+    // stale patch to re-apply (an orphan `scene.connectors[id]`).
+    modelStoreApi.getState().actions.clearFuture();
+    sceneStoreApi.getState().actions.clearFuture();
     modelStoreApi.getState().actions.saveToHistory();
     sceneStoreApi.getState().actions.saveToHistory();
-  }, [modelStoreApi, sceneStoreApi]);
+  }, [session, currentViewId, modelStoreApi, sceneStoreApi]);
+
+  /**
+   * Arm the undo snapshot for one logical action and run its reducer. If the
+   * reducer throws, the armed snapshot is DISCARDED: leaving it armed let the
+   * next `skipHistory` write from elsewhere (a page switch's SYNC_SCENE)
+   * consume it and push a bogus entry stamped with this action's seq, so a
+   * later Ctrl+Z reverted a diff the user never made (E1/HIST-05).
+   */
+  const withHistory = useCallback(
+    <T,>(run: () => T): T => {
+      saveToHistoryBeforeChange();
+      try {
+        return run();
+      } catch (e) {
+        modelStoreApi.getState().actions.discardPendingPre();
+        sceneStoreApi.getState().actions.discardPendingPre();
+        throw e;
+      }
+    },
+    [saveToHistoryBeforeChange, modelStoreApi, sceneStoreApi]
+  );
 
   // -------------------------------------------------------------------------
   // Live drag transactions — for interactions where intermediate updates must
@@ -101,27 +163,30 @@ export const useSceneActions = () => {
   // -------------------------------------------------------------------------
 
   const beginDragTransaction = useCallback(() => {
-    if (dragInProgress.current) return;
-    dragInProgress.current = true;
+    if (session.dragInProgress) return;
+    session.dragInProgress = true;
     // The whole drag is one logical action — allocate a single shared seq so the
-    // model+scene commit entries stamp the same value (D-7).
-    allocateHistorySequence();
+    // model+scene commit entries stamp the same value (D-7), on the page the
+    // drag started on (HIST-10).
+    allocateHistorySequence(currentViewId);
+    modelStoreApi.getState().actions.clearFuture(); // E1/HIST-02
+    sceneStoreApi.getState().actions.clearFuture();
     modelStoreApi.getState().actions.saveToHistory();
     sceneStoreApi.getState().actions.saveToHistory();
     modelStoreApi.getState().actions.freezePendingPre();
     sceneStoreApi.getState().actions.freezePendingPre();
-  }, [modelStoreApi, sceneStoreApi]);
+  }, [session, currentViewId, modelStoreApi, sceneStoreApi]);
 
   const commitDragTransaction = useCallback(() => {
-    if (!dragInProgress.current) return;
-    dragInProgress.current = false;
+    if (!session.dragInProgress) return;
+    session.dragInProgress = false;
     modelStoreApi.getState().actions.unfreezePendingPre();
     sceneStoreApi.getState().actions.unfreezePendingPre();
     // Empty-update set() consumes pendingPre and pushes one entry covering all
     // intermediate writes since beginDragTransaction.
     modelStoreApi.getState().actions.set({}, true);
     sceneStoreApi.getState().actions.set({}, true);
-  }, [modelStoreApi, sceneStoreApi]);
+  }, [session, modelStoreApi, sceneStoreApi]);
 
   // -------------------------------------------------------------------------
   // MQA #7 Path 4 — batched, immer-free tile updater for the drag hot path.
@@ -141,11 +206,32 @@ export const useSceneActions = () => {
   // mouseup commit path through the normal reducer.
   // -------------------------------------------------------------------------
 
+  // E3/SCN-07: the "DRAG ONLY" contract above lived in a comment. Called
+  // outside a drag bracket the move really landed — visible, with no history
+  // entry and no validateView — so any new caller reaching for the fast path
+  // (a keyboard nudge, an alignment command) silently produced un-undoable
+  // edits. The drag flag lives in the shared editSession now (E1/HIST-07), so
+  // the contract is enforceable: outside a bracket the fast path is a no-op
+  // with a dev warning, and the caller must use the reducer path instead.
+  const assertDragBracket = useCallback(
+    (caller: string): boolean => {
+      if (session.dragInProgress) return true;
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(
+          `[axoview] ${caller} is drag-only (call beginDragTransaction first) — ignored. Use the reducer actions for a standalone edit.`
+        );
+      }
+      return false;
+    },
+    [session]
+  );
+
   const batchUpdateViewItemTiles = useCallback(
     // `offset` (ADR 0023) rides the same drag commit: present (incl. cleared to
     // undefined when re-snapping) on every touched item so the off-grid residual
     // and the integer tile stay in lockstep.
     (updates: { id: string; tile: Coords; offset?: Coords }[]) => {
+      if (!assertDragBracket('batchUpdateViewItemTiles')) return;
       if (!currentViewId || updates.length === 0) return;
 
       const state = getState();
@@ -203,7 +289,7 @@ export const useSceneActions = () => {
 
       setState(newState);
     },
-    [currentViewId, getState, setState]
+    [currentViewId, getState, setState, assertDragBracket]
   );
 
   // -------------------------------------------------------------------------
@@ -224,6 +310,7 @@ export const useSceneActions = () => {
 
   const batchUpdateRectangles = useCallback(
     (updates: { id: string; from: Coords; to: Coords; offset?: Coords }[]) => {
+      if (!assertDragBracket('batchUpdateRectangles')) return;
       if (!currentViewId || updates.length === 0) return;
 
       const state = getState();
@@ -250,11 +337,12 @@ export const useSceneActions = () => {
         scene: state.scene
       });
     },
-    [currentViewId, getState, setState]
+    [currentViewId, getState, setState, assertDragBracket]
   );
 
   const batchUpdateTextBoxTiles = useCallback(
     (updates: { id: string; tile: Coords; offset?: Coords }[]) => {
+      if (!assertDragBracket('batchUpdateTextBoxTiles')) return;
       if (!currentViewId || updates.length === 0) return;
 
       const state = getState();
@@ -281,13 +369,14 @@ export const useSceneActions = () => {
         scene: state.scene
       });
     },
-    [currentViewId, getState, setState]
+    [currentViewId, getState, setState, assertDragBracket]
   );
 
   // Labels (ADR 0031) are model-only — no scene size to touch. Mirrors
   // batchUpdateTextBoxTiles for the DragItems group-move commit.
   const batchUpdateLabelTiles = useCallback(
     (updates: { id: string; tile: Coords; offset?: Coords }[]) => {
+      if (!assertDragBracket('batchUpdateLabelTiles')) return;
       if (!currentViewId || updates.length === 0) return;
 
       const state = getState();
@@ -313,7 +402,7 @@ export const useSceneActions = () => {
         scene: state.scene
       });
     },
-    [currentViewId, getState, setState]
+    [currentViewId, getState, setState, assertDragBracket]
   );
 
   // -------------------------------------------------------------------------
@@ -421,43 +510,31 @@ export const useSceneActions = () => {
 
   const transaction = useCallback(
     (operations: () => void) => {
-      if (transactionInProgress.current) {
+      if (session.transactionInProgress) {
         operations();
         return;
       }
 
       saveToHistoryBeforeChange();
-      pendingStateRef.current = (() => {
-        const model = modelStoreApi.getState();
-        const scene = sceneStoreApi.getState();
-        return {
-          model: {
-            version: model.version,
-            title: model.title,
-            description: model.description,
-            colors: model.colors,
-            icons: model.icons,
-            items: model.items,
-            views: model.views
-          },
-          scene: { connectors: scene.connectors, textBoxes: scene.textBoxes }
-        };
-      })();
-      transactionInProgress.current = true;
+      // Start EMPTY rather than with a snapshot of the stores. `getState()`
+      // falls through to the live stores while this is null, so a caller that
+      // writes to a store directly inside the bracket — which
+      // `useHistory.transaction` has always allowed, and which its delegation
+      // to this implementation must keep allowing (E1/HIST-08) — is seen by the
+      // next op and is not clobbered by the flush below.
+      session.pendingState = null;
+      session.transactionInProgress = true;
 
       try {
         operations();
-        if (pendingStateRef.current) {
-          modelStoreApi
-            .getState()
-            .actions.set(pendingStateRef.current.model, true);
-          sceneStoreApi
-            .getState()
-            .actions.set(pendingStateRef.current.scene, true);
+        const pending = session.pendingState as State | null;
+        if (pending) {
+          modelStoreApi.getState().actions.set(pending.model, true);
+          sceneStoreApi.getState().actions.set(pending.scene, true);
         }
       } finally {
-        pendingStateRef.current = null;
-        transactionInProgress.current = false;
+        session.pendingState = null;
+        session.transactionInProgress = false;
       }
     },
     [saveToHistoryBeforeChange, modelStoreApi, sceneStoreApi]
@@ -469,28 +546,31 @@ export const useSceneActions = () => {
 
   const createModelItem = useCallback(
     (newModelItem: ModelItem) => {
-      if (!transactionInProgress.current) saveToHistoryBeforeChange();
-      const newState = reducers.createModelItem(newModelItem, getState());
-      setState(newState);
-      return newState;
+      return withHistory(() => {
+        const newState = reducers.createModelItem(newModelItem, getState());
+        setState(newState);
+        return newState;
+      });
     },
     [getState, setState, saveToHistoryBeforeChange]
   );
 
   const updateModelItem = useCallback(
     (id: string, updates: Partial<ModelItem>) => {
-      saveToHistoryBeforeChange();
-      const newState = reducers.updateModelItem(id, updates, getState());
-      setState(newState);
+      return withHistory(() => {
+        const newState = reducers.updateModelItem(id, updates, getState());
+        setState(newState);
+      });
     },
     [getState, setState, saveToHistoryBeforeChange]
   );
 
   const deleteModelItem = useCallback(
     (id: string) => {
-      saveToHistoryBeforeChange();
-      const newState = reducers.deleteModelItem(id, getState());
-      setState(newState);
+      return withHistory(() => {
+        const newState = reducers.deleteModelItem(id, getState());
+        setState(newState);
+      });
     },
     [getState, setState, saveToHistoryBeforeChange]
   );
@@ -502,14 +582,15 @@ export const useSceneActions = () => {
   const createViewItem = useCallback(
     (newViewItem: ViewItem) => {
       if (!currentViewId) return;
-      if (!transactionInProgress.current) saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'CREATE_VIEWITEM',
-        payload: newViewItem,
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'CREATE_VIEWITEM',
+          payload: newViewItem,
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
+        return newState;
       });
-      setState(newState);
-      return newState;
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -517,14 +598,15 @@ export const useSceneActions = () => {
   const updateViewItem = useCallback(
     (id: string, updates: Partial<ViewItem>) => {
       if (!currentViewId) return getState();
-      if (!transactionInProgress.current) saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'UPDATE_VIEWITEM',
-        payload: { id, ...updates },
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'UPDATE_VIEWITEM',
+          payload: { id, ...updates },
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
+        return newState;
       });
-      setState(newState);
-      return newState;
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -532,13 +614,14 @@ export const useSceneActions = () => {
   const deleteViewItem = useCallback(
     (id: string) => {
       if (!currentViewId) return;
-      saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'DELETE_VIEWITEM',
-        payload: id,
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'DELETE_VIEWITEM',
+          payload: id,
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
       });
-      setState(newState);
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -550,13 +633,14 @@ export const useSceneActions = () => {
   const createConnector = useCallback(
     (newConnector: Connector) => {
       if (!currentViewId) return;
-      saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'CREATE_CONNECTOR',
-        payload: newConnector,
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'CREATE_CONNECTOR',
+          payload: newConnector,
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
       });
-      setState(newState);
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -564,13 +648,14 @@ export const useSceneActions = () => {
   const updateConnector = useCallback(
     (id: string, updates: Partial<Connector>) => {
       if (!currentViewId) return;
-      saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'UPDATE_CONNECTOR',
-        payload: { id, ...updates },
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'UPDATE_CONNECTOR',
+          payload: { id, ...updates },
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
       });
-      setState(newState);
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -578,13 +663,14 @@ export const useSceneActions = () => {
   const deleteConnector = useCallback(
     (id: string) => {
       if (!currentViewId) return;
-      saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'DELETE_CONNECTOR',
-        payload: id,
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'DELETE_CONNECTOR',
+          payload: id,
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
       });
-      setState(newState);
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -596,13 +682,14 @@ export const useSceneActions = () => {
   const createTextBox = useCallback(
     (newTextBox: TextBox) => {
       if (!currentViewId) return;
-      saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'CREATE_TEXTBOX',
-        payload: newTextBox,
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'CREATE_TEXTBOX',
+          payload: newTextBox,
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
       });
-      setState(newState);
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -610,14 +697,15 @@ export const useSceneActions = () => {
   const updateTextBox = useCallback(
     (id: string, updates: Partial<TextBox>) => {
       if (!currentViewId) return getState();
-      if (!transactionInProgress.current) saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'UPDATE_TEXTBOX',
-        payload: { id, ...updates },
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'UPDATE_TEXTBOX',
+          payload: { id, ...updates },
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
+        return newState;
       });
-      setState(newState);
-      return newState;
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -625,32 +713,34 @@ export const useSceneActions = () => {
   const deleteTextBox = useCallback(
     (id: string) => {
       if (!currentViewId) return;
-      saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'DELETE_TEXTBOX',
-        payload: id,
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'DELETE_TEXTBOX',
+          payload: id,
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
       });
-      setState(newState);
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
 
   // -------------------------------------------------------------------------
-  // Label CRUD (ADR 0031) — model-only; no scene sync (the Canvas2D LabelsCanvas
+  // Label CRUD (ADR 0031) — model-only; no scene sync (the Canvas2D SceneCanvas
   // and the DOM LabelHitLayer self-measure the chip, like node labels).
   // -------------------------------------------------------------------------
 
   const createLabel = useCallback(
     (newLabel: Label) => {
       if (!currentViewId) return;
-      saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'CREATE_LABEL',
-        payload: newLabel,
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'CREATE_LABEL',
+          payload: newLabel,
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
       });
-      setState(newState);
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -658,14 +748,15 @@ export const useSceneActions = () => {
   const updateLabel = useCallback(
     (id: string, updates: Partial<Label>) => {
       if (!currentViewId) return getState();
-      if (!transactionInProgress.current) saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'UPDATE_LABEL',
-        payload: { id, ...updates },
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'UPDATE_LABEL',
+          payload: { id, ...updates },
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
+        return newState;
       });
-      setState(newState);
-      return newState;
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -673,13 +764,14 @@ export const useSceneActions = () => {
   const deleteLabel = useCallback(
     (id: string) => {
       if (!currentViewId) return;
-      saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'DELETE_LABEL',
-        payload: id,
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'DELETE_LABEL',
+          payload: id,
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
       });
-      setState(newState);
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -691,13 +783,14 @@ export const useSceneActions = () => {
   const createRectangle = useCallback(
     (newRectangle: Rectangle) => {
       if (!currentViewId) return;
-      saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'CREATE_RECTANGLE',
-        payload: newRectangle,
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'CREATE_RECTANGLE',
+          payload: newRectangle,
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
       });
-      setState(newState);
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -705,14 +798,15 @@ export const useSceneActions = () => {
   const updateRectangle = useCallback(
     (id: string, updates: Partial<Rectangle>) => {
       if (!currentViewId) return getState();
-      if (!transactionInProgress.current) saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'UPDATE_RECTANGLE',
-        payload: { id, ...updates },
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'UPDATE_RECTANGLE',
+          payload: { id, ...updates },
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
+        return newState;
       });
-      setState(newState);
-      return newState;
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -720,13 +814,14 @@ export const useSceneActions = () => {
   const deleteRectangle = useCallback(
     (id: string) => {
       if (!currentViewId) return;
-      saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'DELETE_RECTANGLE',
-        payload: id,
-        ctx: { viewId: currentViewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'DELETE_RECTANGLE',
+          payload: id,
+          ctx: { viewId: currentViewId, state: getState() }
+        });
+        setState(newState);
       });
-      setState(newState);
     },
     [getState, setState, currentViewId, saveToHistoryBeforeChange]
   );
@@ -761,26 +856,51 @@ export const useSceneActions = () => {
     [modelStoreApi, changeView]
   );
 
+  /**
+   * E1/HIST-04 — creating a page is undoable, and became safe to make undoable
+   * only once entries carry a page stamp (HIST-10).
+   *
+   * It used to write `skipHistory` with no `saveToHistoryBeforeChange`, so
+   * "New page" recorded nothing: the next Ctrl+Z reverted whatever came BEFORE
+   * it while the new page stayed, and `deleteView` — which does record — made
+   * the pair asymmetric.
+   *
+   * Recording it on its own would have been worse, which is why wave 1 held it.
+   * Every entry's inverse patch replaces the whole `views` array (HIST-06), so
+   * an undo that removes the just-created page leaves `uiState.view` pointing
+   * at a deleted id — E3/SCN-09's dangling active view, which every reader
+   * papers over by falling back to `views[0]`. `withHistory` arms the snapshot
+   * BEFORE `changeView` moves us, so the entry is stamped with the page the
+   * user came from and the undo has somewhere correct to navigate.
+   */
   const createView = useCallback(
     (newViewPartial?: Partial<View>) => {
-      const newViewId = generateId();
-      const views = modelStoreApi.getState().views;
-      const newState = reducers.view({
-        action: 'CREATE_VIEW',
-        payload: {
-          ...VIEW_DEFAULTS,
-          ...newViewPartial,
-          // D13 — interpolate {count} via i18n, never concatenate.
-          name:
-            newViewPartial?.name ??
-            t('pageName').replace('{count}', String(views.length + 1))
-        },
-        ctx: { viewId: newViewId, state: getState() }
+      return withHistory(() => {
+        const newViewId = generateId();
+        const views = modelStoreApi.getState().views;
+        const newState = reducers.view({
+          action: 'CREATE_VIEW',
+          payload: {
+            ...VIEW_DEFAULTS,
+            ...newViewPartial,
+            // D13 — interpolate {count} via i18n, never concatenate. The number
+            // comes from the highest existing suffix, not from `views.length`:
+            // deleting a page in the middle used to make the next one duplicate
+            // a name already on screen (E3/SCN-13).
+            name:
+              newViewPartial?.name ??
+              nextPageName(
+                t('pageName'),
+                views.map((v) => v.name)
+              )
+          },
+          ctx: { viewId: newViewId, state: getState() }
+        });
+        setState(newState);
+        changeView(newViewId, newState.model);
       });
-      setState(newState);
-      changeView(newViewId, newState.model);
     },
-    [getState, setState, modelStoreApi, changeView, t]
+    [getState, setState, withHistory, modelStoreApi, changeView, t]
   );
 
   const deleteView = useCallback(
@@ -789,20 +909,21 @@ export const useSceneActions = () => {
       const activViewId = currentViewId;
       if (views.length <= 1) return;
 
-      saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'DELETE_VIEW',
-        payload: undefined,
-        ctx: { viewId, state: getState() }
-      });
-      setState(newState);
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'DELETE_VIEW',
+          payload: undefined,
+          ctx: { viewId, state: getState() }
+        });
+        setState(newState);
 
-      if (viewId === activViewId) {
-        const remainingViews = newState.model.views;
-        if (remainingViews.length > 0) {
-          changeView(remainingViews[0].id, newState.model);
+        if (viewId === activViewId) {
+          const remainingViews = newState.model.views;
+          if (remainingViews.length > 0) {
+            changeView(remainingViews[0].id, newState.model);
+          }
         }
-      }
+      });
     },
     [
       currentViewId,
@@ -816,13 +937,14 @@ export const useSceneActions = () => {
 
   const updateView = useCallback(
     (viewId: string, updates: Partial<Pick<View, 'name'>>) => {
-      saveToHistoryBeforeChange();
-      const newState = reducers.view({
-        action: 'UPDATE_VIEW',
-        payload: updates,
-        ctx: { viewId, state: getState() }
+      return withHistory(() => {
+        const newState = reducers.view({
+          action: 'UPDATE_VIEW',
+          payload: updates,
+          ctx: { viewId, state: getState() }
+        });
+        setState(newState);
       });
-      setState(newState);
     },
     [getState, setState, saveToHistoryBeforeChange]
   );
@@ -832,8 +954,20 @@ export const useSceneActions = () => {
       if (!currentViewId || selectedItems.length === 0) return;
 
       transaction(() => {
+        // E3/SCN-11: ITEM refs get the same liveness guard the other four ref
+        // types always had. A selection can legitimately carry a dead id (a
+        // stale selection, a double-press of Delete racing the first commit),
+        // and `deleteViewItem` throws on it — which aborted the WHOLE
+        // multi-delete and let the exception escape into the key handler. A
+        // dead ref in a selection is skipped, never fatal.
+        const viewBefore = getState().model.views.find(
+          (v) => v.id === currentViewId
+        );
+        const existingItems = new Set(
+          (viewBefore?.items ?? []).map((i) => i.id)
+        );
         selectedItems
-          .filter((ref) => ref.type === 'ITEM')
+          .filter((ref) => ref.type === 'ITEM' && existingItems.has(ref.id))
           .forEach((ref) => deleteViewItem(ref.id));
 
         const liveView = getState().model.views.find(
@@ -943,8 +1077,18 @@ export const useSceneActions = () => {
       const BATCH_SIZE = 25;
       const total = connectorIds.length;
       let offset = 0;
+      // E3/SCN-15: the scene store is per-ACTIVE-view, but these rAF batches
+      // write into whatever scene is live when they fire — so a page switch
+      // mid-routing cached the old page's connector paths in the new page's
+      // scene (phantom `scene.connectors[id]` entries with no owner in the
+      // active view; the async sibling of D-9). The view this routing belongs
+      // to is captured at schedule time; a batch firing after the view moved
+      // on is dropped — `changeView`'s SYNC_SCENE has already rebuilt the
+      // scene for wherever the user went, and coming back rebuilds it again.
+      const scheduledViewId = currentViewId;
 
       const processNextBatch = () => {
+        if (uiStateStoreApi.getState().view !== scheduledViewId) return;
         const batch = connectorIds.slice(offset, offset + BATCH_SIZE);
         if (batch.length === 0) return;
         offset += BATCH_SIZE;
@@ -986,7 +1130,7 @@ export const useSceneActions = () => {
 
       requestAnimationFrame(processNextBatch);
     },
-    [currentViewId, sceneStoreApi, modelStoreApi]
+    [currentViewId, sceneStoreApi, modelStoreApi, uiStateStoreApi]
   );
 
   // Bulk paste — ONE structural assembly of the N-scale arrays, validated once.
@@ -1006,8 +1150,8 @@ export const useSceneActions = () => {
     (
       payload: PastePayload,
       onPathProgress?: (done: number, total: number) => void
-    ) => {
-      if (!currentViewId) return;
+    ): boolean => {
+      if (!currentViewId) return false;
 
       const viewId = currentViewId;
       let applied = false;
@@ -1019,6 +1163,29 @@ export const useSceneActions = () => {
         if (viewIdx !== -1) {
           const view = state.model.views[viewIdx];
 
+          // E3/SCN-14: the paste TARGET view's layer set is authoritative. A
+          // copied entity's `layerId` names a layer on the page it came FROM;
+          // carried across pages it is a dangling ref that visibility and
+          // locking silently ignore and the Layers panel cannot repair. Strip
+          // it (the entity lands unassigned — the same repair `repairModel`
+          // applies on load) whenever the target has no such layer. This is
+          // the chokepoint every duplication path funnels through, so the
+          // class cannot come back through another one.
+          const targetLayerIds = new Set(
+            (view.layers ?? []).map((l) => l.id)
+          );
+          const stripForeignLayer = <T extends { layerId?: string }>(
+            entity: T
+          ): T =>
+            entity.layerId && !targetLayerIds.has(entity.layerId)
+              ? { ...entity, layerId: undefined }
+              : entity;
+
+          const pastedConnectors = payload.connectors.map(stripForeignLayer);
+          const pastedRectangles = payload.rectangles.map(stripForeignLayer);
+          const pastedTextBoxes = payload.textBoxes.map(stripForeignLayer);
+          const pastedLabels = (payload.labels ?? []).map(stripForeignLayer);
+
           // Build plain (non-frozen) arrays — concat/slice/map return fresh
           // arrays, so we never mutate the immer-frozen store state.
           const newModelItems = state.model.items.concat(
@@ -1026,16 +1193,16 @@ export const useSceneActions = () => {
           );
           // Pasted view items prepend — matches the old createViewItem unshift.
           const newViewItems = payload.items
-            .map((ci) => ci.viewItem)
+            .map((ci) => stripForeignLayer(ci.viewItem))
             .concat(view.items ?? []);
           // Connectors prepend — matches the old createConnector unshift.
-          const newViewConnectors = payload.connectors.concat(
+          const newViewConnectors = pastedConnectors.concat(
             view.connectors ?? []
           );
           // Provisional empty paths — matches createConnector(skipPathfinding);
           // computePathsAsync fills them in after commit.
           const newSceneConnectors = { ...state.scene.connectors };
-          for (const c of payload.connectors) {
+          for (const c of pastedConnectors) {
             newSceneConnectors[c.id] = {
               path: {
                 tiles: [],
@@ -1066,7 +1233,21 @@ export const useSceneActions = () => {
           // text boxes, or path routing) rather than committing a partial paste.
           // Warn-and-skip instead of throw, since this runs in a startTransition
           // callback.
-          const issues = validateView(newView, { model: newState.model });
+          //
+          // E3/SCN-06: validate the COMPLETE pasted content. The single check
+          // used to run on the items+connectors view only, with rectangles,
+          // text boxes and labels layered on through their reducers AFTER it —
+          // so a pasted rectangle with a dangling colour ref landed unchecked
+          // and the "all-or-nothing" the comment above promises covered only
+          // half the paste. The probe view is validation-only; the reducers
+          // below still perform the actual layering.
+          const probeView: View = {
+            ...newView,
+            rectangles: [...(view.rectangles ?? []), ...pastedRectangles],
+            textBoxes: [...(view.textBoxes ?? []), ...pastedTextBoxes],
+            labels: [...(view.labels ?? []), ...pastedLabels]
+          };
+          const issues = validateView(probeView, { model: newState.model });
           if (issues.length > 0) {
             console.warn(
               '[axoview] paste produced an invalid view; skipping',
@@ -1077,9 +1258,9 @@ export const useSceneActions = () => {
             // Rectangles / text boxes are not N-scale — keep the existing
             // reducers (they layer on top of the pending state set above). Run
             // them only on a valid paste so the operation stays all-or-nothing.
-            [...payload.rectangles].reverse().forEach((r) => createRectangle(r));
-            payload.textBoxes.forEach((tb) => createTextBox(tb));
-            (payload.labels ?? []).forEach((l) => createLabel(l));
+            [...pastedRectangles].reverse().forEach((r) => createRectangle(r));
+            pastedTextBoxes.forEach((tb) => createTextBox(tb));
+            pastedLabels.forEach((l) => createLabel(l));
             applied = true;
           }
         }
@@ -1092,6 +1273,9 @@ export const useSceneActions = () => {
           onPathProgress
         );
       }
+      // E3/SCN-12: the caller surfaces a rejected paste to the user — the
+      // console.warn above is not a user-facing signal.
+      return applied;
     },
     [
       currentViewId,

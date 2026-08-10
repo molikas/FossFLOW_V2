@@ -196,3 +196,74 @@ The deck editors already had the Docs loop natively (snow's tooltip shows target
 - **Manual (2026-07-05 round 8b):** a linked floating Label paints blue + underlined on canvas; a linked node caption and connector chip read the same; hover raises the card on all three, Edit pins it, leaving both dismisses; plain click on a linked node caption selects (Ctrl+click opens); a custom label color wins over link blue but keeps the underline.
 - **e2e (2026-07-05 round 9):** placing a node, writing its `headerLink`, and deselecting it (so it renders on `NodesCanvas`, not the DOM overlay) still paints the linked style (`canvas.dataset.linkedLabelsDrawn === '1'`) and hovering its `NodeLabelHitLayer` proxy raises the element link card with the resolved URL.
 - **Manual (2026-07-05 round 9):** an unselected node with a link reads exactly like the selected one did before — blue + underlined name, hover card, pointer cursor over the name; selecting and deselecting the node never changes how its link looks or behaves.
+
+---
+
+### 2026-07-31 addendum — the edit session is one action, and one cancel (TXT-04/06/07/08)
+
+Implemented in the exploratory-remediation wave 4, incorporating the TXT-07
+owner ruling ([rulings table](../reviews/exploratory-2026-07.md#owner-rulings-2026-07-30)). §1's empty-entity
+lifecycle and §2's dual scope are unchanged in substance; this addendum fixes
+what they left unstated about the session's BOUNDARY — where it begins and ends,
+what belongs to it, and what a cancel takes with it.
+
+**1. A session is one history action.** From the placement (or the double-click)
+to the commit, everything the session does — creating the entity, typing, and
+every strip write — coalesces into a single entry, built on the existing
+drag-transaction primitive. A session whose net patch set is empty pushes
+nothing.
+
+*Why it mattered:* placement wrote one entry and the empty-box discard wrote a
+second, so a single Ctrl+Z after abandoning a fresh box landed BETWEEN them and
+resurrected an empty 1×1 entity — invisible, but clickable, lassoable, included
+by Ctrl+A and by the project bounds, and written to every save and export
+(TXT-04).
+
+*Where it lives, and why not in the obvious place:* the bracket is owned by the
+Renderer ([`useInlineEditHistoryBracket`](../../packages/axoview-lib/src/hooks/useInlineEditHistoryBracket.ts)),
+keyed on `editingTextBoxId` / `inlineEditLabelId`. It cannot live in `TextBox`:
+the Renderer promotes the edited box into its own layer so the editor can
+receive pointer events, which unmounts and remounts that component mid-session —
+a bracket owned by it closes itself the instant the session begins, reproducing
+TXT-04 exactly. The placement modes call `beginDragTransaction()` **before**
+creating the entity (the store flag is set after), and the primitive is
+idempotent, so the two compose.
+
+**2. One cancel contract: Escape undoes everything the session did.** §2's dual
+scope decides where a strip write GOES — the Quill draft, or the element's own
+fields — and Escape used to know about only the first. Element-level writes
+(font size, line spacing, manual width/height, border, fill, vertical alignment)
+were already committed when Escape arrived and survived it, so one control could
+disagree with itself: the alignment popover's horizontal half vanished and its
+vertical half stayed. The session now snapshots the element-level fields at open
+and restores them on cancel; with (1), a cancelled session leaves no entry at
+all (TXT-08).
+
+Corollary, and the reason this is a contract rather than a patch: **a commit is a
+commit.** `finish('commit')` used to fall through to `onCancel()` when the TEXT
+was untouched — harmless while cancel only closed the session, and a silent
+data-loss path the moment cancel started rolling styling back.
+
+**3. The strip is INSIDE the session, for every editor.** A press on
+`[data-axoview-strip]` or any MUI portal overlay does not end an edit. This was
+already true for the text box and was NOT true for
+[`useInlineRename`](../../packages/axoview-lib/src/hooks/useInlineRename.ts) —
+the shared hook behind the floating Label, node-name and connector-label
+editors — so reaching for the strip mid-rename ended the rename (TXT-06). Both
+now ask one predicate,
+[`isSessionPreservingTarget`](../../packages/axoview-lib/src/utils/sessionPreservingTarget.ts).
+
+The allow-list alone was not sufficient, and the second cause is the durable
+lesson: `useInlineRename` committed on **blur**, and a plain mousedown on a
+strip control moves focus. The press-away and key handlers are the AUTHORITY on
+ending a session (an idempotent `finish`); `blur` defers to them unless focus
+went somewhere outside the session. **Focus leaving is not the user leaving.**
+
+**4. Floating Labels follow the text box's lifecycle exactly (TXT-07 ruling).**
+Placement seeds EMPTY text rather than the literal word "Label", so "never
+committed" is the same signal the text box uses; a Label abandoned during its
+first edit is discarded, and emptying an existing Label then committing deletes
+it (undoably). The silent revert — which restored the old text with no feedback
+— is gone. Both discards clear the selection with `setSelectedIds([])`, not
+`setItemControls(null)`, which is a half-deselect that leaves every
+`selectedIds` consumer pointing at a dead id (TXT-15).

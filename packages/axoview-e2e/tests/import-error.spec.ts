@@ -18,6 +18,7 @@ import path from 'path';
 import { appTest as test, expect } from '../fixtures/app.fixture';
 import { DialogsPOM } from '../pom/DialogsPOM';
 import { EmptyStateScreenPOM } from '../pom/EmptyStateScreenPOM';
+import { chooseImportFile } from '../helpers/import';
 
 const LOCAL_STORAGE_KEYS = [
   'axoview-diagrams',
@@ -63,12 +64,10 @@ test.describe('Import error — ADR 0011 failure-of-intent (Import)', () => {
     const emptyState = new EmptyStateScreenPOM(page);
     await emptyState.expectVisible();
 
-    // Empty-tree Import → native chooser → handleDirectImportFile.
-    const [fileChooser] = await Promise.all([
-      page.waitForEvent('filechooser', { timeout: 5_000 }),
-      emptyState.clickImport()
-    ]);
-    await fileChooser.setFiles(INVALID_JSON);
+    // A3/ZIP-09 (owner ruling): the Import button opens the one import flow,
+    // which surfaces a file it cannot READ through the same ADR 0011 dialog.
+    await emptyState.clickImport();
+    await chooseImportFile(page, INVALID_JSON);
 
     const dialogs = new DialogsPOM(page);
     await dialogs.importError().waitFor({ state: 'visible', timeout: 10_000 });

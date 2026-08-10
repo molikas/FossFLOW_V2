@@ -102,6 +102,11 @@ class FakeStorage implements StorageProvider {
   async saveTreeManifest(m: TreeManifest) { this.manifest = m; }
 }
 
+const readManifestFrom = async (blob: Blob) => {
+  const zip = await JSZip.loadAsync(blob);
+  return JSON.parse(await zip.file('manifest.json')!.async('string'));
+};
+
 const sampleModel = (name: string) => ({
   title: name,
   name,
@@ -325,6 +330,31 @@ describe('parseProject — errors', () => {
     });
   });
 
+  // A3/ZIP-08: a manifest with no version is corrupt, not from the future. It
+  // used to be told "exported by a newer Axoview (version undefined); please
+  // upgrade" — sending the user to look for an update that does not exist.
+  it('rejects a missing or non-string version with BAD_MANIFEST', async () => {
+    for (const version of [undefined, 42, null]) {
+      const zip = new JSZip();
+      zip.file(
+        'manifest.json',
+        JSON.stringify({
+          format: PROJECT_FORMAT,
+          version,
+          exportedAt: new Date().toISOString(),
+          exportedBy: 'test',
+          scope: 'project',
+          folders: [],
+          diagrams: []
+        })
+      );
+      const blob = await zip.generateAsync({ type: 'blob' });
+      await expect(parseProject(blob)).rejects.toMatchObject({
+        code: 'BAD_MANIFEST'
+      });
+    }
+  });
+
   it('rejects missing diagram file with MISSING_DIAGRAM', async () => {
     const zip = new JSZip();
     zip.file(
@@ -353,6 +383,366 @@ describe('parseProject — errors', () => {
       code: 'MISSING_DIAGRAM'
     });
   });
+});
+
+// ---------------------------------------------------------------------------
+// A3/ZIP-01 — a cyclic folder graph used to freeze the tab. `importProject` and
+// `wipeWorkspace` each climbed `parentId` with no visited set, and nothing
+// between `parseProject` and the walk looked at the shape of the graph
+// (`validateFolderIds` checks the id characters only). A few hundred bytes, well
+// under every anti-zip-bomb cap, and the only way out was closing the tab.
+//
+// Promoted from the probe lane (`__explore__/A3/zip-01-to-15`).
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// A3/ZIP-07, ZIP-11, ZIP-13, ZIP-15 — export/import fidelity.
+// Promoted from the probe lane (`__explore__/A3/zip-*`).
+// ---------------------------------------------------------------------------
+describe('exportProject — what does and does not go in the archive', () => {
+  it('leaves soft-deleted diagrams out (ZIP-07)', async () => {
+    const storage = new FakeStorage();
+    const live = await storage.createDiagram(sampleModel('Live'), null);
+    const trashed = await storage.createDiagram(sampleModel('Trashed'), null);
+    const t = storage.diagrams.get(trashed)!;
+    t.meta = { ...t.meta, deletedAt: new Date().toISOString() };
+
+    const { blob } = await exportProject(
+      { storage, exporterTag: 'test' },
+      { scope: 'project' }
+    );
+    const manifest = await readManifestFrom(blob);
+
+    // Without this the trash rides along AND comes back live: the import has no
+    // `deletedAt` branch at all.
+    expect(manifest.diagrams.map((d: DiagramMeta) => d.id)).toEqual([live]);
+  });
+
+  it('skips a diagram it cannot read and reports it, instead of aborting (ZIP-11)', async () => {
+    const storage = new FakeStorage();
+    await storage.createDiagram(sampleModel('Good one'), null);
+    const bad = await storage.createDiagram(sampleModel('Broken'), null);
+    const realLoad = storage.loadDiagram.bind(storage);
+    storage.loadDiagram = async (id: string) => {
+      if (id === bad) throw new Error('blob is gone');
+      return realLoad(id);
+    };
+
+    const { blob, skipped } = await exportProject(
+      { storage, exporterTag: 'test' },
+      { scope: 'project' }
+    );
+
+    expect(skipped).toEqual([{ id: bad, name: 'Broken' }]);
+    const manifest = await readManifestFrom(blob);
+    expect(manifest.diagrams).toHaveLength(1);
+    expect(manifest.diagrams[0].name).toBe('Good one');
+  });
+});
+
+describe('parseProject / importProject — diagram fidelity', () => {
+  it('rejects a diagram entry that is not an object (ZIP-15)', async () => {
+    for (const body of ['null', '42', '["a"]']) {
+      const zip = new JSZip();
+      zip.file(
+        'manifest.json',
+        JSON.stringify({
+          format: PROJECT_FORMAT,
+          version: PROJECT_FORMAT_VERSION,
+          exportedAt: new Date().toISOString(),
+          exportedBy: 'test',
+          scope: 'project',
+          folders: [],
+          diagrams: [
+            { id: 'd1', name: 'D1', folderId: null, file: 'diagrams/d1.json' }
+          ]
+        })
+      );
+      zip.file('diagrams/d1.json', body);
+      const blob = await zip.generateAsync({ type: 'blob' });
+      // Each used to import as a BLANK diagram and count as a success.
+      await expect(parseProject(blob)).rejects.toMatchObject({
+        code: 'BAD_DIAGRAM'
+      });
+    }
+  });
+
+  it('keeps the name the export recorded, not the blob’s stale title (ZIP-13)', async () => {
+    const source = new FakeStorage();
+    const id = await source.createDiagram(sampleModel('Old title'), null);
+    // A rename after the last save: the workspace shows the new name, the blob
+    // still carries the old one.
+    await source.renameDiagram(id, 'Renamed in the explorer');
+
+    const { blob } = await exportProject(
+      { storage: source, exporterTag: 'test' },
+      { scope: 'project' }
+    );
+    const parsed = await parseProject(blob);
+
+    const target = new FakeStorage();
+    await importProject({ storage: target }, parsed, {
+      destination: { kind: 'root' }
+    });
+
+    const names = (await target.listDiagrams()).map((d) => d.name);
+    expect(names).toEqual(['Renamed in the explorer']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A3/ZIP-03 and ZIP-10 — what "replace everything" costs when it fails, and
+// what survives a round trip. Promoted from the probe lane.
+// ---------------------------------------------------------------------------
+describe('importProject — replaceAll is not destructive until it has succeeded', () => {
+  it('leaves the workspace as it was when a create fails (ZIP-03)', async () => {
+    const storage = new FakeStorage();
+    const { d1, d2 } = await seedWorkspace(storage);
+    const before = {
+      diagrams: (await storage.listDiagrams()).map((d) => d.id).sort(),
+      folders: (await storage.listFolders()).map((f) => f.id).sort()
+    };
+    expect(before.diagrams).toContain(d1); // precondition: there IS something to lose
+    expect(before.diagrams).toContain(d2);
+
+    const parsed: ParsedProject = {
+      manifest: {
+        format: PROJECT_FORMAT,
+        version: PROJECT_FORMAT_VERSION,
+        exportedAt: new Date().toISOString(),
+        exportedBy: 'test',
+        scope: 'project',
+        folders: [],
+        diagrams: [
+          { id: 'x1', name: 'X1', folderId: null, lastModified: '', file: 'diagrams/x1.json' }
+        ] as never
+      },
+      diagrams: new Map([['x1', sampleModel('X1')]])
+    };
+    storage.createDiagram = async () => {
+      throw new Error('backend down');
+    };
+
+    await expect(
+      importProject({ storage }, parsed, { destination: { kind: 'replaceAll' } })
+    ).rejects.toThrow('backend down');
+
+    // The old workspace used to be gone by this point, with nothing imported.
+    expect((await storage.listDiagrams()).map((d) => d.id).sort()).toEqual(before.diagrams);
+    expect((await storage.listFolders()).map((f) => f.id).sort()).toEqual(before.folders);
+  });
+
+  it('still replaces the old content when the import succeeds', async () => {
+    const storage = new FakeStorage();
+    const { d1 } = await seedWorkspace(storage);
+    const parsed: ParsedProject = {
+      manifest: {
+        format: PROJECT_FORMAT,
+        version: PROJECT_FORMAT_VERSION,
+        exportedAt: new Date().toISOString(),
+        exportedBy: 'test',
+        scope: 'project',
+        folders: [],
+        diagrams: [
+          { id: 'x1', name: 'X1', folderId: null, lastModified: '', file: 'diagrams/x1.json' }
+        ] as never
+      },
+      diagrams: new Map([['x1', sampleModel('X1')]])
+    };
+
+    await importProject({ storage }, parsed, { destination: { kind: 'replaceAll' } });
+
+    const names = (await storage.listDiagrams()).map((d) => d.name);
+    expect(names).toEqual(['X1']);
+    expect(await storage.listFolders()).toEqual([]);
+    expect(storage.diagrams.has(d1)).toBe(false);
+  });
+});
+
+describe('folder ordering survives a round trip (ZIP-10)', () => {
+  it('carries the tree manifest into the target, remapped to the new ids', async () => {
+    const source = new FakeStorage();
+    const { networking, internal } = await seedWorkspace(source);
+    // A deliberate ordering the user set in the explorer.
+    await source.saveTreeManifest({
+      folders: [
+        { id: internal, name: 'Internal', parentId: networking, order: 0 },
+        { id: networking, name: 'Networking', parentId: null, order: 1 }
+      ] as never
+    });
+
+    const { blob } = await exportProject(
+      { storage: source, exporterTag: 'test' },
+      { scope: 'project' }
+    );
+    const parsed = await parseProject(blob);
+    expect(parsed.treeManifest?.folders).toHaveLength(2); // precondition
+
+    const target = new FakeStorage();
+    await importProject({ storage: target }, parsed, {
+      destination: { kind: 'root' }
+    });
+
+    const targetFolders = await target.listFolders();
+    const manifest = await target.getTreeManifest();
+    // The import used to ignore `treeManifest` entirely — every ordering was lost.
+    expect(manifest.folders).toHaveLength(2);
+    // …and every id in it names a folder that actually exists here now.
+    const realIds = new Set(targetFolders.map((f) => f.id));
+    for (const f of manifest.folders) expect(realIds.has(f.id)).toBe(true);
+    // Ordering preserved: Internal before Networking, as the source recorded.
+    const byOrder = [...manifest.folders].sort(
+      (a, b) => ((a as never as {order:number}).order) - ((b as never as {order:number}).order)
+    );
+    expect(byOrder.map((f) => f.name)).toEqual(['Internal', 'Networking']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A3/ZIP-02 — `modelItem.link` holds a diagram id, and a partial (folder-scope)
+// export carries links whose target is not in the archive. They used to be
+// written through verbatim, so the imported node linked to an id that resolves
+// against the IMPORTER's storage: a dead link that looks live.
+// ---------------------------------------------------------------------------
+describe('importProject — cross-diagram links', () => {
+  const parsedWithLink = (link: string): ParsedProject => ({
+    manifest: {
+      format: PROJECT_FORMAT,
+      version: PROJECT_FORMAT_VERSION,
+      exportedAt: new Date().toISOString(),
+      exportedBy: 'test',
+      scope: 'project',
+      folders: [],
+      diagrams: [
+        { id: 'inzip', name: 'In Zip', folderId: null, lastModified: '', file: 'diagrams/inzip.json' }
+      ] as never
+    },
+    diagrams: new Map([
+      ['inzip', { ...sampleModel('In Zip'), items: [{ id: 'n1', name: 'N', link }] }]
+    ])
+  });
+
+  const importedModel = async (parsed: ParsedProject) => {
+    const storage = new FakeStorage();
+    const result = await importProject({ storage }, parsed, {
+      destination: { kind: 'root' }
+    });
+    const data = Array.from(storage.diagrams.values())[0].data as {
+      items: Array<{ link?: string }>;
+    };
+    return { result, item: data.items[0] };
+  };
+
+  it('drops a link whose target is not in the archive, and reports it', async () => {
+    const { result, item } = await importedModel(parsedWithLink('outside-the-zip'));
+    expect(result.diagramCount).toBe(1); // precondition: the import really ran
+    expect(item.link).toBeUndefined();
+    expect(result.droppedLinks).toBe(1);
+  });
+
+  it('rewrites a link whose target IS in the archive', async () => {
+    const parsed = parsedWithLink('inzip');
+    const { result, item } = await importedModel(parsed);
+    expect(result.droppedLinks).toBe(0);
+    // Remapped to the fresh id, not left as the source workspace's.
+    expect(item.link).toBeDefined();
+    expect(item.link).not.toBe('inzip');
+  });
+
+  it('leaves a URL alone (deleting a real URL would be the worse failure)', async () => {
+    for (const url of ['https://example.com/x', 'mailto:a@b.c', '#anchor']) {
+      const { result, item } = await importedModel(parsedWithLink(url));
+      expect(item.link).toBe(url);
+      expect(result.droppedLinks).toBe(0);
+    }
+  });
+});
+
+describe('parseProject — cyclic folder graphs', () => {
+  const zipWithFolders = async (folders: unknown[]) => {
+    const zip = new JSZip();
+    zip.file(
+      'manifest.json',
+      JSON.stringify({
+        format: PROJECT_FORMAT,
+        version: PROJECT_FORMAT_VERSION,
+        exportedAt: new Date().toISOString(),
+        exportedBy: 'test',
+        scope: 'project',
+        folders,
+        diagrams: []
+      })
+    );
+    return zip.generateAsync({ type: 'blob' });
+  };
+
+  const folder = (id: string, parentId: string | null) => ({
+    id,
+    name: id,
+    parentId,
+    createdAt: '2026-01-01T00:00:00.000Z'
+  });
+
+  it('rejects a two-folder loop with BAD_FOLDER_GRAPH instead of hanging', async () => {
+    const blob = await zipWithFolders([folder('a', 'b'), folder('b', 'a')]);
+    await expect(parseProject(blob)).rejects.toMatchObject({
+      name: 'ProjectZipError',
+      code: 'BAD_FOLDER_GRAPH'
+    });
+  });
+
+  it('rejects a self-parented folder', async () => {
+    const blob = await zipWithFolders([folder('a', 'a')]);
+    await expect(parseProject(blob)).rejects.toMatchObject({
+      code: 'BAD_FOLDER_GRAPH'
+    });
+  });
+
+  it('rejects a longer transitive loop', async () => {
+    const blob = await zipWithFolders([
+      folder('a', 'b'),
+      folder('b', 'c'),
+      folder('c', 'a')
+    ]);
+    await expect(parseProject(blob)).rejects.toMatchObject({
+      code: 'BAD_FOLDER_GRAPH'
+    });
+  });
+
+  it('accepts the acyclic control, including a dangling parent', async () => {
+    const blob = await zipWithFolders([
+      folder('a', null),
+      folder('b', 'a'),
+      // A parent that is not in the archive is treated as top level, as before —
+      // the loop check must not turn that into a rejection.
+      folder('c', 'not-in-this-archive')
+    ]);
+    const parsed = await parseProject(blob);
+    expect(parsed.manifest.folders).toHaveLength(3);
+  });
+
+  it('importProject terminates on a cyclic graph handed to it directly', async () => {
+    // `importProject` is exported, so a caller can bypass `parseProject`. The
+    // walk must terminate on its own rather than rely on the parse-time gate.
+    const storage = new FakeStorage();
+    const parsed: ParsedProject = {
+      manifest: {
+        format: PROJECT_FORMAT,
+        version: PROJECT_FORMAT_VERSION,
+        exportedAt: new Date().toISOString(),
+        exportedBy: 'test',
+        scope: 'project',
+        folders: [folder('a', 'b'), folder('b', 'a')] as never,
+        diagrams: []
+      },
+      diagrams: new Map()
+    };
+    const result = await importProject(
+      { storage },
+      parsed,
+      { destination: { kind: 'root' } }
+    );
+    expect(result.folderCount).toBe(2);
+  }, 5000);
 });
 
 describe('parseProject leaves workspace untouched on error', () => {

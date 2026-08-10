@@ -328,6 +328,7 @@ const locale: LocaleProps = {
     namePlaceholder: 'Elementname…'
   },
   topBarStyleControls: {
+    mixed: 'Gemischt',
     rotate90: 'Um 90° drehen',
     noColor: 'Keine Farbe',
     pickColorFromScreen: 'Farbe vom Bildschirm auswählen',
@@ -583,6 +584,12 @@ const locale: LocaleProps = {
   },
   // D8 — LayersPanel
   layersPanel: {
+    deleteLayerTitle: 'Ebene löschen?',
+    deleteLayerBody: 'Diese Ebene enthält {count} Element(e). Was soll damit geschehen?',
+    deleteLayerHiddenWarning: 'Diese Ebene ist AUSGEBLENDET. Wenn der Inhalt erhalten bleibt, wird er wieder SICHTBAR — ein Element ohne Ebene wird immer angezeigt.',
+    deleteLayerCancel: 'Abbrechen',
+    deleteLayerKeep: 'Inhalt behalten',
+    deleteLayerDeleteContents: 'Inhalt ebenfalls löschen',
     header: 'Ebenen',
     addLayer: 'Ebene hinzufügen',
     deleteSelectedLayer: 'Ausgewählte Ebene löschen',

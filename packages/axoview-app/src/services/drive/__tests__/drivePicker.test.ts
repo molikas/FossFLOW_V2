@@ -132,7 +132,7 @@ describe('launchDrivePicker', () => {
     await expect(outcome).resolves.toBe('picked');
   });
 
-  test('resolves cancelled when PICKED reports a DIFFERENT file (wrong grant)', async () => {
+  test('resolves wrong-file when PICKED reports a DIFFERENT file (wrong grant)', async () => {
     signedIn();
     const harness = installFakePicker();
     const outcome = launchDrivePicker({
@@ -143,8 +143,14 @@ describe('launchDrivePicker', () => {
     await flush();
     // The user browsed away and picked some other file — the target never got
     // granted, so this must NOT report 'picked' (else the gate retries and 404s).
+    //
+    // S3/DRV-03: it must not report 'cancelled' either. That made a wrong pick
+    // indistinguishable from closing the dialog deliberately, so the gate said
+    // nothing and the natural next action was to pick the same wrong file
+    // again. The distinction was already computed here — it just had nowhere
+    // to go until the outcome type gained a third value.
     harness.fireCallback('picked-action', [{ id: 'some-other-file' }]);
-    await expect(outcome).resolves.toBe('cancelled');
+    await expect(outcome).resolves.toBe('wrong-file');
   });
 
   test('resolves cancelled on CANCEL', async () => {

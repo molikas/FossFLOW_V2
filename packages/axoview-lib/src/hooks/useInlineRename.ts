@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { isSessionPreservingTarget } from 'src/utils/sessionPreservingTarget';
 
 interface Params {
   /** True while the contentEditable is mounted / editing. */
@@ -43,20 +44,59 @@ export const useInlineRename = ({
   commitRef.current = commit;
   cancelFnRef.current = cancel;
 
+  // TXT-06 made the press-away listener the AUTHORITY on ending the session,
+  // rather than relying on `blur` to mean "the user left". Focus moves to the
+  // strip on a plain mousedown, which fired a blur the hook could only read as
+  // a commit — so reaching for the strip mid-rename ended the rename whatever
+  // the press-away listener allow-listed. `finish` is now called explicitly and
+  // guarded, and blur only defers to it when focus went somewhere that is NOT
+  // part of the session.
+  const finishedRef = useRef(false);
+  const finish = useCallback((mode: 'commit' | 'cancel', text?: string) => {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    cancelRef.current = false;
+    if (mode === 'cancel') {
+      cancelFnRef.current();
+      return;
+    }
+    const el = elRef.current;
+    // `innerText` is the authored text as rendered; jsdom does not implement it,
+    // so fall back to `textContent` (the two agree for these single-node
+    // contentEditables).
+    commitRef.current(text ?? el?.innerText ?? el?.textContent ?? '');
+  }, []);
+
   useEffect(() => {
     if (!active) return;
-    const onPointerDown = (e: PointerEvent) => {
+    finishedRef.current = false;
+    const onPressAway = (e: PointerEvent | MouseEvent) => {
       const el = elRef.current;
       if (!el || el.contains(e.target as Node)) return;
-      // Right-click away cancels; any other button commits.
-      if (e.button === 2) cancelRef.current = true;
-      // Synchronously blur so the commit/cancel below runs before the canvas's
-      // own pointerdown handler deselects and unmounts this editor.
+      // The strip and its MUI portals are part of the session, not away from
+      // it. Without this branch, reaching for the top strip to change a Label's
+      // colour or size mid-rename ended the rename — while the same gesture
+      // during a text-box session worked, because THAT editor had the allow-list
+      // and this shared hook did not. One helper now, so the two
+      // implementations of the same contract cannot drift again.
+      if (isSessionPreservingTarget(e.target)) return;
+      // Right-click away cancels; any other button commits. Blur first so the
+      // caret leaves before the canvas's own pointerdown handler deselects and
+      // unmounts this editor, then finish explicitly — the editor may already
+      // have lost focus to a strip control, in which case no blur would fire.
       el.blur();
+      finish(e.button === 2 ? 'cancel' : 'commit');
     };
-    window.addEventListener('pointerdown', onPointerDown, true);
-    return () => window.removeEventListener('pointerdown', onPointerDown, true);
-  }, [active]);
+    // Bound to BOTH, matching TextBoxInlineEditor: real input fires pointerdown
+    // first (`finishedRef` makes the mousedown a no-op), and the e2e suite's
+    // synthetic canvas events are mouse-only.
+    window.addEventListener('pointerdown', onPressAway, true);
+    window.addEventListener('mousedown', onPressAway, true);
+    return () => {
+      window.removeEventListener('pointerdown', onPressAway, true);
+      window.removeEventListener('mousedown', onPressAway, true);
+    };
+  }, [active, finish]);
 
   // Callback ref: focus + select-all on mount (matches prior per-editor logic).
   const setRef = useCallback((el: HTMLElement | null) => {
@@ -71,14 +111,19 @@ export const useInlineRename = ({
     }
   }, []);
 
-  const onBlur = useCallback((e: React.FocusEvent<HTMLElement>) => {
-    if (cancelRef.current) {
-      cancelRef.current = false;
-      cancelFnRef.current();
-    } else {
-      commitRef.current(e.currentTarget.innerText);
-    }
-  }, []);
+  const onBlur = useCallback(
+    (e: React.FocusEvent<HTMLElement>) => {
+      // Focus landing on the strip (or one of its portals) is not leaving the
+      // session — the control is about to edit THIS element. The session ends
+      // when the press-away listener says so, not when focus wanders.
+      if (isSessionPreservingTarget(e.relatedTarget)) return;
+      finish(
+        cancelRef.current ? 'cancel' : 'commit',
+        e.currentTarget?.innerText
+      );
+    },
+    [finish]
+  );
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLElement>) => {
@@ -86,13 +131,15 @@ export const useInlineRename = ({
       if (e.key === 'Enter' && (!multiline || !e.shiftKey)) {
         e.preventDefault();
         (e.currentTarget as HTMLElement).blur(); // → commit
+        finish('commit');
       } else if (e.key === 'Escape') {
         e.preventDefault();
         cancelRef.current = true;
         (e.currentTarget as HTMLElement).blur(); // → cancel
+        finish('cancel');
       }
     },
-    [multiline]
+    [multiline, finish]
   );
 
   return { setRef, onBlur, onKeyDown };

@@ -201,15 +201,24 @@ describe('ReconnectAnchor.mouseup', () => {
     expect(actions.setMode).not.toHaveBeenCalled();
   });
 
-  it('does nothing when isRendererInteraction is false', () => {
+  // I4/CONN-02 — this used to assert the OPPOSITE, and that was the bug. The
+  // handler early-returned unless `isRendererInteraction`, so a release over a
+  // panel (dock, properties deck — anywhere off the canvas) neither committed
+  // nor exited: the mode stayed RECONNECT_ANCHOR and the reconnect kept
+  // following the pointer with nothing pressed. The gesture BEGAN on the canvas
+  // — that is the only way to reach this mode — so where the button comes up
+  // must not decide whether it finishes.
+  it('CONN-02: a release OFF the canvas still commits and exits', () => {
     const uiState = makeUiState();
     ReconnectAnchor.mouseup!({
       uiState,
       scene: makeScene(),
       isRendererInteraction: false
     } as any);
-    expect(uiState.actions.setMode).not.toHaveBeenCalled();
-    expect(uiState.actions.setItemControls).not.toHaveBeenCalled();
+    expect(uiState.actions.setMode).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'CURSOR' })
+    );
+    expect(uiState.actions.setItemControls).toHaveBeenCalled();
   });
 
   it('switches to CURSOR mode on mouseup', () => {

@@ -101,11 +101,22 @@ export const useSceneData = () => {
   );
 
   // Labels are model-only (ADR 0031) — no scene-size merge. The Canvas2D layer
-  // (LabelsCanvas) and the DOM hit-proxy (LabelHitLayer) each measure the chip
-  // themselves, exactly like node labels in NodesCanvas.
+  // (SceneCanvas) and the DOM hit-proxy (LabelHitLayer) each measure the chip
+  // themselves, exactly like node labels in SceneCanvas.
   const labelsList = useMemo(
     () => currentView.labels ?? [],
     [currentView.labels]
+  );
+
+  // PROJ-10's residual: the hit test resolves the same three paint-order tiers
+  // the merged canvas sorts by, and the LAYER tier is the one it could not see —
+  // it was handed a flat scene and resolved every entity at `layerOrder: 0`.
+  // Read from the view rather than from `useLayerContext`, which is a React
+  // context the interaction modes (plain functions taking `state.scene`) cannot
+  // reach; `SceneCanvas` sorts by this same `currentView.layers` array.
+  const layersList = useMemo(
+    () => currentView.layers ?? [],
+    [currentView.layers]
   );
 
   return {
@@ -121,6 +132,7 @@ export const useSceneData = () => {
     hitConnectors: hitConnectorsList,
     rectangles: rectanglesList,
     textBoxes: textBoxesList,
-    labels: labelsList
+    labels: labelsList,
+    layers: layersList
   };
 };

@@ -4,6 +4,10 @@
     "noEmit": true,
     "target": "es5"
   },
+  // `src/__explore__` is the quarantined exploratory probe lane (ADR 0047 §1):
+  // it must never reach CI, and `npm run lint` (tsc --noEmit) is a CI gate.
+  // Probes are still type-checked per-file by ts-jest when they run.
+  "exclude": ["node_modules", "build", "src/__explore__"],
   "include": [
     "src/**/*"
   ]

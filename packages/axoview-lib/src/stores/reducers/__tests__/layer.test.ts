@@ -205,13 +205,27 @@ describe('reorderLayers', () => {
 });
 
 describe('assignLayerToItems', () => {
+  const LAYERS: Layer[] = [
+    { id: 'layer1', name: 'L1', visible: true, locked: false, order: 0 },
+    { id: 'new-layer', name: 'L2', visible: true, locked: false, order: 1 }
+  ];
+
   it('assigns layerId to specified items', () => {
-    const state = makeState();
+    const state = makeState({ layers: LAYERS });
     const result = assignLayerToItems(
-      { layerId: 'layer1', itemIds: ['item1'] },
+      { layerId: 'layer1', refs: [{ type: 'ITEM', id: 'item1' }] },
       ctx(state)
     );
     expect(result.model.views[0].items[0].layerId).toBe('layer1');
+  });
+
+  // E2/RED-03: an id naming no layer used to be accepted here, pass
+  // `validateView` AND `modelSchema`, and save and reload intact.
+  it('refuses an id that names no layer in the view', () => {
+    const state = makeState({ layers: LAYERS });
+    expect(() =>
+      assignLayerToItems({ layerId: 'ghost', refs: [{ type: 'ITEM', id: 'item1' }] }, ctx(state))
+    ).toThrow(/no such layer/);
   });
 
   it('removes layerId when layerId is undefined', () => {
@@ -219,7 +233,7 @@ describe('assignLayerToItems', () => {
       items: [{ id: 'item1', tile: { x: 0, y: 0 }, layerId: 'layer1' }]
     });
     const result = assignLayerToItems(
-      { layerId: undefined, itemIds: ['item1'] },
+      { layerId: undefined, refs: [{ type: 'ITEM', id: 'item1' }] },
       ctx(state)
     );
     expect(result.model.views[0].items[0].layerId).toBeUndefined();
@@ -227,13 +241,14 @@ describe('assignLayerToItems', () => {
 
   it('leaves unspecified items unchanged', () => {
     const state = makeState({
+      layers: LAYERS,
       items: [
         { id: 'item1', tile: { x: 0, y: 0 } },
         { id: 'item2', tile: { x: 1, y: 0 }, layerId: 'existing-layer' }
       ]
     });
     const result = assignLayerToItems(
-      { layerId: 'new-layer', itemIds: ['item1'] },
+      { layerId: 'new-layer', refs: [{ type: 'ITEM', id: 'item1' }] },
       ctx(state)
     );
     expect(result.model.views[0].items[1].layerId).toBe('existing-layer');

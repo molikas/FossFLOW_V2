@@ -333,3 +333,269 @@ describe('LocalStorageProvider', () => {
     expect(list[0].id).toBe('fallback-1');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Wave 1 — A2/STOR-01, 03, 04, 05, 06, 07, 16. Promoted from the 2026-07
+// exploratory campaign's probe lane (`__explore__/A2/local-place-*`).
+// ---------------------------------------------------------------------------
+
+describe('A2/STOR-05 — a corrupt store degrades, it does not brick the tree', () => {
+  it('listDiagrams survives a corrupt index', async () => {
+    sessionStorage.setItem('axoview_diagrams', '{not json');
+    const p = await offlineProvider();
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(p.listDiagrams()).resolves.toEqual([]);
+  });
+
+  it('listFolders survives a corrupt folder store', async () => {
+    localStorage.setItem('axoview-folders', '[[[');
+    const p = await offlineProvider();
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(p.listFolders()).resolves.toEqual([]);
+  });
+
+  it('getTreeManifest survives a corrupt manifest', async () => {
+    localStorage.setItem('axoview-tree-manifest', 'nope');
+    const p = await offlineProvider();
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(p.getTreeManifest()).resolves.toEqual({ folders: [] });
+  });
+
+  it('and the corruption is reported, not swallowed', async () => {
+    sessionStorage.setItem('axoview_diagrams', '{not json');
+    const err = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const p = await offlineProvider();
+    await p.listDiagrams();
+    expect(err).toHaveBeenCalled();
+  });
+});
+
+describe('A2/STOR-06 — a quota failure must not leave unreachable bytes', () => {
+  it('removes the blob it just wrote when the index write fails', async () => {
+    const p = await offlineProvider();
+    const realSetItem = Storage.prototype.setItem;
+    jest
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation(function (this: Storage, key: string, value: string) {
+        if (key === 'axoview_diagrams') {
+          throw new DOMException('quota', 'QuotaExceededError');
+        }
+        realSetItem.call(this, key, value);
+      });
+
+    await expect(
+      p.saveDiagram('diag-1', { title: 'Big', icons: [], items: [], views: [] })
+    ).rejects.toThrow();
+
+    jest.restoreAllMocks();
+    // The blob used to survive: bytes on a 5 MB budget that no listing shows
+    // and nothing can delete.
+    expect(sessionStorage.getItem('axoview_diagram_diag-1')).toBeNull();
+  });
+});
+
+describe('A2/STOR-07 — every session mutation announces itself', () => {
+  const countEvents = async (run: () => Promise<void>) => {
+    let n = 0;
+    const listener = () => {
+      n += 1;
+    };
+    window.addEventListener('axoview-session-changed', listener);
+    await run();
+    window.removeEventListener('axoview-session-changed', listener);
+    return n;
+  };
+
+  it('rename, restore and move all dispatch, as save and delete already did', async () => {
+    const p = await offlineProvider();
+    const id = await p.createDiagram({ title: 'A', name: 'A' }, null);
+
+    // Preconditions: each op really did mutate the index.
+    expect(await countEvents(() => p.renameDiagram(id, 'B'))).toBe(1);
+    expect((await p.listDiagrams()).find((d) => d.id === id)!.name).toBe('B');
+
+    await p.deleteDiagram(id, true);
+    expect(await countEvents(() => p.restoreDiagram(id))).toBe(1);
+
+    const folder = await p.createFolder('F', null);
+    expect(await countEvents(() => p.moveItem(id, 'diagram', folder))).toBe(1);
+    expect((await p.listDiagrams()).find((d) => d.id === id)!.folderId).toBe(folder);
+  });
+});
+
+describe('A2/STOR-03 — deleting a folder does not orphan its diagrams', () => {
+  it('recursive: the diagrams and their bytes go with the folder', async () => {
+    const p = await offlineProvider();
+    const folder = await p.createFolder('Networking', null);
+    const id = await p.createDiagram({ title: 'VPC', name: 'VPC' }, folder);
+    expect(sessionStorage.getItem('axoview_diagram_' + id)).not.toBeNull();
+
+    await p.deleteFolder(folder, true);
+
+    expect(await p.listDiagrams()).toEqual([]);
+    expect(sessionStorage.getItem('axoview_diagram_' + id)).toBeNull();
+  });
+
+  it('non-recursive: the diagrams move up to the parent, not into limbo', async () => {
+    const p = await offlineProvider();
+    const parent = await p.createFolder('Parent', null);
+    const child = await p.createFolder('Child', parent);
+    await p.createDiagram({ title: 'Doc', name: 'Doc' }, child);
+
+    await p.deleteFolder(child, false);
+
+    const [meta] = await p.listDiagrams();
+    // It used to keep `folderId: <child>` — a folder no listing returns, so the
+    // diagram was in no tree at all while still counting everywhere.
+    expect(meta.folderId).toBe(parent);
+    expect(await p.listDiagrams(parent)).toHaveLength(1);
+  });
+
+  it('non-recursive: child FOLDERS are re-parented rather than dangling', async () => {
+    const p = await offlineProvider();
+    const parent = await p.createFolder('Parent', null);
+    const mid = await p.createFolder('Mid', parent);
+    const leaf = await p.createFolder('Leaf', mid);
+
+    await p.deleteFolder(mid, false);
+
+    const folders = await p.listFolders();
+    expect(folders.find((f) => f.id === leaf)!.parentId).toBe(parent);
+  });
+});
+
+describe('A2/STOR-04 — a silent read fallback is audible', () => {
+  it('reports when a server read falls back to this tab, and still falls back', async () => {
+    const p = await serverProvider();
+    setFetch(async () => {
+      throw new Error('backend down');
+    });
+    const err = jest.spyOn(console, 'error').mockImplementation(() => {});
+    let event = 0;
+    const listener = () => {
+      event += 1;
+    };
+    window.addEventListener('axoview-server-unreachable', listener);
+
+    // The fallback stays — a transient blip must not empty the screen with an
+    // exception — but it no longer happens in silence while writes still
+    // target the server.
+    await expect(p.listDiagrams()).resolves.toEqual([]);
+
+    window.removeEventListener('axoview-server-unreachable', listener);
+    expect(err).toHaveBeenCalled();
+    expect(event).toBe(1);
+  });
+});
+
+describe('A2/STOR-01 — the server CREATE is lean, like every sibling', () => {
+  it('strips pack icons and records requiredPacks on the first write', async () => {
+    const p = await serverProvider();
+    const bodies: unknown[] = [];
+    setFetch(async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return mockResponse({ id: 'server-1' });
+    });
+
+    await p.createDiagram(
+      {
+        title: 'New',
+        icons: [
+          { id: 'aws-ec2', name: 'EC2', url: 'data:x', collection: 'aws' },
+          { id: 'mine', name: 'Mine', url: 'data:y', collection: 'imported' }
+        ],
+        items: [{ id: 'n1', name: 'N', icon: 'aws-ec2' }],
+        views: []
+      },
+      null
+    );
+
+    const body = bodies[0] as { icons: unknown[]; requiredPacks: string[] };
+    // It used to POST the whole catalog with no pack hint, and only the NEXT
+    // save wrote the lean shape — which is how the drift stayed invisible.
+    expect(body.icons).toHaveLength(1);
+    expect(body.requiredPacks).toEqual(['aws']);
+  });
+});
+
+describe('A2/STOR-16 — a failed manifest save is reported, not written locally', () => {
+  it('rejects instead of resolving into localStorage', async () => {
+    const p = await serverProvider();
+    setFetch(async () => mockResponse({ error: 'nope' }, 500));
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(p.saveTreeManifest({ folders: [] })).rejects.toThrow();
+
+    // The local copy used to win the next healthy read, silently reverting the
+    // user's ordering — the read and write halves fell back to the same store
+    // with opposite authority.
+    expect(localStorage.getItem('axoview-tree-manifest')).toBeNull();
+  });
+
+  it('clears a stale local copy when a save later succeeds', async () => {
+    localStorage.setItem('axoview-tree-manifest', JSON.stringify({ folders: [] }));
+    const p = await serverProvider();
+    setFetch(async () => mockResponse({}, 200));
+    await p.saveTreeManifest({ folders: [] });
+    expect(localStorage.getItem('axoview-tree-manifest')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S3/DRV-14 — a failed share must say something the user can act on
+// ---------------------------------------------------------------------------
+// `shareDiagram` used to throw ``new Error(`Share failed: ${status}`)``,
+// discarding the backend's own `{ error }` body — and `AppToolbar` surfaces
+// `err.message` verbatim into the share popover. A diagram deleted in another
+// tab between being opened and being shared displayed the literal text
+// `Share failed: 404`. ADR 0011 §1 requires copy the user can act on.
+describe('shareDiagram failures', () => {
+  it('maps 404 to "this diagram no longer exists", not a raw status', async () => {
+    const p = await serverProvider();
+    setFetch(async () => mockResponse({ error: 'Diagram not found' }, 404));
+
+    const err = (await p.shareDiagram!('d1').catch((e: unknown) => e)) as Error & {
+      status?: number;
+      serverMessage?: string;
+    };
+
+    expect(err.name).toBe('ShareRequestError');
+    expect(err.message).toMatch(/no longer exists/i);
+    expect(err.message).not.toMatch(/^Share failed/);
+    expect(err.status).toBe(404);
+    // The backend's own text is carried for diagnostics, just not shown raw.
+    expect(err.serverMessage).toBe(
+      'Diagram not found'
+    );
+  });
+
+  it('maps 5xx to a retryable message', async () => {
+    const p = await serverProvider();
+    setFetch(async () => mockResponse({ error: 'Internal error' }, 503));
+
+    const err = (await p.shareDiagram!('d1').catch((e: unknown) => e)) as Error & {
+      status?: number;
+      serverMessage?: string;
+    };
+
+    expect(err.message).toMatch(/try again/i);
+  });
+
+  it("falls back to the backend's own message for anything else", async () => {
+    const p = await serverProvider();
+    setFetch(async () => mockResponse({ error: 'Origin not allowed' }, 403));
+
+    const err = (await p.shareDiagram!('d1').catch((e: unknown) => e)) as Error & {
+      status?: number;
+      serverMessage?: string;
+    };
+
+    expect(err.message).toBe('Origin not allowed');
+  });
+
+  it('still succeeds normally', async () => {
+    const p = await serverProvider();
+    setFetch(async () => mockResponse({ uuid: 'u1', url: 'x', sharedAt: 't' }));
+    await expect(p.shareDiagram!('d1')).resolves.toMatchObject({ uuid: 'u1' });
+  });
+});

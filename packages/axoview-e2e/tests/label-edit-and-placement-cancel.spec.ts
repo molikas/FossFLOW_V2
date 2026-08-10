@@ -51,11 +51,12 @@ test.describe('Floating Label inline edit (double-click / F2)', () => {
   test('double-clicking a label chip edits it inline', async ({ page, app }) => {
     void app;
     const canvas = new CanvasPOM(page);
+    // Place-and-type: placement opens the inline editor immediately, and the
+    // POM types + commits so the chip repaints and the hit proxy mounts before
+    // the double-click-to-edit path under test runs. (Placement seeds EMPTY
+    // text since the TXT-07 ruling — an uncommitted Label is discarded — so the
+    // text has to come from somewhere, and the POM is that somewhere.)
     await canvas.placeLabelAt({ x: 400, y: 300 });
-    // Place-and-type (2026-07 cycle): placement opens the inline editor
-    // immediately; Enter commits the seeded text so the chip repaints and the
-    // hit proxy mounts before the double-click-to-edit path under test runs.
-    await page.keyboard.press('Enter');
     await expect
       .poll(
         () =>

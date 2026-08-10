@@ -159,7 +159,15 @@ test.describe('Lasso × connector × delete-cascade — Track 5e-1 (PR #6 regres
     //    the node places cleanly."). Pre-fix the connector was left with
     //    a single anchor and placeIcon's downstream isoMath throw
     //    cascaded out of the scene. Post-fix the scene takes it cleanly.
-    await placeIcon(page, { x: 240, y: 240 });
+    //
+    //    The drop point moved from {240,240} to {700,300} in wave 3: at
+    //    {240,240} `document.elementFromPoint` resolves to an Elements-panel
+    //    icon button, i.e. the drag was being released ON THE PANEL, and the
+    //    node it placed landed at a tile hidden behind it. That is exactly
+    //    I5/CTX-01, so this step was passing only because of the bug. The drop
+    //    LOCATION is incidental to what this journey asserts (that the scene
+    //    survives the delete cascade); the location being on open canvas is not.
+    await placeIcon(page, { x: 700, y: 300 });
     await expect.poll(() => getModelItemCount(page), { timeout: 5_000 }).toBe(1);
   });
 

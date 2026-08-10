@@ -42,13 +42,41 @@ describe('shared formatting-geometry constants (ADR 0034 addendum)', () => {
 });
 
 describe('countHtmlLines — weighted line counting', () => {
-  it('plain text counts as 1 unit', () => {
-    expect(countHtmlLines('Text')).toBe(1);
+  // TXT-01/02: plain text is measured ROW BY ROW at the same weight as a `<p>`
+  // row, because the resting render draws it `white-space: pre` and those rows
+  // are the same height. It used to short-circuit to a flat 1 regardless of how
+  // many newlines it held, so a multi-row plain-text box occupied a ONE-row
+  // footprint and every row after the first overhung its tiles. The
+  // single-row footprint is unchanged — ceil(1 × 0.6) and ceil(1.2 × 0.6) are
+  // both one tile — so no existing single-line box moves.
+  it('one plain-text row weighs the same as one <p> row', () => {
+    expect(countHtmlLines('Text')).toBeCloseTo(TEXTBOX_LINE_HEIGHT, 5);
+    expect(countHtmlLines('Text')).toBeCloseTo(countHtmlLines('<p>Text</p>'), 5);
     expect(countHtmlLines('')).toBe(1);
   });
 
-  it('content not starting with `<` short-circuits to 1', () => {
-    expect(countHtmlLines('1. point one')).toBe(1);
+  it('plain text counts one row per newline (TXT-01)', () => {
+    expect(countHtmlLines('a\nb\nc')).toBeCloseTo(TEXTBOX_LINE_HEIGHT * 3, 5);
+  });
+
+  it('content with no leading TAG is plain text, not HTML', () => {
+    expect(countHtmlLines('1. point one')).toBeCloseTo(TEXTBOX_LINE_HEIGHT, 5);
+  });
+
+  it('<div> rows and <br> breaks count (TXT-02)', () => {
+    expect(countHtmlLines('<div>a</div><div>b</div>')).toBeCloseTo(
+      TEXTBOX_LINE_HEIGHT * 2,
+      5
+    );
+    expect(countHtmlLines('<p>a<br>b</p>')).toBeCloseTo(
+      TEXTBOX_LINE_HEIGHT * 2,
+      5
+    );
+  });
+
+  it("Quill's blank line <p><br></p> stays ONE row", () => {
+    expect(countHtmlLines('<p><br></p>')).toBeCloseTo(TEXTBOX_LINE_HEIGHT, 5);
+    expect(countHtmlLines('<p>a<br></p>')).toBeCloseTo(TEXTBOX_LINE_HEIGHT, 5);
   });
 
   it('a <p> weighs exactly the default line-spacing multiplier (no margins)', () => {

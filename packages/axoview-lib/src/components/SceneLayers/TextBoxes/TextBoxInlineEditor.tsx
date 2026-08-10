@@ -9,6 +9,7 @@ import {
   normalizeQuillHtmlSpaces
 } from 'src/utils/richTextTransform';
 import { htmlToPlainText } from 'src/utils/htmlToPlainText';
+import { isSessionPreservingTarget } from 'src/utils/sessionPreservingTarget';
 import { buildListAutofillBinding } from 'src/utils/quillListAutofill';
 import { buildLinkShortcutBinding } from 'src/utils/quillLinkShortcut';
 import { CANVAS_RICHTEXT_LIST_INDENT_EM } from 'src/config';
@@ -49,8 +50,13 @@ interface Props {
 // ([data-axoview-strip]) or any MUI portal overlay (the strip's own popovers)
 // keep the session alive.
 //
-// Commit is a no-op unless something actually changed (user typing, or a strip
-// format routed through the bridge's markChanged) — never compare plain text
+// A commit writes whatever the session leaves, and the PARENT decides whether
+// that is a change (TXT-08 — a commit that fell through to cancel because the
+// TEXT was untouched discarded the session's styling once cancel started
+// rolling element-level writes back). `changedRef` still records that the
+// content was touched — by typing or by a strip format routed through the
+// bridge's markChanged — and drives the live draft re-measure; it no longer
+// decides commit vs cancel. Never compare plain text
 // against stored HTML; that comparison is what made the old plain-text editor
 // destroy formatting on a zero-keystroke click-away.
 const QUILL_MODULES = {
@@ -88,6 +94,10 @@ export const TextBoxInlineEditor = ({
   const [quillInstance, setQuillInstance] = useState<Quill | null>(null);
   const markChanged = useCallback(() => {
     changedRef.current = true;
+    // A strip format routed through the bridge changes the RENDERED content, so
+    // the live footprint the parent measures has to follow it. Typing reaches
+    // `emitDraft` through Quill's text-change handler; a bridge format does not.
+    emitDraftRef.current();
   }, []);
 
   // Seed once per session — sanitized write-side (the editor is an HTML
@@ -106,7 +116,14 @@ export const TextBoxInlineEditor = ({
     (kind: 'commit' | 'cancel') => {
       if (finishedRef.current) return;
       finishedRef.current = true;
-      if (kind === 'commit' && changedRef.current) {
+      // TXT-08: a commit with no TEXT change used to fall through to
+      // `onCancel()` as a cheap "nothing to write" path. That was invisible
+      // while cancel only cleared `editingTextBoxId` — but now that cancel
+      // rolls the session's element-level writes back, a session where the user
+      // changed only STYLING would have been discarded by a left-click-away.
+      // A commit is a commit; the parent already no-ops on unchanged content,
+      // and an empty box still round-trips to '' and hits the discard.
+      if (kind === 'commit') {
         const quill = quillRef.current?.getEditor();
         // getSemanticHTML serializes every space as &nbsp; — normalize back to
         // real spaces (wrap opportunities for manual-width boxes) BEFORE the
@@ -147,13 +164,9 @@ export const TextBoxInlineEditor = ({
       const rootEl = rootRef.current;
       if (!target || !rootEl || rootEl.contains(target)) return;
       // The strip and its popovers (MUI portals) drive the live selection —
-      // pressing them must not end the session (ADR 0034 §1).
-      if (
-        target.closest?.('[data-axoview-strip]') ||
-        target.closest?.('.MuiPopover-root, .MuiPopper-root, .MuiModal-root')
-      ) {
-        return;
-      }
+      // pressing them must not end the session (ADR 0034 §1). Shared with
+      // useInlineRename so the two editors cannot drift again (TXT-06).
+      if (isSessionPreservingTarget(target)) return;
       finishRef.current(e.button === 2 ? 'cancel' : 'commit');
     };
     window.addEventListener('pointerdown', onPressAway, true);

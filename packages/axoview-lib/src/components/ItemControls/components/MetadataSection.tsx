@@ -14,6 +14,11 @@ interface Props {
   onChange: (value: string) => void;
   /** Start expanded (default: collapsed — identity is secondary to content/Notes). */
   defaultExpanded?: boolean;
+  /**
+   * View mode (EXPLORABLE_READONLY): the name still reads, but the click-to-edit
+   * affordance is withdrawn — there is no field to open. F2/VIEW-11.
+   */
+  readOnly?: boolean;
 }
 
 // Collapsible "Metadata" section holding an element's identity `name` (2026-07-02).
@@ -27,10 +32,12 @@ export const MetadataSection = ({
   name,
   placeholder,
   onChange,
-  defaultExpanded = false
+  defaultExpanded = false,
+  readOnly = false
 }: Props) => {
   const [open, setOpen] = useState(defaultExpanded);
   const [editing, setEditing] = useState(false);
+  const isEditing = editing && !readOnly;
 
   return (
     <Box sx={{ pt: 1.5, px: 2 }}>
@@ -58,7 +65,7 @@ export const MetadataSection = ({
           >
             {fieldLabel}
           </Typography>
-          {editing ? (
+          {isEditing ? (
             <TextField
               value={name}
               placeholder={placeholder}
@@ -78,15 +85,15 @@ export const MetadataSection = ({
           ) : (
             <Typography
               variant="body2"
-              onClick={() => setEditing(true)}
+              onClick={readOnly ? undefined : () => setEditing(true)}
               sx={{
                 flex: 1,
-                cursor: 'text',
+                cursor: readOnly ? 'default' : 'text',
                 color: name ? 'text.primary' : 'text.disabled',
                 borderRadius: 0.5,
                 px: 0.5,
                 mx: -0.5,
-                '&:hover': { bgcolor: 'action.hover' }
+                ...(readOnly ? {} : { '&:hover': { bgcolor: 'action.hover' } })
               }}
             >
               {name || placeholder}

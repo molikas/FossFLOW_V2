@@ -1,4 +1,4 @@
-import { resolveToolHotkey } from '../toolHotkeys';
+import { resolveToolHotkey, resolveZOrderDirection } from '../toolHotkeys';
 import { TOOL_HOTKEYS } from 'src/config/hotkeys';
 import type { HotkeyMapping } from 'src/types/settings';
 
@@ -49,5 +49,52 @@ describe('resolveToolHotkey', () => {
   it('returns null for an unmapped key and for an all-null mapping', () => {
     expect(resolveToolHotkey(false, 'z', TOOL_HOTKEYS)).toBeNull();
     expect(resolveToolHotkey(false, 'c', allNull)).toBeNull();
+  });
+});
+
+// Promoted from the exploratory lane (I1/PTR-14). The z-order guard matched
+// `e.key === ']'` — the identity Playwright's `keyboard.press` synthesises, and
+// the one a physical keyboard never sends while Shift is held. "Bring to front"
+// and "send to back" were dead in the product, with `z-order.spec.ts` green.
+describe('resolveZOrderDirection — real vs synthetic key identity (PTR-14)', () => {
+  it('resolves the unshifted characters', () => {
+    expect(resolveZOrderDirection({ key: ']', code: 'BracketRight' })).toBe(
+      'front'
+    );
+    expect(resolveZOrderDirection({ key: '[', code: 'BracketLeft' })).toBe(
+      'back'
+    );
+  });
+
+  it('resolves the SHIFTED characters a real US keyboard sends (the bug)', () => {
+    // Ctrl+Shift+] arrives as `}` from hardware. This is the whole defect.
+    expect(resolveZOrderDirection({ key: '}', code: 'BracketRight' })).toBe(
+      'front'
+    );
+    expect(resolveZOrderDirection({ key: '{', code: 'BracketLeft' })).toBe(
+      'back'
+    );
+  });
+
+  it('resolves from the physical key even when the character is neither', () => {
+    // A layout where the bracket sits behind AltGr still reports the code.
+    expect(resolveZOrderDirection({ key: 'å', code: 'BracketRight' })).toBe(
+      'front'
+    );
+    expect(resolveZOrderDirection({ key: 'ø', code: 'BracketLeft' })).toBe(
+      'back'
+    );
+  });
+
+  it('resolves from the character alone when no code is carried', () => {
+    // Synthetic dispatch (jsdom, older automation) omits `code`.
+    expect(resolveZOrderDirection({ key: ']', code: '' })).toBe('front');
+    expect(resolveZOrderDirection({ key: '{', code: '' })).toBe('back');
+  });
+
+  it('is null for anything that is not a bracket', () => {
+    expect(resolveZOrderDirection({ key: 'z', code: 'KeyZ' })).toBeNull();
+    expect(resolveZOrderDirection({ key: 'Enter', code: 'Enter' })).toBeNull();
+    expect(resolveZOrderDirection({ key: ')', code: 'Digit0' })).toBeNull();
   });
 });

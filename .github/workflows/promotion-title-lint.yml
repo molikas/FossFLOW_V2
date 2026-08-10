@@ -7,7 +7,7 @@
 # carry a conventional-commit title so the release fires no matter which merge
 # button is pressed. Merge commits remain the preferred method (/ship skill) —
 # a conventional title is harmless there and load-bearing under squash.
-# Context: docs/technical-review-2026-07.md §5b.
+# Context: the retired technical-review-2026-07 §5b (git history).
 
 name: Promotion title lint
 
@@ -35,6 +35,6 @@ jobs:
           if echo "${PR_TITLE}" | grep -qE '^(feat|fix|perf|refactor|revert|docs|test|chore|build|ci|style)(\([^)]+\))?!?: .+'; then
             echo "OK — conventional title; semantic-release will analyze it correctly even under a squash merge."
           else
-            echo "::error::Promotion PR title is not a conventional commit. If this PR is squash-merged as-is, semantic-release cuts NO release (see docs/technical-review-2026-07.md §5b). Retitle (e.g. 'feat(scope): …') or merge with a merge commit."
+            echo "::error::Promotion PR title is not a conventional commit. If this PR is squash-merged as-is, semantic-release cuts NO release (see the retired technical-review-2026-07 §5b, git history). Retitle (e.g. 'feat(scope): …') or merge with a merge commit."
             exit 1
           fi

@@ -14,6 +14,7 @@ import path from 'path';
 import { appTest as test, expect } from '../fixtures/app.fixture';
 import { LayersPanelPOM } from '../pom/LayersPanelPOM';
 import { EmptyStateScreenPOM } from '../pom/EmptyStateScreenPOM';
+import { importFileViaDialog } from '../helpers/import';
 import { byAxoviewId, byLibTestId } from '../helpers/selectors';
 import { waitForDebugBridge } from '../helpers/store';
 
@@ -66,18 +67,18 @@ async function importSampleDiagram(page: Page) {
   await page.reload();
   const emptyState = new EmptyStateScreenPOM(page);
   await emptyState.expectVisible();
-  const [fileChooser] = await Promise.all([
-    page.waitForEvent('filechooser', { timeout: 5_000 }),
-    emptyState.clickImport()
-  ]);
-  await fileChooser.setFiles(FIXTURE_JSON);
+  // A3/ZIP-09 (owner ruling 2026-07-30): one import flow — the Import
+  // button opens `ImportDialog` for an empty tree as much as a populated
+  // one, and the import is confirmed with its destination on screen.
+  await emptyState.clickImport();
+  await importFileViaDialog(page, FIXTURE_JSON);
   await byLibTestId(page, 'axoview-canvas').waitFor({ state: 'visible', timeout: 10_000 });
   await waitForDebugBridge(page);
   // Named nodes render either as DOM (`node-label`) or, under the default canvas
-  // node renderer (ADR 0019), as canvas pixels (`axoview-nodes-canvas`). Wait for
+  // node renderer (ADR 0019), as canvas pixels (`axoview-scene-canvas`). Wait for
   // whichever surface this run uses.
   await page
-    .locator('[data-testid="node-label"], [data-testid="axoview-nodes-canvas"]')
+    .locator('[data-testid="node-label"], [data-testid="axoview-scene-canvas"]')
     .first()
     .waitFor({ state: 'attached', timeout: 10_000 });
 }
@@ -90,7 +91,7 @@ async function importSampleDiagram(page: Page) {
 const getVisibleLabelCount = (page: Page): Promise<number> =>
   page.evaluate(() => {
     const canvas = document.querySelector(
-      '[data-testid="axoview-nodes-canvas"]'
+      '[data-testid="axoview-scene-canvas"]'
     );
     if (canvas) {
       return parseInt(

@@ -10,7 +10,8 @@ export * from 'src/utils/hitDetection';
 
 import {
   PROJECT_BOUNDING_BOX_PADDING,
-  MAX_ZOOM
+  MAX_ZOOM,
+  MIN_ZOOM
 } from 'src/config';
 import { Coords, Size, Scroll, Mouse, SlimMouseEvent, View } from 'src/types';
 import { CoordsUtils } from 'src/utils/coordsUtils';
@@ -23,7 +24,8 @@ import {
   sortByPosition,
   getConnectorPath,
   connectorPathTileToGlobal,
-  getTextBoxDimensions
+  getTextBoxDimensions,
+  getTextBoxEndTile
 } from 'src/utils/isoMath';
 
 // Type alias for a mode-aware getTilePosition function.
@@ -122,19 +124,30 @@ export const getProjectBounds = (
 
   const textBoxes = view.textBoxes ?? [];
   const textBoxTiles = textBoxes.reduce<Coords[]>((acc, textBox) => {
+    // R1/PROJ-01: this used to add `{x: size.width, y: size.height}` — but a
+    // text box grows DOWNWARD in tile space, to `tile.y − (height − 1)`, which
+    // is what `getTextBoxEndTile` (the selection/hit-test authority) computes.
+    // Adding the height instead of subtracting it put the frame on the wrong
+    // side of the anchor: a 6-row box at y=0 gave lowY=−3 / highY=+9, so its own
+    // rows were OUTSIDE the frame and six empty tiles above it were inside, and
+    // the miss grew 1:1 with the row count. Both consumers — fit-to-view and
+    // the image export — framed the wrong region. Reading the same helper the
+    // hit-test reads is what stops the two drifting again.
     const size = getTextBoxDimensions(textBox);
-    return [
-      ...acc,
-      textBox.tile,
-      CoordsUtils.add(textBox.tile, { x: size.width, y: size.height })
-    ];
+    return [...acc, textBox.tile, getTextBoxEndTile(textBox, size)];
   }, []);
+
+  // R1/PROJ-02: floating Labels (ADR 0031) were enumerated nowhere here, so a
+  // Label dragged clear of the item bounds sat outside fit-to-view and outside
+  // the exported image entirely — measured 37 tiles outside a 6-tile frame.
+  const labelTiles = (view.labels ?? []).map((label) => label.tile);
 
   let allTiles = [
     ...itemTiles,
     ...connectorTiles,
     ...rectangleTiles,
-    ...textBoxTiles
+    ...textBoxTiles,
+    ...labelTiles
   ];
 
   if (allTiles.length === 0) {
@@ -227,8 +240,18 @@ export const getUnprojectedBounds = (
   );
   const sortedCorners = sortByPosition(cornerPositions);
   const topLeft = { x: sortedCorners.lowX, y: sortedCorners.lowY };
-  const size = getBoundingBoxSize(cornerPositions);
-  return { width: size.width, height: size.height, x: topLeft.x, y: topLeft.y };
+  // R1/PROJ-04: this used to call `getBoundingBoxSize`, which adds the inclusive
+  // TILE-COUNT `+1` — correct for tiles, wrong here, because `cornerPositions`
+  // are PIXELS. The reported project width/height were each exactly 1 px too
+  // large and the error propagated into the fit-to-view zoom. It is the same
+  // unit-mix `getFitToViewParams` already fixed for the centre and not for the
+  // size. A pixel extent is `high − low`, full stop.
+  return {
+    width: sortedCorners.highX - sortedCorners.lowX,
+    height: sortedCorners.highY - sortedCorners.lowY,
+    x: topLeft.x,
+    y: topLeft.y
+  };
 };
 
 export const getFitToViewParams = (
@@ -239,12 +262,22 @@ export const getFitToViewParams = (
   const projectBounds = getProjectBounds(view);
   const sortedCornerPositions = sortByPosition(projectBounds);
   const unprojectedBounds = getUnprojectedBounds(view, getTilePositionFn);
+  // R4/RND-01: the lower bound was 0, so a large diagram fitted to a zoom every
+  // other path refuses — the zoom buttons, the wheel and the pinch all clamp to
+  // MIN_ZOOM — and the canvas ended up somewhere the UI could not have taken it.
+  //
+  // The product question the clamp does not answer, decided and stated here: a
+  // diagram too large to fit at MIN_ZOOM IS framed with content off-screen. Fit
+  // means "get as close to the whole thing as the zoom range allows", not "make
+  // the zoom range bigger" — a content-dependent MIN_ZOOM for this one path
+  // would let fit reach a zoom the user then cannot return to, because every
+  // other control still clamps at MIN_ZOOM.
   const zoom = clamp(
     Math.min(
       viewportSize.width / unprojectedBounds.width,
       viewportSize.height / unprojectedBounds.height
     ),
-    0,
+    MIN_ZOOM,
     MAX_ZOOM
   );
 

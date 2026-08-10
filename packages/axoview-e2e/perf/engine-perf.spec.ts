@@ -533,7 +533,7 @@ function installHarness() {
       }
     }
     // All-types: floating Labels (ADR 0031) sprinkled ~1 per 4 nodes, styled +
-    // varied, so the LabelsCanvas layer is also exercised in the same scene.
+    // varied, so the SceneCanvas layer is also exercised in the same scene.
     const labels: any[] = [];
     if (allTypes) {
       for (let i = 0; i < N; i += 4) {
@@ -779,22 +779,22 @@ function installHarness() {
     // (`[data-drag-id]`) for any non-canvas path. sceneCounts records the full
     // multi-element composition that was committed.
     const canvasEl = document.querySelector(
-      '[data-testid="axoview-nodes-canvas"]'
+      '[data-testid="axoview-scene-canvas"]'
     ) as HTMLElement | null;
+    // R3/GPU-13: `data-draw-count` is a TOTAL over every bulk entity type on the
+    // merged canvas, so the node anti-cheat reads `data-nodes-drawn` — the
+    // honesty channel ADR 0020's addendum names.
     const renderedNodes = canvasEl
-      ? parseInt(canvasEl.dataset.drawCount ?? '0', 10) || 0
+      ? parseInt(canvasEl.dataset.nodesDrawn ?? '0', 10) || 0
       : document.querySelectorAll('[data-drag-id]').length;
     // Connector-paint anti-cheat (D4-1, mirrors the node draw-count): every
-    // committed connector must paint. Bulk connector bodies fold onto the GPU
-    // (axoview-connectors-canvas → dataset.drawCount), while the sparse DOM
-    // hybrid (selected / degenerate / unroutable) still emits its testids. The
-    // two sets are disjoint (Renderer partitions by connectorHybridIds), so
-    // GPU-drawn + DOM-painted == committed.
-    const connCanvas = document.querySelector(
-      '[data-testid="axoview-connectors-canvas"]'
-    ) as HTMLElement | null;
-    const gpuPaintedConn = connCanvas
-      ? parseInt(connCanvas.dataset.drawCount ?? '0', 10) || 0
+    // committed connector must paint. Bulk connector bodies draw on the merged
+    // canvas (`data-connectors-drawn` — its own channel, since `data-draw-count`
+    // is now the total over every type), while the sparse DOM hybrid (degenerate
+    // / unroutable) still emits its testids. The two sets are disjoint (Renderer
+    // partitions by connectorHybridIds), so GPU-drawn + DOM-painted == committed.
+    const gpuPaintedConn = canvasEl
+      ? parseInt(canvasEl.dataset.connectorsDrawn ?? '0', 10) || 0
       : 0;
     const domPaintedConn = document.querySelectorAll(
       '[data-testid="connector-path"], [data-testid="connector-unroutable"]'
@@ -1037,10 +1037,10 @@ function installHarness() {
 
     const after = ax().model.getState().items.length;
     const canvasEl = document.querySelector(
-      '[data-testid="axoview-nodes-canvas"]'
+      '[data-testid="axoview-scene-canvas"]'
     ) as HTMLElement | null;
     const renderedNodes = canvasEl
-      ? parseInt(canvasEl.dataset.drawCount ?? '0', 10) || 0
+      ? parseInt(canvasEl.dataset.nodesDrawn ?? '0', 10) || 0
       : 0;
     return {
       frames,
@@ -1175,10 +1175,10 @@ function installHarness() {
       }
     }
     const canvasEl = document.querySelector(
-      '[data-testid="axoview-nodes-canvas"]'
+      '[data-testid="axoview-scene-canvas"]'
     ) as HTMLElement | null;
     const drawn = canvasEl
-      ? parseInt(canvasEl.dataset.drawCount ?? '0', 10) || 0
+      ? parseInt(canvasEl.dataset.nodesDrawn ?? '0', 10) || 0
       : 0;
     if (!best) {
       return {
@@ -1399,10 +1399,15 @@ function installHarness() {
         '[data-testid="axoview-canvas"]'
       ) as HTMLElement) || document.body;
     const canvasEl = document.querySelector(
-      '[data-testid="axoview-nodes-canvas"]'
+      '[data-testid="axoview-scene-canvas"]'
     ) as HTMLElement | null;
+    // R3/GPU-13: the anti-cheat reads `data-nodes-drawn`, not
+    // `data-draw-count`. On the merged canvas `data-draw-count` is a TOTAL over
+    // every entity type and can no longer be compared against
+    // N; `data-nodes-drawn` is the channel that keeps meaning "the canvas
+    // painted every node" (ADR 0038 §8; ADR 0020 addendum 2026-08-02).
     const drawCount = canvasEl
-      ? parseInt(canvasEl.dataset.drawCount ?? '0', 10) || 0
+      ? parseInt(canvasEl.dataset.nodesDrawn ?? '0', 10) || 0
       : 0;
     const dom = {
       totalDoc: document.querySelectorAll('*').length,
@@ -1443,7 +1448,7 @@ function installHarness() {
   }
 
   // ---- E-slice: sustained-pan repaint floor (measurePan, per pan-r1-design.md) ----
-  // The R1 floor: NodesCanvas.drawNow() repaints the full O(visible) node set
+  // The R1 floor: SceneCanvas.drawNow() repaints the full O(visible) node set
   // SYNCHRONOUSLY on every scroll write (#54 lockstep). We drive that exact
   // store write once per rAF — the same setScroll the real right-drag pan
   // funnels through useRAFThrottle — and measure the per-frame repaint it
@@ -1482,30 +1487,21 @@ function installHarness() {
     const baseX = base.position.x;
     const baseY = base.position.y;
     const canvasEl = document.querySelector(
-      '[data-testid="axoview-nodes-canvas"]'
+      '[data-testid="axoview-scene-canvas"]'
     ) as HTMLElement | null;
     const drawCountNow = () =>
-      canvasEl ? parseInt(canvasEl.dataset.drawCount ?? '0', 10) || 0 : 0;
+      canvasEl ? parseInt(canvasEl.dataset.nodesDrawn ?? '0', 10) || 0 : 0;
     const drawAtStart = drawCountNow();
     // "No per-frame CPU work" invariant: buildInstances (the only O(N) CPU on the
-    // GPU layers) must NOT run during a pan (scene unchanged) — so the summed
-    // build-count across all GPU canvases must stay FLAT. A non-zero delta means
-    // a layer is rebuilding geometry per frame (CPU work leaked into navigation).
+    // GPU bulk) must NOT run during a pan (scene unchanged) — so the build count
+    // must stay FLAT. A non-zero delta means the canvas is rebuilding geometry
+    // per frame (CPU work leaked into navigation). ADR 0038 §5's assertion,
+    // extended to the merged canvas: four counters became one.
     const buildSum = () => {
-      const ids = [
-        'axoview-nodes-canvas',
-        'axoview-connectors-canvas',
-        'axoview-rectangles-canvas',
-        'axoview-labels-canvas'
-      ];
-      let n = 0;
-      for (const id of ids) {
-        const el = document.querySelector(
-          `[data-testid="${id}"]`
-        ) as HTMLElement | null;
-        if (el) n += parseInt(el.dataset.buildCount ?? '0', 10) || 0;
-      }
-      return n;
+      const el = document.querySelector(
+        '[data-testid="axoview-scene-canvas"]'
+      ) as HTMLElement | null;
+      return el ? parseInt(el.dataset.buildCount ?? '0', 10) || 0 : 0;
     };
     const buildStart = buildSum();
     const frames: number[] = [];
@@ -1551,10 +1547,100 @@ function installHarness() {
   // ---- E-slice: floating-label-heavy (Canvas2D Label layer; gates ADR 0031 E3) ----
   // N floating Labels (the first-class Label entity, ADR 0031) with B/I/S +
   // colour + background, over the realistic node/connector/rect base. Labels now
-  // render on the Canvas2D LabelsCanvas — the substrate ADR 0031 E3 chose after
+  // render on the Canvas2D SceneCanvas — the substrate ADR 0031 E3 chose after
   // the DOM chip layer ~2.3×'d spawn p95 — so this re-measures the floating-label
   // spawn/settle cost on the new substrate. Labels are MODEL-ONLY (no scene
   // size), so the old scene-size pre-seed hack is gone.
+  // R3/GPU-13 §4 measurements 2 and 3 (2026-08-02). Uses the ALL-TYPES scene —
+  // the representative "everything at once" load — and reports:
+  //
+  //   2. atlas occupancy for the node and label chip atlases, which is what
+  //      decides whether ONE merged atlas fits at ADR 0038 §6's clamps;
+  //   3. whether a pan rebuilds geometry (buildDelta must be 0), i.e. whether the
+  //      existing scene-change trigger is still a single pass with no per-frame
+  //      work (ADR 0038 §5).
+  //
+  // Diagnostic only: writes perf-results/atlas.md, never baseline.md.
+  async function measureAtlas(N: number, capMs: number) {
+    resetState();
+    const w = window as any;
+    const prevAllTypes = w.__perfAllTypes;
+    w.__perfAllTypes = true;
+    try {
+      const scene = buildScene(N, 1);
+      fitForGrid(1, N);
+      await quiesce();
+      const { view } = activeView();
+      const newViews = viewsWith(
+        view.id,
+        scene.vitems,
+        scene.connectors,
+        scene.rectangles,
+        scene.textBoxes,
+        scene.labels
+      );
+      ax()
+        .model.getState()
+        .actions.set({ items: scene.items, views: newViews }, false);
+      ax().changeView(view.id, ax().model.getState());
+      await captureUntilSettled([], capMs);
+
+      const read = (testid: string) => {
+        const el = document.querySelector(
+          `[data-testid="${testid}"]`
+        ) as HTMLElement | null;
+        if (!el) return null;
+        const n = (k: string) => parseInt(el.dataset[k] ?? '0', 10) || 0;
+        return {
+          atlasSize: n('atlasSize'),
+          usedRows: n('atlasUsedRows'),
+          slots: n('atlasSlots'),
+          atlasFull: el.dataset.atlasFull === 'true',
+          atlasPages: n('atlasPages'),
+          drawCalls: n('drawCalls'),
+          buildCount: n('buildCount'),
+          drawCount: n('drawCount'),
+          nodesDrawn: n('nodesDrawn')
+        };
+      };
+
+      const mergedBefore = read('axoview-scene-canvas');
+
+      // Measurement 3: pan without touching the scene. Nothing may rebuild.
+      const ui = ax().ui.getState();
+      const start = ui.scroll.position;
+      for (let i = 1; i <= 10; i++) {
+        ax()
+          .ui.getState()
+          .actions.setScroll({
+            position: { x: start.x - i * 12, y: start.y - i * 8 },
+            offset: { x: 0, y: 0 }
+          });
+        await raf();
+      }
+      await raf();
+
+      const mergedAfter = read('axoview-scene-canvas');
+
+      const delta = (a: any, b: any) =>
+        a && b ? b.buildCount - a.buildCount : -1;
+
+      return {
+        N,
+        sceneCounts: {
+          nodes: scene.vitems.length,
+          connectors: scene.connectors.length,
+          rectangles: scene.rectangles.length,
+          labels: (scene.labels ?? []).length
+        },
+        atlases: { merged: mergedBefore },
+        buildDeltaAcrossPan: { scene: delta(mergedBefore, mergedAfter) }
+      };
+    } finally {
+      w.__perfAllTypes = prevAllTypes;
+    }
+  }
+
   async function measureFloatingLabelHeavy(N: number, capMs: number) {
     resetState();
     const scene = buildScene(N, 1);
@@ -1579,7 +1665,7 @@ function installHarness() {
     await quiesce();
     const { view } = activeView();
     // Labels are MODEL-ONLY (ADR 0031) — no scene-size entry, so no pre-seed:
-    // the LabelsCanvas measures each chip itself, like node labels.
+    // the SceneCanvas measures each chip itself, like node labels.
     const newViews = viewsWith(
       view.id,
       scene.vitems,
@@ -1600,19 +1686,17 @@ function installHarness() {
     await captureUntilSettled(frames, capMs);
     stop();
     const canvasEl = document.querySelector(
-      '[data-testid="axoview-nodes-canvas"]'
+      '[data-testid="axoview-scene-canvas"]'
     ) as HTMLElement | null;
     const renderedNodes = canvasEl
-      ? parseInt(canvasEl.dataset.drawCount ?? '0', 10) || 0
+      ? parseInt(canvasEl.dataset.nodesDrawn ?? '0', 10) || 0
       : 0;
-    // Labels render on the Canvas2D LabelsCanvas now, so the anti-cheat reads its
-    // published draw-count (mirrors the node-canvas draw-count) — the DOM
-    // [data-drag-id] chips are gone.
-    const labelsCanvasEl = document.querySelector(
-      '[data-testid="axoview-labels-canvas"]'
-    ) as HTMLElement | null;
-    const renderedLabels = labelsCanvasEl
-      ? parseInt(labelsCanvasEl.dataset.drawCount ?? '0', 10) || 0
+    // Floating Labels draw on the merged canvas, which publishes their own count
+    // (`data-floating-labels-drawn`) beside the node one — `data-labels-drawn` is
+    // the NODE-NAME chip count and always was. The DOM [data-drag-id] chips are
+    // gone.
+    const renderedLabels = canvasEl
+      ? parseInt(canvasEl.dataset.floatingLabelsDrawn ?? '0', 10) || 0
       : 0;
     return {
       frames,
@@ -1657,6 +1741,7 @@ function installHarness() {
     measureIdle,
     measureLabelDrag,
     measureBloat,
+    measureAtlas,
     measurePan,
     measureLabelHeavy,
     measureConnLabelHeavy,
@@ -1680,7 +1765,7 @@ async function bootApp(page: Page) {
     // always-on DiagnosticsOverlay 1 Hz rAF+setState loop (diagnosticsStore).
     ['axoview-perf-harness', '1']
   ];
-  // The Canvas2D node layer (NodesCanvas) is the default + sole bulk renderer
+  // The Canvas2D node layer (SceneCanvas) is the default + sole bulk renderer
   // (ADR 0019) — no flag to set. The harness measures it unconditionally; the
   // draw-count anti-cheat above asserts it painted every node.
   const CLEAR_KEYS = [
@@ -2213,6 +2298,79 @@ test('engine perf baseline — bulk-spawn + drag across N', async ({ page }) => 
       .map((s) => parseInt(s.trim(), 10))
       .filter((n) => n > 0);
 
+  // ATLAS mode (R3/GPU-13 §4, 2026-08-02): the measurements the ADR 0038 §8
+  // amendment rests on — chip-atlas occupancy at the §6 clamps, and whether a pan
+  // still rebuilds nothing. Retained AFTER the merge as the standing guard on
+  // both: §5's build cadence is asserted here, not merely reported. Diagnostic
+  // otherwise; writes perf-results/atlas.md and leaves baseline.md alone.
+  if (process.env.PERF_ATLAS) {
+    const Ns = parseNs(process.env.PERF_ATLAS);
+    fs.mkdirSync(RESULTS_DIR, { recursive: true });
+    const rows: string[] = [];
+    const panRows: string[] = [];
+    for (const N of Ns) {
+      const r: any = await page.evaluate(
+        ([n, c]) => (window as any).__perfH.measureAtlas(n, c),
+        [N, SPAWN_CAP_MS] as const
+      );
+      const pct = (a: any) =>
+        a && a.atlasSize > 0
+          ? `${round((a.usedRows / a.atlasSize) * 100, 1)}%`
+          : 'n/a';
+      const cell = (a: any) =>
+        a
+          ? `${a.usedRows} / ${a.atlasSize} (${pct(a)}), ${a.slots} slots, ` +
+            `${a.atlasPages} page(s), ${a.drawCalls} draw call(s)${
+              a.atlasFull ? ' **FULL**' : ''
+            }`
+          : 'not mounted';
+      // ONE atlas now (ADR 0038 §8): the merged canvas packs node chips, label
+      // chips and icons together, and pages/drawCalls are what say whether that
+      // fit. The design does NOT require it to — measurement 2 found it does not
+      // at the 4096 clamp — and a second page costs one bind per material run.
+      rows.push(`| ${N} | ${cell(r.atlases.merged)} |`);
+      const d = r.buildDeltaAcrossPan;
+      panRows.push(`| ${N} | ${d.scene} |`);
+      console.log(
+        `[atlas] N=${N} scene=${JSON.stringify(r.sceneCounts)} ` +
+          `merged=${cell(r.atlases.merged)} buildDelta=${JSON.stringify(d)}`
+      );
+      // ADR 0038 §5 is a hard invariant, not a reported number: a pan must not
+      // rebuild geometry on ANY layer. If this trips, the merged-canvas design
+      // question is moot until it is explained.
+      expect(
+        d.scene === 0,
+        `no geometry rebuild during a pan at N=${N} (ADR 0038 §5)`
+      ).toBe(true);
+    }
+    fs.writeFileSync(
+      path.join(RESULTS_DIR, 'atlas.md'),
+      [
+        '# GPU-13 §4 — chip-atlas occupancy & build cadence',
+        '',
+        `_Generated ${new Date().toISOString()} · ALL-TYPES scene · cal ${round(calibrationMs, 1)} ms._`,
+        '',
+        'Measurement 2 — occupancy of the ONE merged atlas (rows consumed / atlas',
+        'edge), with the pages and draw calls it needed. §8 records that the merged',
+        'chip set does NOT fit the 4096 high-DPR clamp at large N, so pages > 1 (and',
+        'draw calls > 1) is the designed degradation, not a failure.',
+        '',
+        '| N | merged chip atlas |',
+        '|---|---|',
+        ...rows,
+        '',
+        'Measurement 3 — `data-build-count` delta across a 10-step pan. Zero means',
+        'the scene-change trigger is the only thing that rebuilds (ADR 0038 §5).',
+        '',
+        '| N | merged canvas |',
+        '|---|---|',
+        ...panRows,
+        ''
+      ].join(String.fromCharCode(10))
+    );
+    return;
+  }
+
   // Spawn-class styled scenario: commit a styled scene, report settle/longest/
   // p95 + the draw-count==N anti-cheat. Mirrors the spawn baseline cells so the
   // numbers are directly comparable to baseline.md's spawn column.
@@ -2331,7 +2489,7 @@ test('engine perf baseline — bulk-spawn + drag across N', async ({ page }) => 
       'floating-label-heavy',
       'Floating-label-heavy spawn — N Canvas2D Label chips (B/I/S + colour + background)',
       'N floating Labels (the first-class Label entity, ADR 0031) over the realistic ' +
-        'node/connector/rect base. Labels render on the Canvas2D LabelsCanvas — the substrate ' +
+        'node/connector/rect base. Labels render on the Canvas2D SceneCanvas — the substrate ' +
         "ADR 0031 E3 chose after the DOM chip layer ~2.3×'d spawn p95 — so this re-measures the " +
         'floating-label spawn cost on the new substrate. labels=N/N anti-cheats every chip drew.',
       parseNs(process.env.PERF_FLOATLABELS)

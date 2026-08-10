@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // lineStyle — shared polyline dash/dot walkers for the WebGL bulk layers
-// (ConnectorsCanvas, RectanglesCanvas). Pure geometry: they walk a polyline in
+// (SceneCanvas, SceneCanvas). Pure geometry: they walk a polyline in
 // scene space and invoke a callback for each dash sub-span / dot centre, so the
 // caller emits its own quads/caps. Keeping the walk in one place is what makes
 // connector and rectangle line-styles measure the SAME way (consistent widths /
@@ -33,7 +33,7 @@ const MAX_SPANS_PER_SEGMENT = 20000;
 // would rebuild geometry per frame, violating the no-per-frame-CPU invariant): the
 // fragment ramp is ~1 SCREEN px at any zoom via fwidth, and a sub-pixel stroke at
 // extreme zoom-out simply fades (cov peaks <1) rather than clipping visibly.
-// Shared by ConnectorsCanvas + RectanglesCanvas so their strokes feather identically.
+// Shared by SceneCanvas + SceneCanvas so their strokes feather identically.
 export const AA_FEATHER = 1.5;
 
 /** Place a dot at arc-length 0, spacing, 2·spacing, … along a polyline. */
@@ -119,7 +119,7 @@ export const walkDashes = (
 // (anchor p0, perpendicular width basis `v`, centred via localOrigin = -v/2) by
 // `feather` (AA_FEATHER above) on each perpendicular side so the fragment ramp
 // isn't clipped by the quad boundary, and reports the true `halfWidth` the shader
-// thresholds. It is wired into ConnectorsCanvas + RectanglesCanvas `segment()`
+// thresholds. It is wired into SceneCanvas + SceneCanvas `segment()`
 // (shapeMode 1); round caps/joins use the sibling analytic disc (shapeMode 2).
 // The companion vertex varying + fragment coverage live in glSpriteBatch's
 // VERT_SRC/FRAG_SRC; the design + trade-offs vs SDF/MSAA are in

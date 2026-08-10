@@ -1,14 +1,35 @@
 import { useCallback, useRef } from 'react';
 import { useModelStore } from 'src/stores/modelStore';
-import { useSceneStore } from 'src/stores/sceneStore';
+import {
+  useSceneStore,
+  useSceneStoreApi,
+  type EditSession
+} from 'src/stores/sceneStore';
 import { useUiStateStore } from 'src/stores/uiStateStore';
+import { useSceneActions } from 'src/hooks/useSceneActions';
 import * as reducers from 'src/stores/reducers';
 import { INITIAL_SCENE_STATE } from 'src/config';
 import { allocateHistorySequence } from 'src/stores/historySequence';
 
 export const useHistory = () => {
-  // Track if we're in a transaction to prevent nested history saves
-  const transactionInProgress = useRef(false);
+  // E1/HIST-08 (owner ruling 2026-07-30: delegate, don't duplicate). This hook
+  // kept its OWN `transactionInProgress` ref, so N scene CRUD ops wrapped in
+  // `useHistory.transaction` pushed N history entries instead of 1 and one
+  // Ctrl+Z undid only the last — `useSceneActions` never saw the bracket. Both
+  // now read the same provider-scoped edit session, so there is one grouping
+  // primitive with one piece of state behind it, whichever hook opens it.
+  //
+  // The `?? fallback` keeps the mocked-store unit tests working, matching the
+  // `peekUndoSeq?.() ?? 0` accommodation below.
+  const sceneStoreApi = useSceneStoreApi();
+  const { transaction: sceneTransaction, switchView } = useSceneActions();
+  const fallbackSession = useRef<EditSession>({
+    transactionInProgress: false,
+    dragInProgress: false,
+    pendingState: null
+  });
+  const session =
+    sceneStoreApi.getState()?.actions?.editSession ?? fallbackSession.current;
 
   // Get store actions
   const modelActions = useModelStore((state) => {
@@ -38,39 +59,19 @@ export const useHistory = () => {
   const canRedo = modelCanRedo || sceneCanRedo;
 
   // Transaction wrapper - groups multiple operations into single history entry
-  const transaction = useCallback(
-    (operations: () => void) => {
-      if (!modelActions || !sceneActions) return;
-
-      // Prevent nested transactions
-      if (transactionInProgress.current) {
-        operations();
-        return;
-      }
-
-      // One logical action across both stores — allocate a single shared seq
-      // so its entries stamp the same value (D-7).
-      allocateHistorySequence();
-
-      // Save current state before transaction
-      modelActions.saveToHistory();
-      sceneActions.saveToHistory();
-
-      // Mark transaction as in progress
-      transactionInProgress.current = true;
-
-      try {
-        // Execute all operations without saving intermediate history
-        operations();
-      } finally {
-        // Always reset transaction state
-        transactionInProgress.current = false;
-      }
-
-      // Note: We don't save after transaction - the final state is already current
-    },
-    [modelActions, sceneActions]
-  );
+  /**
+   * E1/HIST-08 (owner ruling 2026-07-30: **delegate**, don't duplicate).
+   *
+   * This used to be a second, subtly different implementation of grouping: it
+   * armed the snapshots and set its OWN `transactionInProgress` ref, which
+   * `useSceneActions` could not see. N scene CRUD ops inside it therefore
+   * pushed N history entries instead of 1, and one Ctrl+Z undid only the last.
+   * It is now a pass-through to the one implementation that batches the writes
+   * as well as the history — the bracket state they share lives on the scene
+   * store's provider-scoped `editSession`, so a caller's own
+   * `useSceneActions()` instance sees this bracket too.
+   */
+  const transaction = sceneTransaction;
 
   // D4-2 / D-8: connector paths are derived from the model but cached in the
   // scene store + its history. Paste records PROVISIONAL empty connector paths in
@@ -127,6 +128,42 @@ export const useHistory = () => {
     }
   }, [modelActions, sceneActions, activeViewId]);
 
+  /**
+   * E1/HIST-10 — "always navigate" (owner ruling 2026-07-30, signed off
+   * 2026-08-02). A step whose entry was recorded on another page switches to
+   * that page, so the effect of an undo/redo is never off-screen.
+   *
+   * Returns true when it navigated, because the caller then owes the scene a
+   * PAGE-SWITCH sync rather than the same-page `resyncScene()` repair.
+   *
+   * Three reasons this can decline, all of them normal:
+   *  - no stamp (`undefined`) — a document-level action (title, colours) or an
+   *    entry recorded before the field existed. "Stay put", never "views[0]";
+   *  - already there — the overwhelmingly common case, and the one that keeps
+   *    single-page undo byte-identical to its pre-HIST-10 behaviour;
+   *  - the page is gone. Not defensive padding: a redo that re-creates a page,
+   *    and a stamp naming a page a later undo has removed, are both reachable
+   *    (HIST-04). Navigating to a missing id is exactly the dangling
+   *    `uiState.view` this change exists to stop producing (E3/SCN-09).
+   */
+  const navigateToEntryView = useCallback(
+    (targetViewId: string | undefined): boolean => {
+      if (!targetViewId || targetViewId === activeViewId) return false;
+      if (!modelActions) return false;
+      const exists = modelActions
+        .get()
+        .views.some((v) => v.id === targetViewId);
+      if (!exists) return false;
+      // `switchView` is the same primitive a tab click uses (SYNC_SCENE for the
+      // target page, then setView) and it reads the model the step just wrote.
+      // `setView` touches ui state only — ui state has no history stack, so a
+      // navigation cannot record an entry and undo cannot become a loop.
+      switchView(targetViewId);
+      return true;
+    },
+    [activeViewId, modelActions, switchView]
+  );
+
   // D-7: the two stacks can skew to different depths (a model-only action pushes
   // a model entry but the scene store's no-op branch pushes nothing). Stepping
   // them in lockstep then pops entries belonging to DIFFERENT logical actions
@@ -155,6 +192,16 @@ export const useHistory = () => {
       sceneSeq ?? Number.NEGATIVE_INFINITY
     );
 
+    // HIST-10: peek BEFORE stepping — a step moves the entry to the other
+    // stack. Only the halves that actually step contribute a page, and the
+    // model half wins when both do; they are stamped from one register for one
+    // logical action, so a disagreement is a bug (asserted in the promoted
+    // regression) rather than something to reconcile here.
+    const modelViewId =
+      modelSeq === target ? modelActions.peekUndoViewId?.() : undefined;
+    const sceneViewId =
+      sceneSeq === target ? sceneActions.peekUndoViewId?.() : undefined;
+
     let undoPerformed = false;
     if (modelSeq === target) {
       undoPerformed = modelActions.undo() || undoPerformed;
@@ -163,9 +210,16 @@ export const useHistory = () => {
       undoPerformed = sceneActions.undo() || undoPerformed;
     }
 
-    if (undoPerformed) resyncScene();
+    if (undoPerformed) {
+      // Navigate first so the page we land on is the one that gets settled.
+      // A navigation runs SYNC_SCENE for the target page — a full, deterministic
+      // rebuild that subsumes `resyncScene`'s same-page repair — so running
+      // both would re-check the OLD page's connectors against the NEW page's
+      // scene and could write a page's cache over its successor's.
+      if (!navigateToEntryView(modelViewId ?? sceneViewId)) resyncScene();
+    }
     return undoPerformed;
-  }, [modelActions, sceneActions, resyncScene]);
+  }, [modelActions, sceneActions, navigateToEntryView, resyncScene]);
 
   const redo = useCallback(() => {
     if (!modelActions || !sceneActions) return false;
@@ -184,6 +238,15 @@ export const useHistory = () => {
       sceneSeq ?? Number.POSITIVE_INFINITY
     );
 
+    // HIST-10, redo symmetry (owner sign-off §5 Q2): the stamp is the page the
+    // action was ORIGINALLY performed on. There is no separate "page I pressed
+    // undo from" to return to — redo re-applies the action, so it belongs where
+    // the action belongs.
+    const modelViewId =
+      modelSeq === target ? modelActions.peekRedoViewId?.() : undefined;
+    const sceneViewId =
+      sceneSeq === target ? sceneActions.peekRedoViewId?.() : undefined;
+
     let redoPerformed = false;
     if (modelSeq === target) {
       redoPerformed = modelActions.redo() || redoPerformed;
@@ -192,23 +255,28 @@ export const useHistory = () => {
       redoPerformed = sceneActions.redo() || redoPerformed;
     }
 
-    if (redoPerformed) resyncScene();
+    if (redoPerformed) {
+      if (!navigateToEntryView(modelViewId ?? sceneViewId)) resyncScene();
+    }
     return redoPerformed;
-  }, [modelActions, sceneActions, resyncScene]);
+  }, [modelActions, sceneActions, navigateToEntryView, resyncScene]);
 
   const saveToHistory = useCallback(() => {
     // Don't save during transactions
-    if (transactionInProgress.current) {
+    if (session.transactionInProgress) {
       return;
     }
 
     if (!modelActions || !sceneActions) return;
 
-    // One logical action across both stores — shared seq (D-7).
-    allocateHistorySequence();
+    // One logical action across both stores — shared seq (D-7) and shared page
+    // stamp (HIST-10).
+    allocateHistorySequence(activeViewId);
+    modelActions.clearFuture?.(); // E1/HIST-02
+    sceneActions.clearFuture?.();
     modelActions.saveToHistory();
     sceneActions.saveToHistory();
-  }, [modelActions, sceneActions]);
+  }, [session, activeViewId, modelActions, sceneActions]);
 
   const clearHistory = useCallback(() => {
     if (!modelActions || !sceneActions) return;
@@ -226,7 +294,7 @@ export const useHistory = () => {
     clearHistory,
     transaction,
     isInTransaction: () => {
-      return transactionInProgress.current;
+      return session.transactionInProgress;
     }
   };
 };

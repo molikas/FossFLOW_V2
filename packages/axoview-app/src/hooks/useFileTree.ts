@@ -38,7 +38,7 @@ export interface FileNode {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function buildTree(
+export function buildTree(
   folders: FolderMeta[],
   diagrams: DiagramMeta[],
   dirtyMap: Map<string, boolean>,
@@ -186,8 +186,27 @@ export function useFileTree(
       ]);
       if (seq !== loadSeqRef.current) return; // superseded by a newer load
       // Normalize to arrays — server may return non-array on error or corrupt data
-      setFolders(Array.isArray(allFolders) ? allFolders : []);
-      setDiagrams(Array.isArray(allDiagrams) ? allDiagrams : []);
+      const folderList = Array.isArray(allFolders) ? allFolders : [];
+      const diagramList = Array.isArray(allDiagrams) ? allDiagrams : [];
+      setFolders(folderList);
+      // A2/STOR-13: `GoogleDriveProvider.listDiagrams(undefined)` queries the
+      // ACCOUNT by app marker, not the root subtree — Drive has no recursive
+      // parent query — so a file the user moved out of the Axoview folder in
+      // Drive's own UI comes back with a `folderId` naming a folder that is not
+      // in `allFolders`. `buildTree` places diagrams by exact `folderId` match,
+      // so it appeared in no folder and at no root: invisible in the tree, yet
+      // counted by every consumer of the listing. Surface it at root, where it
+      // can be seen and moved. Done here rather than in the provider because
+      // this is the one place that already holds both lists — the provider
+      // would have to pay an extra Drive listing per call to know.
+      const knownFolderIds = new Set(folderList.map((f) => f.id));
+      setDiagrams(
+        diagramList.map((d) =>
+          d.folderId != null && !knownFolderIds.has(d.folderId)
+            ? { ...d, folderId: null }
+            : d
+        )
+      );
       setManifest(treeManifest);
       setHasLoaded(true);
     } catch (e) {

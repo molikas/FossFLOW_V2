@@ -186,6 +186,310 @@ a follow-up, not a silent gap:
   Reaching the cap force-loses the oldest context — now recovered by the
   context-loss handling above rather than blanking permanently.
 
+## §8 — Cross-type render order (amendment, 2026-08-02)
+
+**Context.** §2's four-canvas hybrid fixes cross-type paint order to mount order
+in `Renderer.tsx` (`RectanglesCanvas → ConnectorsCanvas → NodesCanvas →
+LabelsCanvas`, all at CSS `zIndex: 0` in ascending document order).
+`resolveRenderOrder` is applied *inside* each canvas, so `layer.order` and
+`zIndex` sort only within an entity type and the z-order controls are silently
+inert across types (R3/GPU-13). Four separate WebGL2 contexts do not share a
+depth buffer, so per-entity depth cannot order across them either — it is a
+sub-decision *inside* a merged context, never an alternative to merging.
+
+**Decision.** Merge the four bulk canvases into **one WebGL2 context** and order
+it by **sorted draw**: the merged instance array is emitted in
+`resolveRenderOrder` order and painted in that order. The depth buffer stays off
+(`depth: false`, `gl.disable(DEPTH_TEST)`, as today).
+
+**Ordering is one sort over all bulk entities**, keyed by
+`resolveRenderOrder(layerOrder, zIndex, isoDepth)` with a **type rank**
+(`rectangle < connector < node < label`) as the tiebreaker at equal keys. Mount
+order carries no ordering meaning.
+
+### The §4 measurements
+
+Owner sign-off framed these as a gate on the **mechanism**, not on the merge. All
+three ran; none contradicts sorted draw.
+
+**1 — Draw-call run lengths under a global sort.** The decisive fact is
+structural, not statistical: `SpriteBatch.render()` issues exactly **one**
+`drawArraysInstanced` over the whole instance array — one program, one VAO, one
+blend state, one atlas bind. Inside one batch there are no material boundaries
+at all, so a global sort cannot fragment a draw call. §2(a)'s batching-regression
+risk was reasoned from a multi-program renderer; this is not one.
+
+Run lengths over the merged sort on the ALL-TYPES scene shape:
+
+| N | instances | one atlas | separate atlases (fallback) |
+|---|---|---|---|
+| 1000 | 2 299 | **1 draw call** | 118 calls, median run 19 |
+| 2000 | 4 581 | **1 draw call** | 44 calls, median run 76 |
+| 5000 | 11 475 | **1 draw call** | 140 calls, median run 74 |
+
+Even the fallback never approaches §4's "revisit below ~8 instances per run"
+threshold.
+
+**2 — Merged chip-atlas budget.** Measured live via `atlasStats()` on the
+ALL-TYPES scene (`PERF_ATLAS`, `perf-results/atlas.md`); rows consumed by the
+shelf packer, which is what decides whether a chip set fits:
+
+| N | node atlas | label atlas | merged rows |
+|---|---|---|---|
+| 250 | 630 / 8192 (7.7%) | 226 / 4096 (5.5%) | 856 |
+| 500 | 1 190 (14.5%) | 454 (11.1%) | 1 644 |
+| 750 | 1 750 (21.4%) | 682 (16.7%) | 2 432 |
+| 1000 | 2 310 (28.2%) | 834 (20.4%) | 3 144 |
+| 1250 | 2 950 (36.0%) | 1 062 (25.9%) | **4 012** |
+| 1500 | 150 (1.8%) | 1 290 (31.5%) | 1 440 |
+| 2000 | 150 (1.8%) | 1 746 (42.6%) | 1 896 |
+| 5000 | 150 (1.8%) | 4 028 (98.3%) **FULL** | **4 178** |
+
+Two things this says that the brief did not anticipate:
+
+- **Node-chip rows collapse between N=1250 and N=1500.** That is the label LOD
+  band switching node name chips off at fit-to-view zoom, leaving the dot, the
+  white texel and a handful of icons (5 slots). Floating Labels (ADR 0031) have
+  no equivalent LOD, so label rows keep growing. The merged worst case is
+  therefore **not** at max N — it is either side of the LOD boundary, and both
+  peaks land near 4 000 rows.
+- **The 4096 clamp is the binding constraint, and it is already binding today.**
+  At the §6 high-DPR/mobile clamp a merged atlas does **not** hold N=5000
+  (4 178 > 4 096) and sits at 98% at N=1250 — but the label atlas *on its own*
+  already reports `atlasFull` at N=5000 at 4096, on a dpr=1 desktop. The merge
+  does not create this ceiling; it removes the slack that hid it.
+
+So the single-atlas assumption behind "1 draw call" holds on the 8192 desktop
+clamp at every measured N (peak 51%), and does **not** hold at the 4096 clamp at
+large N. That is why measurement 1's fallback column matters: it is the design's
+actual degradation path, not a hypothetical.
+
+**3 — One build per scene change.** `data-build-count` delta across a 10-step pan
+is **0 on all four layers at every N measured**, and `PERF_ATLAS` asserts it
+rather than reporting it. Every existing rebuild trigger is a discrete
+scene/geometry event (props identity, store subscription, icon decode,
+atlas-overflow retry, context restore); none is per-frame, so the union of the
+four is still discrete and a merged single-pass build inherits the same cadence.
+
+### Consequences
+
+- **Batching:** one draw call for the whole bulk at any N and any interleaving
+  where the merged content fits one atlas; otherwise one bind per material run,
+  measured above. Down from four draw calls (one per canvas) either way.
+- **The atlas is a per-material resource, not an assumption.** The merged design
+  must not require that everything fits one texture, because at the 4096 clamp it
+  does not. Sorted draw is correct under both; only the draw-call count moves.
+- **The sort key had to be made uniform across types.** Each canvas only had to
+  be internally consistent, so the iso-depth tier is fed inconsistently today:
+  `NodesCanvas` passes `-tile.x - tile.y`, `LabelsCanvas` passes `0`, and
+  `ConnectorsCanvas`/`RectanglesCanvas` do not sort at all — they walk model
+  order, filtering hidden layers. Sorting those together with today's inputs
+  would put every rectangle and label above every node at positive depth, a
+  visible re-ordering of existing documents. The merged key gives every type one
+  iso-depth convention, and the type-rank tiebreaker is what keeps a document
+  with no explicit layering or z-order looking exactly as it does now.
+- **Anti-cheat channel renamed.** `data-draw-count` becomes a TOTAL over all bulk
+  entities and can no longer be compared against N. **`data-nodes-drawn == N`** is
+  the honesty assertion from here on (ADR 0020, addendum 2026-08-02). Both are
+  published on the un-merged `NodesCanvas` today, and the perf-harness assertion
+  was repointed in the same change, so the harness never reads a dead attribute
+  across the merge. §5's `data-build-count` assertion extends to the merged canvas
+  unchanged.
+- **Selection becomes order-preserving.** Selecting no longer lifts an element out
+  of the document's paint order; only selection chrome (handles, outline) floats.
+  This is a visible change from today's hybrid overlay, which lifts the whole
+  element, so affected specs assert the sort and the full Playwright budget
+  applies.
+- `label-entity.spec.ts` asserts the sort, not DOM order; ADR 0031 §2 ("a floating
+  Label paints above nodes") is restated as a sort-key property rather than a
+  mount-order one.
+- Image export composites one canvas (§4 unchanged, mechanism simplified), and
+  `waitForIconsDrawn` follows the merged canvas's `data-all-icons-drawn`.
+- **Connector labels stay DOM and stay out of the sort** (§2: there is no GPU
+  connector-label layer). This leaves a documented inconsistency: a floating Label
+  participates in cross-type depth, a connector label chip does not — chips float
+  above everything, which matches the readable-labels intent. **Follow-up
+  trigger:** pull connector chips into the sort if a user files a stacking defect
+  involving them; it is cheaper once the merge exists (shared atlas, one material
+  run). Grounded estimate at sign-off: in scope would have added ~30–40% to this
+  change (path-keyed instances, raster-cache invalidation over OVL-02's fresh
+  unification, a new hit-proxy layer) for a defect nobody has filed.
+- **`atlasStats()`** is added to `SpriteBatch` as shared-substrate instrumentation
+  (`webgl/atlasDiagnostics.ts`): read from the shelf cursor, published alongside
+  `data-build-count`, gated on the debug surface, no per-frame cost.
+
+**Superseded.** §2's enumeration of four bulk canvases; the GL-13 mount-order
+hazard is closed by construction.
+
+### Implementation note (2026-08-02, written from the merge)
+
+The merge landed as decided. Six things it corrected or settled, each found by
+implementing rather than by reasoning — recorded here because the next reader of
+this section will otherwise re-derive them.
+
+**1 — The tie order above is wrong as written, and the correction is
+load-bearing.** "Keyed by `resolveRenderOrder(layerOrder, zIndex, isoDepth)` with
+a type rank as the tiebreaker at equal keys" cannot be implemented: iso depth is
+fed inconsistently across types (as the consequence above itself records), so a
+node at a positive tile has a NEGATIVE iso depth and sorts below every rectangle
+and label on the same layer at the same z-index — the keys are never equal, so the
+tiebreaker never runs, and the result is exactly the "visible re-ordering of
+existing documents" this section says must not happen. The shipped key ranks
+**layer stack ▸ z-index ▸ TYPE RANK ▸ iso depth**, then the caller's array order
+via a stable sort. Iso depth therefore only ever separates same-type entities,
+which is the only thing it ever meant. `compareSceneDrawOrder` in
+[`renderOrder.ts`](../../packages/axoview-lib/src/utils/renderOrder.ts).
+
+**2 — "The atlas is a per-material resource" became multi-PAGE, not
+per-material.** `SpriteBatch` allocates atlas pages lazily up to a budget (the
+merged canvas asks for 2) and `render()` issues one `drawArraysInstanced` per
+contiguous run of instances sampling the same page. Pages beat per-material
+atlases here because page assignment follows PACKING order, which is the sorted
+draw order, so runs stay long; and because the built-in `dot`/`white` texels are
+replayed onto every page at identical coordinates and carry a wildcard, so
+tinted lines, discs and fills — every connector and rectangle instance — join
+whichever run they land in and can never fragment one. A connector-and-rectangle
+scene is one draw call however it interleaves.
+
+Measured after the merge (`PERF_ATLAS`, `perf-results/decision-log.md`), the
+merged atlas needs **2 766 rows at N=1000 and 2 354 at N=5000** — one page and
+**one draw call at every N**, against measurement 2's estimate of 3 144 and 4 178.
+The estimate was derived by SUMMING the two separate chip atlases; one shelf
+packer shares rows across chip kinds instead of each atlas rounding up its own, so
+the real merged set fits the 4096 high-DPR clamp too. The multi-page fallback is
+insurance rather than a routine path. It stays: "must not REQUIRE one texture" is
+the property that made sorted draw safe to commit to, and an estimate being
+conservative is not a reason to remove the path it justified.
+
+**3 — Connector-body order had to be defended twice.** A SELECTED connector was
+promoted into the DOM `<Connector>` for its S3/A2 halo; keeping that promotion
+would have lifted its body above every node, which order-preserving selection
+forbids. The halo is emitted by the bulk now, on the connector's own instance run,
+with the DOM's 3.5× width and 0.35 opacity. The DOM connector layer keeps only the
+degenerate-dot and unroutable-badge cues, which the bulk cannot draw at all
+(it needs ≥2 path tiles). Connectors carry no `zIndex` in the schema at all — the
+canvas context menu offers the z-order commands to ITEM / LABEL / RECTANGLE only —
+so they order by layer and type rank alone, which is what the brief's
+"bring-to-front on a connector does nothing" observed and is unchanged here.
+
+**4 — Everything DOM that is not in the sort floats above the merged canvas, and
+that is now one rule rather than four accidents.** Connector label chips (already
+recorded above), text boxes, the dragged node/rectangle hybrid and the
+inline-rename session all sit after the canvas in the Renderer's child list. Two
+consequences worth stating: a text box used to paint UNDER nodes (it was
+DOM-earlier than `NodesCanvas`) and now paints over them, and the GRID moved to
+mount FIRST — it used to sit between `RectanglesCanvas` and `ConnectorsCanvas`,
+painting over rectangle fills and under everything else, a position that only
+existed while there were four canvases to sit between. A backdrop under all
+content is the reading that survives the merge. The follow-up trigger for text
+boxes is the connector-label one: pull them into the sort if a user files a
+stacking defect involving them.
+
+**5 — Rectangles had a renderer/picker divergence the merge had to settle before
+the agreement gate could assert anything true.** At equal `zIndex` the pre-merge
+`RectanglesCanvas` walked plain model order (last entry on top) while the DOM
+`<Rectangles>` layer and `hitDetection`'s rectangle branch both use REVERSED
+insertion (first entry on top). The merged canvas adopts the picker's convention.
+
+**6 — `data-all-icons-drawn` is a claim about the PAINT, and was being written
+about the BUILD.** It was set inside `buildInstances`, before the draw call for
+that build had been issued, so the export dialog — which polls it and then
+captures the canvas (ADR 0025 / QA #10) — could snapshot the previous frame and
+produce a PNG with no icon nodes in it. It is written after `render()` now.
+
+> **CORRECTION — 2026-08-09, established by CI instrumentation.** The paragraph
+> that stood here read the 0.001-vs-0.042 spread on `import-export-image` #10 as
+> a timing race resolving differently run to run. **It is not a race, and those
+> are not two runs — they are the two CAPTURES.** `ExportImageDialog` captures
+> once its 400 ms readiness budget elapses and RECAPTURES when the canvas reports
+> every icon drawn. 0.001 is the first capture; 0.042 is the recaptured one. The
+> spec sampled the preview the instant the `<img>` appeared, so it asserted on
+> the intermediate frame.
+>
+> That is why it looked machine-dependent: on a fast machine the icons decode
+> inside the 400 ms budget and the first capture is already complete, so the spec
+> passed everywhere for months. On CI it does not, and the first capture is
+> deterministically incomplete — `0.001017293997965412`, byte-identical on every
+> run. **The product is behaving as designed**; the spec was racing its
+> progressive refinement, and now polls the settled outcome.
+>
+> Measured on CI rather than reasoned: at assertion time the hidden export
+> canvas is healthy (7151 painted pixels, `buildCount` 12, `nodesDrawn` 1,
+> `data-all-icons-drawn="true"`, correctly sized), and moments later the preview
+> reads 69 783 non-background pixels across the full bounding box. Nothing is
+> lost from the composite.
+>
+> **Correction 6's own fix stands but was aimed at the wrong target.** Writing
+> the flag after `render()` is right on its own terms; it was not what this spec
+> was failing on. A second attempt to fix it by reseeding the flag was made and
+> reverted (`0163c2ae`) — reasoned from the mechanism, never reproduced.
+>
+> **Residual, not fixed here:** the download button is live during the window
+> between the two captures, so a user who clicks inside it gets the incomplete
+> PNG. Recorded in known_issues.md.
+
+> **SECOND CORRECTION — 2026-08-09, later the same day, established by a second
+> round of CI instrumentation (run 31330358840) plus a local reproduction.** The
+> correction above got the captures right and the verdict wrong: **the product
+> was NOT behaving as designed.** "0.042 is the recaptured one" assumed the
+> recapture always runs. It does not. `data-all-icons-drawn` is vacuously
+> `"true"` on any paint whose build saw no node with a *pending* icon — including
+> the hidden export Axoview's mount-time paints that precede its content build
+> (`nodeEmitter.stats.allIconsDrawn` initialises `true` and only a pending icon
+> clears it; an early build simply never looks). When the dialog's first
+> readiness poll lands on such a frame it resolves `iconsReady=true`, captures a
+> background-only frame, and takes the `if (iconsReady) return` short-circuit —
+> **the recapture is skipped permanently** and the blank preview is final, not
+> provisional. The timeline that proved it: `data-all-icons-drawn="true"` with
+> the preview src frozen at the first capture for the whole observation window,
+> canvas healthy throughout.
+>
+> It was also never machine-dependent — it is **order-dependent**. Running spec
+> #10 alone passes on the same machine where running the file in sequence
+> (#9→#18→#19→#10) reproduces CI's byte-identical 0.001. Every prior local
+> "passes 4/4" was a solo run; "CI-only" was an artifact of never running the
+> full file locally.
+>
+> Fixed in two measured rounds, because the readiness lie had two layers:
+>
+> 1. `4f518bbc` — **content honesty.** `waitForIconsDrawn` readiness requires
+>    `data-nodes-drawn` ≥ 1 whenever the exported view has items (vacuity is no
+>    longer satisfiable before the content build), and the recovery recapture
+>    runs unconditionally once a capture went out not-ready, on a 5 s budget.
+>    The reseeding attempt reverted in `0163c2ae` could never have worked:
+>    `buildInstances` overwrites the seed from `nodeEmitter.stats` on every
+>    build.
+> 2. `4abca8f7` — **size honesty.** With round 1 in place CI still failed, and
+>    the capture-time instrumentation (PROBE10, run 31332531270) showed why:
+>    every attribute was now HONESTLY true — `build=2, nodes=1, drawn=true`,
+>    context not lost — about a paint into a **1×1 backing store**. Before the
+>    hidden export container's ResizeObserver → `rendererSize` update lands, the
+>    GL draws the whole scene into one pixel; `toDataURL` serializes 142 bytes
+>    of nothing and dom-to-image composites the deterministic 48 210-byte blank.
+>    That is also the order-dependence in one clause: a warm cache (ordered spec
+>    run) flips content readiness before the resize; a cold solo run flips it
+>    after. Readiness now additionally requires `canvas.width/height > 1` — a
+>    degenerate buffer is not a capturable frame, however truthful its dataset.
+
+This is the campaign's own standing lesson landing on the campaign's own record,
+twice over: the evidence was reliable and the diagnosis was a hypothesis. The
+0.001/0.042 measurements were real both times; "therefore a race" was not, and
+neither was the bisect-driven "therefore the merge broke the composite" that
+briefly replaced it — nor, in the end, was "therefore the spec was racing a
+healthy product": the first correction stopped at the diagnosis that fit the
+data it had, and the decisive fact (the recapture never fired) took a second
+instrumentation round to surface. What settled it, both times, was instrumenting
+the failing environment instead of arguing from the symptom.
+
+The agreement gate itself
+([`pickerAgreement.contract.test.ts`](../../packages/axoview-lib/src/utils/__tests__/pickerAgreement.contract.test.ts))
+covers the zIndex and iso-depth tiers and names the layer tier as excluded, with
+the repro shape that makes the exclusion honest; closing that is PROJ-10's
+residual, routed to the program final sweep so it does not widen this change.
+Cross-type order is proved in pixels off the preserved drawing buffer by
+[`cross-type-z-order.spec.ts`](../../packages/axoview-e2e/tests/cross-type-z-order.spec.ts),
+which is also where RND-13/15's order-preserving selection is asserted.
+
 ## §7 — Relationship to ADR 0019
 
 ADR 0019 remains the record of *why* the bulk moved off DOM/SVG and of the

@@ -34,6 +34,9 @@ import { CoordsUtils } from 'src/utils/coordsUtils';
 import { SizeUtils } from 'src/utils/sizeUtils';
 import { findPath } from 'src/utils/pathfinder';
 import { htmlToPlainText } from 'src/utils/htmlToPlainText';
+// ONE "is this HTML?" sniff for the whole app (TXT-14) — measurement, render
+// and the editors must agree, or a box measures as one shape and draws another.
+import { isHtmlContent } from 'src/utils/richTextTransform';
 import {
   clamp,
   roundToTwoDecimalPlaces,
@@ -451,7 +454,7 @@ export const getTextBoxEndTile = (textBox: TextBox, size: Size) => {
 };
 
 const getPlainTextForMeasurement = (content: string): string => {
-  if (!content?.trim().startsWith('<')) return content;
+  if (!isHtmlContent(content)) return content;
   const lines = content
     .split(/<\/p>|<\/div>|<br\s*\/?>/i)
     .map((s) => htmlToPlainText(s).trim())
@@ -478,19 +481,65 @@ const BLOCK_HEIGHT_UNITS: Record<string, number> = {
   pre: 0.9 * 1.5 + 0.5 + 0.5 // 2.35
 };
 
+// TXT-01/02 — the block vocabulary below is the one the Quill editor emits, but
+// it is NOT the only vocabulary that reaches the resting render. The supported
+// input surfaces (hand-edited or imported JSON, a project ZIP, a diagram from
+// the upstream lineage — the repo's own view-mode-info-diagram.json fixture
+// among them) can store plain text with newlines, `<div>` rows, or `<br>`
+// breaks inside one `<p>`. `sanitizeHtml` keeps all three and they lay out as N
+// rows, so a vocabulary that counts them as one row leaves every row after the
+// first overhanging its footprint — outside the selection outline, the
+// transform box and `getItemAtTile`.
+//
+// `div` joins the closing-tag list, `<br>` is counted inside each block, and a
+// non-HTML string splits on `\n` (matching the `white-space: pre` the resting
+// render uses for it).
+
+/** Rows a plain-text (non-HTML) content string occupies. */
+const countPlainTextLines = (content: string): number =>
+  Math.max(1, content.split('\n').length);
+
+// A `<br>` adds a row only when something follows it inside the block. Quill's
+// own blank line is `<p><br></p>` — one block, one row — and a trailing `<br>`
+// before a block close does not paint an extra line either.
+const ROW_BREAK = /<br\s*\/?>(?!\s*<\/(?:p|li|h[1-6]|blockquote|pre|div)>)/gi;
+
+const countRowBreaks = (html: string): number =>
+  (html.match(ROW_BREAK) ?? []).length;
+
+/**
+ * Split one block's inner HTML into the rows it paints. A lone or trailing
+ * `<br>` is NOT a row of its own (see ROW_BREAK), so `<p><br></p>` stays one
+ * empty row — the shape Quill emits for a blank line.
+ */
+const splitBlockRows = (inner: string): string[] => {
+  const parts = inner.split(/<br\s*\/?>/gi);
+  while (parts.length > 1 && !parts[parts.length - 1].trim()) parts.pop();
+  return parts;
+};
+
 /** @internal exported for unit-testing the per-block weighting only. */
 export const countHtmlLines = (
   content: string,
   lineHeight: number = TEXTBOX_LINE_HEIGHT
 ): number => {
-  if (!content?.trim().startsWith('<')) return 1;
-  const re = /<\/(p|li|h[1-6]|blockquote|pre)>/gi;
+  if (!content?.trim()) return 1;
+  if (!isHtmlContent(content)) {
+    return Math.max(1, countPlainTextLines(content) * lineHeight);
+  }
+  const re = /<\/(p|li|h[1-6]|blockquote|pre|div)>/gi;
   let total = 0;
+  let blocks = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(content)) !== null) {
     const tag = m[1].toLowerCase();
     total += BLOCK_HEIGHT_UNITS[tag] ?? lineHeight;
+    blocks += 1;
   }
+  // A `<br>` inside a block is an extra row the closing-tag count misses.
+  total += countRowBreaks(content) * lineHeight;
+  // Bare inline markup with no block wrapper at all still renders one row.
+  if (blocks === 0) total += lineHeight;
   return Math.max(1, total);
 };
 
@@ -514,24 +563,39 @@ export interface MeasurableBlock {
 export const splitIntoMeasurableBlocks = (
   content: string
 ): MeasurableBlock[] => {
-  if (!content?.trim().startsWith('<')) {
-    return [{ text: content || '', scale: 1.0, indentEm: 0, tag: 'p' }];
+  if (!isHtmlContent(content)) {
+    // TXT-01/02: one block holding every line measured the lines CONCATENATED,
+    // so a multi-line plain-text box came out far too wide. The resting render
+    // draws it `white-space: pre`, i.e. one row per newline — measure it that
+    // way. An empty string still yields one block so callers always have
+    // something to measure.
+    const lines = (content || '').split('\n');
+    return lines.map((text) => ({
+      text,
+      scale: 1.0,
+      indentEm: 0,
+      tag: 'p'
+    }));
   }
   const blocks: MeasurableBlock[] = [];
   const re =
-    /<(p|li|h([1-6])|blockquote|pre)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/gi;
+    /<(p|li|h([1-6])|blockquote|pre|div)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(content)) !== null) {
     const tag = m[1].toLowerCase();
-    const text = htmlToPlainText(m[3]).trim();
     const scale =
       CANVAS_RICHTEXT_SCALE[tag as keyof typeof CANVAS_RICHTEXT_SCALE] ?? 1.0;
-    blocks.push({
-      text,
-      scale,
-      indentEm: tag === 'li' ? CANVAS_RICHTEXT_LIST_INDENT_EM : 0,
-      tag
-    });
+    const indentEm = tag === 'li' ? CANVAS_RICHTEXT_LIST_INDENT_EM : 0;
+    // A `<br>` inside a block is a row break, so the block measures as N rows
+    // rather than one long concatenated run.
+    splitBlockRows(m[3]).forEach((part) =>
+      blocks.push({
+        text: htmlToPlainText(part).trim(),
+        scale,
+        indentEm,
+        tag
+      })
+    );
   }
   if (blocks.length === 0) {
     return [

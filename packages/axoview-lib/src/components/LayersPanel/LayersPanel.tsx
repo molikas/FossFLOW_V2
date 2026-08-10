@@ -5,11 +5,19 @@ import {
   IconButton,
   Tooltip,
   Divider,
-  Stack
+  Stack,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
+  Button,
+  Alert
 } from '@mui/material';
 import { AddOutlined, DeleteOutlineOutlined } from '@mui/icons-material';
 import { useLayerContext, LayerItem } from 'src/hooks/useLayerContext';
 import { useLayerActions } from 'src/hooks/useLayerActions';
+import { describeLayerContents } from 'src/stores/reducers/view';
 import { useUiStateStore } from 'src/stores/uiStateStore';
 import { useTranslation } from 'src/stores/localeStore';
 import { useScene } from 'src/hooks/useScene';
@@ -84,9 +92,30 @@ export const LayersPanel = () => {
     reorderLayers,
     assignLayerToItems
   } = useLayerActions();
-  const { updateModelItem, updateConnector, updateViewItem, updateTextBox, updateRectangle } = useScene();
+  const {
+    currentView,
+    updateModelItem,
+    updateConnector,
+    updateViewItem,
+    updateTextBox,
+    updateRectangle
+  } = useScene();
   const sceneData = useSceneData();
-  const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
+  // F4/LAY-03 — the selected row IS the active layer, and it lives in uiState so
+  // the placement modes can read it. It used to be component state that nothing
+  // outside this panel could see, which is why every new element landed
+  // unassigned however carefully the user had organised their layers.
+  const selectedLayerId = useUiStateStore((s) => s.activeLayerId);
+  const setSelectedLayerId = useUiStateStore((s) => s.actions.setActiveLayerId);
+  // …and it is dropped as soon as it stops naming a live layer — a delete from
+  // anywhere, or a switch to a page that does not have it. `activeLayerPatch`
+  // re-checks at the placement site too, so a stale id can never be stamped
+  // onto a new entity (the E2/RED-03 dangling-reference class).
+  useEffect(() => {
+    if (selectedLayerId && !layers.some((l) => l.id === selectedLayerId)) {
+      setSelectedLayerId(null);
+    }
+  }, [selectedLayerId, layers, setSelectedLayerId]);
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const [expandedLayerIds, setExpandedLayerIds] = useState<Set<string>>(
     new Set()
@@ -160,11 +189,39 @@ export const LayersPanel = () => {
     });
   }, [createLayer, layers.length, t]);
 
+  // F4/LAY-05 + the E2/RED-13 ruling (owner 2026-07-30) — deleting a layer that
+  // HOLDS something asks what to do with the contents, because both answers are
+  // defensible and doing either silently is not. An EMPTY layer skips the
+  // dialog: there is nothing to decide.
+  const [pendingDelete, setPendingDelete] = useState<{
+    layerId: string;
+    count: number;
+    hidden: boolean;
+  } | null>(null);
+
   const handleDeleteSelected = useCallback(() => {
     if (!selectedLayerId) return;
-    deleteLayer(selectedLayerId);
-    setSelectedLayerId(null);
-  }, [deleteLayer, selectedLayerId]);
+    const { count, hidden } = describeLayerContents(
+      currentView,
+      selectedLayerId
+    );
+    if (count === 0) {
+      deleteLayer(selectedLayerId, 'unassign');
+      setSelectedLayerId(null);
+      return;
+    }
+    setPendingDelete({ layerId: selectedLayerId, count, hidden });
+  }, [deleteLayer, selectedLayerId, currentView, setSelectedLayerId]);
+
+  const resolveDelete = useCallback(
+    (contents: 'unassign' | 'delete') => {
+      if (!pendingDelete) return;
+      deleteLayer(pendingDelete.layerId, contents);
+      setSelectedLayerId(null);
+      setPendingDelete(null);
+    },
+    [pendingDelete, deleteLayer, setSelectedLayerId]
+  );
 
   const handleToggleVisible = useCallback(
     (id: string) => {
@@ -536,6 +593,7 @@ export const LayersPanel = () => {
             <span>
               <IconButton
                 size="small"
+                data-axoview-id="layers-panel-delete"
                 onClick={handleDeleteSelected}
                 disabled={!selectedLayerId}
                 sx={{ p: 0.5 }}
@@ -595,7 +653,6 @@ export const LayersPanel = () => {
                     onToggleVisible={handleToggleVisible}
                     onToggleLocked={handleToggleLocked}
                     onRename={handleRename}
-                    onDelete={deleteLayer}
                     dragHandleProps={{
                       onMouseDown: (e) => {
                         e.preventDefault();
@@ -675,6 +732,59 @@ export const LayersPanel = () => {
           )}
         </Box>
       </Box>
+
+      {/* F4/LAY-05 + E2/RED-13 (owner ruling 2026-07-30) — deleting a layer that
+          holds something asks which of the two defensible meanings applies.
+          Axoview layers are TAGS, not owners, so the Visio pattern (ask) rather
+          than AutoCAD's (refuse) or Photoshop's (delete contents silently).
+
+          The hidden-layer warning is LAY-05: visibility derives as
+          `!layer || layer.visible`, so an entity with NO layer is
+          unconditionally visible — unassigning the members of a hidden layer
+          inverts their visibility, and deleting a hidden layer used to reveal
+          everything it was hiding with no warning at all. */}
+      <Dialog
+        open={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        data-axoview-id="layer-delete-confirm"
+      >
+        <DialogTitle>{t('deleteLayerTitle')}</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {t('deleteLayerBody').replace(
+              '{count}',
+              String(pendingDelete?.count ?? 0)
+            )}
+          </DialogContentText>
+          {pendingDelete?.hidden && (
+            <Alert
+              severity="warning"
+              sx={{ mt: 2 }}
+              data-axoview-id="layer-delete-hidden-warning"
+            >
+              {t('deleteLayerHiddenWarning')}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPendingDelete(null)}>
+            {t('deleteLayerCancel')}
+          </Button>
+          <Button
+            onClick={() => resolveDelete('unassign')}
+            data-axoview-id="layer-delete-keep"
+          >
+            {t('deleteLayerKeep')}
+          </Button>
+          <Button
+            color="error"
+            onClick={() => resolveDelete('delete')}
+            data-axoview-id="layer-delete-contents"
+          >
+            {t('deleteLayerDeleteContents')}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

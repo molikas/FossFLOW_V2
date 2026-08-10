@@ -9,6 +9,56 @@ import {
 import { leanIfModel } from '../leanModel';
 import { apiBaseUrl } from '../../../utils/apiBaseUrl';
 
+/**
+ * A share request that the backend refused, carrying enough for the caller to
+ * say something the user can act on.
+ *
+ * S3/DRV-14: `shareDiagram` used to throw ``new Error(`Share failed: ${status}`)``,
+ * discarding the backend's own `{ error: 'Diagram not found' }` body — and
+ * `AppToolbar.handleShareClick` surfaces `err.message` verbatim into the share
+ * popover, so a diagram deleted in another tab between being opened and being
+ * shared displayed the literal text `Share failed: 404`. ADR 0011 §1 requires a
+ * failure-of-intent to surface copy the user can act on. Modelled on
+ * `DriveShareError`, which already does this for the Drive side.
+ */
+export class ShareRequestError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+    /** The backend's own `error` string, when it sent one. */
+    readonly serverMessage?: string
+  ) {
+    super(message);
+    this.name = 'ShareRequestError';
+    // Downlevelled `extends Error` loses the prototype link — see the same note
+    // on `DriveError`.
+    Object.setPrototypeOf(this, ShareRequestError.prototype);
+  }
+}
+
+/**
+ * Turn a failed share response into a `ShareRequestError` whose message is what
+ * the user should read. 404 is the reachable one (the diagram was deleted in
+ * another tab or from the file tree between opening and sharing); 5xx is
+ * retryable; everything else falls back to the backend's own text.
+ */
+async function shareRequestError(response: Response): Promise<ShareRequestError> {
+  let serverMessage: string | undefined;
+  try {
+    const body = (await response.json()) as { error?: string };
+    serverMessage = typeof body?.error === 'string' ? body.error : undefined;
+  } catch {
+    /* non-JSON body — the status is all we have */
+  }
+  const message =
+    response.status === 404
+      ? 'This diagram no longer exists.'
+      : response.status >= 500
+        ? 'Sharing is temporarily unavailable. Try again in a moment.'
+        : serverMessage || `Could not create a share link (${response.status}).`;
+  return new ShareRequestError(response.status, message, serverMessage);
+}
+
 const SESSION_DIAGRAMS_KEY = 'axoview_diagrams';
 const SESSION_DIAGRAM_PREFIX = 'axoview_diagram_';
 const LOCAL_FOLDERS_KEY = 'axoview-folders';
@@ -99,7 +149,13 @@ export class LocalStorageProvider implements StorageProvider {
     data: unknown,
     folderId?: string | null
   ): Promise<string> {
-    const body = folderId != null ? { ...(data as object), folderId } : data;
+    // A2/STOR-01: every other write path applies `leanIfModel` (ADR 0003 —
+    // strip bundled pack icons, record `requiredPacks`); the server CREATE did
+    // not, so on a server deploy the FIRST write of every diagram persisted the
+    // whole icon catalog and recorded no pack hint. The very next `saveDiagram`
+    // then wrote the lean shape, which is how the drift stayed invisible.
+    const lean = leanIfModel(data);
+    const body = folderId != null ? { ...(lean as object), folderId } : lean;
     const response = await fetch(`${this.baseUrl}/api/diagrams`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -133,10 +189,31 @@ export class LocalStorageProvider implements StorageProvider {
   // Diagrams — session storage fallback
   // ---------------------------------------------------------------------------
 
+  /**
+   * A2/STOR-05: one corrupt entry used to throw a SyntaxError through EVERY
+   * list call and brick the file tree — and in server mode the fallback sits
+   * inside the catch, so its throw escaped the try that was meant to make
+   * listing failure-proof. The one parse in this file that WAS guarded
+   * (`renameDiagram`'s blob) survived, which is what made the omission a
+   * sibling-drift bug rather than a design. Degrade to empty and say so.
+   */
+  private parseOrWarn<T>(raw: string | null, fallback: T, label: string): T {
+    if (!raw) return fallback;
+    try {
+      return JSON.parse(raw) as T;
+    } catch (e) {
+      console.error(`[LocalStorageProvider] ${label} is corrupt — ignoring it`, e);
+      return fallback;
+    }
+  }
+
   private sessionListDiagrams(folderId?: string | null): DiagramMeta[] {
-    const raw = sessionStorage.getItem(SESSION_DIAGRAMS_KEY);
-    if (!raw) return [];
-    const list: DiagramMeta[] = JSON.parse(raw);
+    const list = this.parseOrWarn<DiagramMeta[]>(
+      sessionStorage.getItem(SESSION_DIAGRAMS_KEY),
+      [],
+      SESSION_DIAGRAMS_KEY
+    );
+    if (!Array.isArray(list)) return [];
     if (folderId === undefined) return list;
     return list.filter((d) => d.folderId === folderId);
   }
@@ -149,7 +226,9 @@ export class LocalStorageProvider implements StorageProvider {
 
   private sessionSaveDiagram(id: string, data: unknown): void {
     const lean = leanIfModel(data);
-    sessionStorage.setItem(`${SESSION_DIAGRAM_PREFIX}${id}`, JSON.stringify(lean));
+    const blobKey = `${SESSION_DIAGRAM_PREFIX}${id}`;
+    const previousBlob = sessionStorage.getItem(blobKey);
+    sessionStorage.setItem(blobKey, JSON.stringify(lean));
     const list = this.sessionListDiagrams();
     const idx = list.findIndex((d) => d.id === id);
     const existing = idx >= 0 ? list[idx] : undefined;
@@ -168,8 +247,27 @@ export class LocalStorageProvider implements StorageProvider {
     };
     if (idx >= 0) list[idx] = meta;
     else list.push(meta);
-    sessionStorage.setItem(SESSION_DIAGRAMS_KEY, JSON.stringify(list));
+    try {
+      sessionStorage.setItem(SESSION_DIAGRAMS_KEY, JSON.stringify(list));
+    } catch (e) {
+      // A2/STOR-06: the blob is written first, so a quota failure on the INDEX
+      // used to leave unreachable bytes on a 5 MB budget — a diagram no listing
+      // shows and nothing can delete. Undo the blob write before rethrowing, so
+      // the failure costs the save but not the budget.
+      if (previousBlob === null) sessionStorage.removeItem(blobKey);
+      else sessionStorage.setItem(blobKey, previousBlob);
+      throw e;
+    }
     // Notify subscribers (storage gauge) — sessionStorage has no native cross-component event.
+    this.notifySessionChanged();
+  }
+
+  /**
+   * A2/STOR-07: only SOME session write paths dispatched this, so the storage
+   * gauge and the `sessionWorkUnexported` export guard missed renames, restores
+   * and moves. One helper, called by every path that mutates the session place.
+   */
+  private notifySessionChanged(): void {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('axoview-session-changed'));
     }
@@ -195,20 +293,40 @@ export class LocalStorageProvider implements StorageProvider {
         JSON.stringify(list.filter((d) => d.id !== id))
       );
     }
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new Event('axoview-session-changed'));
-    }
+    this.notifySessionChanged();
   }
 
   // ---------------------------------------------------------------------------
   // StorageProvider — Diagrams
   // ---------------------------------------------------------------------------
 
+  /**
+   * A2/STOR-04: the read paths swap the whole workspace for the empty per-tab
+   * session one on ANY server error, with no error surfaced anywhere — while
+   * the paired WRITE on the same provider in the same state still targets the
+   * server and throws. The read half and the write half disagreed about whether
+   * the backend exists, silently. The fallback stays (a transient blip should
+   * not empty the screen with an exception), but it is now audible: one console
+   * error, and a window event the shell can surface.
+   */
+  private reportServerFallback(op: string, e: unknown): void {
+    console.error(
+      `[LocalStorageProvider] server ${op} failed — falling back to this tab's session storage. Saves still target the server.`,
+      e
+    );
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('axoview-server-unreachable', { detail: { op } })
+      );
+    }
+  }
+
   async listDiagrams(folderId?: string | null): Promise<DiagramMeta[]> {
     if (this.usingServer) {
       try {
         return await this.serverListDiagrams(folderId);
-      } catch {
+      } catch (e) {
+        this.reportServerFallback('listDiagrams', e);
         return this.sessionListDiagrams(folderId);
       }
     }
@@ -219,7 +337,8 @@ export class LocalStorageProvider implements StorageProvider {
     if (this.usingServer) {
       try {
         return await this.serverLoadDiagram(id);
-      } catch {
+      } catch (e) {
+        this.reportServerFallback('loadDiagram', e);
         return this.sessionLoadDiagram(id);
       }
     }
@@ -264,6 +383,7 @@ export class LocalStorageProvider implements StorageProvider {
         d.id === id ? { ...d, deletedAt: undefined } : d
       );
       sessionStorage.setItem(SESSION_DIAGRAMS_KEY, JSON.stringify(updated));
+      this.notifySessionChanged(); // A2/STOR-07
     }
   }
 
@@ -301,6 +421,7 @@ export class LocalStorageProvider implements StorageProvider {
           // Corrupted blob — leave the listing rename in place but don't crash.
         }
       }
+      this.notifySessionChanged(); // A2/STOR-07
     }
   }
 
@@ -373,8 +494,12 @@ export class LocalStorageProvider implements StorageProvider {
   // ---------------------------------------------------------------------------
 
   private localGetFolders(): FolderMeta[] {
-    const raw = localStorage.getItem(LOCAL_FOLDERS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const folders = this.parseOrWarn<FolderMeta[]>(
+      localStorage.getItem(LOCAL_FOLDERS_KEY),
+      [],
+      LOCAL_FOLDERS_KEY
+    );
+    return Array.isArray(folders) ? folders : [];
   }
 
   private localSaveFolders(folders: FolderMeta[]): void {
@@ -397,18 +522,58 @@ export class LocalStorageProvider implements StorageProvider {
 
   private localDeleteFolder(id: string, recursive: boolean): void {
     let folders = this.localGetFolders();
+    // Captured BEFORE the delete: where the folder's contents go when the
+    // caller asked for a non-recursive delete.
+    const parentOfDeleted = folders.find((f) => f.id === id)?.parentId ?? null;
+    const removed = new Set<string>();
     if (recursive) {
-      const toDelete = new Set<string>();
       const collect = (fid: string) => {
-        toDelete.add(fid);
+        if (removed.has(fid)) return; // a corrupt parent cycle must not hang
+        removed.add(fid);
         folders.filter((f) => f.parentId === fid).forEach((f) => collect(f.id));
       };
       collect(id);
-      folders = folders.filter((f) => !toDelete.has(f.id));
+      folders = folders.filter((f) => !removed.has(f.id));
     } else {
+      removed.add(id);
       folders = folders.filter((f) => f.id !== id);
+      // A2/STOR-02: `recursive` only ever widened the FOLDER sweep, so a
+      // non-recursive delete left child folders with a dangling `parentId`.
+      // Re-parent them to where their parent was, which is what every file
+      // manager does with a non-recursive delete.
+      folders = folders.map((f) =>
+        f.parentId === id ? { ...f, parentId: parentOfDeleted } : f
+      );
     }
     this.localSaveFolders(folders);
+
+    // A2/STOR-03: the diagrams INSIDE the folder were never touched, so they
+    // stayed in `axoview_diagrams` pointing at a folder that no longer exists —
+    // invisible in the tree, still counted by every `listDiagrams()` consumer,
+    // still consuming the 5 MB budget, and unreachable by any UI. A recursive
+    // delete removes them; a non-recursive one moves them to the deleted
+    // folder's parent, alongside the child folders above.
+    const list = this.sessionListDiagrams();
+    const affected = list.filter(
+      (d) => d.folderId != null && removed.has(d.folderId)
+    );
+    if (affected.length === 0) return;
+
+    if (recursive) {
+      affected.forEach((d) =>
+        sessionStorage.removeItem(`${SESSION_DIAGRAM_PREFIX}${d.id}`)
+      );
+      const keep = list.filter((d) => !affected.some((a) => a.id === d.id));
+      sessionStorage.setItem(SESSION_DIAGRAMS_KEY, JSON.stringify(keep));
+    } else {
+      const moved = list.map((d) =>
+        d.folderId != null && removed.has(d.folderId)
+          ? { ...d, folderId: parentOfDeleted }
+          : d
+      );
+      sessionStorage.setItem(SESSION_DIAGRAMS_KEY, JSON.stringify(moved));
+    }
+    this.notifySessionChanged();
   }
 
   private localRenameFolder(id: string, name: string): void {
@@ -434,6 +599,7 @@ export class LocalStorageProvider implements StorageProvider {
         d.id === id ? { ...d, folderId: targetFolderId } : d
       );
       sessionStorage.setItem(SESSION_DIAGRAMS_KEY, JSON.stringify(updated));
+      this.notifySessionChanged(); // A2/STOR-07
     }
   }
 
@@ -445,7 +611,8 @@ export class LocalStorageProvider implements StorageProvider {
     if (this.usingServer) {
       try {
         return await this.serverListFolders(parentId);
-      } catch {
+      } catch (e) {
+        this.reportServerFallback('listFolders', e);
         return this.localListFolders(parentId);
       }
     }
@@ -499,12 +666,18 @@ export class LocalStorageProvider implements StorageProvider {
         });
         if (!response.ok) throw new Error('Failed to get tree manifest');
         return response.json();
-      } catch {
-        // fall through to localStorage
+      } catch (e) {
+        this.reportServerFallback('getTreeManifest', e);
       }
     }
-    const raw = localStorage.getItem(LOCAL_MANIFEST_KEY);
-    return raw ? JSON.parse(raw) : { folders: [] };
+    const manifest = this.parseOrWarn<TreeManifest>(
+      localStorage.getItem(LOCAL_MANIFEST_KEY),
+      { folders: [] },
+      LOCAL_MANIFEST_KEY
+    );
+    return manifest && Array.isArray(manifest.folders)
+      ? manifest
+      : { folders: [] };
   }
 
   // ---------------------------------------------------------------------------
@@ -520,7 +693,7 @@ export class LocalStorageProvider implements StorageProvider {
       headers: { 'Content-Type': 'application/json' },
       signal: timeoutSignal(10000)
     });
-    if (!response.ok) throw new Error(`Share failed: ${response.status}`);
+    if (!response.ok) throw await shareRequestError(response);
     return response.json();
   }
 
@@ -543,9 +716,19 @@ export class LocalStorageProvider implements StorageProvider {
           signal: timeoutSignal(10000)
         });
         if (!response.ok) throw new Error('Failed to save tree manifest');
+        // A2/STOR-16: on success, drop any local copy a previous failed save
+        // left behind, so the two stores cannot disagree later.
+        localStorage.removeItem(LOCAL_MANIFEST_KEY);
         return;
-      } catch {
-        // fall through to localStorage
+      } catch (e) {
+        // A2/STOR-16: this used to write localStorage and RESOLVE, so the user
+        // saw a successful reorder — and `getTreeManifest` prefers the server
+        // copy, so the ordering silently reverted on the next healthy read. The
+        // read and write halves fell back to the same store with opposite
+        // authority. In server mode the server owns the manifest: report the
+        // failure instead of pretending, and leave no local copy to shadow it.
+        console.error('[LocalStorageProvider] tree manifest save failed', e);
+        throw e instanceof Error ? e : new Error('Failed to save tree manifest');
       }
     }
     localStorage.setItem(LOCAL_MANIFEST_KEY, JSON.stringify(manifest));

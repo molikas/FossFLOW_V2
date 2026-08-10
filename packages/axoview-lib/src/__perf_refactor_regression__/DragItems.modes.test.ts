@@ -687,10 +687,10 @@ describe('DragItems — rectangle/textbox CSS-preview move (perf, RECT-1)', () =
 });
 
 // ---------------------------------------------------------------------------
-// Floating-label GROUP move (ADR 0031). A label is canvas-drawn (LabelsCanvas)
+// Floating-label GROUP move (ADR 0031). A label is canvas-drawn (SceneCanvas)
 // with no [data-drag-id] DOM element, so — unlike nodes/rectangles/text boxes —
 // it cannot carry a CSS `--ff-drag-*` preview. Its live preview instead rides the
-// uiState `labelMoves` channel, which LabelsCanvas reads. REGRESSION GUARD: two
+// uiState `labelMoves` channel, which SceneCanvas reads. REGRESSION GUARD: two
 // reported bugs, (1) the label wasn't seeded so it never moved at all, and (2)
 // once seeded it moved on COMMIT but showed no live preview (looked frozen). This
 // locks both: the preview is published during the drag AND committed once + the

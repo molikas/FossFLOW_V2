@@ -193,10 +193,66 @@ The repo-root [wrangler.toml](../wrangler.toml) is set up so the deploy button w
 
 - HTTP contract for every `/api/*` endpoint the frontend calls.
 - Public routes that bypass auth: `GET /api/config`, `GET /api/public/diagrams/:uuid`.
-- Body limit: 10 MB per request.
-- ID validation: `^[a-zA-Z0-9_-]{1,64}$` — anything else is `400 Invalid id` (Docker only; Cloudflare 503s before reaching the validator).
+- Body limit: 10 MB per request. Over it, or a body that does not parse, answers
+  `{ "error": … }` JSON (413 / 400) — never an HTML error page, and never a
+  stack trace.
+- Requests carrying an `Origin` header that is not in `ALLOWED_ORIGINS` are
+  **refused with 403 before any handler runs**. CORS alone only withholds the
+  *response*; a CORS-safelisted request (e.g. `POST` with
+  `Content-Type: text/plain`) skips the preflight entirely and would otherwise
+  have already executed. Requests with no `Origin` (same-origin, curl,
+  server-to-server) are unaffected.
+- ID validation: `^[a-zA-Z0-9_-]{1,64}$`, minus the four reserved storage names
+  `folders`, `tree-manifest`, `metadata` and `diagrams-index` — anything else is
+  `400 Invalid id` (Docker only; Cloudflare 503s before reaching the validator).
+  The reserved names matter because the fs adapter flattens `diagrams/<id>` to
+  `<STORAGE_PATH>/<id>.json`, so a diagram called `folders` would resolve to the
+  same file as the folder tree.
 - Drive OAuth scope is locked to `drive.file` (per-file consent only) — the app sees only files it created ([ADR 0035](adr/0035-google-identity-and-drive-authorization.md)).
 - Runtime config (`GET /api/config`) replaces build-time env injection — the frontend bundle never embeds secrets.
+
+### D.0 `PUBLIC_BASE_URL` — the base every share link resolves against
+
+Optional on every target. When set, it is the canonical, externally reachable
+base URL of the deployment, and **every share link the app mints uses it** —
+the public-snapshot link (`/display/p/:uuid`) and the Drive preview link
+(`/display/drive/:fileId`) alike. Unset, both fall back to the page origin,
+which is the historical behaviour and correct for a single-origin deployment.
+
+```bash
+PUBLIC_BASE_URL=https://diagrams.example.com
+```
+
+Set it whenever the app is reachable on more than one origin — a Cloudflare
+`*.pages.dev` preview build, a staging host, a LAN IP alongside a public
+hostname. Without it, a link copied while on the preview origin embeds that
+origin and keeps pointing there long after the preview is gone. This is
+standard for products that mint shareable links (GitLab `external_url`, Grafana
+`root_url`, Sentry `system.url-prefix`).
+
+The value is surfaced to the browser through `GET /api/config` as
+`publicBaseUrl`. The Express backend has always used the same variable for the
+`url` it returns from `POST /api/diagrams/:id/share`, so the two agree.
+
+### D.1 `ENABLE_SERVER_STORAGE=false` — the two routes that stay reachable
+
+Turning server storage off makes every `/api/*` route answer
+`503 Server storage is disabled`, with **three** deliberate exemptions:
+
+| Route | Why it stays reachable |
+|---|---|
+| `GET /api/config` | The sole boot probe ([ADR 0009](adr/0009-runtime-config-and-boot-probe.md) D2) — the app cannot discover that storage is off without it. |
+| `GET /api/public/diagrams/:uuid` | A **published artifact surviving an API kill-switch is normal** (S3, Pages, publish-to-web). Links already sent to other people keep working. |
+| `DELETE /api/diagrams/:id/share` | **Unpublish must always remain reachable.** If the read survives the switch, the revoke has to as well — otherwise flipping the flag strands a live public link with no way to take it down. |
+
+The last two are a **pair**: change one and you must change the other. Keeping
+the read exempt while gating the revoke is the failure mode this exemption
+exists to prevent (owner ruling 2026-07-30 on S2/SHARE-10).
+
+Note the exemptions are about `ENABLE_SERVER_STORAGE`, **not** about auth. Under
+`AUTH_MODE=shared-token` only the two `GET`s bypass authentication; the revoke
+still requires the bearer token, so it is reachable by the operator, not by
+anyone with the link.
 
 ## E. What differs
 

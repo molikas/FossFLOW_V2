@@ -24,6 +24,11 @@ import { seedNodeLabel } from 'src/utils/seedNodeLabel';
 import { seedConnectorLabel } from 'src/utils/seedConnectorLabel';
 import { foldTextBoxStyleFlags } from 'src/utils/foldTextBoxStyleFlags';
 import { normalizeQuillHtmlSpaces } from 'src/utils/richTextTransform';
+import {
+  repairModelIdentity,
+  isCleanRepair,
+  describeRepair
+} from 'src/utils/repairModel';
 
 // Must match the threshold in IconCollection.tsx so newly-loaded large packs
 // (e.g. Material Icons) are not auto-expanded (which would freeze the browser).
@@ -148,6 +153,25 @@ export const useInitialDataManager = () => {
           .map(foldNodeDescription)
           .map(seedNodeLabel);
 
+        // Identity & range repair (owner ruling 2026-07-30: repair, don't
+        // reject). Duplicate ids, dangling layer refs and non-finite/absurd
+        // coordinates all pass the schema today, so files carrying them exist;
+        // making them schema errors here would stop those files opening, which
+        // is the E4/CLIP-02 harm. Repair, then tell the user what changed — a
+        // silent rewrite of their document is its own failure (ADR 0011).
+        const repaired = repairModelIdentity(rawData);
+        Object.assign(rawData, repaired.data);
+        if (!isCleanRepair(repaired.report)) {
+          console.warn(
+            '[useInitialDataManager] repaired the loaded model:',
+            repaired.report
+          );
+          uiStateActions.setNotification({
+            severity: 'warning',
+            message: `Repaired this diagram on load — ${describeRepair(repaired.report)}. Save to keep the repair.`
+          });
+        }
+
         // Re-type after normalisation — Zod will validate the structure next
         const initialData = rawData as unknown as typeof _initialData;
 
@@ -204,18 +228,22 @@ export const useInitialDataManager = () => {
 
         // Reset scroll/zoom for a clean slate on each load, unless the caller
         // explicitly preserves the current viewport (e.g. icon-pack updates).
-        // Selection is reset on the same condition — selectedIds carried over
-        // from the previous diagram point at items that no longer exist in
-        // the new model, leaving the properties panel "open but blank" instead
-        // of showing the no-selection placeholder.
         if (!options?.preserveViewport) {
           uiStateActions.setScroll({
             position: CoordsUtils.zero(),
             offset: CoordsUtils.zero()
           });
           uiStateActions.setZoom(INITIAL_UI_STATE.zoom);
-          uiStateActions.setSelectedIds([]);
         }
+        // E4/CLIP-08: the selection is cleared on EVERY load — it used to sit
+        // behind the preserveViewport guard, but the two answer different
+        // questions: the viewport can survive an icon-pack-swap reload, a
+        // selection naming the previous model's ids cannot (INV-2 — the
+        // delete path then threw on it, and the properties panel rendered
+        // "open but blank"). The layer-context invalidation prunes dead refs
+        // as a backstop; the load path states its intent explicitly.
+        uiStateActions.setSelectedIds([]);
+        uiStateActions.setItemControls(null);
 
         const activeViewId = uiStateStoreApi.getState().view;
         const targetViewId =

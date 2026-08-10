@@ -311,6 +311,19 @@ const dragItems = (
     scene,
     externalOccupiedCache
   );
+
+  // I3/SEL-04: collision rejection is all-or-nothing across the NODE members —
+  // `computeNodeUpdates` returns null for the whole set when any target tile is
+  // occupied — but the rectangle, text-box, Label and waypoint previews below
+  // kept following the cursor regardless. A MIXED group dragged into a collision
+  // therefore committed a node delta and a rectangle delta that differ, and the
+  // group's relative layout silently changed (measured: node {-2,+2} vs
+  // rectangle {-3,+3}). Node-only groups were always safe, which is why this
+  // hid. A blocked frame blocks the WHOLE group: every preview map keeps its
+  // last good value, so the group holds together at the last legal position and
+  // the commit on release matches what the user was looking at.
+  if (itemRefs.length > 0 && nodeUpdates === null) return;
+
   applyNodePreview(
     nodeUpdates,
     initialTiles,
@@ -406,6 +419,37 @@ const dragItems = (
   commitAnchorReconnects(anchorReconnects, tile, scene);
 };
 
+/**
+ * Drop the whole drag preview WITHOUT committing it, and close the transaction.
+ *
+ * This is `exit`'s body minus the renderer chrome, factored out so a keyboard
+ * path can abort a live drag (I1/PTR-10: an undo taken mid-drag was
+ * unrecoverable, because the pending mouseup still committed the preview maps
+ * as a new action and that clears the redo stack). Clearing the maps is the
+ * operative part — the mouseup that arrives afterwards then writes nothing.
+ *
+ * Idempotent: `exit` runs the same clears again on the next mouse event, and
+ * `commitDragTransaction` is a no-op when no bracket is open.
+ */
+export const abortDragItems = (
+  scene: Pick<ReturnType<typeof useScene>, 'commitDragTransaction'>,
+  uiState: { actions: { clearLabelMoves?: () => void } }
+) => {
+  clearAllCssOffsets();
+  previewTiles.clear();
+  previewAnchorTiles.clear();
+  previewRectangles.clear();
+  previewTextBoxes.clear();
+  previewLabels.clear();
+  previewNodeOffsets.clear();
+  previewRectOffsets.clear();
+  previewTextBoxOffsets.clear();
+  previewLabelOffsets.clear();
+  externalOccupiedCache = null;
+  uiState.actions.clearLabelMoves?.();
+  scene.commitDragTransaction();
+};
+
 export const DragItems: ModeActions = {
   entry: ({ uiState, rendererRef, scene }) => {
     if (uiState.mode.type !== 'DRAG_ITEMS' || !uiState.mouse.mousedown) return;
@@ -438,22 +482,10 @@ export const DragItems: ModeActions = {
     rendererRef.style.userSelect = 'auto';
     setWindowCursor('default');
     // Safety net for escape / programmatic mode change. If exit fires without
-    // a normal mouseup, clear the preview without committing.
-    clearAllCssOffsets();
-    previewTiles.clear();
-    previewAnchorTiles.clear();
-    previewRectangles.clear();
-    previewTextBoxes.clear();
-    previewLabels.clear();
-    previewNodeOffsets.clear();
-    previewRectOffsets.clear();
-    previewTextBoxOffsets.clear();
-    previewLabelOffsets.clear();
-    externalOccupiedCache = null;
-    // Drop the canvas label move-preview too, or an escaped group drag leaves the
-    // labels stranded at their (uncommitted) preview position.
-    uiState.actions.clearLabelMoves?.();
-    scene.commitDragTransaction();
+    // a normal mouseup, clear the preview without committing — including the
+    // canvas label move-preview, or an escaped group drag leaves the labels
+    // stranded at their (uncommitted) preview position.
+    abortDragItems(scene, uiState);
   },
   mousemove: ({ uiState, scene }) => {
     if (uiState.mode.type !== 'DRAG_ITEMS' || !uiState.mouse.mousedown) return;
@@ -512,9 +544,9 @@ export const DragItems: ModeActions = {
       uiState.snapToGrid ?? true
     );
 
-    // Floating labels are canvas-drawn (LabelsCanvas) with no [data-drag-id] DOM
+    // Floating labels are canvas-drawn (SceneCanvas) with no [data-drag-id] DOM
     // element to carry a CSS `--ff-drag-*` preview, so publish their accumulated
-    // target tile/offset to the group move-preview channel — LabelsCanvas redraws
+    // target tile/offset to the group move-preview channel — SceneCanvas redraws
     // each dragged chip there. Without this the labels stay frozen mid-drag and
     // only jump into place on the mouseup commit (the reported "label not moving"
     // confusion). Cleared on mouseup (after commit) and on exit.
@@ -569,7 +601,7 @@ export const DragItems: ModeActions = {
         }))
       );
     }
-    // Drop the canvas move-preview AFTER the model commit above, so LabelsCanvas
+    // Drop the canvas move-preview AFTER the model commit above, so SceneCanvas
     // redraws each chip at its new model position and the preview clears in the
     // same pass (no one-frame jump back to the origin). Mirrors the single-label
     // updateLabel → clearLabelMove ordering in LabelHitLayer.

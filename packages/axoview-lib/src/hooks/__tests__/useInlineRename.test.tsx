@@ -20,25 +20,39 @@ const keyEvent = (key: string, blur: () => void, shiftKey = false): AnyEvent => 
 });
 
 describe('useInlineRename — commit/cancel contract', () => {
-  it('Enter blurs (which commits) and prevents default', () => {
+  // TXT-06 changed the AUTHORITY on ending a session from  to the
+  // explicit press-away / key handlers: focus moves to the strip on a plain
+  // mousedown, and a hook that reads that blur as "the user left" ended the
+  // rename the moment the user reached for a style control.  is
+  // idempotent, so the blur that follows is a no-op rather than a second commit.
+  it('Enter commits the element text and prevents default', () => {
     const commit = jest.fn();
     const cancel = jest.fn();
     const { result } = renderHook(() =>
       useInlineRename({ active: true, commit, cancel })
     );
+    const el = document.createElement('div');
+    el.textContent = 'hello';
+    document.body.appendChild(el);
+    jest.spyOn(el, 'blur').mockImplementation(() => {});
+    act(() => result.current.setRef(el));
+
     const blur = jest.fn();
     const e = keyEvent('Enter', blur);
     act(() => result.current.onKeyDown(e as never));
 
     expect(e.preventDefault).toHaveBeenCalled();
     expect(blur).toHaveBeenCalled();
+    expect(commit).toHaveBeenCalledWith('hello');
+    expect(cancel).not.toHaveBeenCalled();
 
-    // The resulting blur commits the current text.
+    // The blur that follows is a no-op — one session, one outcome.
     act(() =>
       result.current.onBlur({ currentTarget: { innerText: 'hello' } } as never)
     );
-    expect(commit).toHaveBeenCalledWith('hello');
-    expect(cancel).not.toHaveBeenCalled();
+    expect(commit).toHaveBeenCalledTimes(1);
+
+    el.remove();
   });
 
   it('Escape blurs and the resulting blur CANCELS (no commit)', () => {
@@ -84,13 +98,14 @@ describe('useInlineRename — commit/cancel contract', () => {
     expect(e.preventDefault).not.toHaveBeenCalled();
   });
 
-  it('pointerdown OUTSIDE with the left button commits', () => {
+  it('pointerdown OUTSIDE with the left button commits the element text', () => {
     const commit = jest.fn();
     const cancel = jest.fn();
     const { result } = renderHook(() =>
       useInlineRename({ active: true, commit, cancel })
     );
     const el = document.createElement('div');
+    el.textContent = 'v';
     document.body.appendChild(el);
     const blurSpy = jest.spyOn(el, 'blur').mockImplementation(() => {});
     act(() => result.current.setRef(el));
@@ -101,14 +116,50 @@ describe('useInlineRename — commit/cancel contract', () => {
       );
     });
     expect(blurSpy).toHaveBeenCalled();
-
-    act(() =>
-      result.current.onBlur({ currentTarget: { innerText: 'v' } } as never)
-    );
     expect(commit).toHaveBeenCalledWith('v');
     expect(cancel).not.toHaveBeenCalled();
 
     el.remove();
+  });
+
+  // TXT-06 — the strip (and its MUI portals) is part of the session.
+  it('pointerdown on the strip does NOT end the session', () => {
+    const commit = jest.fn();
+    const cancel = jest.fn();
+    const { result } = renderHook(() =>
+      useInlineRename({ active: true, commit, cancel })
+    );
+    const el = document.createElement('div');
+    el.textContent = 'v';
+    document.body.appendChild(el);
+    jest.spyOn(el, 'blur').mockImplementation(() => {});
+    act(() => result.current.setRef(el));
+
+    const strip = document.createElement('div');
+    strip.setAttribute('data-axoview-strip', 'true');
+    const button = document.createElement('button');
+    strip.appendChild(button);
+    document.body.appendChild(strip);
+
+    act(() => {
+      button.dispatchEvent(
+        new MouseEvent('pointerdown', { bubbles: true, button: 0 })
+      );
+    });
+    expect(commit).not.toHaveBeenCalled();
+    expect(cancel).not.toHaveBeenCalled();
+
+    // …and the blur that follows the focus move is not a commit either.
+    act(() =>
+      result.current.onBlur({
+        currentTarget: { innerText: 'v' },
+        relatedTarget: button
+      } as never)
+    );
+    expect(commit).not.toHaveBeenCalled();
+
+    el.remove();
+    strip.remove();
   });
 
   it('pointerdown OUTSIDE with the right button cancels', () => {

@@ -56,19 +56,36 @@ export const ARROW_TILE_DELTAS: Record<string, Coords> = {
 // Refs of selectable item types that can be tile-nudged. CONNECTOR /
 // CONNECTOR_ANCHOR are excluded — they aren't directly tile-nudge-able here, so a
 // connectors-only selection falls back to pan.
+//
+// R5/OVL-14: LABEL was missing, so the arrow keys PANNED the canvas with a
+// floating Label selected — the one canvas entity with no keyboard nudge at all,
+// while the mouse drag moved it fine. Labels are tile-anchored like everything
+// else here (ADR 0031); being outside the TILE HIT-TEST is what makes them
+// special, and that has nothing to do with nudging a ref that is already
+// selected.
 const NUDGEABLE_TYPES = new Set<ItemReference['type']>([
   'ITEM',
   'RECTANGLE',
-  'TEXTBOX'
+  'TEXTBOX',
+  'LABEL'
 ]);
 
 // Minimal scene shape the nudge needs to read CURRENT positions (the batch
 // updaters take absolute target tiles). Kept structural so this module stays
 // dependency-free and unit-testable (mirrors selectableRefs' SelectableScene).
+// `offset` is the ADR 0023 sub-tile residual. It must be READ here and written
+// back unchanged: the batch updaters below are the drag commit path, and they
+// write `offset: u.offset` unconditionally — that is deliberate, because a drag
+// that re-snaps an item clears the residual by passing `undefined`. A nudge
+// never re-snaps, so omitting the field erased the residual and slid the item
+// onto the grid (I3/SEL-01 — the ADR 0023 offset-omission class in its keyboard
+// consumer).
 interface NudgeScene {
-  items: { id: string; tile: Coords }[];
-  rectangles: { id: string; from: Coords; to: Coords }[];
-  textBoxes: { id: string; tile: Coords }[];
+  items: { id: string; tile: Coords; offset?: Coords }[];
+  rectangles: { id: string; from: Coords; to: Coords; offset?: Coords }[];
+  textBoxes: { id: string; tile: Coords; offset?: Coords }[];
+  /** Optional so partial scenes (tests, older callers) keep compiling. */
+  labels?: { id: string; tile: Coords; offset?: Coords }[];
 }
 
 // Minimal dependency surface for the arrow handler — a structural subset of
@@ -77,6 +94,14 @@ interface NudgeScene {
 // handleSelectAll reads sceneRef.current.
 export interface ArrowKeyDeps {
   getScene: () => NudgeScene;
+  /**
+   * Layer gate — false for a ref whose layer is locked or hidden (I3/PTR-11).
+   * The same predicate every pointer path consults (`State.isItemInteractable`).
+   * Optional so unit tests and callers with no layer context keep working; when
+   * absent every selected ref is treated as nudge-able, which is what a diagram
+   * with no layers configured means anyway.
+   */
+  isItemInteractable?: (ref: ItemReference) => boolean;
   beginDragTransaction: () => void;
   commitDragTransaction: () => void;
   batchUpdateViewItemTiles: (
@@ -86,6 +111,10 @@ export interface ArrowKeyDeps {
     updates: { id: string; from: Coords; to: Coords; offset?: Coords }[]
   ) => void;
   batchUpdateTextBoxTiles: (
+    updates: { id: string; tile: Coords; offset?: Coords }[]
+  ) => void;
+  /** Optional (OVL-14) so callers that predate the Label nudge still compile. */
+  batchUpdateLabelTiles?: (
     updates: { id: string; tile: Coords; offset?: Coords }[]
   ) => void;
 }
@@ -122,11 +151,18 @@ const nudge = (
 
   // selectedIds is the persistent multi-selection (a single selected item is
   // len === 1 there). Filter to the nudge-able types; a selection of ONLY
-  // connectors/anchors yields none → fall back to pan. selectedIds already only
-  // holds interactable refs (it can't contain locked/hidden items — ADR 0006
-  // §3), so no extra lock/hide gate is needed here.
-  const selected = uiState.selectedIds.filter((ref) =>
-    NUDGEABLE_TYPES.has(ref.type)
+  // connectors/anchors yields none → fall back to pan.
+  //
+  // I1/PTR-11: this used to carry a comment asserting `selectedIds` cannot hold
+  // locked or hidden refs (ADR 0006 §3) and therefore needed no lock/hide gate.
+  // E2/RED-15 falsified that — ACQUISITION is gated (Ctrl+A, lasso and click all
+  // consult the predicate), but locking or hiding a layer does not re-validate a
+  // selection that is already live. The arrows then moved items on a locked
+  // layer one tile per press, and kept moving them, while a mouse drag on the
+  // same items was refused. Re-check the gate here, per press.
+  const gate = deps.isItemInteractable ?? (() => true);
+  const selected = uiState.selectedIds.filter(
+    (ref) => NUDGEABLE_TYPES.has(ref.type) && gate(ref)
   );
   if (selected.length === 0) return false;
 
@@ -139,22 +175,39 @@ const nudge = (
   // (don't crash on a stale ref) — the batch updaters also no-op on empty input.
   const itemUpdates = scene.items
     .filter((it) => selectedIds.has(it.id))
-    .map((it) => ({ id: it.id, tile: CoordsUtils.add(it.tile, delta) }));
+    .map((it) => ({
+      id: it.id,
+      tile: CoordsUtils.add(it.tile, delta),
+      offset: it.offset
+    }));
   const rectUpdates = scene.rectangles
     .filter((r) => selectedIds.has(r.id))
     .map((r) => ({
       id: r.id,
       from: CoordsUtils.add(r.from, delta),
-      to: CoordsUtils.add(r.to, delta)
+      to: CoordsUtils.add(r.to, delta),
+      offset: r.offset
     }));
   const textBoxUpdates = scene.textBoxes
     .filter((tb) => selectedIds.has(tb.id))
-    .map((tb) => ({ id: tb.id, tile: CoordsUtils.add(tb.tile, delta) }));
+    .map((tb) => ({
+      id: tb.id,
+      tile: CoordsUtils.add(tb.tile, delta),
+      offset: tb.offset
+    }));
+  const labelUpdates = (scene.labels ?? [])
+    .filter((l) => selectedIds.has(l.id))
+    .map((l) => ({
+      id: l.id,
+      tile: CoordsUtils.add(l.tile, delta),
+      offset: l.offset
+    }));
 
   if (
     itemUpdates.length === 0 &&
     rectUpdates.length === 0 &&
-    textBoxUpdates.length === 0
+    textBoxUpdates.length === 0 &&
+    labelUpdates.length === 0
   ) {
     // Selection referenced only missing items — nothing to move, and we must
     // NOT open a dangling transaction. Consume the key (it WAS a nudge intent).
@@ -166,6 +219,7 @@ const nudge = (
   if (itemUpdates.length > 0) deps.batchUpdateViewItemTiles(itemUpdates);
   if (rectUpdates.length > 0) deps.batchUpdateRectangles(rectUpdates);
   if (textBoxUpdates.length > 0) deps.batchUpdateTextBoxTiles(textBoxUpdates);
+  if (labelUpdates.length > 0) deps.batchUpdateLabelTiles?.(labelUpdates);
   deps.commitDragTransaction();
 
   return true;
@@ -175,11 +229,17 @@ const nudge = (
 // Returns true when the key was an arrow (and thus consumed). The text-field
 // guard is applied by the caller (the keydown dispatcher returns on
 // isEditableTarget before reaching here), exactly as the pan path always was.
+//
+// The two halves have different read-only access classes (readonlyPolicy):
+// `arrowNudge` is an `editor` surface, `arrowPan` a `viewer` one. With
+// `allowNudge` false the nudge branch is skipped entirely, so a viewer's arrows
+// always pan — which is what they did before B6 made them selection-aware.
 export const handleArrowKey = (
   e: KeyboardEvent,
   uiState: State['uiState'],
-  deps: ArrowKeyDeps
+  deps: ArrowKeyDeps,
+  allowNudge = true
 ): boolean => {
-  if (nudge(e, uiState, deps)) return true;
+  if (allowNudge && nudge(e, uiState, deps)) return true;
   return pan(e, uiState);
 };

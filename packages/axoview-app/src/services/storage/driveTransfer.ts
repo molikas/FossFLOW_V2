@@ -16,6 +16,13 @@ export interface MoveToDriveResult {
   driveId?: string;
   /** The name it landed under (may carry a copy-suffix on collision). */
   driveName?: string;
+  /**
+   * A2/STOR-09: the Drive copy is verified but the SOURCE could not be deleted,
+   * so the diagram now exists in both places. `ok` stays true — the copy is
+   * real and `driveId` names it — and this flags the cleanup the caller still
+   * owes, so a retry does not mint a second Drive copy.
+   */
+  sourceRemained?: boolean;
 }
 
 /** Folder-name chain (root→leaf) for a diagram, from the flat folder list. */
@@ -47,6 +54,27 @@ export interface MoveToDriveOptions {
    */
   targetFolderId?: string | null;
   onProgress?: (done: number, total: number, current: DiagramMeta) => void;
+  /**
+   * A4/FEX-13 — called immediately before each SOURCE DELETE.
+   *
+   * The move reads the PERSISTED blob, and between the caller's `saveAllDirty()`
+   * and this delete sit at least two Drive listings and, on the first item, root
+   * resolution. Anything typed in that window was still only in memory: the
+   * Drive copy held the pre-move flush, the source was deleted, and the last few
+   * seconds of work went with it — with a success toast. Nothing re-checked
+   * dirtiness before removing the source, and the in-memory model was never
+   * consulted.
+   *
+   * The implementation must flush `id`'s in-memory edits to the SOURCE and
+   * resolve `true` when it actually wrote something; the Drive copy is then
+   * refreshed from the source before the delete. Resolving `false` (or omitting
+   * the hook) keeps the previous behaviour.
+   *
+   * A hook rather than a model reference because this module is storage-only
+   * and must stay usable from the bulk `MigrateSessionDialog` path, which has
+   * the same shape for every item after the first.
+   */
+  flushSource?: (id: string) => Promise<boolean>;
 }
 
 export async function moveDiagramsToDrive(
@@ -115,8 +143,67 @@ export async function moveDiagramsToDrive(
         lastModified: meta.lastModified
       });
 
+      // A4/FEX-13 — last chance to catch an edit that landed DURING the move.
+      // Deliberately here, immediately before the delete, rather than earlier:
+      // the whole bug is the size of the window between the read and the
+      // delete, so anything checked earlier reopens it.
+      if (opts.flushSource) {
+        try {
+          const wrote = await opts.flushSource(meta.id);
+          if (wrote) {
+            const fresh = await opts.source.loadDiagram(meta.id);
+            const freshBlob =
+              fresh && typeof fresh === 'object'
+                ? (fresh as Record<string, unknown>)
+                : {};
+            const { id: _freshId, ...freshRest } = freshBlob;
+            await opts.drive.saveDiagram(driveId, {
+              ...freshRest,
+              title: targetName,
+              name: targetName
+            });
+          }
+        } catch (e) {
+          // Refuse rather than delete: the source still holds the only copy of
+          // whatever could not be flushed. `sourceRemained` tells the caller
+          // the Drive copy is real, so a retry does not mint a second one.
+          results.push({
+            id: meta.id,
+            name: meta.name,
+            ok: true,
+            driveId,
+            driveName: targetName,
+            sourceRemained: true,
+            error: e instanceof Error ? e.message : String(e)
+          });
+          done += 1;
+          opts.onProgress?.(done, opts.diagrams.length, meta);
+          continue;
+        }
+      }
+
       // Verified on Drive — NOW the source copy may go (move, not copy).
-      await opts.source.deleteDiagram(meta.id, false);
+      try {
+        await opts.source.deleteDiagram(meta.id, false);
+      } catch (e) {
+        // A2/STOR-09: this used to fall into the outer catch, which reports
+        // `ok: false` and DROPS `driveId` — so the caller was told the move
+        // failed and given no way to reconcile the Drive copy it now owns, and
+        // a retry with the same selection minted a second one. The copy exists
+        // and is verified; only the source cleanup failed. Report exactly that.
+        results.push({
+          id: meta.id,
+          name: meta.name,
+          ok: true,
+          driveId,
+          driveName: targetName,
+          sourceRemained: true,
+          error: e instanceof Error ? e.message : String(e)
+        });
+        done += 1;
+        opts.onProgress?.(done, opts.diagrams.length, meta);
+        continue;
+      }
       results.push({ id: meta.id, name: meta.name, ok: true, driveId, driveName: targetName });
     } catch (e) {
       results.push({

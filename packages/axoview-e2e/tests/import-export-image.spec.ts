@@ -219,37 +219,58 @@ test.describe('Export image — T5 (ADR 0025)', () => {
 
     // Sample the preview PNG: the top-left pixel is the background; count pixels
     // that differ from it. A captured icon yields a meaningful fraction.
-    const nonBgRatio = await page.evaluate(async () => {
-      const img = document.querySelector(
-        'img[alt="preview"]'
-      ) as HTMLImageElement | null;
-      if (!img) return -1;
-      if (!img.complete || img.naturalWidth === 0) {
-        await new Promise<void>((res) => {
-          img.onload = () => res();
-          img.onerror = () => res();
-        });
-      }
-      const c = document.createElement('canvas');
-      c.width = img.naturalWidth;
-      c.height = img.naturalHeight;
-      const ctx = c.getContext('2d');
-      if (!ctx || c.width === 0) return -1;
-      ctx.drawImage(img, 0, 0);
-      const { data } = ctx.getImageData(0, 0, c.width, c.height);
-      const [br, bg, bb, ba] = [data[0], data[1], data[2], data[3]];
-      let nonBg = 0;
-      const total = data.length / 4;
-      for (let i = 0; i < data.length; i += 4) {
-        const dr = Math.abs(data[i] - br);
-        const dg = Math.abs(data[i + 1] - bg);
-        const db = Math.abs(data[i + 2] - bb);
-        const da = Math.abs(data[i + 3] - ba);
-        if (dr + dg + db + da > 48) nonBg++;
-      }
-      return nonBg / total;
-    });
+    const nonBgRatio = () =>
+      page.evaluate(async () => {
+        const img = document.querySelector(
+          'img[alt="preview"]'
+        ) as HTMLImageElement | null;
+        if (!img) return -1;
+        if (!img.complete || img.naturalWidth === 0) {
+          await new Promise<void>((res) => {
+            img.onload = () => res();
+            img.onerror = () => res();
+          });
+        }
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth;
+        c.height = img.naturalHeight;
+        const ctx = c.getContext('2d');
+        if (!ctx || c.width === 0) return -1;
+        ctx.drawImage(img, 0, 0);
+        const { data } = ctx.getImageData(0, 0, c.width, c.height);
+        const [br, bg, bb, ba] = [data[0], data[1], data[2], data[3]];
+        let nonBg = 0;
+        let total = 0;
+        // STRIDE-SAMPLE, every 16th pixel. This runs inside a poll, and at full
+        // resolution it is a 1.67M-iteration loop per call (1698x983 at 2x DPI)
+        // that blocks the page's main thread — which is the same thread the
+        // dialog's recapture needs. Measuring at full rate starved the very
+        // update being waited for: the value sat at the first capture for the
+        // whole 20 s on CI, while a single off-poll read moments later showed
+        // the settled image. A 1-in-16 sample is ~100k iterations, and the two
+        // outcomes it separates are 0.001 and 0.042 — 40x apart, so sampling
+        // error cannot reach the 0.01 threshold.
+        for (let i = 0; i < data.length; i += 4 * 16) {
+          const dr = Math.abs(data[i] - br);
+          const dg = Math.abs(data[i + 1] - bg);
+          const db = Math.abs(data[i + 2] - bb);
+          const da = Math.abs(data[i + 3] - ba);
+          if (dr + dg + db + da > 48) nonBg++;
+          total++;
+        }
+        return nonBg / total;
+      });
 
-    expect(nonBgRatio).toBeGreaterThan(0.01);
+    // The dialog captures once readiness is real (≥1 node drawn + icons
+    // decoded) and RE-captures if the first snapshot ran before that — so the
+    // settled preview must show the icon. Poll (not a one-shot read): the
+    // replacement capture lands asynchronously after the dialog opens.
+    // The dialog captures once readiness is real (content built, icons decoded,
+    // backing store at its real size — see waitForIconsDrawn) and RE-captures
+    // if the first snapshot went out before that. Poll (not a one-shot read):
+    // the replacement capture lands asynchronously after the dialog opens.
+    await expect
+      .poll(nonBgRatio, { timeout: 20_000 })
+      .toBeGreaterThan(0.01);
   });
 });

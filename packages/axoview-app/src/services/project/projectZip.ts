@@ -5,6 +5,7 @@ import {
   StorageProvider,
   TreeManifest
 } from '../storage';
+import { stripSourceIdentity } from '../storage/importedBlob';
 
 // ----------------------------------------------------------------------------
 // Format constants — see ADR 0001
@@ -115,11 +116,20 @@ const collectFolderSubtree = (
 export const exportProject = async (
   ctx: ExportContext,
   opts: ExportProjectOpts
-): Promise<{ blob: Blob; filename: string }> => {
+): Promise<{
+  blob: Blob;
+  filename: string;
+  /** Diagrams whose blob could not be read; the archive is complete without them (A3/ZIP-11). */
+  skipped: Array<{ id: string; name: string }>;
+}> => {
   const { storage, exporterTag } = ctx;
 
   const allFolders = await storage.listFolders();
-  const allDiagrams = await storage.listDiagrams();
+  // A3/ZIP-07: `listDiagrams()` includes soft-deleted rows, so a project export
+  // carried the trash — and the import has no `deletedAt` branch, so every
+  // trashed diagram came back LIVE. Export and import now agree: the trash is
+  // not part of a project export.
+  const allDiagrams = (await storage.listDiagrams()).filter((d) => !d.deletedAt);
 
   let folders: FolderMeta[];
   let diagrams: DiagramMeta[];
@@ -148,8 +158,18 @@ export const exportProject = async (
   if (!diagramsDir) throw new ProjectZipError('Failed to create diagrams folder', 'ZIP_ERROR');
 
   const manifestDiagrams: Array<DiagramMeta & { file: string }> = [];
+  // A3/ZIP-11: one unreadable diagram used to abort the whole export — the user
+  // asked to back up 42 diagrams and got a stack trace and no file. Skip what
+  // cannot be read and report it, so 41 of 42 still reach disk.
+  const skipped: Array<{ id: string; name: string }> = [];
   for (const meta of diagrams) {
-    const model = await storage.loadDiagram(meta.id);
+    let model: unknown;
+    try {
+      model = await storage.loadDiagram(meta.id);
+    } catch {
+      skipped.push({ id: meta.id, name: meta.name });
+      continue;
+    }
     const file = `diagrams/${meta.id}.json`;
     diagramsDir.file(`${meta.id}.json`, JSON.stringify(model));
     manifestDiagrams.push({ ...meta, file });
@@ -168,15 +188,29 @@ export const exportProject = async (
   zip.file('manifest.json', JSON.stringify(manifest, null, 2));
 
   // Tree manifest is best-effort — failure must not block export.
+  // A3/ZIP-10: scope it to the folders actually in this archive, so a
+  // folder-scope export does not ship ordering rows for folders the importer
+  // will never see.
   try {
     const treeManifest = await storage.getTreeManifest();
-    zip.file('tree-manifest.json', JSON.stringify(treeManifest));
+    const exportedIds = new Set(folders.map((f) => f.id));
+    zip.file(
+      'tree-manifest.json',
+      JSON.stringify({
+        ...treeManifest,
+        folders: (treeManifest.folders ?? []).filter((f) => exportedIds.has(f.id))
+      })
+    );
   } catch {
     // skip
   }
 
   const blob = await zip.generateAsync({ type: 'blob' });
-  return { blob, filename: projectZipFilename(opts.scope, scopeLabel) };
+  return {
+    blob,
+    filename: projectZipFilename(opts.scope, scopeLabel),
+    skipped
+  };
 };
 
 // ----------------------------------------------------------------------------
@@ -240,6 +274,16 @@ const readManifest = async (zip: JSZip): Promise<ProjectManifest> => {
       'BAD_FORMAT'
     );
   }
+  // A3/ZIP-08: a manifest with no `version` (or a non-string one) is corrupt,
+  // not from the future — it used to be told "exported by a newer Axoview
+  // (version undefined); please upgrade", which sends the user to look for an
+  // update that does not exist.
+  if (typeof manifest.version !== 'string' || manifest.version === '') {
+    throw new ProjectZipError(
+      'manifest.json has no version — the archive is incomplete or corrupt',
+      'BAD_MANIFEST'
+    );
+  }
   if (!SUPPORTED_VERSIONS.has(manifest.version)) {
     throw new ProjectZipError(
       `This project was exported by a newer Axoview (version ${manifest.version}); please upgrade.`,
@@ -270,6 +314,16 @@ const loadDiagrams = async (
       if (e instanceof ProjectZipError) throw e;
       throw new ProjectZipError(`Diagram ${meta.id} is not valid JSON`, 'BAD_DIAGRAM');
     }
+    // A3/ZIP-15: `null`, a number or an array all parse as valid JSON and used
+    // to be imported as a BLANK diagram that counted as a success. Only an
+    // object can be a model — take the BAD_DIAGRAM path the other two
+    // corruption cases already take.
+    if (model === null || typeof model !== 'object' || Array.isArray(model)) {
+      throw new ProjectZipError(
+        `Diagram ${meta.id} is not a diagram document`,
+        'BAD_DIAGRAM'
+      );
+    }
     diagrams.set(meta.id, model);
   }
   return diagrams;
@@ -279,6 +333,56 @@ const validateFolderIds = (manifest: ProjectManifest): void => {
   for (const folder of manifest.folders ?? []) {
     if (!ID_PATTERN.test(folder.id)) {
       throw new ProjectZipError(`Invalid folder id "${folder.id}"`, 'BAD_ID');
+    }
+  }
+};
+
+/**
+ * Depth of a folder in the parent chain, and the one place that knows a chain
+ * can be a loop.
+ *
+ * A3/ZIP-01: `importProject` and `wipeWorkspace` each climbed `parentId` with no
+ * visited set, so a manifest with `A.parent = B` and `B.parent = A` — a few
+ * hundred bytes, well under every anti-zip-bomb cap — spun forever and froze the
+ * tab with no error and no way out. The export side's `collectFolderSubtree`
+ * already carried a `seen` set for exactly this.
+ *
+ * Returns `null` when the chain revisits a folder, which is what makes the loop
+ * reportable rather than merely survivable.
+ */
+const folderDepth = (
+  folder: FolderMeta,
+  folders: FolderMeta[]
+): number | null => {
+  const seen = new Set<string>([folder.id]);
+  let depth = 0;
+  let cur: FolderMeta | undefined = folder;
+  while (cur && cur.parentId) {
+    const parentId: string = cur.parentId;
+    const next: FolderMeta | undefined = folders.find((x) => x.id === parentId);
+    if (!next) break; // dangling parent: treat as top level, as before
+    if (seen.has(next.id)) return null;
+    seen.add(next.id);
+    cur = next;
+    depth += 1;
+  }
+  return depth;
+};
+
+/**
+ * Reject a cyclic folder graph at parse time, so the user gets the import-error
+ * dialog instead of a frozen tab (A3/ZIP-01). `validateFolderIds` checked the id
+ * characters only; nothing between `parseProject` and the walk looked at the
+ * shape of the graph.
+ */
+const validateFolderGraph = (manifest: ProjectManifest): void => {
+  const folders = manifest.folders ?? [];
+  for (const folder of folders) {
+    if (folderDepth(folder, folders) === null) {
+      throw new ProjectZipError(
+        `Folder "${folder.name || folder.id}" is inside itself — the archive's folder tree contains a loop`,
+        'BAD_FOLDER_GRAPH'
+      );
     }
   }
 };
@@ -302,6 +406,7 @@ export const parseProject = async (file: File | Blob): Promise<ParsedProject> =>
   const manifest = await readManifest(zip);
   const diagrams = await loadDiagrams(zip, manifest);
   validateFolderIds(manifest);
+  validateFolderGraph(manifest);
   const treeManifest = await readTreeManifest(zip);
   return { manifest, diagrams, treeManifest };
 };
@@ -318,15 +423,79 @@ const newId = (prefix: 'diagram' | 'folder'): string => {
   return `${prefix}_${Date.now().toString(36)}_${rand}`;
 };
 
-const rewriteRefsInModel = (model: unknown, idMap: Map<string, string>): unknown => {
+/**
+ * `modelItem.link` holds a DIAGRAM ID (the node's "linked diagram" — the URL
+ * lives on `headerLink`), so a value that is not in this import's id map names a
+ * diagram in the workspace the archive came FROM. A3/ZIP-02: it used to be
+ * carried through verbatim, so a folder-scope export produced nodes whose link
+ * resolves against the importer's own storage — a dead link that looks live.
+ *
+ * A dead link is worse than none, so it is dropped and counted. URL-shaped
+ * values are left alone: nothing in the persisted model should put one here,
+ * and silently deleting a user's URL would be the worse failure of the two.
+ */
+const isUrlLike = (v: string): boolean =>
+  /^[a-z][a-z0-9+.-]*:/i.test(v) || v.startsWith('//') || v.startsWith('/') || v.startsWith('#');
+
+/**
+ * TXT-09 — cross-diagram references that live INSIDE a string.
+ *
+ * ADR 0001 §1 requires the importer to rewrite every id and every
+ * cross-reference. The key-based walk below rewrites exactly one KEY (`link`),
+ * which covered every cross-diagram reference that existed when it was written.
+ * Since the ADR 0034 addendum (2026-07-04) a reference can also live inside a
+ * text box's Quill content as an `<a href="#diagram:&lt;id&gt;">` run authored
+ * by `TextBoxLinkCard` — a string inside an HTML blob, invisible to a walk that
+ * keys on property names. The old id survived verbatim, so an imported copy's
+ * in-text links dead-ended at diagrams in the project they were imported FROM.
+ *
+ * Rewriting by SENTINEL rather than by key covers any current or future HTML
+ * surface carrying it, by construction. A sentinel whose target is not in this
+ * archive is left alone — `TextBox.onRestingClick` already no-ops on an
+ * unresolvable id, and silently rewriting it to something else would be worse
+ * than a dead link.
+ */
+const DIAGRAM_LINK_SENTINEL = '#diagram:';
+
+export const rewriteEmbeddedDiagramLinks = (
+  value: string,
+  idMap: Map<string, string>
+): string => {
+  if (!value.includes(DIAGRAM_LINK_SENTINEL)) return value;
+  // Ids are opaque tokens; stop at the first character that cannot be part of
+  // one so the surrounding markup (`">`, `&quot;`, …) is preserved verbatim.
+  return value.replace(
+    /#diagram:([A-Za-z0-9_-]+)/g,
+    (whole, oldId: string) => {
+      const next = idMap.get(oldId);
+      return next ? `${DIAGRAM_LINK_SENTINEL}${next}` : whole;
+    }
+  );
+};
+
+const rewriteRefsInModel = (
+  model: unknown,
+  idMap: Map<string, string>,
+  dropped: { count: number }
+): unknown => {
   if (model == null || typeof model !== 'object') return model;
-  if (Array.isArray(model)) return model.map((m) => rewriteRefsInModel(m, idMap));
+  if (Array.isArray(model)) {
+    return model.map((m) => rewriteRefsInModel(m, idMap, dropped));
+  }
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(model as Record<string, unknown>)) {
-    if (k === 'link' && typeof v === 'string' && idMap.has(v)) {
-      out[k] = idMap.get(v);
+    if (k === 'link' && typeof v === 'string') {
+      if (idMap.has(v)) {
+        out[k] = idMap.get(v);
+      } else if (!isUrlLike(v)) {
+        dropped.count += 1; // omit the key entirely
+      } else {
+        out[k] = v;
+      }
+    } else if (typeof v === 'string') {
+      out[k] = rewriteEmbeddedDiagramLinks(v, idMap);
     } else {
-      out[k] = rewriteRefsInModel(v, idMap);
+      out[k] = rewriteRefsInModel(v, idMap, dropped);
     }
   }
   return out;
@@ -337,6 +506,8 @@ export interface RewriteResult {
   diagrams: Array<DiagramMeta & { newId: string }>;
   models: Map<string, unknown>; // newId → rewritten model
   idMap: Map<string, string>; // oldId → newId (folders + diagrams)
+  /** Cross-diagram links dropped because their target is not in this archive (A3/ZIP-02). */
+  droppedLinks: number;
 }
 
 export const rewriteIds = (parsed: ParsedProject): RewriteResult => {
@@ -357,12 +528,13 @@ export const rewriteIds = (parsed: ParsedProject): RewriteResult => {
   }));
 
   const models = new Map<string, unknown>();
+  const dropped = { count: 0 };
   for (const d of parsed.manifest.diagrams) {
     const raw = parsed.diagrams.get(d.id);
-    models.set(idMap.get(d.id)!, rewriteRefsInModel(raw, idMap));
+    models.set(idMap.get(d.id)!, rewriteRefsInModel(raw, idMap, dropped));
   }
 
-  return { folders, diagrams, models, idMap };
+  return { folders, diagrams, models, idMap, droppedLinks: dropped.count };
 };
 
 // ----------------------------------------------------------------------------
@@ -377,18 +549,11 @@ const wipeWorkspace = async (storage: StorageProvider): Promise<void> => {
   const diagrams = await storage.listDiagrams();
   for (const d of diagrams) await storage.deleteDiagram(d.id, false);
   const folders = await storage.listFolders();
-  // Delete children before parents — sort by depth (parent chain length).
-  const depth = (f: FolderMeta): number => {
-    let n = 0;
-    let cur: FolderMeta | undefined = f;
-    while (cur && cur.parentId) {
-      const next = folders.find((x) => x.id === cur!.parentId);
-      if (!next) break;
-      cur = next;
-      n++;
-    }
-    return n;
-  };
+  // Delete children before parents — sort by depth (parent chain length). A
+  // cycle here comes from STORAGE, not from the archive, so it cannot be
+  // rejected at parse time: `folderDepth` returns null and those folders sort
+  // last, which still deletes them (A3/ZIP-01).
+  const depth = (f: FolderMeta): number => folderDepth(f, folders) ?? -1;
   const sorted = [...folders].sort((a, b) => depth(b) - depth(a));
   for (const f of sorted) await storage.deleteFolder(f.id, false);
 };
@@ -397,12 +562,26 @@ export const importProject = async (
   ctx: ImportContext,
   parsed: ParsedProject,
   opts: ImportProjectOpts
-): Promise<{ folderCount: number; diagramCount: number }> => {
+): Promise<{
+  folderCount: number;
+  diagramCount: number;
+  /** Cross-diagram links dropped because their target was not in the archive (A3/ZIP-02). */
+  droppedLinks: number;
+}> => {
   const { storage } = ctx;
 
-  if (opts.destination.kind === 'replaceAll') {
-    await wipeWorkspace(storage);
-  }
+  // A3/ZIP-03: `replaceAll` used to wipe FIRST. A failure anywhere in the
+  // import then left the workspace destroyed and nothing imported — the one
+  // destination where a partial failure is unrecoverable. Snapshot what is
+  // there, import alongside it, and delete the old content only once every
+  // create has succeeded.
+  const replacing = opts.destination.kind === 'replaceAll';
+  const preexisting = replacing
+    ? {
+        diagrams: (await storage.listDiagrams()).map((d) => d.id),
+        folders: await storage.listFolders()
+      }
+    : null;
 
   const rewritten = rewriteIds(parsed);
 
@@ -412,18 +591,13 @@ export const importProject = async (
     rootOverride = await storage.createFolder(opts.destination.name, null);
   }
 
-  // Recreate folder tree. Parents must exist before children; sort by depth ascending.
-  const depthIn = (f: FolderMeta): number => {
-    let n = 0;
-    let cur: FolderMeta | undefined = f;
-    while (cur && cur.parentId) {
-      const next = rewritten.folders.find((x) => x.id === cur!.parentId);
-      if (!next) break;
-      cur = next;
-      n++;
-    }
-    return n;
-  };
+  // Recreate folder tree. Parents must exist before children; sort by depth
+  // ascending. `parseProject` has already rejected a cyclic graph, so the null
+  // branch is unreachable for a parsed archive — it is kept because
+  // `importProject` is exported and can be called with a hand-built
+  // `ParsedProject` (A3/ZIP-01).
+  const depthIn = (f: FolderMeta): number =>
+    folderDepth(f, rewritten.folders) ?? Number.MAX_SAFE_INTEGER;
   const folderRemap = new Map<string, string>();
   const ordered = [...rewritten.folders].sort((a, b) => depthIn(a) - depthIn(b));
   for (const f of ordered) {
@@ -444,16 +618,80 @@ export const importProject = async (
     // the server 409s and the whole import aborts. Strip the original id
     // and let the server allocate a fresh one — keeps import idempotent
     // against pre-existing collisions and matches the duplicate flow.
-    const { id: _strippedId, ...model } =
+    //
+    // MOP-01: `shareUuid` / `sharedAt` go with it. An imported diagram is a
+    // COPY — it has never been shared, and inheriting the source's snapshot
+    // pointer meant unsharing the import took down the original's live link.
+    // Shared helper so all three copy paths cannot drift apart again.
+    const model = stripSourceIdentity(
       rawModel && typeof rawModel === 'object'
         ? (rawModel as Record<string, unknown>)
-        : { id: undefined };
+        : {}
+    );
     const folderId = d.folderId
       ? folderRemap.get(d.folderId) ?? d.folderId
       : rootOverride;
-    await storage.createDiagram(model, folderId);
+    // A3/ZIP-13: providers name a created diagram from the blob itself
+    // (`blob.name || blob.title`), but the manifest carries the name the
+    // workspace actually showed — a rename after the last save leaves the two
+    // disagreeing, and the import used to resurrect the stale one. What the
+    // export recorded wins, and both fields are set because either can name it.
+    const named = d.name ? { ...model, name: d.name, title: d.name } : model;
+    await storage.createDiagram(named, folderId);
     diagramCount++;
   }
 
-  return { folderCount: rewritten.folders.length, diagramCount };
+  // A3/ZIP-10: carry the exported folder ordering into the new workspace,
+  // remapped through the ids the import just minted. Best-effort, like the
+  // export side — a workspace with the content but the old ordering is a far
+  // better outcome than a failed import.
+  if (parsed.treeManifest) {
+    try {
+      const remappedFolders = (parsed.treeManifest.folders ?? [])
+        .map((f) => {
+          const rewrittenId = rewritten.idMap.get(f.id);
+          const realId = rewrittenId ? folderRemap.get(rewrittenId) : undefined;
+          if (!realId) return null;
+          const parentRewritten = f.parentId
+            ? rewritten.idMap.get(f.parentId)
+            : undefined;
+          return {
+            ...f,
+            id: realId,
+            parentId: parentRewritten
+              ? folderRemap.get(parentRewritten) ?? null
+              : rootOverride
+          };
+        })
+        .filter((f): f is FolderMeta => f !== null);
+      if (remappedFolders.length > 0) {
+        const existing = await storage.getTreeManifest();
+        const carried = new Set(remappedFolders.map((f) => f.id));
+        await storage.saveTreeManifest({
+          ...existing,
+          folders: [
+            ...(existing.folders ?? []).filter((f) => !carried.has(f.id)),
+            ...remappedFolders
+          ]
+        });
+      }
+    } catch {
+      // Ordering is cosmetic — never fail an import over it.
+    }
+  }
+
+  // Every create succeeded: now the old workspace can go (A3/ZIP-03).
+  if (preexisting) {
+    for (const id of preexisting.diagrams) await storage.deleteDiagram(id, false);
+    const oldDepth = (f: FolderMeta): number =>
+      folderDepth(f, preexisting.folders) ?? -1;
+    const sorted = [...preexisting.folders].sort((a, b) => oldDepth(b) - oldDepth(a));
+    for (const f of sorted) await storage.deleteFolder(f.id, false);
+  }
+
+  return {
+    folderCount: rewritten.folders.length,
+    diagramCount,
+    droppedLinks: rewritten.droppedLinks
+  };
 };

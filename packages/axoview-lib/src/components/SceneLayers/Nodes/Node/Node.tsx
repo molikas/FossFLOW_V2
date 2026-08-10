@@ -24,8 +24,8 @@ import {
 import { LABEL_LINK_COLOR } from 'src/utils/labelChip';
 import { stripHtmlTags } from 'src/utils/stripHtml';
 import { isLabelVisibleInPreview } from 'src/utils/previewLabelVisibility';
+import { isNodeLabelDrawn } from 'src/config/labelSettings';
 
-const INLINE_EDIT_EVENT = 'inlineEditNodeName';
 
 interface Props {
   node: ViewItem;
@@ -249,14 +249,44 @@ const NodeContent = memo(
 
     const isReadonly = editorMode === 'EXPLORABLE_READONLY';
     const isEditable = editorMode === 'EDITABLE';
+    // R4/RND-05: the LOD gate. `SceneCanvas` stops drawing name chips below
+    // `LABEL_LOD_ZOOM` (unless "keep labels readable" is on), but this DOM
+    // overlay — which the hybrid promotes the SELECTED node into — had no such
+    // gate, so selecting a node at low zoom made its name reappear while every
+    // other node's stayed hidden. Same predicate both sides read now
+    // (config/labelSettings), so bulk and overlay cannot disagree.
+    const labelLodVisible = useUiStateStore((s) =>
+      isNodeLabelDrawn(s.zoom, s.readableLabels)
+    );
     // Merge the model's `showLabel` with the present-mode hide-labels flag at the
     // single documented merge point (forced hidden only while presenting).
     const labelVisible =
+      labelLodVisible &&
       isLabelVisibleInPreview(showLabel !== false, isReadonly, previewHideLabels) &&
       !exportHideLabels;
     const hasLink = isReadonly && !!modelItem?.link;
 
-    const [isEditingName, setIsEditingName] = useState(false);
+    // R4/RND-13/15 + R3/GPU-13: the rename session lives in the STORE, not in
+    // local state driven by the `inlineEditNodeName` window event.
+    //
+    // With one merged bulk canvas, a node promoted into this DOM overlay can only
+    // paint above or below the WHOLE canvas — so selection stopped promoting, and
+    // the rename intent is what promotes now. The event could not survive that
+    // move: it is dispatched synchronously, and a node that has not mounted yet
+    // cannot hear it. `uiState.inlineEditNodeId` is set BEFORE this component
+    // exists, and the mount then reads it — which also makes "is this node being
+    // renamed?" a single value both the Renderer's promotion and this editor read,
+    // instead of two states that could disagree.
+    const isEditingName = useUiStateStore((s) => s.inlineEditNodeId === id);
+    const setInlineEditNodeId = useUiStateStore(
+      (s) => s.actions.setInlineEditNodeId
+    );
+    const setIsEditingName = useCallback(
+      (next: boolean) => {
+        setInlineEditNodeId(next ? id : null);
+      },
+      [setInlineEditNodeId, id]
+    );
 
     // ADR 0024 label reposition — drag the label chip itself to move it above or
     // below the node. Live preview held here (not the model) so the gesture is a
@@ -274,17 +304,13 @@ const NodeContent = memo(
       [updateViewItem, id]
     );
 
-    // F2 handler in useInteractionManager dispatches this event for the
-    // currently-selected item; match by id so only that node enters edit mode.
+    // A read-only surface must never hold a rename session open. The event
+    // listener this replaces gated on `isEditable` before entering edit mode;
+    // the store field is written by the F2 / double-click / context-menu paths,
+    // which are editor-only, and this is the belt-and-braces half.
     useEffect(() => {
-      if (!isEditable) return;
-      const handler = (e: Event) => {
-        const detail = (e as CustomEvent<{ id: string }>).detail;
-        if (detail?.id === id) setIsEditingName(true);
-      };
-      window.addEventListener(INLINE_EDIT_EVENT, handler);
-      return () => window.removeEventListener(INLINE_EDIT_EVENT, handler);
-    }, [id, isEditable]);
+      if (isEditingName && !isEditable) setInlineEditNodeId(null);
+    }, [isEditingName, isEditable, setInlineEditNodeId]);
 
     const startInlineEdit = useCallback(
       (e: React.MouseEvent) => {
@@ -352,7 +378,7 @@ const NodeContent = memo(
     }
 
     // ADR 0032 amendment: the on-canvas text is the `label` field, falling back
-    // to the identity `name` when absent. The DOM overlay mirrors NodesCanvas.
+    // to the identity `name` when absent. The DOM overlay mirrors SceneCanvas.
     const labelText = modelItem.label ?? modelItem.name;
 
     return (
@@ -365,6 +391,8 @@ const NodeContent = memo(
               <ExpandableLabel
                 maxWidth={isEditingName ? 600 : 250}
                 expandDirection="BOTTOM"
+                // R5/OVL-02: the readable-labels floor is per label.
+                labelFontSizePx={labelFontSize}
                 labelHeight={
                   labelDragHeight ??
                   labelOffsetPreview ??

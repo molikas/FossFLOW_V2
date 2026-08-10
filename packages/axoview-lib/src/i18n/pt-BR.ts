@@ -325,6 +325,7 @@ const locale: LocaleProps = {
     namePlaceholder: 'Nome do elemento…'
   },
   topBarStyleControls: {
+    mixed: 'Variado',
     rotate90: 'Girar 90°',
     noColor: 'Sem cor',
     pickColorFromScreen: 'Selecionar cor da tela',
@@ -577,6 +578,12 @@ const locale: LocaleProps = {
   },
   // D8 — LayersPanel
   layersPanel: {
+    deleteLayerTitle: 'Excluir a camada?',
+    deleteLayerBody: 'Esta camada contém {count} elemento(s). O que deve acontecer com eles?',
+    deleteLayerHiddenWarning: 'Esta camada está OCULTA. Manter o conteúdo o tornará VISÍVEL novamente — um elemento sem camada é sempre exibido.',
+    deleteLayerCancel: 'Cancelar',
+    deleteLayerKeep: 'Manter o conteúdo',
+    deleteLayerDeleteContents: 'Excluir o conteúdo também',
     header: 'Camadas',
     addLayer: 'Adicionar camada',
     deleteSelectedLayer: 'Excluir camada selecionada',

@@ -1,15 +1,43 @@
 # Regression Test Suite Reference
 
-**Last updated:** 2026-07-28 (totals re-measured across all four workspaces)
-**Unit / integration totals** (measured 2026-07-28 via per-workspace `npm test`):
+**Last updated:** 2026-08-09 (exploratory remediation **CLOSED** — waves 4–6: consistency & decided UX, the two design-gated larges, the program build-out)
+**Unit / integration totals** (measured 2026-08-08 via per-workspace `npm test`):
 
 | Workspace | Passing | Suites |
 |---|---|---|
-| `axoview-lib` | 1737 (+1 skipped) | 155 |
-| `axoview-app` | 268 | 26 |
-| `axoview-backend` | 102 | 7 |
-| `axoview-worker` | 124 | 4 |
-| **Total** | **2231 (+1 skipped)** | **192** |
+| `axoview-lib` | 2346 (+1 skipped) | 199 |
+| `axoview-app` | 555 | 50 |
+| `axoview-backend` | 134 | 9 |
+| `axoview-worker` | 129 | 4 |
+| **Total** | **3164 (+1 skipped)** | **262** |
+
+**End-to-end:** 286 Playwright specs, 38.4 min, exit 0 (2026-08-08).
+
+*(Waves 4–6 of the exploratory remediation, 2026-08-02 → 2026-08-08: lib `+324` /
+`+24` suites, app `+132` / `+11`. Same flip rule as every wave — promoted probes
+plus the wave's class gates. **Wave 6 closed the program**: the picker now
+resolves the layer tier and cross-type through the renderer's own comparator
+(`pickerAgreement.contract.test.ts`, 22 tests, red-verified once per moving
+part), and the method became the [`/explore`](../../.claude/commands/explore.md)
+skill. Two CI gates worth knowing about: the lane is excluded from `tsc --noEmit`
+**and** from knip, and each exclusion has been silently red at some point —
+**check a gate's exit code, not its output.**)*
+
+*(Wave 3 of the exploratory remediation, 2026-07-31: lib `+188` / `+13` suites —
+the whole delta is lib, because the I-block and R-block are both lib code. All
+of it probes promoted out of the quarantined lane under the ADR 0047 §2 flip
+rule, plus the layer-filter class gate. See "Exploratory remediation wave 3"
+below.)*
+
+*(Wave 2 of the exploratory remediation, 2026-07-30: lib `+6` / `+1` suite, app
+`+14` / `+1`, backend `+32` / `+2`, worker `+5`. All of it probes promoted out
+of the quarantined lane under the ADR 0047 §2 flip rule, plus four class gates.
+See "Exploratory remediation wave 2" below.)*
+
+*(lib `+43` / `+4` suites and app `+88` / `+8` suites on 2026-07-30 — wave 1 of the
+exploratory-campaign remediation, all of it probes promoted out of the
+quarantined lane under the ADR 0047 §2 flip rule, plus the model identity/range
+class gate. See the additions below.)*
 
 > Most of the lib delta since the 2026-07-15 measurement (1544→1737, 150→155) predates this sync — it accumulated across the intervening waves and was simply never re-measured. The 2026-07-28 session itself added only the two `driveSharing` policy-rejection cases (app 266→268).
 
@@ -19,7 +47,7 @@
 
 **Run:** `npm test --workspace=packages/<pkg>` per package, or `npm test --workspaces` for all. The v1.1 wave added the backend + worker server-runtime suites — the only **high**-severity gap the post-v1.0.0 review named — plus the app-side error-UX, startup-timeout, parallelism-contract, file-explorer-delete, share-URL, and backend-routes contract suites. The single skipped test is `leanSave bundledFixtures[0]` (see [known_issues.md](../../known_issues.md)).
 
-E2E suite lives at [`packages/axoview-e2e/`](../../packages/axoview-e2e/) (Playwright, 76 spec files covering canonical journeys J1–J20 + the v1.1 cross-interaction additions + the Phase 6 presentation/annotation specs + the Phase 6.5 touch/pen specs + the labels & text-styling productization specs). Touch specs run under a dedicated `chromium-touch` project (`hasTouch: true`, `testMatch: /touch-.*\.spec\.ts/`) and drive real touch via CDP `Input.dispatchTouchEvent`; the default `chromium` project ignores them. Runs on PRs + master push via [`.github/workflows/e2e-playwright.yml`](../../.github/workflows/e2e-playwright.yml). Locally: `npm run test:e2e:ci` from repo root, or `npx playwright test --ui` from the package. The legacy Python/Selenium suite at `e2e-tests/` was deleted 2026-05-23 (audit C.2 I9; the T1-rewrite tactical was retired along with the rest of `docs/tactical/`).
+E2E suite lives at [`packages/axoview-e2e/`](../../packages/axoview-e2e/) (Playwright, 83 spec files covering canonical journeys J1–J20 + the v1.1 cross-interaction additions + the Phase 6 presentation/annotation specs + the Phase 6.5 touch/pen specs + the labels & text-styling productization specs). Touch specs run under a dedicated `chromium-touch` project (`hasTouch: true`, `testMatch: /touch-.*\.spec\.ts/`) and drive real touch via CDP `Input.dispatchTouchEvent`; the default `chromium` project ignores them. Runs on PRs + master push via [`.github/workflows/e2e-playwright.yml`](../../.github/workflows/e2e-playwright.yml). Locally: `npm run test:e2e:ci` from repo root, or `npx playwright test --ui` from the package. The legacy Python/Selenium suite at `e2e-tests/` was deleted 2026-05-23 (audit C.2 I9; the T1-rewrite tactical was retired along with the rest of `docs/tactical/`).
 
 **CI execution model — sharding (2026-07-10, PR #66).** The suite runs at `workers: 1` because the shared rsbuild dev server can't take parallel HMR clients (a 2-worker "Loading-Axoview" stall is documented in the config). CI parallelism is therefore achieved by **sharding across runners**: [`e2e-playwright.yml`](../../.github/workflows/e2e-playwright.yml) fans the run out over 4 jobs via a `shard` matrix, each running `--shard=i/4` at `workers: 1`. Within a runner the execution is byte-for-byte the sequential local flow, so the fan-out is machine-level, not context-level — no new flake risk. This cut the E2E wall-clock **~20m28s → ~6m30s (≈3.2×)**. Per-shard blob reports merge into one HTML report only on failure. Two invariants keep this safe for the future:
 
@@ -27,6 +55,335 @@ E2E suite lives at [`packages/axoview-e2e/`](../../packages/axoview-e2e/) (Playw
 - **Don't swap the dev server for a precompiled prod bundle to raise `workers`.** A `NODE_ENV=production` build tree-shakes out the `window.__axoview__` debug bridge that ~every spec reads (gated in `Axoview.tsx` by `enableDebugTools || exposeStoreBridge || NODE_ENV !== 'production'`); the whole suite would fail on `waitForDebugBridge`. If that route is ever needed for within-runner parallelism, re-expose the bridge via `exposeStoreBridge` behind a **CI-only build flag** (never the Cloudflare prod build).
 
 To scale further, raise the shard count (`SHARD_TOTAL` + the matrix list in the workflow, kept in sync) — diminishing past ~6 shards because a fixed ~3 min setup (npm ci + build:lib + Playwright install + dev-server boot) is paid per shard.
+
+### Exploratory remediation wave 5 — page-stamped history (2026-08-02)
+
+**HIST-10 + HIST-04, one change** — [`useHistory.pageStamp.test.tsx`](../../packages/axoview-lib/src/hooks/__tests__/useHistory.pageStamp.test.tsx)
+(15 cases, real stores) and [`undo-page-navigation.spec.ts`](../../packages/axoview-e2e/tests/undo-page-navigation.spec.ts)
+(5 cases). History entries carry the page they were recorded on; undo/redo
+switches to it. Design + owner sign-off: the HIST-10 wave-5 sign-off in
+[exploratory-2026-07.md](../reviews/exploratory-2026-07.md#hist-10--page-stamped-history-entries)
+(the full brief is retired to git history).
+
+Four things worth carrying forward:
+
+1. **Two assertions the sign-off made mandatory, and why they are the right two.**
+   *Both stores stamp the same page for one logical action* — they read one
+   register at one boundary, so a disagreement means the boundary moved, not that
+   a store drifted. *Navigation records no history* — the failure mode is a
+   LOOP: an undo that pushes an entry leaves the next Ctrl+Z something to eat and
+   the stack never drains. The sharp form of the second is "an undo that
+   navigated did not GROW either past stack", not "the drain terminated": a plant
+   that pushes one entry per navigation still drains, so the loop-bound assertion
+   alone passes while the growth assertion fails.
+2. **Red-verify by planting the defect where it would actually live.** Killing
+   the scene half's stamp reddens the agreement check; making
+   `navigateToEntryView` write history reddens the growth check; making it return
+   `false` reddens four of the five e2e cases. The one that stays green
+   (`redo brings the page back`) is honest — it asserts the page returns and the
+   active id resolves, neither of which needs navigation.
+3. **A fix can close a bug in a NEIGHBOURING area without being aimed at it.**
+   HIST-09/D-9 (a cross-page undo writing the previous page's cached connector
+   paths into the page on screen) flipped to passing untouched, because the step
+   now lands on the page the entry belongs to and SYNC_SCENEs it. That coverage
+   existed only in the probe, so it was promoted — asserting the ORPHAN COUNT,
+   not the navigation — before the probe was retired. **Ask what a flipped probe
+   proved that your promoted regression does not**, in both directions: the
+   sibling case in wave 4 was a probe going red without its bug being fixed.
+4. **A guard can be unreachable through the public API and still be right.** The
+   `model.views has it` check almost never fires, because every inverse patch
+   replaces the whole `views` array — an undo that steps past a page removal
+   *restores* the page. The reachable case is HIST-03's half-step, and the test
+   has to construct it (drop the model half, then remove the page with a
+   `skipHistory` write). A first attempt asserted the guard on a setup the coarse
+   patch simply undid, and passed for the wrong reason until the premise was
+   checked.
+
+### Exploratory remediation wave 5 — the GPU-13 measurement gate (2026-08-02)
+
+`PERF_ATLAS=250,500,…` (`perf/engine-perf.spec.ts` → `perf-results/atlas.md`) is
+the diagnostic behind [ADR 0038 §8](../adr/0038-webgl-instanced-render-substrate.md).
+It reuses the harness's own ALL-TYPES scene builder rather than reconstructing
+one — a measurement that models the code measures the model, which is the
+transcription trap in a different costume.
+
+Three things it establishes as testing practice:
+
+- **An invariant in a diagnostic should be asserted, not printed.** ADR 0038 §5
+  ("no per-frame CPU geometry work") is reported by `measurePan` as `buildDelta`;
+  `PERF_ATLAS` also `expect`s it to be 0 on every layer. A number in a report is
+  read once; a gate is read every run.
+- **A renamed anti-cheat channel and its assertion move in ONE change.**
+  `data-nodes-drawn` is published and the harness repointed together, so there is
+  no window where the assertion reads a missing attribute and silently compares
+  `0` to `N`. Verified by the value it now reports (`drawn=200/200`) — a dead
+  attribute would parse to 0 and fail, not pass.
+- **A hand-rolled stub of a shared interface is a maintenance surface.**
+  `SceneCanvas.scrollSync.test.tsx` builds its own `SpriteBatch`, and adding
+  `atlasStats()` broke it — exactly as `atlasOverflowed()` had before, which that
+  stub already carries a comment about. Extending the interface means extending
+  the stub; the failure is loud and immediate, which is the right trade, but budget
+  for it. (`drawCallCount()` broke it again on the merge, as expected.)
+
+### Exploratory remediation wave 5 — paired history trimming (2026-08-02)
+
+**HIST-03** — [`useHistory.pairedTrim.test.tsx`](../../packages/axoview-lib/src/hooks/__tests__/useHistory.pairedTrim.test.tsx)
+(4 cases). The 50-entry-per-store cap became a 50-**logical-action** window
+evaluated against the counter both stores already share, so one action's two
+halves are never split.
+
+Two testing lessons, both about what a probe was asserting:
+
+1. **The probe's own repro could never have flipped.** Its `it.failing` demanded
+   the shared seq still be PRESENT in the model stack — one particular
+   resolution — while its comment allowed either ("evicted together, or neither
+   is"). The fix evicts together, so the probe stayed red through a correct fix.
+   Wave 4 named this class (*a probe that pins a MECHANISM cannot flip on a
+   legitimate alternative fix*); this is the first case of it in a probe written
+   *before* that lesson existed. **Re-read a probe's assertion against its own
+   comment before trusting its verdict.**
+2. **Assert through the surface that decides behaviour, not through raw state.**
+   The window is evaluated on READ, so a store that has stopped writing keeps
+   aged-out entries in `history.past` until its next write or step. An assertion
+   over `history.past` therefore reads a stale floor and fails on a correct fix —
+   which is what a first draft of the pairing test did. `canUndo`/`peek*`/`undo`
+   are what a Ctrl+Z consults, so they are what must agree. The sharp assertion
+   is the bug's own shape: **drain the model store alone, then require the scene
+   store to have nothing left over.**
+
+Of the four cases, two are detectors and two are pins — verified by reverting to
+the old independent trim, under which exactly the two detectors go red. The
+connector leg stays green either way (`resyncScene` re-routes the orphan and
+always hid the split), and it is in the suite to say that repair is no longer
+load-bearing.
+
+### Exploratory remediation wave 4 — running the e2e gate (rig notes, 2026-07-31)
+
+Three things cost this wave hours of wall clock. All three are rig, not product.
+
+1. **Never start a second Playwright run while a full one is in flight.** They
+   share the dev-server port; the first run does not fail, it **hangs
+   indefinitely** with an empty log and no error. Run targeted specs *or* the
+   full suite, never both at once.
+2. **`npm run build:lib` over a live dev server poisons it.** The rsbuild dev
+   server desyncs from `dist/` and caches `Can't resolve 'axoview'`, which
+   presents as *every* test failing at `waitForAppReady` — indistinguishable
+   from a boot-time product crash until you read the page snapshot. This is the
+   same gotcha the perf harness documents (see "Engine performance harness →
+   Gotcha" below, which is why `npm run perf` owns its own server lifecycle).
+   Kill every stray `node` process, rebuild, *then* start Playwright.
+3. **This machine ran ~4× slower than wave 3's baseline** on 2026-07-31 —
+   `bulk-style.spec.ts` took 42 s against the 30 s default and passed at
+   120 s. The wave-4 gate was therefore run with `--timeout=120000` **on the
+   command line only**. Do NOT commit a raised timeout as a default: a silently
+   raised global timeout masks real regressions the day the machine is healthy
+   again. **Do not compare a wave-4 wall-clock against wave 3's 34.8 min**
+   naively; the per-test cost was anomalous, not the suite.
+
+The one genuine finding underneath the noise is recorded with GPU-01/GPU-03 in
+known_issues.md: `gpu-icon-recovery.spec.ts`'s recovery test was racing the
+layer's own retry cascade (`MAX_ICON_LOAD_ATTEMPTS`), which burns back-to-back
+without any help from `forceRebuilds`. Fixed spec-side; the reconciliation was
+deliberately left alone.
+
+### Exploratory remediation wave 4 — consistency & decided UX (2026-07-31)
+
+The F-block (text/rich-text, view modes & annotations, styling, layers, icons),
+the E2 reducer remainder, and the A4/A5 areas the campaign close-out added. Same
+flip rule: each probe was promoted as its bug was fixed and trimmed out of the
+lane.
+
+**Class gates landed** (ADR 0047 §3), each verified able to go red before it was
+committed:
+
+- **[`bulkStyleFanOut.contract.test.ts`](../../packages/axoview-lib/src/utils/__tests__/bulkStyleFanOut.contract.test.ts)** · 24 tests · **CLASS GATE** for *"bulk styling is representative-in / everyone-out"* (F3 standing thread F-c). The docked strip read ONE member of a homogeneous bulk (`bulk.ids[0]`) and wrote the derived value to all of them — right for an absolute value, wrong for anything derived, and it produced four filed bugs at once (STYL-01 payload, STYL-02/06 direction, STYL-08 order-dependence). Four sections: the B/I/U/S field maps are complete and every field exists on its zod schema; a source scan proves the strip never hand-writes a format field (the maps live in `utils/bulkStyleTarget.ts`, so a literal `isBold:` means a writer went around them); a sweep proves every derivation is order-independent; and §4 gates the neighbouring sibling-drift class STYL-05 came from — all three text-box Border writers go through one seeded helper. One detail is load-bearing: the connector label's bare `bold`/`italic`/`underline` fields are also the FormatName keys the derivation is written in, so scanning for them by name would flag every read — `strikethrough` is the tell instead, and a quartet revert necessarily names it.
+
+- **[`leanSaveSingleImplementation.contract.test.ts`](../../packages/axoview-app/src/services/__tests__/leanSaveSingleImplementation.contract.test.ts)** · 15 tests · **CLASS GATE** for *"the same rule implemented on both sides of the app/lib boundary"* (ADR 0003 addendum 2026-08-01). ADR 0003's lean-save existed **three** times: the lib's ran against an empty fixture and stripped nothing (so JSON export wrote the whole loaded icon catalog), the app's carried its own stricter rule, and the app's **jest mock stubbed it as the identity function** — so the app's own tests could not see either behaviour. Four sections: one definition, in the lib, catalog-parameterised; no app-side re-implementation; no lib-side catalog; and §4 **runs both halves on the same input**, which is the property no source scan can see. §4 is what caught the identity-stub mock, an id-keyed composition that kept or dropped every icon sharing an id together, and the one legitimate SAVE/EXPORT divergence (an unloaded pack icon) — now pinned with its reason instead of papered over. **Verified red twice:** once for a planted duplicate, and again after the first version exempted `leanModel.ts` wholesale and so missed a duplicate planted in the very file it used to live in.
+
+- **[`jestExpectArity.contract.test.ts`](../../packages/axoview-lib/src/__tests__/jestExpectArity.contract.test.ts)** · 9 tests · **CLASS GATE** for *"a probe written in the Playwright `expect(value, 'message')` style is red in Jest whatever the code does"*. Wave 3 lost a verdict to this: an OVL-14 probe read as a confirmed bug and the code was fine — the most expensive kind of rig fault, because it looks like evidence. Scans all four workspaces' Jest-context test files **including the quarantined lane, as data** (reading it breaks no part of the ADR 0047 §1 quarantine, and it is the only way a main-suite gate can protect a tree that is excluded from execution, tsc and knip). Playwright specs are out of scope — the form is legal there. **A regex cannot do this job:** `expect(keyIn(layers, 'high'))` has a comma and a quote inside its single argument, and every false positive the naive pattern produced on this repo was that shape; the gate finds a comma at paren depth zero, outside strings, template `${…}` and comments. Two CONTROLs stop a path typo making it vacuously green.
+
+- **[`TextBoxInlineEditor.commitContract.test.tsx`](../../packages/axoview-lib/src/components/SceneLayers/TextBoxes/__tests__/TextBoxInlineEditor.commitContract.test.tsx)** · 6 tests · **REGRESSION PIN**, own file because the class is silent data loss. `finish('commit')` with no TEXT change fell through to `onCancel()` — dead-equivalent behaviour until TXT-08 gave cancel a real job, at which point a session that changed only styling was discarded by a left-click-away. Verified red against the old `&& changedRef.current`. The durable lesson is in the file header: **when a branch that was previously indistinguishable from its sibling gains behaviour, every caller that fell into it "harmlessly" becomes a live defect.**
+
+Promoted suites — lib:
+
+- **[`bulkStyleDerivation.test.ts`](../../packages/axoview-lib/src/utils/__tests__/bulkStyleDerivation.test.ts)** · the STYL-01/02/06/08 derivations: tri-state, `nextToggleValue`, `deriveSharedValue`, the one-field patch and the three naming schemes.
+- **[`stripSliderRanges.test.ts`](../../packages/axoview-lib/src/utils/__tests__/stripSliderRanges.test.ts)** · the STYL-10 sweep (every strip slider's endpoints against the schema field it writes) and the STYL-12 opacity round trip. Neither was a bug; both are the generalised form of the connector-label 24→40 S1-brick lesson, so they belong in the main suite rather than a lane that only runs on demand. **When you add a slider to the strip, add its row.**
+
+E2E: **[`bulk-format-mixed.spec.ts`](../../packages/axoview-e2e/tests/bulk-format-mixed.spec.ts)** · 5 tests · the strip driven through its real controls — a Bold press over a mixed bulk leaves italic alone (STYL-01), a mixed bulk reads `aria-pressed="mixed"` and one press applies rather than clears (STYL-02), the reversed selection gives the same result (STYL-08), the fan-out stays one undo entry (STYL-07), and clearing a rectangle fill writes an absent colour with the legacy preset cleared alongside it (STYL-03 ruling, ADR 0039 addendum).
+
+The F1 text cluster + the E2 no-op reducer fix (ADR 0034 addendum 2026-07-31):
+
+- **[`textBoxContentVocabulary.test.ts`](../../packages/axoview-lib/src/utils/__tests__/textBoxContentVocabulary.test.ts)** · 14 tests · the gap between the content vocabulary the EDITOR emits (Quill: `<p>`/`<li>` only) and the vocabulary the supported INPUT surfaces can store — plain text with newlines, `<div>` rows, `<br>` breaks. Measurement that models fewer rows than the render paints leaves every row after the first outside its own selection outline, transform box and `getItemAtTile` (TXT-01/02). Also the TXT-14 sniff: **`<T>` is not HTML**, and a tag-SHAPE regex does not say so (tag names are case-insensitive, so `<T>` matches `[a-z]` under `/i`) — the discriminator has to be the tag NAME.
+- **[`noOpUpdate.test.ts`](../../packages/axoview-lib/src/stores/reducers/__tests__/noOpUpdate.test.ts)** · 12 tests · RED-06. The dispatcher honours the "nothing happened" signal, AND the `update*` reducers actually give it for an identical write. The comparison is deliberately primitive-only — an object-valued update counts as a change without inspection, because a deep compare on the drag hot path would cost more than the write it avoids.
+- **[`useInlineRename.test.tsx`](../../packages/axoview-lib/src/hooks/__tests__/useInlineRename.test.tsx)** · +1 test, 3 rewritten · TXT-06 moved the AUTHORITY on ending a rename session from `blur` to the explicit press-away/key handlers. **Focus leaving is not the user leaving:** a plain mousedown on a strip control moves focus, and a hook that reads that blur as "commit" ends the rename however carefully its press-away listener allow-lists the strip.
+- **[`modelItem.test.ts`](../../packages/axoview-lib/src/stores/reducers/__tests__/modelItem.test.ts)** · +3 · TXT-05, the ADR 0032 label seed at the creation chokepoint.
+- App: **[`projectZipEmbeddedLinks.test.ts`](../../packages/axoview-app/src/services/project/__tests__/projectZipEmbeddedLinks.test.ts)** · 8 tests · TXT-09/10. The importer rewrites cross-diagram refs by SENTINEL as well as by key, so an `#diagram:<id>` inside a text box's HTML is covered by construction rather than by someone remembering.
+
+E2E: **[`text-entity-lifecycle.spec.ts`](../../packages/axoview-e2e/tests/text-entity-lifecycle.spec.ts)** · 6 tests · the provisional-entity lifecycle (TXT-04/05/07/15) and **[`inline-edit-session-scope.spec.ts`](../../packages/axoview-e2e/tests/inline-edit-session-scope.spec.ts)** · 4 tests · the session boundary (TXT-06/08). Both carry CONTROL cases — a text-box session for the Label test to be compared against, and a COMMITTED session beside the cancelled one — because the fixes are about a *difference* between two paths and a test of one path alone cannot see it.
+
+**A main-suite POM contract changed with this wave — `CanvasPOM.placeLabelAt`.**
+The TXT-07 ruling removed the `'Label'` placeholder: placement seeds EMPTY text
+and a Label whose first edit session ends without text is discarded. So the
+helper now **types probe text and commits by default**, exactly like
+`placeTextBoxAt`, with a `keepEditing: true` opt-out. Eight specs were adjusted
+for the new contract, and the split is deliberate:
+
+- **`keepEditing: true`** — `bulk-format-mixed`, `inline-edit-session-scope`, `text-entity-lifecycle`, `renderer-overlay-parity`. These drive the placement session themselves (they type, format or cancel inside it), so handing them a committed chip would test something else.
+- **default (commits)** — `label-entity`, `label-edit-and-placement-cancel`, `element-link-card`, `connector-dot-and-label-placement`, `readonly-enforcement`, `touch-gesture-interrupts`. For these a Label is *setup* for a different assertion (z-order, select, delete, the link card, the read-only panel), and the old "place, then Escape the seeded placeholder" idiom would now leave nothing to select.
+
+None of the eight was rewritten away from what it tested; `label-entity`'s
+placement test still counts one Label per placement, and the cancel describe
+never places a Label at all (it arms and cancels the MODE).
+
+The F4 layers cluster:
+
+- **[`layerRenderOrder.test.ts`](../../packages/axoview-lib/src/utils/__tests__/layerRenderOrder.test.ts)** · 5 tests · LAY-01. Only the node layers keyed their sort on `resolveRenderOrder`; `LabelsCanvas` and `Rectangles` sorted on `zIndex` alone, so the Layers panel looked like it controlled paint order for every element type and controlled it for one. Carries the zIndex-only comparator as a **CONTROL**, so the test demonstrably distinguishes the two keys rather than asserting into a vacuum.
+- **[`layerAssignment.test.ts`](../../packages/axoview-lib/src/stores/reducers/__tests__/layerAssignment.test.ts)** · 9 tests · LAY-11 and the LAY-03 placement chokepoint. The fixture deliberately gives a node, a rectangle and a label the **same id** — the shape `assignLayerToItems` used to move all three of, because the caller's `ItemReference` type was dropped on the way in and one id-set was applied across all five collections.
+- **[`deleteLayerContents.test.ts`](../../packages/axoview-lib/src/stores/reducers/__tests__/deleteLayerContents.test.ts)** · 15 tests · LAY-05 implementing the E2/RED-13 ruling — the two are one change because they are one gesture. The last describe **transcribes `useLayerContext`'s visibility derivation** (`!layer || layer.visible`) so the inversion is demonstrated rather than asserted from memory: a member of a hidden layer is hidden before the delete and visible after "keep contents", which is precisely what the dialog's Alert exists to warn about.
+
+### Exploratory remediation wave 3 — interaction & rendering correctness (2026-07-31)
+
+The I-block (pointer, touch, selection, connectors, pan/menu) and the R-block
+(projection, WebGL, GPU layers, renderer, overlays). Same flip rule: each probe
+was promoted as its bug was fixed and trimmed out of the lane.
+
+**One class gate landed** (ADR 0047 §3), verified able to go red before it was
+committed:
+
+- **[`layerFilter.contract.test.ts`](../../packages/axoview-lib/src/components/SceneLayers/__tests__/layerFilter.contract.test.ts)** · 38 tests · **CLASS GATE** for *"layer visible/locked filter re-application in new paint/affordance layers"*. Four layers had drifted, each added at a different time by someone without the rule in front of them: `ConnectorLabels` had no filter at all (RND-02), `NodeLabelHitLayer` had the visible half and not the locked half (OVL-13), `TransformControlsManager` consulted `lockedIds` and never `visibleIds` (CTX-06). The gate enumerates every paint/affordance layer with what its filter must cover **and why** — HIDDEN means nothing belonging to the entity may draw; LOCKED means only the gestures that *mutate* it are withheld, so a paint-only layer has no reason to read `lockedIds`. A new layer with no table entry fails on the enumeration; a listed layer that drops its filter fails on the scan. Two details are load-bearing and were both found by checking the gate could go red rather than by reasoning: the scan strips **comments** (these files explain their filters at length, and the two that warn *"NOT `visibleIds.size`"* would fail a negative scan for saying exactly the right thing) **and import statements** (the first version passed with the filter deleted, because `import { useLayerContext } …` still contained the word — a gate satisfied by an unused import is a gate that cannot fail).
+
+Promoted suites — lib:
+
+- **[`keyboardScope.test.ts`](../../packages/axoview-lib/src/interaction/__tests__/keyboardScope.test.ts)** + **[`canvas-keyboard-scope.spec.ts`](../../packages/axoview-e2e/tests/canvas-keyboard-scope.spec.ts)** (13 e2e) · the canvas keydown dispatcher listens on `document`, so it also ran while a modal dialog was open or a text selection the app does not own was live. `isModalDialogOpen()` deliberately does **not** match `role="menu"` — a menu is the app's own surface and its shortcuts should keep working.
+- **[`connectorHitTest.test.ts`](../../packages/axoview-lib/src/interaction/modes/__tests__/connectorHitTest.test.ts)** + **[`connector-integrity.spec.ts`](../../packages/axoview-e2e/tests/connector-integrity.spec.ts)** (10 e2e) · degenerate connectors, parallel fan-out, and the reconnect abort path, which had no revert at all.
+- **[`mergeMarqueeSelection.test.ts`](../../packages/axoview-lib/src/utils/__tests__/mergeMarqueeSelection.test.ts)** + **[`selection-group-rules.spec.ts`](../../packages/axoview-e2e/tests/selection-group-rules.spec.ts)** (8 e2e) · SEL-15 additive marquee (ADR 0006 §10 addendum) and the group-integrity rules around it.
+- **[`canvasDropTarget.test.ts`](../../packages/axoview-lib/src/utils/__tests__/canvasDropTarget.test.ts)** + **[`touch-gesture-interrupts.spec.ts`](../../packages/axoview-e2e/tests/touch-gesture-interrupts.spec.ts)** (15 e2e) · the shared `endPointer(e, {cancelled})` (TCH-06 + TCH-14) and one canvas-drop test shared by the three placement modes.
+- **[`reprojectOffset.test.ts`](../../packages/axoview-lib/src/utils/__tests__/reprojectOffset.test.ts)**, **[`projectBounds.test.ts`](../../packages/axoview-lib/src/utils/__tests__/projectBounds.test.ts)**, **[`hitPaintOrder.test.ts`](../../packages/axoview-lib/src/utils/__tests__/hitPaintOrder.test.ts)**, **[`fitToView.test.ts`](../../packages/axoview-lib/src/utils/__tests__/fitToView.test.ts)** + **[`projection-geometry.spec.ts`](../../packages/axoview-e2e/tests/projection-geometry.spec.ts)** (5 e2e) · the R1 cluster. `getFitToViewParams` had **no** production unit test before this wave, which is how it kept a missing `MIN_ZOOM` floor.
+- **[`glSpriteBatch.atlas.test.ts`](../../packages/axoview-lib/src/webgl/__tests__/glSpriteBatch.atlas.test.ts)**, **[`itemRaster.ellipsize.test.ts`](../../packages/axoview-lib/src/webgl/__tests__/itemRaster.ellipsize.test.ts)** + **[`gpu-icon-recovery.spec.ts`](../../packages/axoview-e2e/tests/gpu-icon-recovery.spec.ts)** (2 e2e) · the atlas never staying unpacked, and the icon-decode failure path that used to hold `data-all-icons-drawn` at false for a whole session.
+- **[`useImageAspect.test.tsx`](../../packages/axoview-lib/src/hooks/__tests__/useImageAspect.test.tsx)** · 7 tests · the hook the ADR 0044 selection outline sizes itself from, which had no failure path: a dead url was re-requested on **every** mount of every outline naming it. The exact inverse of GPU-03, where a transient failure *was* cached as permanent — the two icon caches got the trade-off wrong in opposite directions.
+- **[`TransformControlsManager.layerGate.test.tsx`](../../packages/axoview-lib/src/components/TransformControlsManager/__tests__/TransformControlsManager.layerGate.test.tsx)** · the CTX-06 half of the layer-filter class.
+
+E2E: **[`renderer-overlay-parity.spec.ts`](../../packages/axoview-e2e/tests/renderer-overlay-parity.spec.ts)** · 8 tests · the behavioural half of the layer-filter class, which the static gate cannot reach: the gate can see that a filter *exists*, not that it removes anything on screen. Covers hidden-layer connector chips (RND-02), promotion for an id containing the join separator (RND-04), the LOD band applying to the promoted node too (RND-05), the RND-14 reveal-then-act cull bypass, present-mode hover proxies (OVL-06), the counter-scaled grab box (OVL-12) and the locked-layer handle (OVL-13). Every test asserts its precondition — the layer really is hidden/locked, the cull really fired, the counter-scale really is engaged — so a setup that silently did not happen cannot read as a pass.
+
+Suite total **250 passed (34.8 min), exit 0** — up from wave 2's 189, the
+difference being wave 3's seven promoted e2e specs and the touch-project
+additions.
+
+**A second rig lesson, after wave 2's CDP one.** Jest's `expect` throws
+`"Expect takes at most one argument."`, so a probe written in the Playwright
+`expect(value, 'message')` style is red whatever the code does. One OVL-14 probe
+was, and would have stayed red after any fix. A scan of every Jest suite in the
+repo found it to be the only occurrence, and Playwright's 178 uses (including
+the campaign's e2e invariant fixture) are unaffected — had that form not worked
+there, every explore spec would have failed at the fixture rather than at its
+assertions. Promotion is what surfaced it: flipping a probe re-runs it against
+fixed code, which is precisely the check that catches a probe red for the wrong
+reason.
+
+### Exploratory remediation wave 2 — trust & security (2026-07-30)
+
+The S-track (Google identity, share backend, Drive sharing) plus the read-only
+enforcement class and MOP-01's copy identity. Same flip rule as wave 1: each
+probe was promoted as its bug was fixed, and the lane files retired.
+
+**Four class gates landed** (ADR 0047 §3) — each verified able to go red before
+it was committed, per the 2026-07-29 audit's "a green gate that cannot fail"
+finding:
+
+- **[`readonlySurfaces.contract.test.ts`](../../packages/axoview-lib/src/interaction/__tests__/readonlySurfaces.contract.test.ts)** · 31 tests · **CLASS GATE**, keyboard half, **per-surface opt-in**. `EXPLORABLE_READONLY` was enforced surface-by-surface from memory, so most canvas shortcuts mutated a read-only diagram. Every keydown delegate now carries an explicit `viewer` / `editor` access class in [`readonlyPolicy.ts`](../../packages/axoview-lib/src/interaction/readonlyPolicy.ts), and the gate cross-checks that table against the dispatcher's *source*: a new shortcut with no access class fails, and so does an `editor` surface whose call site does not consult the policy. Verified red by unwrapping the z-order guard. I1/PTR-01/02/03.
+- **[`readonlyPanels.contract.test.tsx`](../../packages/axoview-lib/src/components/ItemControls/__tests__/readonlyPanels.contract.test.tsx)** · 17 tests · **CLASS GATE**, panel half. Renders all five element panels in *both* modes and scans `ItemControlsManager` for the `readOnly` forwarding, so a sixth panel — or a regressed fifth — fails without anyone remembering to write a test. Verified red by dropping the prop from the LABEL branch. F2/VIEW-11.
+- **[`externalLinks.contract.test.ts`](../../packages/axoview-lib/src/__tests__/externalLinks.contract.test.ts)** (lib, 5 tests) and [its app twin](../../packages/axoview-app/src/__tests__/externalLinks.contract.test.ts) (4 tests) · **CLASS GATE** for the blind spot ADR 0029 leaves: the rel-forcing hook lives *inside* `sanitizeHtml`, so React-built link surfaces get `target=_blank` from their own JSX and the sanitizer tests cannot see them. Every surface was already compliant — this pins the property rather than fixing a defect. Two gates so each package fails on its own files. Verified red by removing a `rel` from `AboutTab`. F1 invariant list.
+
+Promoted suites:
+
+- **[`authStore.sessionIntegrity.test.ts`](../../packages/axoview-app/src/stores/__tests__/authStore.sessionIntegrity.test.ts)** · 20 tests · the auth state machine with a SECOND actor arriving mid-request — a Drive 401, a scope-403, a second sign-in click, the safety-net timeout. The existing `authStore.test.ts` drives one request at a time, which is why this area's whole seam was invisible to it. S1/AUTH-01..05, 07, 11, 12, 13, 16.
+- **[`GoogleDriveProvider.authFailures.test.ts`](../../packages/axoview-app/src/services/storage/__tests__/GoogleDriveProvider.authFailures.test.ts)** · 8 tests · `request()` is where an HTTP answer becomes an auth *decision*, and three of the four it made were wrong the same way — a status code treated as if it named the cause. Pins the 403 split (scope vs rate limit vs neither), that a withheld token in `DRIVE_ACCESS_REQUIRED` reads as a scope problem rather than "not signed in", and that sign-out invalidates the per-account Drive root caches. S1/AUTH-06, 08, 09, 16.
+- **[`AuthControl.identity.test.tsx`](../../packages/axoview-app/src/components/__tests__/AuthControl.identity.test.tsx)** · 3 tests · the DOM consequence AUTH-05 was actually about: a session whose one `userinfo` call failed must still render its Sign out control. `AuthControl` had no unit test at all.
+- **[`routes.shareIntegrity.spec.js`](../../packages/axoview-backend/src/__tests__/routes.shareIntegrity.spec.js)** · 25 tests · what the route layer does when "one well-formed request at a time" stops holding: a concurrent second request, a reserved id, a body carrying a server-owned field, a source diagram since trashed. S2/SHARE-01..06, 11, 15.
+- **[`server.wiring.spec.js`](../../packages/axoview-backend/src/__tests__/server.wiring.spec.js)** · 7 tests · boots the real `server.js` as a child process and speaks HTTP to it, because middleware ordering and the `requireStorage` route flags cannot be answered at the handler tier. The CORS leg asserts the diagram is genuinely **not published**, not merely that the response was withheld — the distinction SHARE-09 exists for. S2/SHARE-08, 09, 10.
+
+Existing suites absorbed the rest: `drivePublicRead.test.ts` (+4, and its toy
+`'fid'` fixture replaced with a realistic Drive id, which the new DRV-12 shape
+check correctly refuses), `driveSharing.test.ts` (+6), `drivePicker.test.ts`
+(the wrong-file outcome), `LocalStorageProvider.test.ts` (+4),
+`importedBlob.test.ts` (+6, MOP-01), `app.spec.ts` (worker, +5),
+`routes.config.spec.js` and the worker's config test (the CHR-08 key). New:
+[`appBase.publicBase.test.ts`](../../packages/axoview-app/src/__tests__/appBase.publicBase.test.ts)
+· 10 tests · the CHR-08 configured-base ruling, including that both link
+builders inherit it and fall back together.
+
+E2E: **[`readonly-enforcement.spec.ts`](../../packages/axoview-e2e/tests/readonly-enforcement.spec.ts)** · 9 tests · the read-only class through the real app — real keystrokes, real mouse, real store. Carries a 60 s per-test timeout because every leg boots a blank diagram and places a node through the real palette before it can reach read-only. Suite total **189 passed, exit 0**.
+
+**Why the full run still matters, even with the class gates.** Wave 2's CTX-15
+fix made a dormant `Pan.mouseup` branch reachable for the first time — and that
+branch had its own latent bug (a window-bound listener with no
+`isRendererInteraction` check) which nothing had ever been able to expose. Both
+unit gates missed it and so did the new read-only spec, because all of them
+click the canvas. It took a journey that clicks real app chrome (J5.3, the
+linked-diagram link in the read-only NodePanel) to surface it. Un-deadening a
+code path is a change to that path; budget for the full suite when a change
+revives one.
+
+### Exploratory remediation wave 1 — save path, storage places, layer history (2026-07-30)
+
+Promoted from the 2026-07 campaign's quarantined probe lane as each bug was
+fixed (ADR 0047 §2). All five are behavioural suites over the real hook,
+provider or store — none of them mock the thing under test.
+
+- **[`useAutoSave.test.ts`](../../packages/axoview-app/src/hooks/__tests__/useAutoSave.test.ts)** · 11 tests · the debounced write path, which had none. Pins flush-not-cancel on unmount / `enabled:false` / `resetStatus()`, the failed-write re-queue, `saveNow()` awaiting an in-flight write and reporting its own outcome, and write serialisation (an older write can neither land after nor report "saved" over a newer one). A1/LIFE-01, 05, 06, 07, 08, 09.
+- **[`DiagramLifecycleProvider.save.test.tsx`](../../packages/axoview-app/src/providers/__tests__/DiagramLifecycleProvider.save.test.tsx)** · 10 tests · the real provider under jsdom (a closure read and a `beforeunload` listener are not observable below the component). Manual save inside the debounce window, retry after a failed autosave, the single unsaved-work guard, the two rename paths, and the create-blank flush. A1/LIFE-02, 03, 04, 09, 12, 14.
+- **[`AppStorageContext.place.test.tsx`](../../packages/axoview-app/src/providers/__tests__/AppStorageContext.place.test.tsx)** · 1 test · the active place survives a provider remount, because the `StorageManager` singleton owns it. A2/STOR-12.
+- **[`StorageManager.test.ts`](../../packages/axoview-app/src/services/storage/__tests__/StorageManager.test.ts)** · 3 tests · the provider registry, which had none: active-id reporting, unknown-provider refusal, and `setServerStorage` reaching every registered provider. A2/STOR-10.
+- **[`useLayerActions.history.test.tsx`](../../packages/axoview-lib/src/hooks/__tests__/useLayerActions.history.test.tsx)** · 4 tests · a layer op is its own logical action: fresh sequence, one action per Ctrl+Z, no stranded text-box scene size, no orphan scene connector on the next undo. E1/HIST-01.
+
+- **[`historyBrackets.test.tsx`](../../packages/axoview-lib/src/hooks/__tests__/historyBrackets.test.tsx)** · 9 tests · the transaction / drag brackets and the pre-snapshot they arm, driven through TWO `useSceneActions()` instances under one provider pair — the configuration the app actually runs, and the one a per-hook ref could not model. Pins that a foreign mid-drag write does not move where undo lands, that `useHistory.transaction` groups scene CRUD into one entry, that a throwing reducer leaves no armed snapshot, that a new action clears both redo stacks, that a leaked drag bracket is recoverable, and that a write made inside a bracket by another route survives the commit. E1/HIST-02, 05, 06, 07, 08; E3/SCN-08.
+- **[`repairModel.test.ts`](../../packages/axoview-lib/src/utils/__tests__/repairModel.test.ts)** · 13 tests · the identity/range repair applied on the way in, per the owner's repair-don't-reject ruling. Every case asserts both that the violation is gone AND that the model still parses — including the non-finite coordinate, which the schema rejects, so those files do not open at all today. Carries the "a clean file is byte-identical" control that stops the repair firing spuriously. E4/CLIP-01, E4/CLIP-15, E2/RED-03.
+- **[`leanModel.test.ts`](../../packages/axoview-app/src/services/storage/__tests__/leanModel.test.ts)** · 5 tests · what ADR 0003 lean-save may and may not discard. A2/STOR-14.
+- **[`importedBlob.test.ts`](../../packages/axoview-app/src/services/storage/__tests__/importedBlob.test.ts)** · 5 tests · the field whitelist an imported document passes through. A3/ZIP-06.
+- **[`useFileTree.orphans.test.ts`](../../packages/axoview-app/src/hooks/__tests__/useFileTree.orphans.test.ts)** · 4 tests · a Drive diagram whose folder is not in the tree is re-homed to root rather than vanishing. A2/STOR-13.
+- **[`modelIdentity.contract.test.ts`](../../packages/axoview-lib/src/schemas/__tests__/modelIdentity.contract.test.ts)** · 11 tests · **CLASS GATE** (ADR 0047 §3) for the campaign's biggest cross-area finding: the model has reference-integrity checks but no identity or range checks. It scans for the *class*, not the individual bugs — the range half derives the bounded fields from `viewItemSchema` through `safeParse`, so adding a schema bound without a write-site clamp fails it, and it asserts the discovery found something so it cannot become a vacuous green. Verified red by removing the `iconScale` clamp. The identity half pins `layer.order` as a permutation of 0..n-1 across every layer mutation, the refusal of a layer id that names no layer, and that a default page name is never one already on screen. E2/RED-03/04/05, E3/SCN-13, E4/CLIP-13.
+
+Three existing suites absorbed the rest rather than growing new files:
+`useRuntimeConfig.test.ts` (+2, the STOR-11 ruling — a transport failure is never
+cached, a received response still is), `ImportErrorDialog.test.tsx` (+6, A3/ZIP-08
+— each failure class gets copy that is true for it, with both fall-through
+controls), and **`projectZip.test.ts` (+16)**, which now covers the whole A3
+project-ZIP block: the cyclic folder graph (ZIP-01), what the archive does and
+does not contain (ZIP-07, ZIP-11, ZIP-13, ZIP-15), replaceAll's
+create-before-delete ordering (ZIP-03), folder ordering across a round trip
+(ZIP-10) and cross-diagram links (ZIP-02). New:
+[`importSummary.test.ts`](../../packages/axoview-app/src/utils/__tests__/importSummary.test.ts)
+· 6 tests · the import toast reports what actually landed, and names both kinds
+of shortfall (A3/ZIP-05, ZIP-02).
+
+**The lane stays out of CI.** Wave 1 also excluded `src/__explore__` from both
+packages' `tsconfig.json`: `npm run lint` is `tsc --noEmit` and was sweeping the
+probes in, so the CI type-check gate had been red since the campaign branch
+merged. Probes are still type-checked per-file by ts-jest when they run. Wave 6
+closed the matching knip hole (`Tree` in the promoted arborist stub is reached
+only through a `jest.mock` factory, which static analysis cannot follow) — the
+lane's two CI gates are green together for the first time. **The corollary for
+promotion: the lane is tsc- and knip-excluded and the main suite is neither**, so
+a probe promoted verbatim surfaces type errors it never had to satisfy. Budget a
+typecheck pass per promotion.
+
+**Filling the lane is `/explore`'s job** ([`.claude/commands/explore.md`](../../.claude/commands/explore.md),
+[ADR 0047](../adr/0047-exploratory-testing-program.md)) — hypothesis, probe,
+verdict, file; delta-scoped against the last-swept commit, and never a fix. The
+2026-07 campaign that produced this lane is frozen at
+[`docs/reviews/exploratory-2026-07.md`](../reviews/exploratory-2026-07.md) —
+one file: heat map, per-area defect classes, owner rulings, the delta anchor.
+The per-hypothesis area files are retired to git history; the rig notes that
+generalise live in the skill's §9.
+
+**Between campaigns there is NO lane (ADR 0047, 2026-08-10).** The
+`__explore__/` and `tests-exploratory/` trees exist only while a campaign runs;
+its close-out deletes them, converting every surviving open-bug repro to a
+colocated `it.failing` / `test.fail()` test in the normal suite next to the code
+it tests — which CI runs. So an open campaign bug is a `test.fail()` you will
+find beside the feature, not in a quarantined tree; grep `known_issues.md` for
+`accepted open by owner ruling` to see which are deliberate. The explore configs
+stay (`passWithNoTests`) so `/explore` can refill the trees.
 
 ### ADR 0023 hardening additions — off-grid rendered geometry (2026-07-23)
 
@@ -81,7 +438,7 @@ New/extended suites shipped with [ADRs 0035–0037](../adr/) (app `+40` unit acr
 
 ### v1.1 close-out gates (2026-06-10)
 
-Two CI gates hardened at the v1.1 close-out (`@typescript-eslint/no-explicit-any` → `error`; Knip → hard-fail). The full CI-gate inventory + lint-debt detail — including the latent ~17 `tsc --noEmit` fixture-type errors confined to `__perf_refactor_regression__/*.test.ts(x)` — lives in [technical-review-2026-06.md §8b/§8e/§11](../reviews/technical-review-2026-06.md#8-quality-kpis-aggregate); not restated here.
+Two CI gates hardened at the v1.1 close-out (`@typescript-eslint/no-explicit-any` → `error`; Knip → hard-fail). The v1.1-era detail lived in the 2026-06 review §8b/§8e/§11 (retired 2026-08-09 — git history), migrated here in brief: a ten-gate inventory (ESLint hard-fail with `no-explicit-any` at `error`, lib-only Jest coverage floor, build-output shape, worker bundle ≤ 1 MB, commitlint, CodeQL, Knip — then still soft-fail — Playwright, Dependabot, Node 22/24 matrix); lint debt down 196 → 44 warnings across the v1.1 wave; and a then-latent ~17 `tsc --noEmit` type errors confined to `__perf_refactor_regression__/*.test.ts(x)` — since fixed, and strict type-check now gates CI via the workspace lint scripts. The **current** gate inventory is [test.yml](../../.github/workflows/test.yml) itself plus the 2026-07-29 ratchets in [architecture.md §5](architecture.md#5-tests-gaps--quality).
 
 ### Phase 6 additions — Presentation & Annotation (2026-06-12)
 
@@ -137,7 +494,8 @@ New suites + extensions shipped with the paste-O(N) + pre-T3 render/drag wave ([
 | `utils/__tests__/findNearestUnoccupiedTile.test.ts` | lib unit | rigid-stamp placement — a row pasted on itself shifts by one offset to clear space (keeps the block's shape, never collapses to one tile); degenerate dense case stamps at the target offset |
 | `hooks/__tests__/useHistory.test.tsx` + `useHistory.realStore.test.tsx` (extended) | lib unit | scoped post-undo/redo D-8 connector re-sync — early-returns when no active-view connector path is empty (uiState store added to both wrappers); D-7 dual-stack coordination unchanged |
 | `__perf_refactor_regression__/DragItems.modes.test.ts` (extended) | lib unit | rectangle / text-box drag is CSS-var-only during the move + a single `batchUpdate*` commit on mouseup (no per-frame store write) |
-| `canvas-node-render.spec.ts` | E2E | Canvas2D node sprite centred on its tile + label connector stalk; `data-draw-count` anti-cheat reads == N at fit-to-view |
+| `canvas-node-render.spec.ts` | E2E | GPU node sprite centred on its tile + label connector stalk; `data-nodes-drawn` anti-cheat reads == N at fit-to-view |
+| `cross-type-z-order.spec.ts` | E2E | R3/GPU-13 + R4/RND-13/15 — a rectangle's `zIndex` lifts it above a node (and back), a Label outranks a node by TYPE RANK, selecting changes no pixels, renaming still promotes. Reads the merged canvas's preserved drawing buffer where two entities overlap |
 | `perf/engine-perf.spec.ts` (paste-on-top scenario) | perf harness | real Ctrl+C/Ctrl+V paste-on-top adds exactly N → 2N nodes; honest draw-count guard (see [ADR 0020](../adr/0020-engine-perf-harness-and-measurement-protocol.md)) |
 
 CI: [`perf-smoke.yml`](../../.github/workflows/perf-smoke.yml) runs a small-N `npm run perf` on PRs so a regression in the measured render/paste path trips CI.
@@ -237,9 +595,11 @@ how-to.
   ~22% (≫ the ~2–5% within-run noise), so every keep/revert is a **same-session A/B with
   a matching calibration index** — never a fresh run vs a prior-session baseline. A
   result inside the noise band is not a change. One `decision-log.md` row per hypothesis.
-- **Anti-cheat:** the canvas node layer publishes a per-frame draw count on
-  `data-draw-count`; the harness asserts it `== N` at fit-to-view (no off-screen cull
-  shrinking the benchmark). `perf-results/baseline.md` is rewritten by **every** run incl.
+- **Anti-cheat:** the merged bulk canvas publishes a PER-TYPE draw count and the
+  harness asserts `data-nodes-drawn == N` at fit-to-view (no off-screen cull
+  shrinking the benchmark). `data-draw-count` is the TOTAL over every entity type
+  since the ADR 0038 §8 canvas merge and can no longer be compared against N;
+  connectors, rectangles and both label kinds have their own channels. `perf-results/baseline.md` is rewritten by **every** run incl.
   partial/diagnostic ones — `git checkout -- perf-results/baseline.md` after any non-full
   run; only a clean full idle run updates it.
 - **Gotcha:** the rsbuild dev server desyncs from `dist/` after `build:lib` ("Can't
@@ -437,6 +797,30 @@ Uses real `ModelProvider` + `SceneProvider` wrappers — tests actual Zustand st
 | Overflow (1) | After 51 mutations, `history.past.length` stays ≤ 50 (oldest entry dropped by `shift()`) |
 | Redo round-trip (1) | `undo()` then `redo()` returns to the later value |
 | Transaction real-store (2) | `transaction()` produces exactly 1 checkpoint for 3 ops; nested transaction produces only 1 checkpoint |
+
+---
+
+### [useHistory.pageStamp.test.tsx](../../packages/axoview-lib/src/hooks/__tests__/useHistory.pageStamp.test.tsx) · 15 tests · ✅ VALID
+
+**Production target:** `src/stores/historySequence.ts`, both stores' entry
+construction, `useHistory.undo/redo`, `useSceneActions.createView`.
+
+E1/HIST-10 (owner ruling "always navigate", 2026-07-30) and E1/HIST-04 riding it.
+Real stores — the behaviour is a stamp written by two stores, consumed by
+`useHistory`, and acted on through `useSceneActions.switchView`, so the mocked
+suite above cannot see it.
+
+| Group | What's covered |
+|---|---|
+| Navigation (7) | Undo of a delete of the ACTIVE page returns to it; an edit on another page is undone WITH the switch; redo goes to the page the action was ORIGINALLY on (§5 Q2); every step navigates, so two undos move twice (§5 Q1); an entry with NO stamp stays put (`undefined` ≠ `views[0]`); a stamp naming a page no longer in the model does not navigate; a HALF-stepped action still navigates (§5 Q3, fail-visible over fail-silent) |
+| Stamp agreement (2) — **mandatory** | Every `seq` present on both stacks carries the same `viewId` on both, with a CONTROL asserting the comparison set is non-empty; the stamp is the page active at RECORD time, and moving does not rewrite it |
+| No history from navigation (3) — **mandatory** | `setView` pushes nothing onto either stack; an undo that NAVIGATED does not GROW either past stack (the sharp one — see below); repeated undo drains in exactly the number of logical actions recorded |
+| HIST-04 (3) | `createView` records exactly one entry, symmetric with `deleteView`; Ctrl+Z after "New page" removes the page (not the action before it) and leaves the active view resolvable; redo restores it |
+
+**Why the growth assertion and not just the drain.** The failure mode is an undo
+loop, but a plant that pushes one entry per navigation still drains — each undo
+eats the one before it. Only "did not grow" catches it. The drain bound is a
+runaway guard, not the detector.
 
 ---
 
@@ -688,7 +1072,7 @@ The highest-regression-risk paths still without a real-module regression test:
 
 > **Productization regression-coverage note (2026-07-05):** a full `master..integration` fix-commit audit confirmed the cycle's regressions are largely covered; the two highest-risk uncovered gaps (RECT-1 drag-chrome, the text-box schema S1-brick class) were closed with the unit suites above. The four rows just added are the remaining **e2e-only** gaps — catalogued (not silently dropped) with the exact spec + assertion so they can be closed as a fast follow.
 
-The full standing-gap register (with risk/complexity) is in [known_issues.md](../../known_issues.md) and [technical-review-2026-06.md §11](../reviews/technical-review-2026-06.md#11-open-known-issues); the architectural framing is in [architecture.md §5](architecture.md#5-tests-gaps--quality).
+The full standing-gap register (with risk/complexity) is in [known_issues.md](../../known_issues.md); the architectural framing is in [architecture.md §5](architecture.md#5-tests-gaps--quality). (The 2026-06 review's §11 point-in-time register is retired — git history.)
 
 ---
 
@@ -700,4 +1084,67 @@ npx jest <pattern> --no-coverage                       # one suite, e.g. Cursor.
 npm test --workspace=packages/axoview-lib -- --coverage # with coverage
 ```
 
-Run from `packages/axoview-lib/`. HTML coverage report at `packages/axoview-lib/coverage/lcov-report/index.html`. **Measured 2026-07-29:** statements 40.2 % · branches 28.5 % · functions 34.6 % · lines 40.2 %. Floors in [`jest.config.js`](../../packages/axoview-lib/jest.config.js) are a **ratchet**, deliberately set ~6pp under measured reality so the tested core cannot silently erode — global **34 / 23 / 29 / 34**, with `stores/reducers/` (85 stmts / 65 branches) and `schemas/` (95 / 90) carrying their own higher floors. *(This line previously read "~32 %; thresholds floored at 10 %" — both figures had gone stale; the floors were re-ratcheted from 30/20/25/30 on 2026-07-29 after coverage rose without them following, widening the intended slack to ~10pp. **Re-measure and re-tighten whenever coverage moves up materially** — that is the maintenance this gate needs to keep working.)* Aggregate KPIs (test:source ratio, LOC, lint debt, complexity baseline) and the static-analysis report locations are in [technical-review-2026-06.md §8](../reviews/technical-review-2026-06.md#8-quality-kpis-aggregate).
+Run from `packages/axoview-lib/`. HTML coverage report at `packages/axoview-lib/coverage/lcov-report/index.html`. **Measured 2026-07-29:** statements 40.2 % · branches 28.5 % · functions 34.6 % · lines 40.2 %. Floors in [`jest.config.js`](../../packages/axoview-lib/jest.config.js) are a **ratchet**, deliberately set ~6pp under measured reality so the tested core cannot silently erode — global **34 / 23 / 29 / 34**, with `stores/reducers/` (85 stmts / 65 branches) and `schemas/` (95 / 90) carrying their own higher floors. *(This line previously read "~32 %; thresholds floored at 10 %" — both figures had gone stale; the floors were re-ratcheted from 30/20/25/30 on 2026-07-29 after coverage rose without them following, widening the intended slack to ~10pp. **Re-measure and re-tighten whenever coverage moves up materially** — that is the maintenance this gate needs to keep working.)* Aggregate KPIs live in the [2026-07-29 review](../reviews/technical-review-2026-07-29.md) (health scorecard §1a, `/audit` pass §9) — the standing full-audit baseline; the older per-wave KPI series (2026-05/06/07 reviews) is retired to git history.
+
+## The bulk canvas is ONE canvas (2026-08-02, R3/GPU-13)
+
+`RectanglesCanvas → ConnectorsCanvas → NodesCanvas → LabelsCanvas` are gone.
+[`SceneCanvas`](../../packages/axoview-lib/src/components/SceneLayers/SceneCanvas.tsx)
+(`data-testid="axoview-scene-canvas"`) draws all four entity types in one WebGL2
+context, ordered by one sort (ADR 0038 §8). Three things that changes for tests:
+
+- **There is no mount order to assert.** Cross-type paint order used to be
+  readable off DOM position; it is a sort key now. Assert it in PIXELS — the
+  context is created with `preserveDrawingBuffer: true` for image export, so
+  `drawImage` onto a 2D scratch and read the buffer back.
+  [`helpers/sceneCanvas.ts`](../../packages/axoview-e2e/helpers/sceneCanvas.ts)
+  has `paintedPixels`, `canvasPatchColor` (an averaged patch, because a single
+  texel lands on antialiased edges) and `sceneCounters`.
+- **"Which layer painted this?" is a COUNTER, not a canvas.** `data-nodes-drawn`,
+  `data-connectors-drawn`, `data-rectangles-drawn`, `data-labels-drawn` (node NAME
+  chips) and `data-floating-labels-drawn` (ADR 0031 Labels). Whole-canvas painted
+  pixels can no longer answer "is the connector bulk painting?" — everything else
+  paints into the same buffer.
+- **Selection no longer promotes a node into the DOM overlay** (R4/RND-13/15).
+  A spec that wanted the DOM `<Node>` as its source of truth must promote through
+  the RENAME session (`uiState.inlineEditNodeId`) instead; `[data-drag-id="…"]`
+  being absent after a click is now correct, not a regression. Drag still promotes.
+
+## Label counter-scale — one derivation, six consumers (2026-08-02, R5/OVL-02)
+
+`labelSettings.labelCounterScaleFor` is the **only** place the "keep labels
+readable" factor is computed. Six layers consume it — two GPU emitters
+(`webgl/scene/nodeEmitter.ts`, `webgl/scene/labelEmitter.ts`; they were
+`NodesCanvas`/`LabelsCanvas` until the ADR 0038 §8 merge moved the emission
+out of the components), three DOM hit/proxy (`LabelHitLayer`, `NodeLabelHitLayer`,
+`ConnectorLabel`) and `ExpandableLabel` — and they must always move together:
+the paint layers draw the chip while the hit layers size the box that grabs it,
+so a factor that changes on one side alone puts the grab box somewhere other
+than the thing it proxies.
+
+Two mechanisms carry it, and a change to either needs the other checked:
+
+- **GPU:** per INSTANCE via `i_misc.w`, not the `u_counterScale` uniform (one
+  uniform per draw can only be right for a default-sized label). The uniform is
+  the fallback for an instance that packs no value.
+- **DOM:** per ELEMENT via `data-label-font` + a store subscription, not one
+  `--axoview-label-scale` on a shared `display: contents` wrapper.
+
+[`labelCounterScale.contract.test.ts`](../../packages/axoview-lib/src/config/__tests__/labelCounterScale.contract.test.ts)
+enforces all of it. Its exemption names the **function**, not the file — see the
+gate-authoring rule below.
+
+## Gate authoring — an exemption names the CALL SITE, never the FILE (2026-08-01)
+
+A dual-implementation gate has to exempt its one legitimate implementation. Do
+that by naming the **function**, not the file it lives in.
+
+Wave 4's lean-save gate exempted `leanModel.ts` wholesale, because the one
+permitted composition legitimately lives there — and a duplicate planted in that
+same file passed clean on the first red-check. A file-level exemption is a hole
+shaped exactly like the bug, since a duplicate's natural home *is* the file that
+already owns the concern.
+
+Corollary: **red-verify a gate by planting the defect where it actually lived**,
+not in a convenient neighbouring file. The OVL-02 gate above was verified three
+ways, one of which was a second derivation planted inside its own exempted file.

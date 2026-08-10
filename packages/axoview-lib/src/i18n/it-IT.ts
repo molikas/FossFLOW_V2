@@ -328,6 +328,7 @@ const locale: LocaleProps = {
     namePlaceholder: "Nome dell'elemento…"
   },
   topBarStyleControls: {
+    mixed: 'Misto',
     rotate90: 'Ruota di 90°',
     noColor: 'Nessun colore',
     pickColorFromScreen: 'Preleva colore dallo schermo',
@@ -581,6 +582,12 @@ const locale: LocaleProps = {
   },
   // D8 — LayersPanel
   layersPanel: {
+    deleteLayerTitle: 'Eliminare il livello?',
+    deleteLayerBody: 'Questo livello contiene {count} elemento/i. Cosa deve accadere?',
+    deleteLayerHiddenWarning: 'Questo livello è NASCOSTO. Mantenendone il contenuto tornerà VISIBILE: un elemento senza livello è sempre mostrato.',
+    deleteLayerCancel: 'Annulla',
+    deleteLayerKeep: 'Mantieni il contenuto',
+    deleteLayerDeleteContents: 'Elimina anche il contenuto',
     header: 'Livelli',
     addLayer: 'Aggiungi livello',
     deleteSelectedLayer: 'Elimina livello selezionato',

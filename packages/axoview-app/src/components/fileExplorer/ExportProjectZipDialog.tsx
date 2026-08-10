@@ -11,7 +11,6 @@ import {
   Typography
 } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
-import { stripDefaultIcons } from 'axoview';
 import { StorageProvider } from '../../services/storage';
 import {
   exportProject,
@@ -58,7 +57,7 @@ export function ExportProjectZipDialog({
     setBusy(true);
     setError(null);
     try {
-      const { blob, filename } = await exportProject(
+      const { blob, filename, skipped } = await exportProject(
         { storage, exporterTag },
         { scope, folderId }
       );
@@ -66,6 +65,17 @@ export function ExportProjectZipDialog({
       // Only a PROJECT-scope zip covers all session work — a folder export
       // must not clear the caller's sessionWorkUnexported guard.
       if (scope === 'project') onProjectZipExported?.();
+      if (skipped.length > 0) {
+        // A3/ZIP-11: the archive is real and complete without them, so this is
+        // a warning about what is NOT in the file the user just downloaded —
+        // not a failure. Keeping the dialog open is what makes it readable.
+        setError(
+          `Exported, but ${skipped.length} diagram${skipped.length === 1 ? '' : 's'} could not be read and ${skipped.length === 1 ? 'is' : 'are'} missing from the archive: ${skipped
+            .map((d) => d.name || d.id)
+            .join(', ')}`
+        );
+        return;
+      }
       onClose();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Export failed';
@@ -113,4 +123,10 @@ export function ExportProjectZipDialog({
   );
 }
 
-export { stripDefaultIcons };
+// F5/ICON-01/02 correction (2026-08-01). This file used to import and re-export
+// `stripDefaultIcons` without ever applying it. The project-ZIP export archives
+// the STORED blobs (`storage.loadDiagram`), which every provider already leans
+// on write — so the ZIP path never needed a strip of its own, and the entry's
+// claim that it "writes every icon the session has loaded" was inferred from
+// the dead import rather than measured. The single-diagram "Export as JSON"
+// path is the one that was genuinely fat, and it is fixed at its own call site.

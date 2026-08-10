@@ -22,6 +22,8 @@ jest.mock('src/utils', () => ({
 }));
 
 jest.mock('src/utils/resolvePlacement', () => ({
+  // F4/LAY-03 chokepoint — no active layer in these fixtures.
+  activeLayerPatch: () => ({}),
   resolvePlacement: (...args: unknown[]) => mockResolvePlacement(...args),
   cursorTileResidual: (...args: unknown[]) => mockCursorTileResidual(...args)
 }));
@@ -33,6 +35,28 @@ jest.mock('src/config', () => ({
 jest.mock('src/config/tapGesture', () => ({
   exceedsTapSlop: (a: unknown, b: unknown) => mockExceedsTapSlop(a, b)
 }));
+
+// I5/CTX-01: a drag-from-panel release is a placement only when it ENDS OVER
+// the canvas. `isCanvasDrop` hit-tests the release point, so these cases need a
+// renderer element and a stubbed `elementFromPoint` (jsdom has no layout).
+const CANVAS_CHILD = { nodeType: 1, tag: 'canvas-child' };
+const PANEL_CHILD = { nodeType: 1, tag: 'panel-child' };
+const makeRenderer = (dropOverCanvas: boolean) => {
+  document.elementFromPoint = jest.fn(() =>
+    dropOverCanvas ? CANVAS_CHILD : PANEL_CHILD
+  );
+  return {
+    getBoundingClientRect: () => ({
+      left: 0,
+      top: 0,
+      right: 1280,
+      bottom: 720,
+      width: 1280,
+      height: 720
+    }),
+    contains: (node: unknown) => node === CANVAS_CHILD
+  };
+};
 
 function makeUiState(overrides: Record<string, unknown> = {}) {
   return {
@@ -47,8 +71,19 @@ function makeUiState(overrides: Record<string, unknown> = {}) {
   };
 }
 
+// `beginDragTransaction` opens the session's history bracket BEFORE the create,
+// so placement + the empty-box discard are one logical action (TXT-04).
+const mockBeginDragTransaction = jest.fn();
+
 function makeScene(overrides: Record<string, unknown> = {}) {
-  return { createTextBox: mockCreateTextBox, ...overrides };
+  return {
+    // F4/LAY-03: the placement modes read the view's layers to validate the
+    // active layer before stamping it onto the new entity.
+    currentView: { layers: [] },
+    createTextBox: mockCreateTextBox,
+    beginDragTransaction: mockBeginDragTransaction,
+    ...overrides
+  };
 }
 
 beforeEach(() => {
@@ -118,7 +153,7 @@ describe('TextBox.mouseup', () => {
     expect(mockSetItemControls).not.toHaveBeenCalled();
   });
 
-  it('a drag-from-panel release (off-canvas but past tap-slop) places one box', () => {
+  it('a drag-from-panel release that ends OVER THE CANVAS places one box', () => {
     mockExceedsTapSlop.mockReturnValue(true);
     const uiState = makeUiState({
       mouse: {
@@ -130,11 +165,35 @@ describe('TextBox.mouseup', () => {
     TextBox.mouseup?.({
       uiState: uiState as any,
       scene: makeScene() as any,
-      isRendererInteraction: false
+      isRendererInteraction: false,
+      rendererRef: makeRenderer(true) as any
     });
 
     expect(mockCreateTextBox).toHaveBeenCalledTimes(1);
     expect(mockSetMode).toHaveBeenCalledWith(expect.objectContaining({ type: 'CURSOR' }));
+  });
+
+  // Promoted from the exploratory lane (I5/CTX-01). "Did the pointer travel?"
+  // used to be the whole gate, so a drag released back onto the panel dropped a
+  // box at the tile behind it.
+  it('a drag-from-panel release back OVER THE PANEL places nothing', () => {
+    mockExceedsTapSlop.mockReturnValue(true);
+    const uiState = makeUiState({
+      mouse: {
+        position: { tile: { x: 2, y: 3 }, screen: { x: 60, y: 200 } },
+        mousedown: { screen: { x: 0, y: 0 } }
+      }
+    });
+
+    TextBox.mouseup?.({
+      uiState: uiState as any,
+      scene: makeScene() as any,
+      isRendererInteraction: false,
+      rendererRef: makeRenderer(false) as any
+    });
+
+    expect(mockCreateTextBox).not.toHaveBeenCalled();
+    expect(mockSetMode).not.toHaveBeenCalled();
   });
 
   it('does nothing when the mode is not TEXTBOX', () => {

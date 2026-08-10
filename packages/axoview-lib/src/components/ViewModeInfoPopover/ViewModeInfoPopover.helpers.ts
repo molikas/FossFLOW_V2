@@ -12,10 +12,29 @@ import {
   Rectangle
 } from 'src/types';
 import { hasVisibleText } from 'src/components/NodeActionBar/NodeActionBar.helpers';
+import { normalizeWebLinkUrl } from 'src/utils/quillLinkShortcut';
 
-/** Normalise a possibly-schemeless link to an absolute https URL. */
+/**
+ * Normalise a possibly-schemeless link for rendering.
+ *
+ * F2/VIEW-06 — this used to be its own `/^https?:\/\//i` allowlist, a second
+ * normaliser for the same job written at a different time. Element-level
+ * `headerLink`s are stored RAW (`TopBarStyleControls.onLinkChange`: "element
+ * headerLinks keep their raw semantics"), so a user's `mailto:ops@example.com`
+ * arrived here verbatim and was rendered as `https://mailto:ops@example.com` —
+ * a dead URL. Same for `tel:` and a bare `#fragment`.
+ *
+ * There is one normaliser now. It stays an ALLOWLIST rather than a "does it
+ * have a scheme?" check, because the prefixing is also what neutralises a
+ * `javascript:` payload — swapping in a scheme test would turn a cosmetic bug
+ * fix into an XSS vector.
+ *
+ * `normalizeWebLinkUrl` returns null for an empty string; the popover only
+ * calls this with a non-empty `headerLink`, and the fallback keeps the return
+ * type total for any other caller.
+ */
 export const toHref = (link: string): string =>
-  /^https?:\/\//i.test(link) ? link : `https://${link}`;
+  normalizeWebLinkUrl(link) ?? `https://${link}`;
 
 /**
  * The content gate: a popover appears only for items with a non-empty name,

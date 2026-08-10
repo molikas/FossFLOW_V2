@@ -394,7 +394,7 @@ export interface UiState {
   labelDrag: { id: string; height: number } | null;
   /**
    * Transient floating-Label move preview (ADR 0031). While a Label is dragged
-   * via LabelHitLayer this holds its id + the live tile/offset, so LabelsCanvas
+   * via LabelHitLayer this holds its id + the live tile/offset, so SceneCanvas
    * redraws the chip following the pointer WITHOUT a per-frame model write
    * (which would re-render every hit-proxy div). UI-only, never persisted; the
    * model position is committed ONCE on release. Null when no move is in flight.
@@ -404,10 +404,10 @@ export interface UiState {
    * Transient GROUP move-preview for floating labels (ADR 0031). A single-label
    * drag uses `labelMove` (LabelHitLayer); a MULTI-selection drag moves through
    * DragItems, where nodes/rectangles/text boxes get a CSS `--ff-drag-*` preview
-   * on their DOM wrapper — but a label is canvas-drawn (LabelsCanvas) with no DOM
+   * on their DOM wrapper — but a label is canvas-drawn (SceneCanvas) with no DOM
    * element to translate, so without this channel the label sat frozen until the
    * mouseup commit ("the label doesn't move when I drag the selection"). Keyed by
-   * label id → its preview tile + off-grid offset; LabelsCanvas redraws each keyed
+   * label id → its preview tile + off-grid offset; SceneCanvas redraws each keyed
    * chip at that position. UI-only, never persisted; committed once on release.
    * Null when no group drag is in flight.
    */
@@ -433,11 +433,35 @@ export interface UiState {
   selectedConnectorLabel: { connectorId: string; labelId: string } | null;
   /**
    * The floating Label (ADR 0031) currently being inline-edited on canvas (via
-   * double-click or F2), or null. While set, LabelsCanvas skips painting that
+   * double-click or F2), or null. While set, SceneCanvas skips painting that
    * label (the DOM contentEditable in LabelHitLayer takes over) so the text
    * isn't drawn twice. UI-only, never persisted.
    */
   inlineEditLabelId: string | null;
+  /**
+   * The NODE currently being inline-renamed on canvas (F2, double-click, or the
+   * context-menu Rename), or null.
+   *
+   * R4/RND-13/15 + R3/GPU-13: selection alone no longer promotes a node into the
+   * DOM `<Nodes>` overlay, because with one merged bulk canvas a promoted element
+   * can only paint ABOVE or BELOW the whole canvas — never in its own place in
+   * the document order — and lifting it on selection is exactly the accidental
+   * "bring to front" RND-13/15 filed. Renaming still needs the DOM
+   * contentEditable, so the rename INTENT is what promotes now, and it has to be
+   * store state rather than the `inlineEditNodeName` window event the DOM `<Node>`
+   * used to listen for: that event is dispatched synchronously, and a node that
+   * is not mounted yet cannot receive it. Mirrors `inlineEditLabelId`. UI-only,
+   * never persisted.
+   */
+  inlineEditNodeId: string | null;
+  /**
+   * The layer new elements are placed onto (F4/LAY-03), or null for the
+   * unassigned bucket. Set by selecting a row in the Layers panel; cleared
+   * when that layer is deleted or the active view changes, so a stale id can
+   * never be stamped onto a new entity (the E2/RED-03 dangling-reference
+   * class). UI-only, never persisted.
+   */
+  activeLayerId: string | null;
   /**
    * The floating-Label chip hovered in VIEW mode (EXPLORABLE_READONLY), or
    * null. Labels are deliberately absent from the tile hit-test
@@ -521,12 +545,36 @@ export interface AnnotationStroke {
 }
 
 /**
+ * One undoable annotation operation (F2/VIEW-07, VIEW-13).
+ *
+ * The overlay used to keep two plain stroke stacks, which can only model
+ * "draw / un-draw at the tail". An erase is a delete at an ARBITRARY index and
+ * had no representation in that model, so erasing the middle stroke and
+ * pressing Undo ate the last one instead — and there was no way to get the
+ * erased stroke back at all. Clear had no representation either.
+ *
+ * Each op therefore carries what it did AND where, so it can be inverted in
+ * place: `index` is the position the stroke occupied (erase) or was appended at
+ * (add), and `clear` keeps the whole list it removed.
+ */
+export type AnnotationOp =
+  | { kind: 'add'; stroke: AnnotationStroke; index: number }
+  | { kind: 'erase'; stroke: AnnotationStroke; index: number }
+  | { kind: 'clear'; strokes: AnnotationStroke[] };
+
+/**
  * Ephemeral annotation state (ADR 0014). Session-scoped, in-memory, and
  * **never** persisted — it lives only in uiState, never in the Model, so no
  * save/export/zip path can reach it. `open` is the single pen-driven toggle:
  * open ⇒ palette + drawing shown; closed ⇒ both hidden but strokes retained
  * (close ≠ discard; only Clear wipes). `tool` decides whether the overlay
  * captures input (`select` = canvas interactive).
+ *
+ * Session-scoped means scoped to the CONTENT, not to the tab: the strokes are
+ * cleared when the canvas underneath them changes identity — a diagram load or
+ * a page switch (F2/VIEW-01/02) — because scene-canvas coordinates mean nothing
+ * against different content. An edit↔present toggle keeps them, which is the
+ * case `setEditorMode` was always right about.
  */
 export interface AnnotationState {
   open: boolean;
@@ -534,8 +582,10 @@ export interface AnnotationState {
   color: string;
   thickness: number;
   strokes: AnnotationStroke[];
-  /** Strokes available to redo (cleared by any new stroke / erase / clear). */
-  redoStack: AnnotationStroke[];
+  /** Operations that can be undone, oldest first. */
+  past: AnnotationOp[];
+  /** Operations that can be redone, most-recently-undone first. */
+  future: AnnotationOp[];
 }
 
 export interface UiStateActions {
@@ -633,6 +683,8 @@ export interface UiStateActions {
   ) => void;
   /** Enter / leave inline-edit for a floating Label (double-click / F2). */
   setInlineEditLabelId: (id: string | null) => void;
+  setInlineEditNodeId: (id: string | null) => void;
+  setActiveLayerId: (id: string | null) => void;
   /** Publish / clear the view-mode hovered Label chip (LabelHitLayer →
    *  ViewModeInfoPopover; see `viewModeHoveredLabelId`). */
   setViewModeHoveredLabelId: (id: string | null) => void;
@@ -653,6 +705,12 @@ export interface UiStateActions {
   redoAnnotationStroke: () => void;
   eraseAnnotationStroke: (id: string) => void;
   clearAnnotations: () => void;
+  /**
+   * F2/VIEW-03 — re-map every stored annotation point through `mapPoint`, so
+   * the ink follows the content across an iso<->2D switch. Applied to the live
+   * strokes and to the operation log alike.
+   */
+  reprojectAnnotationStrokes: (mapPoint: (point: Coords) => Coords) => void;
   setIconPackManager: (iconPackManager: IconPackManagerProps | null) => void;
   setIconUsageScan: (scan: IconUsageScan | null) => void;
   setLinkedDiagrams: (diagrams: Array<{ id: string; name: string }>) => void;

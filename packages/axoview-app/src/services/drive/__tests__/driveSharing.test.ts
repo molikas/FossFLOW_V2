@@ -3,6 +3,7 @@ import {
   getFileShareMeta,
   getAccessSummary,
   getAccessOverview,
+  isShared,
   listPermissions,
   setAnyoneWithLink,
   addPersonPermission,
@@ -151,7 +152,8 @@ describe('getAccessOverview', () => {
     );
     await expect(getAccessOverview('f1')).resolves.toEqual({
       summary: 'anyone-with-link',
-      peopleCount: 2
+      peopleCount: 2,
+      domains: []
     });
   });
 
@@ -161,8 +163,74 @@ describe('getAccessOverview', () => {
     );
     await expect(getAccessOverview('f1')).resolves.toEqual({
       summary: 'restricted',
-      peopleCount: 0
+      peopleCount: 0,
+      domains: []
     });
+  });
+
+  // S3/DRV-04: `type:'domain'` is one of the four values `DrivePermission`
+  // declares, and it matched neither the summary predicate nor the people
+  // count — so a diagram anyone at the company could open reported as
+  // "Restricted, nobody listed", and copying its link warned that only people
+  // with access could open it. The owner was told the opposite of the truth.
+  test('a domain-wide grant is reported as shared, not restricted', async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockResponse({
+        permissions: [
+          { id: 'o', type: 'user', role: 'owner' },
+          { id: 'd', type: 'domain', role: 'reader', domain: 'example.com' }
+        ]
+      })
+    );
+    await expect(getAccessOverview('f1')).resolves.toEqual({
+      summary: 'domain',
+      peopleCount: 0,
+      domains: ['example.com']
+    });
+  });
+
+  test('a domain grant is its own row, not folded into peopleCount', async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockResponse({
+        permissions: [
+          { id: 'o', type: 'user', role: 'owner' },
+          { id: 'd', type: 'domain', role: 'reader', domain: 'example.com' },
+          { id: 'p1', type: 'user', role: 'reader', emailAddress: 'a@x.com' }
+        ]
+      })
+    );
+    const overview = await getAccessOverview('f1');
+    expect(overview.peopleCount).toBe(1);
+    expect(overview.domains).toEqual(['example.com']);
+  });
+
+  test('an anyone-link grant still outranks a domain one', async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockResponse({
+        permissions: [
+          { id: 'a', type: 'anyone', role: 'reader' },
+          { id: 'd', type: 'domain', role: 'reader', domain: 'example.com' }
+        ]
+      })
+    );
+    await expect(getAccessOverview('f1')).resolves.toMatchObject({
+      summary: 'anyone-with-link'
+    });
+  });
+
+  test('isShared agrees with every summary', async () => {
+    expect(
+      isShared({ summary: 'anyone-with-link', peopleCount: 0, domains: [] })
+    ).toBe(true);
+    expect(
+      isShared({ summary: 'domain', peopleCount: 0, domains: ['x.com'] })
+    ).toBe(true);
+    expect(isShared({ summary: 'restricted', peopleCount: 1, domains: [] })).toBe(
+      true
+    );
+    expect(isShared({ summary: 'restricted', peopleCount: 0, domains: [] })).toBe(
+      false
+    );
   });
 });
 
@@ -192,6 +260,44 @@ describe('setAnyoneWithLink', () => {
     const [delUrl, delInit] = fetchMock.mock.calls[1];
     expect(delUrl).toContain('/permissions/anyoneWithLink');
     expect((delInit as RequestInit).method).toBe('DELETE');
+  });
+
+  // DRV-05 (owner ruling 2026-07-30): collect per-permission outcomes. The loop
+  // used to stop at the first rejection, so with several anyone-permissions a
+  // partial revoke threw and the caller could not tell "nothing was revoked"
+  // from "some were, and the link may still be live".
+  test('a PARTIAL revoke attempts every permission and says the link may still be live', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        mockResponse({
+          permissions: [
+            { id: 'anyone-1', type: 'anyone', role: 'reader' },
+            { id: 'anyone-2', type: 'anyone', role: 'writer' }
+          ]
+        })
+      )
+      .mockResolvedValueOnce(mockResponse({ error: { message: 'nope' } }, 403))
+      .mockResolvedValueOnce(mockResponse(null, 204));
+
+    await expect(setAnyoneWithLink('f1', false)).rejects.toThrow(
+      /may still be active/i
+    );
+    // Both deletes were attempted — the failure did not abandon the second.
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  test('a TOTAL failure says so plainly', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        mockResponse({
+          permissions: [{ id: 'anyone-1', type: 'anyone', role: 'reader' }]
+        })
+      )
+      .mockResolvedValueOnce(mockResponse({ error: { message: 'nope' } }, 403));
+
+    await expect(setAnyoneWithLink('f1', false)).rejects.toThrow(
+      /Could not turn off link sharing/i
+    );
   });
 });
 

@@ -54,6 +54,23 @@ const setSelected = (page: Page, id: string | null) =>
     a.setItemControls(nodeId ? { type: 'ITEM', id: nodeId } : null);
   }, id);
 
+/**
+ * Promote a node into the DOM `<Node>` overlay.
+ *
+ * R4/RND-13/15: SELECTION no longer promotes — that lift was the accidental
+ * "bring to front" the entry filed, and with one merged bulk canvas (ADR 0038
+ * §8) a promoted element can only paint above or below the whole canvas. The
+ * rename session is the promotion now. These specs use the overlay purely as the
+ * placement SOURCE OF TRUTH (where does the DOM put this icon?), so the route
+ * into it is rig detail; what they assert is unchanged.
+ */
+const setPromoted = (page: Page, id: string | null) =>
+  page.evaluate((nodeId) => {
+    (window as any).__axoview__.ui
+      .getState()
+      .actions.setInlineEditNodeId(nodeId);
+  }, id);
+
 const selectedId = (page: Page) =>
   page.evaluate(() => {
     const ic = (window as any).__axoview__.ui.getState().itemControls;
@@ -76,7 +93,7 @@ const canvasCentroid = (page: Page, pt: Pt, half: number) =>
   page.evaluate(
     ({ x, y, half }) => {
       const cv = document.querySelector(
-        '[data-testid="axoview-nodes-canvas"]'
+        '[data-testid="axoview-scene-canvas"]'
       ) as HTMLCanvasElement | null;
       if (!cv) return null;
       const rect = cv.getBoundingClientRect();
@@ -128,9 +145,9 @@ test.describe('Canvas node render — render == DOM/hit-test (ADR 0019)', () => 
       }
       await commitSingleNode(page, mode === 'ISOMETRIC');
 
-      // The DOM overlay (selected) is the placement source of truth. Read where
-      // it renders the icon, then deselect so the canvas paints the same node.
-      await setSelected(page, 'tn');
+      // The DOM overlay is the placement source of truth. Read where it renders
+      // the icon, then un-promote so the canvas paints the same node.
+      await setPromoted(page, 'tn');
       const dom = await page
         .locator('[data-drag-id="tn"] img')
         .first()
@@ -138,7 +155,7 @@ test.describe('Canvas node render — render == DOM/hit-test (ADR 0019)', () => 
         .then(() => domIconCentre(page, 'tn'));
       expect(dom, 'DOM overlay icon rendered').not.toBeNull();
 
-      await setSelected(page, null);
+      await setPromoted(page, null);
       // Wait for the icon (async data-URI decode) to actually paint on the canvas.
       await expect
         .poll(async () => (await canvasCentroid(page, dom!, 160))?.n ?? 0, {
@@ -202,16 +219,16 @@ test.describe('Canvas node render — render == DOM/hit-test (ADR 0019)', () => 
       { url: FULL_ICON }
     );
 
-    // Tile screen centre via the DOM overlay, then deselect so the CANVAS paints
-    // the node + its stalk.
-    await setSelected(page, 'sn');
+    // Tile screen centre via the DOM overlay, then un-promote so the CANVAS
+    // paints the node + its stalk.
+    await setPromoted(page, 'sn');
     const dom = await page
       .locator('[data-drag-id="sn"] img')
       .first()
       .waitFor({ state: 'visible', timeout: 5_000 })
       .then(() => domIconCentre(page, 'sn'));
     expect(dom, 'DOM overlay icon rendered').not.toBeNull();
-    await setSelected(page, null);
+    await setPromoted(page, null);
 
     const zoom = await page.evaluate(
       () => (window as any).__axoview__.ui.getState().zoom
@@ -224,7 +241,7 @@ test.describe('Canvas node render — render == DOM/hit-test (ADR 0019)', () => 
       page.evaluate(
         ({ x, y, halfW, halfH }) => {
           const cv = document.querySelector(
-            '[data-testid="axoview-nodes-canvas"]'
+            '[data-testid="axoview-scene-canvas"]'
           ) as HTMLCanvasElement | null;
           if (!cv) return 0;
           const rect = cv.getBoundingClientRect();

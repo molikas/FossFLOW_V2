@@ -325,6 +325,7 @@ const locale: LocaleProps = {
     namePlaceholder: 'Имя элемента…'
   },
   topBarStyleControls: {
+    mixed: 'Разные',
     rotate90: 'Повернуть на 90°',
     noColor: 'Без цвета',
     pickColorFromScreen: 'Выбрать цвет с экрана',
@@ -577,6 +578,12 @@ const locale: LocaleProps = {
   },
   // D8 — LayersPanel
   layersPanel: {
+    deleteLayerTitle: 'Удалить слой?',
+    deleteLayerBody: 'На этом слое {count} элемент(ов). Что с ними сделать?',
+    deleteLayerHiddenWarning: 'Этот слой СКРЫТ. Если сохранить содержимое, оно снова станет ВИДИМЫМ — элемент без слоя показывается всегда.',
+    deleteLayerCancel: 'Отмена',
+    deleteLayerKeep: 'Сохранить содержимое',
+    deleteLayerDeleteContents: 'Удалить и содержимое',
     header: 'Слои',
     addLayer: 'Добавить слой',
     deleteSelectedLayer: 'Удалить выбранный слой',

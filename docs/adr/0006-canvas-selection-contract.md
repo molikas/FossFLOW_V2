@@ -102,6 +102,46 @@ Single accent constant unchanged (`TRANSFORM_CONTROLS_COLOR = #0392ff`); the dra
 
 New acceptance criterion: a selected element shows a solid, high-contrast accent ring offset outside its own border (visible on a coloured fill); a hovered-but-unselected node/rectangle shows a lighter outset outline; both hide during `DRAG_ITEMS`.
 
+### 10. 2026-07-31 addendum — the marquee honours the additive modifier (SEL-15)
+
+Amends the §2 gesture matrix row *"Lasso / freehand lasso (mouseup) | mirrors
+`mode.selection.items` into `selectedIds`"*, which now reads:
+
+| Gesture | Outcome |
+|---|---|
+| Lasso / freehand lasso (mouseup) | replaces `selectedIds` with `mode.selection.items` |
+| **Shift/Ctrl/⌘ + lasso** (2026-07-31, SEL-15) | **UNION**s `mode.selection.items` into the existing `selectedIds`, de-duped by `(type, id)`, existing members keeping their order |
+
+**Why.** The 2026-07 exploratory campaign (I3/SEL-15) found that this ADR taught
+the additive rule on one gesture and broke it on the other: §2 makes
+Shift/Ctrl/⌘ additive **on click** (§6 threads the flag through
+`uiState.mouse.modifiers`), while a second marquee replaced the selection even
+with the modifier held. Axoview was the outlier *because* it had taught the rule
+— a user who learns Shift=add from clicking expects it on a marquee.
+
+**Industry practice (researched 2026-07-29).** Shift+drag extends the selection
+in Figma, Miro, Lucidchart, draw.io, Illustrator, Sketch, Inkscape and Blender;
+Finder and Windows File Explorer do it with Cmd/Ctrl+drag. Owner ruling
+2026-07-30 ([rulings table](../reviews/exploratory-2026-07.md#owner-rulings-2026-07-30)): adopt.
+
+**Scope.** A UNION, not a toggle. A *subtract* modifier (Alt/Option in the Adobe
+family, Ctrl in Blender) is a common second tier but is not baseline and was not
+ruled, so a lasso can extend a selection but never trim one.
+
+**Implementation.** `mergeMarqueeSelection` + `isAdditiveModifier`
+([`utils/selectableRefs.ts`](../../packages/axoview-lib/src/utils/selectableRefs.ts)),
+called from both `Lasso.mouseup` and `FreehandLasso.mouseup` — the two handlers
+are otherwise hand-maintained twins and had already drifted in other ways (the
+rectangular lasso returns to CURSOR on mouseup; the freehand one stays armed).
+`isAdditiveModifier` reads the same three keys the click path honours, from the
+same place, so the two gestures cannot disagree again.
+
+This supersedes the "Negative / open" bullet below that recorded marquee-replaces
+as matching user expectations.
+
+New acceptance criterion: a second marquee with Shift held selects the union of
+both catches; without a modifier it still replaces.
+
 ## Consequences
 
 ### Positive
@@ -115,7 +155,7 @@ New acceptance criterion: a selected element shows a solid, high-contrast accent
 
 - **No bulk style / resize affordance** yet. Multi-select-aware bulk actions are intentionally deferred (per the MQA plan). The BottomDock badge is the placeholder anchor when we're ready.
 - **Single-item selection currently triggers two store writes** when reached via `setSelectedIds([ref])`: one for `selectedIds`, one for the auto-derived `itemControls`. Acceptable; both are in the same `set(...)` call so React renders once.
-- **Mode-driven selection (lasso) and persistent selection can momentarily disagree** if the user starts a new lasso while a Ctrl+click selection is active. The lasso's mouseup overwrites `selectedIds`, which matches user expectations (a new lasso replaces the prior selection).
+- ~~**Mode-driven selection (lasso) and persistent selection can momentarily disagree** if the user starts a new lasso while a Ctrl+click selection is active. The lasso's mouseup overwrites `selectedIds`, which matches user expectations (a new lasso replaces the prior selection).~~ **Superseded by §10 (2026-07-31):** it matched expectations only for an *unmodified* marquee. With the additive modifier held it did not, and that inconsistency was I3/SEL-15.
 
 ## Files changed by this ADR's adoption
 

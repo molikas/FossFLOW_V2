@@ -8,6 +8,7 @@ import {
   useState
 } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { downloadBlob } from '../utils/downloadBlob';
 import { useTranslation } from 'react-i18next';
 import { flattenCollections } from '@isoflow/isopacks/dist/utils';
 import isoflowIsopack from '@isoflow/isopacks/dist/isoflow';
@@ -37,9 +38,16 @@ import { notificationStore } from '../stores/notificationStore';
 import { sequentialName } from '../utils/fileOperations';
 import { apiBaseUrl } from '../utils/apiBaseUrl';
 import { exportAsJSON } from 'axoview';
+import {
+  CORE_ICONS,
+  getBundledCatalog,
+  publishLoadedPackIcons
+} from '../services/icons/bundledCatalog';
 
 // Core icons — loaded once at module level
-const coreIcons = flattenCollections([isoflowIsopack]);
+// ADR 0003 addendum (2026-08-01): the core set moved to the canonical catalog
+// module so the catalog has ONE owner; this alias keeps the call sites below.
+const coreIcons = CORE_ICONS;
 
 const defaultColors = [
   { id: 'blue', value: '#0066cc' },
@@ -82,8 +90,30 @@ export type DriveDisplayState =
   // Network / rate-limit / 5xx — recoverable; the gate offers a Retry rather
   // than the terminal 'failed' treatment.
   | 'transient'
+  // S3/DRV-02: the causes that used to collapse into 'failed'. Each renders its
+  // own gate copy, because "the owner moved it to the trash", "it is too big to
+  // preview", "that link is not valid" and "the grant has not registered yet"
+  // are four different things for the person reading them — and one of them is
+  // fixed by pressing Retry.
+  | 'gone'
+  | 'too-large'
+  | 'bad-link'
+  | 'grant-not-registered'
   | 'failed'
   | 'loaded';
+
+/** Gate states the DriveDisplayGate renders itself (rather than the terminal
+ *  readonly-load-failed dialog). Kept next to the type so a new state cannot be
+ *  added without deciding which side of that line it falls on. */
+export const GATE_RENDERED_DRIVE_STATES: readonly DriveDisplayState[] = [
+  'needs-signin',
+  'needs-grant',
+  'transient',
+  'gone',
+  'too-large',
+  'bad-link',
+  'grant-not-registered'
+];
 
 interface PendingConfirm {
   message: string;
@@ -91,7 +121,7 @@ interface PendingConfirm {
   onDiscard?: () => void;
 }
 
-interface DiagramLifecycleContextValue {
+export interface DiagramLifecycleContextValue {
   // Diagram state
   diagramName: string;
   setDiagramName: (name: string) => void;
@@ -153,6 +183,18 @@ interface DiagramLifecycleContextValue {
   notifyDiagramRenamedFromTree: (id: string, newName: string) => void;
   notifyDiagramDeletedFromTree: (id: string) => void;
   saveAllDirty: () => Promise<void>;
+  /**
+   * A4/FEX-13 — flush ONE diagram if it is dirty RIGHT NOW, reporting whether
+   * anything was written.
+   *
+   * `saveAllDirty` is a fire-and-forget bulk flush and its callers cannot tell
+   * whether it wrote. The move-to-Drive path needs both: it must re-check
+   * dirtiness immediately before deleting the source (the whole bug is the size
+   * of the window between the read and the delete) and refresh the Drive copy
+   * only when there was something new to send. Reads the dirty set through its
+   * ref, so an edit made after the caller's closure was created is still seen.
+   */
+  flushDiagramIfDirty: (id: string) => Promise<boolean>;
   handleCreateBlankDiagram: (
     folderId: string | null,
     focusAfter?: 'fileExplorer' | 'elements',
@@ -222,6 +264,14 @@ export function DiagramLifecycleProvider({
     isInitialized
   } = useAppStorage();
   const iconPackManager = useIconPackManager(coreIcons);
+
+  // ADR 0003 addendum (2026-08-01) — publish the live catalog for the non-React
+  // readers. The storage providers are plain classes and cannot read a hook, so
+  // lean-save would otherwise have no catalog to strip against and would keep
+  // every icon. One writer, here; the readers pull `getBundledCatalog()`.
+  useEffect(() => {
+    publishLoadedPackIcons(iconPackManager.loadedIcons as never);
+  }, [iconPackManager.loadedIcons]);
 
   const isPublicShareUrl = !!shareUuid;
   // `readonlyDiagramId` is the basename-stripped route param (react-router), so
@@ -320,7 +370,6 @@ export function DiagramLifecycleProvider({
   const markProjectExported = useCallback(() => {
     setSessionWorkUnexported(false);
   }, []);
-  const hasUnsavedChangesRef = useRef(false);
   const sessionWorkUnexportedRef = useRef(false);
   useEffect(() => {
     sessionWorkUnexportedRef.current = sessionWorkUnexported;
@@ -332,31 +381,11 @@ export function DiagramLifecycleProvider({
     return () => window.removeEventListener('axoview-session-changed', handler);
   }, [serverStorageAvailable]);
 
-  // beforeunload — warn before leaving with unsaved/un-exported work. Places
-  // model: un-exported session work needs the warning even while a Drive
-  // diagram is open (remote autosave covers only the OPEN diagram, never the
-  // session place), so the session flag is keyed on the deploy, not the mode.
-  useEffect(() => {
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      const trigger =
-        hasUnsavedChangesRef.current ||
-        (!serverStorageAvailable && sessionWorkUnexportedRef.current);
-      if (!trigger) return;
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', onBeforeUnload);
-    return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [serverStorageAvailable]);
-
   // In server mode the single-diagram hasUnsavedChanges is driven by saveStatus.
   // In session mode it uses dirtyDiagramIds as before.
   const hasUnsavedChanges = remoteStorageActive
     ? false  // toolbar uses saveStatus directly in server mode
     : dirtyDiagramIds.has(currentDiagram?.id ?? '__unsaved__');
-  useEffect(() => {
-    hasUnsavedChangesRef.current = hasUnsavedChanges;
-  }, [hasUnsavedChanges]);
 
   // ---------------------------------------------------------------------------
   // Auto-save (server mode only)
@@ -493,6 +522,42 @@ export function DiagramLifecycleProvider({
   const scratchBufferRef = useRef<Map<string, DiagramData>>(new Map());
   const dirtyDiagramIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => { dirtyDiagramIdsRef.current = dirtyDiagramIds; }, [dirtyDiagramIds]);
+
+  // ---------------------------------------------------------------------------
+  // "Leaving now loses work" — single owner (thread A-a)
+  // ---------------------------------------------------------------------------
+  // This question used to have two beforeunload listeners answering it with
+  // different conditions: one hard-false in remote mode, the other keyed on
+  // `saveStatus === 'saving'` only — so a FAILED autosave, the state where the
+  // work is most at risk, waved the user out of the tab (A1/LIFE-02). One
+  // predicate now, read live from refs so the listener never re-binds.
+  //
+  // Places model: un-exported session work needs the warning even while a Drive
+  // diagram is open (remote autosave covers only the OPEN diagram, never the
+  // session place), so the session terms are keyed on the deploy, not the mode.
+  const hasUnsavedWork = useCallback(
+    (): boolean =>
+      autoSave.hasUnsavedWork() ||             // queued, in flight, or failed
+      dirtyDiagramIdsRef.current.size > 0 ||   // session-place work not written
+      (!serverStorageAvailable && sessionWorkUnexportedRef.current),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- autoSave.hasUnsavedWork is stable; the rest are refs
+    [autoSave.hasUnsavedWork, serverStorageAvailable]
+  );
+  const hasUnsavedWorkRef = useRef(hasUnsavedWork);
+  useEffect(() => { hasUnsavedWorkRef.current = hasUnsavedWork; }, [hasUnsavedWork]);
+  const beforeUnloadMessageRef = useRef('');
+  useEffect(() => { beforeUnloadMessageRef.current = t('alert.beforeUnload'); }, [t]);
+
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!hasUnsavedWorkRef.current()) return;
+      e.preventDefault();
+      e.returnValue = beforeUnloadMessageRef.current;
+      return e.returnValue;
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, []);
 
   // Storage ref so callbacks don't stale
   const storageRef = useRef(storage);
@@ -666,14 +731,25 @@ export function DiagramLifecycleProvider({
           afterGrant: driveAfterGrantRef.current
         });
         if (cancelled) return;
+        // S3/DRV-01: the post-Picker flag lives exactly as long as the read it
+        // was set for. It used to be cleared in ONE other place — the effect
+        // that fires when `driveFileId` goes falsy, i.e. when the route
+        // unmounts — so once the Picker had been used, EVERY subsequent read on
+        // that route was an `afterGrant` read, and `afterGrant` is precisely
+        // what turns a recoverable answer into a terminal one. Drive grants
+        // take a moment to register (the ladder's own doc comment says
+        // drive.file "hides files until the Picker grant registers"), so the
+        // post-Picker retry routinely saw the pre-Picker answer and mapped it
+        // to a dead end whose only button navigated away from the link.
+        driveAfterGrantRef.current = false;
         if (!result.ok) {
-          // needs-signin / needs-grant / transient render actionable gate rungs;
-          // only 'not-found' (terminal) falls through to 'failed'.
+          // Everything the gate can render itself stays on the gate; only a
+          // genuinely terminal 'not-found' falls through to 'failed'.
           setDriveDisplayState(
-            result.reason === 'needs-signin' ||
-              result.reason === 'needs-grant' ||
-              result.reason === 'transient'
-              ? result.reason
+            (GATE_RENDERED_DRIVE_STATES as readonly string[]).includes(
+              result.reason
+            )
+              ? (result.reason as DriveDisplayState)
               : 'failed'
           );
           return;
@@ -744,7 +820,22 @@ export function DiagramLifecycleProvider({
   useEffect(() => {
     const savedDiagrams = localStorage.getItem('axoview-diagrams');
     if (savedDiagrams) {
-      setDiagrams(JSON.parse(savedDiagrams));
+      // A1/LIFE-10: an interrupted write, a quota failure mid-write or a hand
+      // edit leaves a non-JSON value here, and this parse used to be the one
+      // unguarded one — the throw escaped the effect, the root ErrorBoundary
+      // swapped the whole app for the crash screen, and refreshing reproduced
+      // it forever because nothing cleared the bad value. Recover the way the
+      // `axoview-last-opened-data` reader always has: warn, remove, boot with
+      // an empty list.
+      try {
+        setDiagrams(JSON.parse(savedDiagrams));
+      } catch (e) {
+        console.warn(
+          'Corrupt axoview-diagrams value — discarding it and booting with an empty list:',
+          e
+        );
+        localStorage.removeItem('axoview-diagrams');
+      }
       setIsDiagramsInitialized(true);
     }
     const lastOpenedId = localStorage.getItem('axoview-last-opened');
@@ -789,24 +880,8 @@ export function DiagramLifecycleProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- persist keyed on diagrams; isDiagramsInitialized is a one-way guard and t only affects the error toast
   }, [diagrams]);
 
-  // ---------------------------------------------------------------------------
-  // Warn before unload
-  // ---------------------------------------------------------------------------
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      const hasPending = remoteStorageActive
-        ? autoSave.saveStatus === 'saving'
-        : dirtyDiagramIds.size > 0;
-      if (hasPending) {
-        e.preventDefault();
-        e.returnValue = t('alert.beforeUnload');
-        return e.returnValue;
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- listener reads autoSave.saveStatus/dirtyDiagramIds; t only labels the prompt, no need to re-bind on locale change
-  }, [dirtyDiagramIds, autoSave.saveStatus, remoteStorageActive]);
+  // (The second beforeunload listener that lived here is gone — `hasUnsavedWork`
+  // above is the single owner of "leaving now loses work". A1/LIFE-02.)
 
   // ---------------------------------------------------------------------------
   // Build save payload (session mode / Ctrl+S in server mode)
@@ -969,12 +1044,27 @@ export function DiagramLifecycleProvider({
   // ---------------------------------------------------------------------------
   const executeLoad = useCallback(
     async (diagram: SavedDiagram) => {
-      await iconPackManager.loadPacksForDiagram(diagram.data);
-      const importedIcons: Icon[] = (diagram.data.icons || []).filter(
+      // A1/LIFE-15: the restored session list is the STRIPPED copy — the
+      // persist effect writes `icons: []` to stay inside the localStorage
+      // budget — so loading `diagram.data` straight from it rendered every
+      // imported icon as a tombstone. The storage provider still holds the
+      // complete blob; ask it (as `openDiagramById` always has) and use the
+      // list entry only for name/timestamps. Fall back to the list copy for a
+      // diagram the provider does not have (e.g. never persisted).
+      let data = diagram.data;
+      if (storage) {
+        try {
+          data = (await storage.loadDiagram(diagram.id)) as DiagramData;
+        } catch {
+          data = diagram.data;
+        }
+      }
+      await iconPackManager.loadPacksForDiagram(data);
+      const importedIcons: Icon[] = (data.icons || []).filter(
         (icon) => icon.collection === 'imported'
       );
       const dataWithIcons: DiagramData = {
-        ...diagram.data,
+        ...data,
         icons: [...iconPackManager.loadedIcons, ...importedIcons]
       };
       setCurrentDiagram(diagram);
@@ -986,12 +1076,12 @@ export function DiagramLifecycleProvider({
       axoviewRef.current?.load(dataWithIcons as InitialData);
       try {
         localStorage.setItem('axoview-last-opened', diagram.id);
-        localStorage.setItem('axoview-last-opened-data', JSON.stringify(diagram.data));
+        localStorage.setItem('axoview-last-opened-data', JSON.stringify(data));
       } catch (e) {
         console.error('Failed to save last opened:', e);
       }
     },
-    [iconPackManager]
+    [iconPackManager, storage]
   );
 
   const loadDiagram = useCallback(
@@ -1013,15 +1103,28 @@ export function DiagramLifecycleProvider({
       setPendingConfirm({
         message: t('alert.confirmDelete'),
         onConfirm: () => {
+          // A1/LIFE-13: this used to be only a state filter — the row left the
+          // list while the stored diagram survived (nothing reclaimed from the
+          // session budget) and the boot pointer kept naming the deleted id.
+          // Route through the same provider call the file explorer's delete
+          // uses (thread S-a: one ritual, not two), and clear the last-opened
+          // pair when it names the deleted diagram.
+          void storage
+            ?.deleteDiagram(id, false)
+            .catch((e) => console.error('Failed to delete diagram:', e));
           setDiagrams(diagrams.filter((d) => d.id !== id));
           if (currentDiagram?.id === id) {
             setCurrentDiagram(null);
             setDiagramName('');
           }
+          if (localStorage.getItem('axoview-last-opened') === id) {
+            localStorage.removeItem('axoview-last-opened');
+            localStorage.removeItem('axoview-last-opened-data');
+          }
         }
       });
     },
-    [diagrams, currentDiagram, t]
+    [diagrams, currentDiagram, t, storage]
   );
 
   const exportDiagram = useCallback(() => {
@@ -1044,13 +1147,11 @@ export function DiagramLifecycleProvider({
     const blob = new Blob([JSON.stringify(exportData, null, 2)], {
       type: 'application/json'
     });
-    const url = URL.createObjectURL(blob);
+    // A5/CHR-11: one implementation. This copy revoked the URL synchronously
+    // after `click()`, so on some browsers the export produced no file, no
+    // error and no toast — while the success toast below fired regardless.
     const filename = `${diagramName || 'diagram'}-${new Date().toISOString().split('T')[0]}.json`;
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, filename);
     setShowExportDialog(false);
     // F-10: confirm the silent download succeeded (H11 feedback). The browser's
     // own download chrome is easy to miss, so a short success toast closes the loop.
@@ -1133,13 +1234,17 @@ export function DiagramLifecycleProvider({
     ) => {
       if (!storageRef.current) return;
       try {
+        // Flush pending writes for the OPEN diagram before anything moves.
+        // Unconditionally: nesting this in the place-change branch meant that
+        // creating a blank diagram in the SAME place carried a queued edit into
+        // `handleDiagramManagerLoad`, which discarded it (A1/LIFE-09).
+        await autoSave.saveNow();
         // Places model: a new diagram is born into an explicit place, or the
         // default one (Drive when signed in on the storage-less deploy). The
         // active provider follows it BEFORE the create so the manager routes
-        // the write — flushing any pending autosave to the old place first.
+        // the write.
         const targetPlace = placeId ?? defaultPlaceId;
         if (storageManager && storageManager.activeProviderId !== targetPlace) {
-          await autoSave.saveNow();
           autoSave.resetStatus();
           setActiveProviderId(targetPlace);
         }
@@ -1178,8 +1283,16 @@ export function DiagramLifecycleProvider({
         // A Drive insufficient-scope 403 (scope revoked out-of-band, or a stale
         // grant) surfaces the blocking re-consent dialog instead of a dead-end
         // "Failed to create diagram" toast the user can't act on.
-        const err = e as { name?: string; status?: number };
-        if (err?.name === 'DriveError' && err.status === 403) {
+        //
+        // S1/AUTH-08: this used to test `status === 403` alone, and `request()`
+        // threw 403 for an exhausted RATE LIMIT too — so Drive being busy parked
+        // a healthy session in DRIVE_ACCESS_REQUIRED and nulled a valid token,
+        // asking the user to re-consent to a permission they never lost. The
+        // classification travels on the error now, and `request()` itself calls
+        // `markDriveScopeMissing()` for the scope case (AUTH-09), so this branch
+        // is only about swallowing the toast the dialog replaces.
+        const err = e as { name?: string; status?: number; reason?: string };
+        if (err?.name === 'DriveError' && err.reason === 'drive-scope-required') {
           useAuthStore.getState().markDriveScopeMissing();
           return;
         }
@@ -1315,24 +1428,51 @@ export function DiagramLifecycleProvider({
   // ---------------------------------------------------------------------------
   // Rename current diagram
   // ---------------------------------------------------------------------------
+  /**
+   * Single owner of "the open diagram is now called X" (thread A-a).
+   *
+   * The toolbar rename used to update the breadcrumb and the storage row while
+   * leaving `currentModel.title` on the old name — and `buildSaveData` prefers
+   * `currentModel.title`, so the next save wrote the stale name back into the
+   * blob and Export JSON shipped it (A1/LIFE-12). Its file-tree sibling, three
+   * functions away, did it correctly. Both go through here now.
+   *
+   * Storage is the caller's business: this only owns the in-memory copies.
+   */
+  const applyDiagramName = useCallback((name: string) => {
+    setDiagramName(name);
+    setCurrentDiagram((prev) => (prev ? { ...prev, name } : prev));
+    if (!currentModelRef.current) return;
+    const updatedModel = { ...currentModelRef.current, title: name };
+    setCurrentModel(updatedModel);
+    currentModelRef.current = updatedModel;
+    if (axoviewRef.current) {
+      // Push it into the canvas so the lib's model agrees. The echo is
+      // swallowed by isAfterLoadRef, so this is not a user edit.
+      isAfterLoadRef.current = true;
+      axoviewRef.current.load(updatedModel as InitialData, { preserveViewport: true });
+    }
+  }, []);
+
   const handleRenameCurrentDiagram = useCallback(
     async (newName: string) => {
       const trimmed = newName.trim();
       if (!trimmed || !currentDiagramRef.current) return;
       const diag = currentDiagramRef.current;
-      setDiagramName(trimmed);
-      setCurrentDiagram({ ...diag, name: trimmed });
+      applyDiagramName(trimmed);
       if (remoteStorageActive && storageRef.current) {
         try {
           await storageRef.current.renameDiagram(diag.id, trimmed);
           setFileTreeRefreshToken((n) => n + 1);
         } catch {
           notificationStore.push({ severity: 'error', message: 'Rename failed' });
-          setDiagramName(diag.name);
-          setCurrentDiagram(diag);
+          // Revert every copy, model title included — a half-revert is what
+          // A4/FEX-16 is about on the tree side.
+          applyDiagramName(diag.name);
         }
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- applyDiagramName is stable
     [remoteStorageActive]
   );
 
@@ -1374,34 +1514,48 @@ export function DiagramLifecycleProvider({
     if (!currentDiagramRef.current || currentDiagramRef.current.id !== id) return;
     const trimmed = newName.trim();
     if (!trimmed) return;
-    setDiagramName(trimmed);
-    setCurrentDiagram((prev) => (prev ? { ...prev, name: trimmed } : prev));
-    if (axoviewRef.current && currentModelRef.current) {
-      const updatedModel = { ...currentModelRef.current, title: trimmed };
-      setCurrentModel(updatedModel);
-      isAfterLoadRef.current = true;
-      axoviewRef.current.load(updatedModel as InitialData, { preserveViewport: true });
-    }
+    applyDiagramName(trimmed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- applyDiagramName is stable
   }, []);
 
   // ---------------------------------------------------------------------------
   // Toolbar save actions
   // ---------------------------------------------------------------------------
   const handleSaveClick = useCallback(async () => {
+    // A1/LIFE-11: the read-only routes (/display/<id>, /display/p/<uuid>)
+    // must not save. The EDIT path was already inert here
+    // (handleModelUpdated returns early), but this save path was not — Ctrl+S
+    // wrote through the provider and toasted "saved" on a page the app
+    // presents as non-editable; on the public-share route it PUT against the
+    // share uuid as if it were a diagram id. Thread C (EXPLORABLE_READONLY
+    // exposing a mutating path), on the app shell.
+    if (isReadonlyUrl) return;
     if (remoteStorageActive && storage) {
       if (currentDiagram) {
-        await autoSave.saveNow();
-        if (autoSave.saveStatus === 'idle') {
-          try {
-            const data = buildSaveData();
-            await storage.saveDiagram(currentDiagram.id, data);
-            const savedAt = new Date();
-            setLastSaved(savedAt);
-            notificationStore.push({ severity: 'success', message: `"${currentDiagram.name}" saved` });
-          } catch {
-            // ADR 0011 — failure-of-intent: explicit dialog, not a toast.
-            setSaveError(true);
-          }
+        // The flush reports its own outcome. Reading `autoSave.saveStatus` back
+        // out of this closure was a render behind the flush just awaited, so a
+        // save inside the debounce window ('saving') skipped the whole branch
+        // and a retry from 'error' did nothing at all (A1/LIFE-03, A1/LIFE-04).
+        const flushed = await autoSave.saveNow();
+        if (flushed === 'saved') {
+          // The queued model is what every autosave tick writes — it just
+          // landed, so confirm it rather than writing the same bytes twice.
+          notificationStore.push({ severity: 'success', message: `"${currentDiagram.name}" saved` });
+          return;
+        }
+        if (flushed === 'error') {
+          // ADR 0011 — failure-of-intent: explicit dialog, not a toast.
+          setSaveError(true);
+          return;
+        }
+        try {
+          const data = buildSaveData();
+          await storage.saveDiagram(currentDiagram.id, data);
+          const savedAt = new Date();
+          setLastSaved(savedAt);
+          notificationStore.push({ severity: 'success', message: `"${currentDiagram.name}" saved` });
+        } catch {
+          setSaveError(true);
         }
       }
     } else {
@@ -1411,7 +1565,7 @@ export function DiagramLifecycleProvider({
         setShowSaveDialog(true);
       }
     }
-  }, [remoteStorageActive, storage, currentDiagram, autoSave, buildSaveData, saveDiagram]);
+  }, [isReadonlyUrl, remoteStorageActive, storage, currentDiagram, autoSave, buildSaveData, saveDiagram]);
 
   // Keep the retry ref pointed at the latest handleSaveClick so SaveErrorDialog's
   // "Try again" re-runs the canonical save entry without re-binding retrySave.
@@ -1420,12 +1574,15 @@ export function DiagramLifecycleProvider({
   }, [handleSaveClick]);
 
   const handleOpenClick = useCallback(() => {
+    // A1/LIFE-11 symmetry: Ctrl+O opens the load/manager dialog, whose every
+    // action assumes an editable route.
+    if (isReadonlyUrl) return;
     if (remoteStorageActive) {
       setShowDiagramManager(true);
     } else {
       setShowLoadDialog(true);
     }
-  }, [remoteStorageActive]);
+  }, [isReadonlyUrl, remoteStorageActive]);
 
   // ---------------------------------------------------------------------------
   // Keyboard shortcuts
@@ -1497,7 +1654,9 @@ export function DiagramLifecycleProvider({
   // Export actions (toolbar Export popover)
   // ---------------------------------------------------------------------------
   const handleExportJSON = useCallback(() => {
-    exportAsJSON(buildSaveData() as Model);
+    // ADR 0003 addendum (2026-08-01) — the host catalog, or the export writes
+    // the entire loaded icon set (F5/ICON-01/02).
+    exportAsJSON(buildSaveData() as Model, getBundledCatalog());
   }, [buildSaveData]);
 
   const handleExportImage = useCallback(() => {
@@ -1520,6 +1679,14 @@ export function DiagramLifecycleProvider({
   // run even while a Drive diagram is open: move-to-Drive relies on it to make
   // the persisted session copy current before the source is deleted.
   // ---------------------------------------------------------------------------
+  const flushDiagramIfDirtyRef = useRef<(id: string) => Promise<boolean>>(
+    async () => false
+  );
+  const flushDiagramIfDirty = useCallback(
+    (id: string) => flushDiagramIfDirtyRef.current(id),
+    []
+  );
+
   const saveAllDirty = useCallback(async () => {
     if (serverStorageAvailable) return; // server deploys have no session place
     const allDirtyIds = Array.from(dirtyDiagramIdsRef.current);
@@ -1619,6 +1786,18 @@ export function DiagramLifecycleProvider({
       });
     }
   }, [diagrams, serverStorageAvailable, storageManager]);
+
+  // A4/FEX-13 — bound through a ref so the exposed callback is stable while
+  // still closing over the CURRENT saveAllDirty. Dirtiness is read from the
+  // ref, not from state, so an edit that landed after the caller built its
+  // closure is still caught.
+  useEffect(() => {
+    flushDiagramIfDirtyRef.current = async (id: string) => {
+      if (!dirtyDiagramIdsRef.current.has(id)) return false;
+      await saveAllDirty();
+      return true;
+    };
+  }, [saveAllDirty]);
 
   // ---------------------------------------------------------------------------
   // Model update handler
@@ -1766,6 +1945,7 @@ export function DiagramLifecycleProvider({
     notifyDiagramRenamedFromTree,
     notifyDiagramDeletedFromTree,
     saveAllDirty,
+    flushDiagramIfDirty,
     handleCreateBlankDiagram,
     checkUnsavedBeforeNavigate,
     handleGoogleSignedOut,

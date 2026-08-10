@@ -19,30 +19,32 @@ export const useDirtyTracker = (isReady: boolean) => {
   // Ref so beforeunload handler always reads the latest value without being recreated
   const isDirtyRef = useRef(false);
 
-  // Subscribe to model changes after the initial load is complete
+  // Subscribe to model changes after the initial load is complete.
+  //
+  // E4/CLIP-04/05/06 (mop-up 2026-08-10): this effect used to defer the
+  // subscription 100 ms and clean up only its timer. Three defects in one
+  // shape: the subscription leaked on every isReady toggle (one per diagram
+  // open), `isDirtyRef` was never reset so a diagram opened after a dirty one
+  // swallowed its first real edit, and an edit landing inside the 100 ms
+  // window was never tracked at all — the beforeunload guard then let the tab
+  // close on unsaved work. The load path (`useInitialDataManager.load`)
+  // completes its store writes synchronously before flipping isReady, so
+  // there is nothing left for a delay to absorb: start clean, subscribe
+  // immediately, release on the way out.
   useEffect(() => {
-    if (!isReady) return;
+    if (!isReady) return undefined;
 
-    // Small delay so any synchronous post-load store writes don't trip the flag
-    const timer = setTimeout(() => {
-      const unsubscribe = modelStoreApi.subscribe(() => {
-        if (!isDirtyRef.current) {
-          isDirtyRef.current = true;
-          setIsDirty(true);
-        }
-      });
+    isDirtyRef.current = false;
+    setIsDirty(false);
 
-      // Capture unsubscribe so the cleanup below can call it
-      cleanupRef.current = unsubscribe;
-    }, 100);
-
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady]);
-
-  // Separate ref so the effect above can register cleanup without a dependency cycle
-  const cleanupRef = useRef<() => void>(() => {});
-  useEffect(() => () => cleanupRef.current(), []);
+    const unsubscribe = modelStoreApi.subscribe(() => {
+      if (!isDirtyRef.current) {
+        isDirtyRef.current = true;
+        setIsDirty(true);
+      }
+    });
+    return () => unsubscribe();
+  }, [isReady, modelStoreApi, setIsDirty]);
 
   // beforeunload — warn the user if there are unsaved changes
   useEffect(() => {

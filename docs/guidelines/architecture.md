@@ -1,6 +1,6 @@
 # Axoview — Architecture Reference
 
-**Last updated:** 2026-07-29 (rev 29 — §5: three advisory checks promoted to enforced CI ratchets (cycles / bundle budget / advisory allowlist) after the [2026-07-29 review](../reviews/technical-review-2026-07-29.md) found two of them could not fail; coverage floors re-ratcheted; Prettier gate removed) · 2026-07-28 (rev 28 — §2 canvas modes: toggle + viewport-preservation extracted to `useCanvasModeToggle` for view-only parity, with its single-live-consumer invariant recorded) · 2026-07-15 (rev 27 — docs housekeeping: render substrate corrected to WebGL2-sole ([ADR 0038](../adr/0038-webgl-instanced-render-substrate.md)); depth pointers re-aimed at the current reviews; ADR count + test totals refreshed; landing/`/app` split ([ADRs 0040–0041](../adr/)) and Drive-native sharing ([ADR 0042](../adr/0042-drive-native-sharing-and-readonly-preview.md)) folded into §2m; moved to `docs/guidelines/`)
+**Last updated:** 2026-08-09 (rev 30 — the exploratory remediation program closed ([ADR 0047](../adr/0047-exploratory-testing-program.md)): §2 render substrate corrected for the **canvas merge** — four bulk WebGL2 contexts became one sorted draw, which is what lets `zIndex` and `layer.order` cross an entity type, and the picker now resolves the same three tiers from the same comparator; the sort-cache note re-pointed from the removed `NodesCanvas` to `SceneCanvas`. Method for finding this class of defect is now the [`/explore`](../../.claude/commands/explore.md) skill; the campaign record is frozen at [docs/reviews/exploratory-2026-07.md](../reviews/exploratory-2026-07.md)) · 2026-07-29 (rev 29 — §5: three advisory checks promoted to enforced CI ratchets (cycles / bundle budget / advisory allowlist) after the [2026-07-29 review](../reviews/technical-review-2026-07-29.md) found two of them could not fail; coverage floors re-ratcheted; Prettier gate removed) · 2026-07-28 (rev 28 — §2 canvas modes: toggle + viewport-preservation extracted to `useCanvasModeToggle` for view-only parity, with its single-live-consumer invariant recorded) · 2026-07-15 (rev 27 — docs housekeeping: render substrate corrected to WebGL2-sole ([ADR 0038](../adr/0038-webgl-instanced-render-substrate.md)); depth pointers re-aimed at the current reviews; ADR count + test totals refreshed; landing/`/app` split ([ADRs 0040–0041](../adr/)) and Drive-native sharing ([ADR 0042](../adr/0042-drive-native-sharing-and-readonly-preview.md)) folded into §2m; moved to `docs/guidelines/`)
 **Codebase root:** `packages/axoview-lib/src` (library) · `packages/axoview-app/src` (application shell) · `packages/axoview-backend/src` (Express + fs adapter) · `packages/axoview-worker/src` (Hono + Cloudflare Pages Functions)
 
 **Purpose:** This is the **orientation map** — what the codebase contains and where each piece lives, tight enough to read in five minutes before touching a surface. It is deliberately *not* the comprehensive reference: decisions live in ADRs, the deep architectural narrative + file-by-file inventory + KPIs live in the frozen technical review, the test catalogue lives in `testing.md`, and runtime issues live in `known_issues.md`. Each section below points to its deeper source.
@@ -10,9 +10,9 @@
 | You want… | Read |
 |---|---|
 | The *decision* behind a contract (why it works this way) | [docs/adr/](../adr/) — 41 ADRs |
-| Deep architecture narrative, sequence diagrams, file-by-file inventory | [technical-review-2026-06.md](../reviews/technical-review-2026-06.md) — still the fullest system narrative (frozen at v2.0.1) |
-| Quality KPIs, `/audit` scorecard, risk register | [technical-review-2026-07.md](../reviews/technical-review-2026-07.md) — the most recent *comprehensive* baseline (frozen at v3.0.3) |
-| The WebGL2 render-substrate fold in depth | [technical-review-2026-07-08.md](../reviews/technical-review-2026-07-08.md) (scoped) + [ADR 0038](../adr/0038-webgl-instanced-render-substrate.md) |
+| Quality KPIs, `/audit` scorecard, gate audit | [technical-review-2026-07-29.md](../reviews/technical-review-2026-07-29.md) — the standing full-audit baseline (v3.7.0) |
+| Deep architecture narrative, sequence diagrams, file-by-file inventory | the retired 2026-06 review — git history (the review series keeps latest + landmarks; see [docs/README.md](../README.md)). §2 below is the maintained orientation |
+| The WebGL2 render-substrate fold in depth | [ADR 0038](../adr/0038-webgl-instanced-render-substrate.md) (the scoped 2026-07-08 review is retired — git history) |
 | The full regression-suite catalogue (every suite, its contract, gaps) | [testing.md](testing.md) |
 | Open runtime issues, deferred fixes, perf cliffs | [known_issues.md](../../known_issues.md) + [perf-troubleshooting.md](perf-troubleshooting.md) |
 | GPU/canvas pixel-fidelity rules | [canvas-rendering-guidelines.md](canvas-rendering-guidelines.md) |
@@ -165,7 +165,7 @@ Starting mode from `getStartingMode()` in `utils`.
 
 ## 2. Architecture Map
 
-> The store topology, package graph, component tree, and sequence flows are diagrammed in depth in [technical-review-2026-06.md §3–§4](../reviews/technical-review-2026-06.md#3-architecture-overview). This section is the orientation summary; technical-review links back here for the formal mode + store definitions.
+> The store topology, package graph, component tree, and sequence flows were diagrammed in depth in the retired 2026-06 review §3–§4 (git history). This section is the maintained orientation summary and the formal mode + store definitions.
 
 ### 2a. Store Layer
 
@@ -185,7 +185,7 @@ History stores **diffs** (Immer `{ patches, inversePatches }` pairs), not snapsh
 
 ### 2b. Mode State Machine
 
-**11 mode types** (the canonical formal definition; [technical-review §3e](../reviews/technical-review-2026-06.md#3e-interaction-modes) links here):
+**11 mode types** (the canonical formal definition):
 
 `INTERACTIONS_DISABLED` · `CURSOR` · `DRAG_ITEMS` · `PAN` · `PLACE_ICON` · `CONNECTOR` · `RECTANGLE.DRAW` · `RECTANGLE.TRANSFORM` · `TEXTBOX` · `LASSO` · `FREEHAND_LASSO`
 
@@ -243,7 +243,7 @@ Model and scene stores each keep an independent `{ past, future, maxHistorySize:
 
 ### 2h. Component Tree
 
-Full mermaid tree in [technical-review §3d](../reviews/technical-review-2026-06.md#3d-component-tree-high-level-lib-side). Provider order (from `Axoview.tsx`): Theme → Locale → Model → Scene → UiState → Clipboard → CanvasMode → LayerContext → App(inner), with `LeftDockSlot` / `RightSidebarSlot` / `BottomDockSlot` as absolute-positioned siblings.
+Full mermaid tree in the retired 2026-06 review §3d (git history). Provider order (from `Axoview.tsx`): Theme → Locale → Model → Scene → UiState → Clipboard → CanvasMode → LayerContext → App(inner), with `LeftDockSlot` / `RightSidebarSlot` / `BottomDockSlot` as absolute-positioned siblings.
 
 **The one ordering insight that matters:** in `Renderer.tsx` the transparent `interactionsRef` interaction div sits **below** the Nodes + TransformControls SceneLayers, so `e.target === interactionsRef.current` is true only for empty-canvas clicks — the basis of the `isRendererInteraction` guard ([§2b](#2b-mode-state-machine)). `UiOverlay` is a sibling of `Renderer` and absolutely positions all UI relative to `rendererSize`.
 
@@ -289,11 +289,11 @@ Completeness is enforced by `i18n.localeCompleteness.test.ts` (every locale file
 - **`AppStorageContext`** — the only place that touches storage init (`isServerStorage`, `isInitialized`, `StorageManager`). Boot does a single `GET /api/config` probe with an **800 ms `AbortSignal.timeout`** (caps Chrome/Windows dual-stack connect latency); `serverStorage` selects server-backed vs sessionStorage. An inline splash in `public/index.html` covers the cold-start gap.
 - **`DiagramLifecycleProvider`** — diagram state, save / Save As / load / delete, keyboard shortcuts, `beforeunload` guard, icon-pack manager, save/discard/load + the ADR-0011 error dialogs.
 
-> ⚠️ **Correction (technical-review-2026-06 §3b):** the "103-line pure-composition `App.tsx`" this section once claimed is **stale** — `App.tsx` is ~442 LOC and carries the React Router tree, error/export/import dialogs, and icon-usage scanning. Treat [technical-review §3b](../reviews/technical-review-2026-06.md#3b-package-responsibilities) as the current word on package responsibilities and LOC.
+> ⚠️ **Correction (from the 2026-06 review §3b, retired — git history):** the "103-line pure-composition `App.tsx`" this section once claimed is **stale** — `App.tsx` is ~442 LOC and carries the React Router tree, error/export/import dialogs, and icon-usage scanning.
 
 ### 2m. Deployment & API Contract
 
-Three targets (local dev, Docker, Cloudflare Pages) from one codebase, sharing one `/api/*` HTTP contract; the frontend is byte-identical at the network boundary. **The durable contract is locked in [ADR 0009 — Deployment Topology](../adr/0009-deployment-topology.md) and [ADR 0010 — Session Backend Contract](../adr/0010-session-backend-contract.md).** Current-state route list, the key-based `StorageAdapter` interface, auth modes, and the Hono/Express split are in [technical-review §5–§6](../reviews/technical-review-2026-06.md#5-deployment-topology); the from-scratch walkthrough is in [deployment.md](../deployment.md). This doc no longer restates them.
+Three targets (local dev, Docker, Cloudflare Pages) from one codebase, sharing one `/api/*` HTTP contract; the frontend is byte-identical at the network boundary. **The durable contract is locked in [ADR 0009 — Deployment Topology](../adr/0009-deployment-topology.md) and [ADR 0010 — Session Backend Contract](../adr/0010-session-backend-contract.md).** Current-state route list, the key-based `StorageAdapter` interface, auth modes, and the Hono/Express split were diagrammed in the retired 2026-06 review §5–§6 (git history); the from-scratch walkthrough is in [deployment.md](../deployment.md). This doc no longer restates them.
 
 Two routing facts post-date that frozen review and are **not** in it:
 
@@ -325,13 +325,13 @@ Shipped 2026-07-05/06 — three ADRs lock it: [0035](../adr/0035-google-identity
 
 ## 3. Performance Architecture
 
-The codebase has been through several perf passes; the **diagnostic narratives and current state live in [perf-troubleshooting.md](perf-troubleshooting.md)** and the runtime-metrics baseline in [technical-review §8g](../reviews/technical-review-2026-06.md#8g-production-runtime-metrics). The structural fixes still in force:
+The codebase has been through several perf passes; the **diagnostic narratives and current state live in [perf-troubleshooting.md](perf-troubleshooting.md)** and the runtime-metrics baseline in the retired 2026-06 review §8g (git history). The structural fixes still in force:
 
 - **O(1) item lookup** — module-level `WeakMap<items[], Map<id,item>>` cache (`useModelItem`, `getItemAtTile`).
 - **Patch-pair history** — diffs not snapshots ([§2g](#2g-history-system)).
 - **Zustand transaction batching** — `transaction()` buffers in `pendingStateRef`, flushes as 2 `setState` calls regardless of N.
 - **Viewport culling** — `Renderer.tsx` filters off-screen items/connectors via a coarse tile-bounds subscriber that bypasses React render until the range changes.
-- **WebGL2 instanced substrate (T4, [ADR 0038](../adr/0038-webgl-instanced-render-substrate.md)) — the SOLE bulk renderer.** Nodes, floating labels, connector bodies and rectangle bodies are drawn by `glSpriteBatch` as one `drawArraysInstanced` **per layer per frame**, from a single texture atlas, with the tile→screen transform computed in the vertex shader — so navigation is **O(1) on the CPU at any N** and panning holds 60 fps to ~20,000 nodes. The DOM `<Node>` (`Nodes.tsx`/`Node/Node.tsx`) survives only as a **sparse overlay** for the selected ∪ dragged item (keeps F2 inline-rename, the readable-labels counter-scale, and the `--ff-drag` drag preview). A browser without WebGL2 gets the `WebGLUnsupportedScreen` gate.
+- **WebGL2 instanced substrate (T4, [ADR 0038](../adr/0038-webgl-instanced-render-substrate.md)) — the SOLE bulk renderer.** Nodes, floating labels, connector bodies and rectangle bodies are drawn by `glSpriteBatch` from a texture atlas, with the tile→screen transform computed in the vertex shader — so navigation is **O(1) on the CPU at any N** and panning holds 60 fps to ~20,000 nodes. **Since the 2026-08-02 canvas merge (ADR 0038 §8) all four entity kinds share ONE WebGL2 context and ONE sorted draw** — `SceneCanvas` sorts every bulk entity through `compareSceneDrawOrder` (layer ▸ z-index ▸ type rank ▸ iso depth) and issues **one `drawArraysInstanced` per atlas page**, typically one per frame, where there used to be four contexts stacked by mount order at fixed CSS z-indices. That is what makes `zIndex` and `layer.order` cross an entity type at all; the picker (`utils/hitDetection.ts`) resolves the same three tiers from the same comparator, so renderer and picker agree by construction (gated by `pickerAgreement.contract.test.ts`). The DOM `<Node>` (`Nodes.tsx`/`Node/Node.tsx`) survives only as a **sparse overlay** for the selected ∪ dragged item (keeps F2 inline-rename, the readable-labels counter-scale, and the `--ff-drag` drag preview). A browser without WebGL2 gets the `WebGLUnsupportedScreen` gate.
   - **Superseded:** the earlier Canvas2D node layer (T2, [ADR 0019](../adr/0019-canvas2d-node-render-layer.md)) **and its fallback path were removed** in the 2026-07-08 fold (PR #63, v3.5.0) — ADR 0019 is *superseded in part* (the bulk-substrate decision only). There is no Canvas2D/DOM bulk fallback and no A/B knob.
   - **Fidelity is a contract, not a detail** — a sprite is a *cached texture*, not a per-frame re-raster, so the atlas must stay a premultiplied-alpha pipeline end-to-end, line styles are geometry, and stroke widths need projection scaling. The hard-won rules live in [canvas-rendering-guidelines.md](canvas-rendering-guidelines.md); **CI cannot see any of it** — every visual change needs a real-browser check.
   - Measured by the engine-perf harness ([testing.md](testing.md), [ADR 0020](../adr/0020-engine-perf-harness-and-measurement-protocol.md)), whose anti-cheat is re-pointed at the GPU `drawCount`.
@@ -340,7 +340,7 @@ The codebase has been through several perf passes; the **diagnostic narratives a
 - **CSS-preview drag path** — multi-element drags mutate `--ff-drag-dx/dy` CSS variables + `previewAnchorTiles` directly (compositor-only, no React/immer per frame); committed to the model only on mouseup. The `previewAnchorTiles` map exists specifically to keep `syncConnector` from running against stale model tiles mid-drag. Rectangles + text boxes now drag the same way (one `batchUpdate*` commit on drop).
 - **Batched atomic paste (ADR 0021)** — `useSceneActions.pasteItems` assembles the N-scale arrays in one structural pass and calls `validateView` **once** (was a per-node `createViewItem → validateView` loop = O(N³); froze on a ~150-node paste-on-top). Still one undo entry; `validateView` ref-existence checks are Set-based (O(N+M)).
 - **Derived `TileIndex` (ADR 0021)** — `utils/spatialIndex.ts`, a uniform-grid hash for O(1) occupancy/placement, **built from the `items` array** (recomputed when it changes, *not* mutated from reducers) so undo/redo applying immer patches straight to the store can't desync it. Paste placement is a rigid-stamp ring-walk over it (the whole block shifts to the first clear offset).
-- **Canvas render-order sort cache (ADR 0021)** — `NodesCanvas.draw()` caches its layer-ordered draw list keyed on `(nodes, layers, visibleIds, skipIds)` reference identities (+ an O(1) `layerId→order` map), so pan/zoom frames don't re-sort with a per-comparison `findLayer`.
+- **Canvas render-order sort cache (ADR 0021)** — `SceneCanvas` caches its sorted draw list keyed on `(rectangles, connectors, nodes, labels, layers, visibleIds, skipIds)` reference identities (+ an O(1) `layerId→order` map), so pan/zoom frames don't re-sort with a per-comparison `findLayer`. The map matters more since the merge: the sort now walks **every** bulk entity rather than one type's worth, so a linear `findLayer` per entity would be an O(entities × layers) cost the merge introduced. `hitDetection` caches the same lookup the same way, keyed on the `layers` array reference.
 
 **Known cliff (deferred):** a sustained drag (≳50 s without committing) accumulates ~12 MB/s of immer-cloned state → a GC stall. Refactor design (keep the preview in `scene.connectors[id]` only until commit) is in [known_issues.md](../../known_issues.md). The `DiagnosticsOverlay` (`axoview-app/src/components/DiagnosticsOverlay.tsx`) is the in-app tool that produced these measurements — a low-overhead, always-available FPS/heap/long-task recorder with AI-compact + human-readable downloads (disabled by default in prod, always on in dev).
 
@@ -384,7 +384,7 @@ Durable "don't re-introduce this" knowledge — non-obvious fixes whose *why* is
 
 ## 5. Tests, Gaps & Quality
 
-The per-suite test catalogue, layer breakdown, classifications (VALID / SEMI-VALID), and current coverage gaps are maintained in **[docs/guidelines/testing.md](testing.md)** — that is the source of truth for counts and what each suite pins. Aggregate KPIs (test inventory, CI gate inventory, LOC, test:source ratio, lint debt, cognitive-complexity baseline) are in **[technical-review-2026-06.md §8](../reviews/technical-review-2026-06.md#8-quality-kpis-aggregate)**.
+The per-suite test catalogue, layer breakdown, classifications (VALID / SEMI-VALID), and current coverage gaps are maintained in **[docs/guidelines/testing.md](testing.md)** — that is the source of truth for counts and what each suite pins. Aggregate KPIs live in the **[2026-07-29 review](../reviews/technical-review-2026-07-29.md)** (health scorecard §1a, `/audit` pass §9); the older per-wave KPI series (2026-05/06/07 reviews) is retired to git history.
 
 Current totals (measured 2026-07-15): lib 1522 (+1 skipped) / 149 suites · app 266 / 26 · backend 102 / 7 · worker 124 / 4 — **2014 passing across 186 suites** · E2E 75 spec files. The v1.1 wave closed the server-runtime test gap (the only **high**-severity item the post-v1.0.0 review named). [testing.md](testing.md) is the authoritative catalogue; re-measure there rather than trusting this line.
 
@@ -400,8 +400,8 @@ Current totals (measured 2026-07-15): lib 1522 (+1 skipped) / 149 suites · app 
 
 The load-bearing pattern is the **denominator assertion**: `check:cycles` verifies the module graph actually contains ≥280 files before it trusts the cycle count, because the bug it replaced was a truthful "no cycles" reported over 16 of 293 files (madge could not resolve the `src/…` alias without `--ts-config`). Any gate that can be starved of input must assert its input volume. Both scripts exit **2** ("gate broken") rather than **0** when they measure nothing — a green over an empty measurement is the failure mode, not a pass.
 
-Prettier was **removed** as a gate in the same change: 156 drifting files, never in CI, and `prettier` already sat in Knip's `ignoreDependencies`. A measurement with no consumer trains people to skim past red. The v1.1 Sonar wave drove down cyclomatic complexity across the hot files (capstone `useInteractionManager.ts` 131 → <16) behind the ADR-0006 selection contract and the `__perf_refactor_regression__` baseline as guardrails. Full CI-gate + lint-debt detail: [technical-review §8b/§8e](../reviews/technical-review-2026-06.md#8-quality-kpis-aggregate).
+Prettier was **removed** as a gate in the same change: 156 drifting files, never in CI, and `prettier` already sat in Knip's `ignoreDependencies`. A measurement with no consumer trains people to skim past red. The v1.1 Sonar wave drove down cyclomatic complexity across the hot files (capstone `useInteractionManager.ts` 131 → <16) behind the ADR-0006 selection contract and the `__perf_refactor_regression__` baseline as guardrails. Full CI-gate + lint-debt detail: the v1.1-era inventory migrated into [testing.md](testing.md) ("v1.1 close-out gates"); the current gates are [test.yml](../../.github/workflows/test.yml) + the ratchets above.
 
-**Standing functional gaps** (carried, product-decision pending): `createView` not undoable · `updateViewItem` throws mid-drag (no catch in `DragItems`) · connector-only clipboard centroid = `{0,0}` · `deleteModelItem` sparse array · touch `mouseup` zeroed coordinates · imported icons scoped per-diagram. Tracked with full risk/complexity in [known_issues.md](../../known_issues.md) and [technical-review §11](../reviews/technical-review-2026-06.md#11-open-known-issues).
+**Standing functional gaps** (carried, product-decision pending): `createView` not undoable · `updateViewItem` throws mid-drag (no catch in `DragItems`) · connector-only clipboard centroid = `{0,0}` · `deleteModelItem` sparse array · touch `mouseup` zeroed coordinates · imported icons scoped per-diagram. Tracked with full risk/complexity in [known_issues.md](../../known_issues.md).
 
 *End of document. This is the orientation map; the deep references it points to are the source of truth.*

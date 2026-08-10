@@ -3,7 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Box, Button, Paper, Typography } from '@mui/material';
 import { useAppStorage } from '../providers/AppStorageContext';
-import { useDiagramLifecycle } from '../providers/DiagramLifecycleProvider';
+import {
+  useDiagramLifecycle,
+  GATE_RENDERED_DRIVE_STATES
+} from '../providers/DiagramLifecycleProvider';
 import { useAuthStore } from '../stores/authStore';
 import { launchDrivePicker } from '../services/drive/drivePicker';
 import { ReadonlyLoadErrorDialog } from './ReadonlyLoadErrorDialog';
@@ -29,7 +32,6 @@ export function DriveDisplayGate() {
   const { runtimeConfig } = useAppStorage();
   const authStatus = useAuthStore((s) => s.status);
   const signIn = useAuthStore((s) => s.signIn);
-  const signOut = useAuthStore((s) => s.signOut);
   const signedInEmail = useAuthStore((s) => s.user?.email || null);
   const [pickerBusy, setPickerBusy] = useState(false);
   const [switchBusy, setSwitchBusy] = useState(false);
@@ -78,13 +80,7 @@ export function DriveDisplayGate() {
     );
   }
 
-  if (
-    driveDisplayState !== 'needs-signin' &&
-    driveDisplayState !== 'needs-grant' &&
-    driveDisplayState !== 'transient'
-  ) {
-    return null;
-  }
+  if (!GATE_RENDERED_DRIVE_STATES.includes(driveDisplayState)) return null;
 
   const handleGrant = async () => {
     if (!driveDisplayFileId) return;
@@ -98,6 +94,21 @@ export function DriveDisplayGate() {
       });
       // 'cancelled' keeps the gate up — the user can pick again.
       if (outcome === 'picked') retryDriveDisplayRead(true);
+      // S3/DRV-03: a pick that landed on the WRONG file used to resolve
+      // 'cancelled' too, so it was indistinguishable from closing the Picker
+      // deliberately — the gate said nothing and the natural next action was to
+      // click the button and pick the same wrong file again. (A pick only
+      // registers a drive.file grant for the file actually picked, which is why
+      // this matters.) It has its own outcome now, surfaced inline next to the
+      // existing pickerError treatment.
+      if (outcome === 'wrong-file') {
+        setPickerError(
+          t(
+            'driveDisplay.pickerWrongFile',
+            "That isn't the diagram this link points to. Pick the file the sender named — Axoview can only open the one the link is for."
+          )
+        );
+      }
     } catch (err) {
       console.error('DriveDisplayGate: Picker launch failed', err);
       setPickerError(
@@ -114,9 +125,18 @@ export function DriveDisplayGate() {
   // Wrong-account recovery (owner report 2026-07-28: "they still couldn't open
   // it"). In `needs-grant` the viewer IS signed in — the account just can't see
   // the file, typically a personal address when the link was shared to a work
-  // one. `signOut()` clears the profile hint, so the next `signIn()` shows
-  // Google's account chooser instead of silently re-picking the same account
-  // (`attemptSilentReconnect` passes the persisted email as `login_hint`).
+  // one. What is needed is Google's account chooser rather than the silent
+  // re-pick `attemptSilentReconnect` performs with the persisted email.
+  //
+  // S1/AUTH-11: this used to get the chooser by calling `signOut()` first,
+  // which clears the profile hint. That works — but `signOut()` also nulls
+  // `user` and clears the hint IRREVERSIBLY, and nothing restored them when the
+  // chooser was then closed without picking. The viewer ended up strictly worse
+  // off than before the click: the gate's copy no longer named the account it
+  // tried, the avatar's amber-dot reconnect affordance (`!!user && …`) was
+  // exactly what `signOut()` had destroyed, and no re-read was attempted.
+  // `prompt: 'select_account'` gets the same chooser without spending the
+  // session first, and a cancelled request now restores a still-valid one.
   //
   // The one-shot auto-retry above fires only on `needs-signin`, so it does NOT
   // cover this state — re-read explicitly once the new session lands, or the
@@ -124,8 +144,7 @@ export function DriveDisplayGate() {
   const handleSwitchAccount = async () => {
     setSwitchBusy(true);
     try {
-      signOut();
-      await signIn();
+      await signIn({ prompt: 'select_account' });
       if (useAuthStore.getState().status === 'AUTHENTICATED') {
         retryDriveDisplayRead(false);
       }
@@ -171,7 +190,60 @@ export function DriveDisplayGate() {
           )}
         </Typography>
 
-        {driveDisplayState === 'transient' ? (
+        {/* S3/DRV-02: the four causes that used to share one sentence. Each
+            says what actually happened, and only the ones a retry can fix
+            offer one. */}
+        {driveDisplayState === 'gone' ? (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            data-axoview-id="drive-display-gate-gone"
+          >
+            {t(
+              'driveDisplay.goneBody',
+              'The owner moved this diagram to their Google Drive trash, so the link no longer opens. If they restore it, the link starts working again.'
+            )}
+          </Typography>
+        ) : driveDisplayState === 'too-large' ? (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            data-axoview-id="drive-display-gate-too-large"
+          >
+            {t(
+              'driveDisplay.tooLargeBody',
+              'This diagram is too large to preview from a link. Ask the sender to share the file with your Google account directly, then reload this page.'
+            )}
+          </Typography>
+        ) : driveDisplayState === 'bad-link' ? (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            data-axoview-id="drive-display-gate-bad-link"
+          >
+            {t(
+              'driveDisplay.badLinkBody',
+              'This link is not valid — it looks like part of it was lost in copying. Ask the sender for the full link.'
+            )}
+          </Typography>
+        ) : driveDisplayState === 'grant-not-registered' ? (
+          <>
+            <Typography variant="body2" color="text.secondary">
+              {t(
+                'driveDisplay.grantNotRegisteredBody',
+                "Google hasn't finished registering your access to this file yet. This usually takes a moment — try again."
+              )}
+            </Typography>
+            <Button
+              variant="contained"
+              onClick={() => retryDriveDisplayRead(false)}
+              data-axoview-id="drive-display-gate-retry"
+              sx={{ textTransform: 'none' }}
+            >
+              {t('driveDisplay.retryButton', 'Try again')}
+            </Button>
+          </>
+        ) : driveDisplayState === 'transient' ? (
           <>
             <Typography variant="body2" color="text.secondary">
               {t(

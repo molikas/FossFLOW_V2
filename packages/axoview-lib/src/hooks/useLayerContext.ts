@@ -8,11 +8,15 @@
 import React, { createContext, useContext, useMemo } from 'react';
 import { shallow } from 'zustand/shallow';
 import { useModelStore } from 'src/stores/modelStore';
-import { useUiStateStore } from 'src/stores/uiStateStore';
+import {
+  useUiStateStore,
+  useUiStateStoreApi
+} from 'src/stores/uiStateStore';
 import { Layer, ViewItem, Connector, Rectangle, TextBox, Label } from 'src/types';
 import { getItemByIdOrThrow } from 'src/utils';
 import { isEntityVisibleInPreview } from 'src/utils/previewLayerVisibility';
 import { stripHtmlTags } from 'src/utils/stripHtml';
+import { dropUninteractableRefs } from 'src/utils/selectableRefs';
 
 export type LayerItemType =
   | 'ITEM'
@@ -34,6 +38,13 @@ export interface LayerContextValue {
   visibleIds: ReadonlySet<string>;
   /** IDs of all canvas entities whose layer is currently locked. */
   lockedIds: ReadonlySet<string>;
+  /**
+   * Every id that can legitimately appear in a selection ref for the current
+   * view — all entity ids plus connector anchor (waypoint) ids. The
+   * invalidation effect below prunes `selectedIds`/`itemControls` against it
+   * (E1/HIST-13, E4/CLIP-08).
+   */
+  liveIds: ReadonlySet<string>;
   /** The ordered layer definitions for the current view. */
   layers: Layer[];
   /** Number of entities assigned to each layer, keyed by layerId. */
@@ -47,6 +58,7 @@ export interface LayerContextValue {
 const DEFAULT_CONTEXT: LayerContextValue = {
   visibleIds: new Set(),
   lockedIds: new Set(),
+  liveIds: new Set(),
   layers: [],
   itemCountByLayerId: new Map(),
   unassignedCount: 0,
@@ -124,6 +136,7 @@ export const LayerContextProvider = ({
 
     const visibleIds = new Set<string>();
     const lockedIds = new Set<string>();
+    const liveIds = new Set<string>();
     const itemCountByLayerId = new Map<string, number>();
     const itemsByLayerId = new Map<string, LayerItem[]>();
     let unassignedCount = 0;
@@ -148,6 +161,11 @@ export const LayerContextProvider = ({
       type: LayerItemType,
       nameOverride?: string
     ) => {
+      liveIds.add(entity.id);
+      if (type === 'CONNECTOR') {
+        // Waypoint (CONNECTOR_ANCHOR) selection refs resolve by anchor id.
+        ((entity as Connector).anchors ?? []).forEach((a) => liveIds.add(a.id));
+      }
       const layer = entity.layerId ? layerById.get(entity.layerId) : undefined;
       // Base model visibility — authoritative in EDITABLE. In preview the
       // UI-only override (solo wins; else base minus hidden) takes over,
@@ -224,6 +242,7 @@ export const LayerContextProvider = ({
     return {
       visibleIds,
       lockedIds,
+      liveIds,
       layers,
       itemCountByLayerId,
       unassignedCount,
@@ -237,6 +256,73 @@ export const LayerContextProvider = ({
     editorMode,
     previewLayerOverrides
   ]);
+
+  // E2/RED-15 — the invalidation step the acquisition guards never had a twin
+  // for. `selectedIds` may only contain interactable refs (ADR 0006 §3 /
+  // canvas-interaction I-1), and every acquisition path filters through
+  // `makeInteractableCheck` — but a selection that was legal when it was made
+  // stayed in the store after its layer was hidden or locked. Delete then
+  // removed items the user could no longer see, and a group drag moved
+  // entities the panel presented as locked.
+  //
+  // This is the one place that sees every input to that verdict (the layer
+  // rows, the preview overrides, the entity→layer assignment), so it is where
+  // the re-check belongs. Layer state lives in the model and selection in
+  // ui-state with no subscription between them; this effect IS that
+  // subscription.
+  const uiStoreApi = useUiStateStoreApi();
+  React.useEffect(() => {
+    const {
+      selectedIds,
+      itemControls,
+      previewLayerOverrides: overrides,
+      actions
+    } = uiStoreApi.getState();
+
+    // E1/HIST-13 / E4/CLIP-08 (mop-up 2026-08-10): the invalidation must also
+    // drop refs whose ENTITY is gone — a delete, an undo/redo of one, or a
+    // model swap under preserveViewport left the selection naming ids that no
+    // longer resolve (INV-2), and the next selection-routed action (a style
+    // write, a nudge, a second Delete) hit `getItemByIdOrThrow`. Same rule for
+    // the properties-panel target: a dead id there rendered the panel "open
+    // but blank". This effect fires on every model change (its deps include
+    // `views`), so it is the one subscription between the two stores.
+    if (selectedIds.length > 0) {
+      const alive = selectedIds.filter((r) => value.liveIds.has(r.id));
+      const { refs, dropped } = dropUninteractableRefs(
+        alive,
+        value.lockedIds,
+        value.visibleIds,
+        value.layers.length > 0
+      );
+      if (dropped > 0 || alive.length !== selectedIds.length) {
+        actions.setSelectedIds(refs);
+      }
+    }
+    if (
+      itemControls &&
+      itemControls.type !== 'ADD_ITEM' &&
+      'id' in itemControls &&
+      typeof itemControls.id === 'string' &&
+      !value.liveIds.has(itemControls.id)
+    ) {
+      actions.setItemControls(null);
+    }
+
+    // E4/CLIP-09: a preview override naming a layer that no longer exists.
+    // Solo is the harmful one — `isEntityVisibleInPreview` shows ONLY the
+    // solo'd layer's entities, so a dead solo id blanked the whole canvas
+    // until a page switch. (`setPreviewSoloLayer` is a toggle: passing the
+    // current id clears it.) Dead hidden ids are pruned for hygiene.
+    const layerIdSet = new Set(value.layers.map((l) => l.id));
+    if (overrides.soloLayerId && !layerIdSet.has(overrides.soloLayerId)) {
+      actions.setPreviewSoloLayer(overrides.soloLayerId);
+    } else {
+      overrides.hiddenLayerIds
+        .filter((id) => !layerIdSet.has(id))
+        .forEach((id) => actions.togglePreviewLayerHidden(id));
+    }
+  }, [value, uiStoreApi]);
 
   return React.createElement(LayerContext.Provider, { value }, children);
 };

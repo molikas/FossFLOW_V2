@@ -11,13 +11,15 @@ import { useTranslation } from 'src/stores/localeStore';
 
 interface Props {
   id: string;
+  /** View mode (EXPLORABLE_READONLY) — F2/VIEW-11. */
+  readOnly?: boolean;
 }
 
 // Rectangle panel (2026-07-02): all visual styling lives on the top-bar style
 // strip, so the deck has no text content — it leads with Notes (open by
 // default), with the identity Name tucked into a collapsed Metadata section
 // (names are Layers-first). Unified collapsible-section deck (ux-principles §5.1).
-export const RectangleControls = ({ id }: Props) => {
+export const RectangleControls = ({ id, readOnly = false }: Props) => {
   const { t } = useTranslation('rectangleControls');
   const { t: tMenu } = useTranslation('toolMenu');
   const uiStateActions = useUiStateStore((state) => state.actions);
@@ -54,6 +56,7 @@ export const RectangleControls = ({ id }: Props) => {
         onChange={(notes) => updateRectangle(rectangle.id, { notes })}
         open={notesOpen}
         onToggle={() => setNotesOpen((v) => !v)}
+        readOnly={readOnly}
       />
       <MetadataSection
         title={t('metadata')}
@@ -61,6 +64,7 @@ export const RectangleControls = ({ id }: Props) => {
         name={rectangle.name ?? ''}
         placeholder={t('namePlaceholder')}
         onChange={(v) => updateRectangle(rectangle.id, { name: v || undefined })}
+        readOnly={readOnly}
       />
     </ControlsContainer>
   );

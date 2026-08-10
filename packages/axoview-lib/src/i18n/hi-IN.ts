@@ -320,6 +320,7 @@ const locale: LocaleProps = {
     namePlaceholder: 'तत्व का नाम…'
   },
   topBarStyleControls: {
+    mixed: 'मिश्रित',
     rotate90: '90° घुमाएं',
     noColor: 'कोई रंग नहीं',
     pickColorFromScreen: 'स्क्रीन से रंग चुनें',
@@ -570,6 +571,12 @@ const locale: LocaleProps = {
   },
   // D8 — LayersPanel
   layersPanel: {
+    deleteLayerTitle: 'लेयर हटाएं?',
+    deleteLayerBody: 'इस लेयर में {count} एलिमेंट हैं। उनका क्या किया जाए?',
+    deleteLayerHiddenWarning: 'यह लेयर छिपी हुई है। सामग्री रखने पर वह फिर से दिखने लगेगी — बिना लेयर वाला एलिमेंट हमेशा दिखता है।',
+    deleteLayerCancel: 'रद्द करें',
+    deleteLayerKeep: 'सामग्री रखें',
+    deleteLayerDeleteContents: 'सामग्री भी हटाएं',
     header: 'परतें',
     addLayer: 'परत जोड़ें',
     deleteSelectedLayer: 'चयनित परत हटाएं',

@@ -166,7 +166,7 @@ test.describe('Element link card + strip Enter-confirm (ADR 0034 addendum)', () 
         () =>
           page.evaluate(() => {
             const c = document.querySelector(
-              '[data-testid="axoview-nodes-canvas"]'
+              '[data-testid="axoview-scene-canvas"]'
             );
             return c
               ? parseInt(

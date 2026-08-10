@@ -27,6 +27,15 @@ import {
   StorageProvider,
   isPersistedDiagramBlob
 } from '../../services/storage';
+import { ImportErrorDialog } from '../ImportErrorDialog';
+
+export interface ImportOutcome {
+  diagramCount: number;
+  folderCount: number;
+  /** What the archive CLAIMED, so the caller can name the gap. */
+  claimedDiagramCount: number;
+  droppedLinks: number;
+}
 
 type Step = 'pickFile' | 'configureZip' | 'configureJson';
 type DestinationKind = ImportDestination['kind'];
@@ -35,8 +44,13 @@ interface Props {
   open: boolean;
   onClose: () => void;
   storage: StorageProvider;
-  /** Notify parent so it can refresh tree / open the imported diagram. */
-  onImported: () => Promise<void> | void;
+  /**
+   * Notify parent so it can refresh tree / open the imported diagram. For a
+   * project ZIP it receives what `importProject` actually created, so the
+   * summary reports the truth rather than what the manifest claimed
+   * (A3/ZIP-05, A3/ZIP-02).
+   */
+  onImported: (result?: ImportOutcome) => Promise<void> | void;
   /** Imports a single .json diagram (preserves the existing single-diagram path). */
   onImportSingleJson: (data: unknown, suggestedName: string) => Promise<void> | void;
 }
@@ -57,6 +71,11 @@ export function ImportDialog({
   const [newFolderName, setNewFolderName] = useState('Imported');
   const [replaceConfirm, setReplaceConfirm] = useState('');
 
+  // A3/ZIP-08 + ADR 0011: a file that cannot be READ is a failure of intent —
+  // it gets the explicit dialog, whose copy is specific to the failure. Errors
+  // raised while CONFIGURING an import (a bad folder name, an unconfirmed
+  // replace) stay inline, where the control that caused them is.
+  const [fileError, setFileError] = useState<unknown>(null);
   const [singleJsonData, setSingleJsonData] = useState<unknown>(null);
   const [singleJsonName, setSingleJsonName] = useState('');
 
@@ -113,8 +132,7 @@ export function ImportDialog({
           setStep('configureJson');
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Could not read file';
-        setError(msg);
+        setFileError(err ?? new Error('Could not read file'));
       } finally {
         setBusy(false);
       }
@@ -137,8 +155,13 @@ export function ImportDialog({
           : destination === 'replaceAll'
             ? { kind: 'replaceAll' }
             : { kind: 'root' };
-      await importProject({ storage }, parsed, { destination: dest });
-      await onImported();
+      const outcome = await importProject({ storage }, parsed, { destination: dest });
+      await onImported({
+        diagramCount: outcome.diagramCount,
+        folderCount: outcome.folderCount,
+        claimedDiagramCount: parsed.manifest.diagrams.length,
+        droppedLinks: outcome.droppedLinks
+      });
       handleClose();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Import failed';
@@ -291,8 +314,14 @@ export function ImportDialog({
   );
 
   return (
+    <>
+    <ImportErrorDialog
+      open={fileError !== null}
+      error={fileError}
+      onDismiss={() => setFileError(null)}
+    />
     <Dialog
-      open={open}
+      open={open && fileError === null}
       onClose={handleClose}
       maxWidth="sm"
       fullWidth
@@ -320,5 +349,6 @@ export function ImportDialog({
         )}
       </DialogContent>
     </Dialog>
+    </>
   );
 }

@@ -14,6 +14,7 @@
 import path from 'path';
 import { appTest as test, expect } from '../fixtures/app.fixture';
 import { EmptyStateScreenPOM } from '../pom/EmptyStateScreenPOM';
+import { importFileViaDialog } from '../helpers/import';
 import { byAxoviewId, byLibTestId } from '../helpers/selectors';
 import { waitForDebugBridge } from '../helpers/store';
 
@@ -80,7 +81,7 @@ const getLabelScale = (page: Page): Promise<number> =>
       return parseFloat(raw) || 1;
     }
     const canvas = document.querySelector(
-      '[data-testid="axoview-nodes-canvas"]'
+      '[data-testid="axoview-scene-canvas"]'
     );
     if (canvas) {
       return parseFloat(canvas.getAttribute('data-label-scale') ?? '') || 1;
@@ -93,11 +94,11 @@ async function importSampleDiagram(page: Page) {
   await page.reload();
   const emptyState = new EmptyStateScreenPOM(page);
   await emptyState.expectVisible();
-  const [fileChooser] = await Promise.all([
-    page.waitForEvent('filechooser', { timeout: 5_000 }),
-    emptyState.clickImport()
-  ]);
-  await fileChooser.setFiles(FIXTURE_JSON);
+  // A3/ZIP-09 (owner ruling 2026-07-30): one import flow — the Import
+  // button opens `ImportDialog` for an empty tree as much as a populated
+  // one, and the import is confirmed with its destination on screen.
+  await emptyState.clickImport();
+  await importFileViaDialog(page, FIXTURE_JSON);
   await byLibTestId(page, 'axoview-canvas').waitFor({ state: 'visible', timeout: 10_000 });
   await waitForDebugBridge(page);
   // Named items (Alpha/Beta) render node labels — as DOM in the default
@@ -106,7 +107,7 @@ async function importSampleDiagram(page: Page) {
   await byLibTestId(page, 'axoview-canvas').waitFor({ state: 'visible' });
   await page
     .locator(
-      '[data-testid="node-label"], [data-testid="axoview-nodes-canvas"]'
+      '[data-testid="node-label"], [data-testid="axoview-scene-canvas"]'
     )
     .first()
     .waitFor({ state: 'attached', timeout: 10_000 });

@@ -7,7 +7,7 @@ import {
   isPersistedDiagramBlob
 } from '../types';
 import { leanIfModel } from '../leanModel';
-import { authStore } from '../../../stores/authStore';
+import { authStore, onAuthSessionReset } from '../../../stores/authStore';
 import { notificationStore } from '../../../stores/notificationStore';
 
 // ADR 0036 — Google Drive Storage Provider.
@@ -31,12 +31,52 @@ const ROOT_CACHE_KEY = 'axoview-drive-root';
 const MANIFEST_NAME = 'axoview-manifest.json';
 export const DEFAULT_ROOT_NAME = 'axoview-diagrams';
 
-class DriveError extends Error {
-  constructor(message: string, readonly status: number) {
+/**
+ * Why a Drive request failed, when the HTTP status alone cannot say.
+ *
+ * S1/AUTH-08: `request()` classified a 403 as rate-limit vs permanent and then
+ * threw `status: 403` for BOTH, discarding the classification — so an exhausted
+ * rate limit was indistinguishable from a missing scope at the throw site, and
+ * the one consumer that acted on a 403 parked a healthy session in
+ * DRIVE_ACCESS_REQUIRED and nulled a valid token. The classification travels
+ * with the error now.
+ */
+export type DriveErrorReason =
+  | 'rate-limit'
+  | 'drive-scope-required'
+  | 'session-expired'
+  | 'network'
+  | 'unknown';
+
+export class DriveError extends Error {
+  readonly reason: DriveErrorReason;
+  constructor(
+    message: string,
+    readonly status: number,
+    reason: DriveErrorReason = 'unknown'
+  ) {
     super(message);
     this.name = 'DriveError';
+    this.reason = reason;
+    // Downlevelled `extends Error` loses the prototype link, so `instanceof
+    // DriveError` reads false and `constructor.name` reads 'Error' — which is
+    // why every consumer tests `err.name === 'DriveError'`. Restore the chain so
+    // both work. (The sibling `DriveShareError` cost the campaign a debugging
+    // session on exactly this — see the DRV-08 rig note in known_issues.md.)
+    Object.setPrototypeOf(this, DriveError.prototype);
   }
 }
+
+/**
+ * A 403 that means "this token does not carry drive.file" rather than "slow
+ * down". Google reports it as `insufficientPermissions` /
+ * `PERMISSION_DENIED` / `insufficientScopes` depending on the endpoint.
+ */
+const isScopeDenial = (status: number, reason: string): boolean =>
+  status === 403 &&
+  /insufficientPermissions|insufficientScopes|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i.test(
+    reason
+  );
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -60,6 +100,32 @@ export class GoogleDriveProvider implements StorageProvider {
   // Overridable in tests to keep backoff fast.
   protected retryDelays = [500, 1000, 2000];
 
+  constructor() {
+    // S1/AUTH-16: `StorageManager` holds ONE provider for the page lifetime, so
+    // the per-account root caches outlive the account. Sign-out (and a grant
+    // naming a different email) fires this.
+    onAuthSessionReset(() => this.invalidateAccountCaches());
+  }
+
+  /**
+   * Drop everything keyed to the Google account that just went away. Without
+   * it, account B's first `listDiagrams(null)` queried
+   * `'<root-of-account-A>' in parents` under B's bearer token and returned `[]`,
+   * and `createDiagram` POSTed A's folder id as the parent — because
+   * `resolveRoot()` short-circuits on the in-memory id, so B never reached
+   * `probeRoot()`, never ran the `folderExists()` check that would have 404'd
+   * and healed the localStorage copy, and never re-ran marker discovery.
+   */
+  invalidateAccountCaches(): void {
+    this.rootFolderId = null;
+    this.rootProbe = null;
+    try {
+      localStorage.removeItem(ROOT_CACHE_KEY);
+    } catch {
+      /* private mode / quota — the in-memory reset is the load-bearing half */
+    }
+  }
+
   async isAvailable(): Promise<boolean> {
     return authStore.getState().status === 'AUTHENTICATED';
   }
@@ -68,13 +134,46 @@ export class GoogleDriveProvider implements StorageProvider {
   // Low-level request: auth (via getValidToken ONLY), retry/backoff, 401 → expire
   // ---------------------------------------------------------------------------
 
+  /**
+   * A2/STOR-08: a retry replays the request VERBATIM, which is only safe when
+   * the request is idempotent. A `POST` that creates a Drive file is not: a 5xx
+   * or a dropped connection returned AFTER the file was committed made the
+   * retry mint a second one — the call then SUCCEEDED, returned the second id,
+   * and left an untracked orphan with no signal at all. GET/PATCH/PUT/DELETE
+   * are safe to replay; POST is not, so it fails fast and the caller decides.
+   *
+   * (Drive's resumable uploads carry an upload id, which would make the create
+   * genuinely retriable. That is a larger change than wave 1; failing fast is
+   * strictly better than silently duplicating the user's file.)
+   */
+  private static isReplaySafe(init: RequestInit): boolean {
+    return (init.method ?? 'GET').toUpperCase() !== 'POST';
+  }
+
   private async request(
     url: string,
     init: RequestInit = {},
     attempt = 0
   ): Promise<Response> {
     const token = await authStore.getValidToken();
-    if (!token) throw new DriveError('Not signed in to Google', 401);
+    if (!token) {
+      // S1/AUTH-06: "no token" is not always "not signed in". A scope-less grant
+      // (or a 403 that routed here) parks the session in DRIVE_ACCESS_REQUIRED
+      // and nulls the token deliberately, and the blocking re-consent dialog is
+      // already on screen owning the recovery — so reporting "Not signed in to
+      // Google" put a second, contradictory error surface next to it (ADR 0011
+      // makes competing surfaces especially costly). Name the real condition so
+      // callers can suppress their own.
+      if (authStore.getState().status === 'DRIVE_ACCESS_REQUIRED') {
+        throw new DriveError(
+          'Google Drive access is required',
+          403,
+          'drive-scope-required'
+        );
+      }
+      throw new DriveError('Not signed in to Google', 401);
+    }
+    const replaySafe = GoogleDriveProvider.isReplaySafe(init);
 
     let res: Response;
     try {
@@ -83,12 +182,12 @@ export class GoogleDriveProvider implements StorageProvider {
         headers: { ...(init.headers || {}), Authorization: `Bearer ${token}` }
       });
     } catch {
-      // Network error — treat as transient.
-      if (attempt < this.retryDelays.length) {
+      // Network error — transient, unless replaying could duplicate a create.
+      if (replaySafe && attempt < this.retryDelays.length) {
         await sleep(this.retryDelays[attempt]);
         return this.request(url, init, attempt + 1);
       }
-      throw new DriveError('Network error contacting Google Drive', 0);
+      throw new DriveError('Network error contacting Google Drive', 0, 'network');
     }
 
     if (res.ok) return res;
@@ -97,7 +196,7 @@ export class GoogleDriveProvider implements StorageProvider {
       // Token rejected server-side despite not being locally expired — force the
       // auth store to SESSION_EXPIRED so the user gets the re-sign-in prompt.
       authStore.markExpired();
-      throw new DriveError('Google session expired', 401);
+      throw new DriveError('Google session expired', 401, 'session-expired');
     }
 
     // Read the error body once (we're erroring out) to classify the failure.
@@ -125,7 +224,9 @@ export class GoogleDriveProvider implements StorageProvider {
       res.status === 429 ||
       (res.status === 403 && /rateLimitExceeded/i.test(reason));
     const transient = isRateLimit || res.status >= 500;
-    if (transient && attempt < this.retryDelays.length) {
+    // A2/STOR-08: never replay a non-idempotent create — a 5xx returned after
+    // the write committed would mint a second file.
+    if (transient && replaySafe && attempt < this.retryDelays.length) {
       if (isRateLimit) {
         notificationStore.push({
           severity: 'warning',
@@ -136,11 +237,29 @@ export class GoogleDriveProvider implements StorageProvider {
       return this.request(url, init, attempt + 1);
     }
 
+    // S1/AUTH-09: the 401 twin above has always driven the auth store; the 403
+    // twin did not. `markDriveScopeMissing()` was called from exactly ONE place
+    // in the codebase — `handleCreateBlankDiagram`'s catch — so a scope revoked
+    // out-of-band (account permissions page, admin policy) dead-ended save,
+    // load, list, rename, move, folder ops and the tree manifest in a generic
+    // toast while the session kept reporting itself signed in, and the blocking
+    // re-consent dialog that exists for this condition never appeared. Routing
+    // it here gives every Drive path the same recovery ladder.
+    if (isScopeDenial(res.status, reason)) {
+      authStore.markDriveScopeMissing();
+      throw new DriveError(
+        apiMessage || 'Google Drive access is required',
+        403,
+        'drive-scope-required'
+      );
+    }
+
     // Surface Google's own message (e.g. "Google Drive API has not been used in
     // project … or it is disabled") so the file tree shows the real cause.
     throw new DriveError(
       apiMessage || `Google Drive request failed (${res.status})`,
-      res.status
+      res.status,
+      isRateLimit ? 'rate-limit' : 'unknown'
     );
   }
 
@@ -434,9 +553,27 @@ export class GoogleDriveProvider implements StorageProvider {
     return json.id;
   }
 
-  async deleteFolder(id: string): Promise<void> {
-    // Trashing a folder trashes its descendants — Drive semantics cover the
-    // `recursive` intent, so the flag is not forwarded.
+  async deleteFolder(id: string, recursive = true): Promise<void> {
+    // A2/STOR-02: `deleteFolder(id, recursive)` meant three different things
+    // across the three providers — the server forwarded the flag, Drive ignored
+    // it and always cascaded, and the session place ignored it the other way,
+    // so `recursive: true` in the session place was WEAKER than `false` on
+    // Drive. Trashing a Drive folder trashes its descendants, so honouring
+    // `recursive: false` means moving the children out first.
+    if (!recursive) {
+      const root = await this.ensureRoot();
+      const meta = (await (
+        await this.request(`${DRIVE_API}/files/${id}?fields=parents`)
+      ).json()) as DriveFile;
+      const target = meta.parents?.[0] ?? root;
+      const children = await this.listFiles(
+        `'${id}' in parents and trashed=false and ${APP_MARKER_Q}`,
+        'files(id,name,parents)'
+      );
+      for (const child of children) {
+        await this.moveItem(child.id, 'folder', target === root ? null : target);
+      }
+    }
     await this.patchJson(id, { trashed: true });
   }
 

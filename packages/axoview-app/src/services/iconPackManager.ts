@@ -28,36 +28,90 @@ const PACK_METADATA: Record<IconPackName, string> = {
   material: 'Material Icons'
 };
 
-// Load preferences from localStorage
+// F5/ICON-05 — every localStorage access is guarded.
+//
+// In a browser that THROWS on access (Safari private browsing, an iframe with
+// third-party storage blocked) the raw reads below propagated and took the
+// whole pack manager down at mount. Its sibling
+// `axoview-lib/src/config/persistedSettings.ts` has wrapped every access since
+// it was written — "errors are silently swallowed so a corrupt/missing entry
+// never crashes the editor" — the same lesson, learned on one side of the
+// package boundary only.
+const safeRead = (key: string): string | null => {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+
+const safeWrite = (key: string, value: string): void => {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // A preference that cannot be persisted is not worth losing the session
+    // over; the in-memory state is still correct for this tab.
+  }
+};
+
 export const loadLazyLoadingPreference = (): boolean => {
-  const stored = localStorage.getItem(LAZY_LOADING_KEY);
+  const stored = safeRead(LAZY_LOADING_KEY);
   return stored === null ? true : stored === 'true'; // Default to true
 };
 
 export const saveLazyLoadingPreference = (enabled: boolean): void => {
-  localStorage.setItem(LAZY_LOADING_KEY, String(enabled));
+  safeWrite(LAZY_LOADING_KEY, String(enabled));
 };
 
+// Default: all packs enabled so AWS/GCP/Azure/K8s icons are available out of
+// the box. Users can opt individual packs off in Settings → Icon Packs.
+const DEFAULT_ENABLED_PACKS: IconPackName[] = [
+  'aws',
+  'gcp',
+  'azure',
+  'kubernetes',
+  'material'
+];
+
+/**
+ * F5/ICON-04 — guard the SHAPE, not just the parse.
+ *
+ * This used to be `JSON.parse(stored) as IconPackName[]`, and an assertion is
+ * not a check: a bare string, `null`, or a list holding a name that is not a
+ * pack all parsed cleanly and were returned verbatim, so `loadIconPack` hit its
+ * `default:` throw. The value survives across sessions, so the failure repeated
+ * on every boot until the key was cleared by hand — a corrupt preference
+ * bricked icon loading with no way back from the UI.
+ *
+ * Filtered against the pack list rather than validated wholesale: one bad name
+ * in an otherwise good list should cost the user that one pack, not all of them.
+ */
 export const loadEnabledPacks = (): IconPackName[] => {
-  const stored = localStorage.getItem(ENABLED_PACKS_KEY);
-  // Default: all packs enabled so AWS/GCP/Azure/K8s icons are available out of the box.
-  // Users can opt individual packs off in Settings → Icon Packs.
-  if (!stored) return ['aws', 'gcp', 'azure', 'kubernetes', 'material'];
+  const stored = safeRead(ENABLED_PACKS_KEY);
+  if (!stored) return DEFAULT_ENABLED_PACKS;
+  let parsed: unknown;
   try {
-    return JSON.parse(stored) as IconPackName[];
+    parsed = JSON.parse(stored);
   } catch {
-    return ['aws', 'gcp', 'azure', 'kubernetes', 'material'];
+    return DEFAULT_ENABLED_PACKS;
   }
+  if (!Array.isArray(parsed)) return DEFAULT_ENABLED_PACKS;
+  const known = parsed.filter((name): name is IconPackName =>
+    ALL_ICON_PACK_NAMES.includes(name as IconPackName)
+  );
+  // Nothing survived — the stored value tells us nothing usable, so fall back
+  // rather than leaving the user with no packs at all.
+  return known.length > 0 ? known : DEFAULT_ENABLED_PACKS;
 };
 
 export const saveEnabledPacks = (packs: IconPackName[]): void => {
-  localStorage.setItem(ENABLED_PACKS_KEY, JSON.stringify(packs));
+  safeWrite(ENABLED_PACKS_KEY, JSON.stringify(packs));
 };
 
 // Dynamic pack loader
 export const loadIconPack = async (
   packName: IconPackName
-): Promise<ProcessedCollection> => {
+): Promise<ProcessedCollection | null> => {
   switch (packName) {
     case 'aws':
       return (await import('@isoflow/isopacks/dist/aws')).default;
@@ -75,11 +129,17 @@ export const loadIconPack = async (
       return (pack.default ?? pack) as unknown as ProcessedCollection;
     }
     default:
-      throw new Error(`Unknown icon pack: ${packName}`);
+      // F5/ICON-04: an unknown name is SKIPPED, not thrown on. It used to
+      // throw, which is how one bad entry in a persisted preference became a
+      // hard failure that repeated on every boot. `loadEnabledPacks` now
+      // filters, so this is unreachable from the preference path — but a name
+      // can also arrive from a diagram's `requiredPacks`, which is untrusted
+      // file content, and a diagram must never be able to break icon loading.
+      return null;
   }
 };
 
-const ALL_ICON_PACK_NAMES: IconPackName[] = [
+export const ALL_ICON_PACK_NAMES: IconPackName[] = [
   'aws',
   'gcp',
   'azure',
@@ -209,6 +269,16 @@ export const useIconPackManager = (coreIcons: Icon[]) => {
 
       try {
         const pack = await loadIconPack(packName);
+        // F5/ICON-04: an unknown pack name resolves to null rather than
+        // throwing. Treat it as "nothing to add" — the pack simply is not one
+        // this build ships.
+        if (!pack) {
+          setPackInfo((prev) => ({
+            ...prev,
+            [packName]: { ...prev[packName], loading: false }
+          }));
+          return;
+        }
         const flattenedIcons = flattenCollections([pack]);
 
         // Store the loaded pack data

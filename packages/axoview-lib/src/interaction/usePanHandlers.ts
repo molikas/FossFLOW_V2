@@ -49,6 +49,19 @@ export const usePanHandlers = () => {
   }, [uiStateApi, deleteConnector, commitDragTransaction]);
 
   // Reconstruct a clean (non-mid-action) mode from a type string for restoration.
+  //
+  // I5/CTX-03: this used to reconstruct five hardcoded types and drop every
+  // other armed tool to CURSOR — so a right-drag pan while TEXTBOX or LABEL was
+  // armed silently disarmed it, and the user's next canvas click did nothing
+  // they expected. The five that WERE listed worked, which is exactly why the
+  // gap was invisible: `usePanHandlers.test.ts` covered CURSOR and CONNECTOR.
+  //
+  // Every PERSISTENT tool mode belongs here — the same set `handleEscapeKey`
+  // returns to Select from, for the same reason (they are the modes a user
+  // deliberately arms and expects to still be armed). Transient interaction
+  // modes (DRAG_ITEMS, the transforms, RECONNECT_ANCHOR) are NOT restorable:
+  // they describe a gesture that the pan interrupted, so CURSOR is right for
+  // them, and the `default` branch is where they land.
   const restorePreviousMode = useCallback(() => {
     const prevType = previousModeTypeRef.current;
     previousModeTypeRef.current = null;
@@ -79,6 +92,12 @@ export const usePanHandlers = () => {
         break;
       case 'PLACE_ICON':
         actions.setMode({ type: 'PLACE_ICON', showCursor: true, id: null });
+        break;
+      case 'TEXTBOX':
+        actions.setMode({ type: 'TEXTBOX', showCursor: true, id: null });
+        break;
+      case 'LABEL':
+        actions.setMode({ type: 'LABEL', showCursor: true, id: null });
         break;
       default:
         actions.setMode({
@@ -118,16 +137,16 @@ export const usePanHandlers = () => {
         // to clear it because the right mouseup is consumed by handleMouseUp).
         const uiState = uiStateApi.getState();
         uiState.actions.setMouse({ ...uiState.mouse, mousedown: null });
-        restorePreviousMode();
-      } else {
-        actions.setMode({
-          type: 'CURSOR',
-          showCursor: true,
-          mousedownItem: null
-        });
       }
+      // I5/CTX-04: the middle-drag branch used to hardcode CURSOR and never
+      // call `restorePreviousMode` at all — so a middle-drag pan dropped even
+      // the tools the right-drag path restores correctly. There is no reason
+      // for the two pan gestures to differ about what the pan INTERRUPTED; the
+      // only real difference is the stale-mousedown cleanup above, which is a
+      // consequence of the right mouseup being consumed.
+      restorePreviousMode();
     }
-  }, [actions, restorePreviousMode, uiStateApi]);
+  }, [restorePreviousMode, uiStateApi]);
 
   // Fixed pan model (ADR 0022 §6): middle-click and right-click drag both pan,
   // always — no settings. The ctrl/alt/empty-area click-pan options were removed
@@ -143,6 +162,11 @@ export const usePanHandlers = () => {
 
       if (e.button === 1) {
         e.preventDefault();
+        // CTX-04: capture the armed tool BEFORE `startPan` overwrites the mode,
+        // so `endPan` can put it back. The right-button branch below has always
+        // done this; the middle one never did, which is why it dropped even the
+        // tools the right-drag path restored.
+        previousModeTypeRef.current = modeType;
         startPan('middle');
         return true;
       }

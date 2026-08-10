@@ -24,12 +24,19 @@ function makeUiState(overrides = {}) {
 
 function makeDeps(scene = {}) {
   return {
-    getScene: () => ({ items: [], rectangles: [], textBoxes: [], ...scene }),
+    getScene: () => ({
+      items: [],
+      rectangles: [],
+      textBoxes: [],
+      labels: [],
+      ...scene
+    }),
     beginDragTransaction: jest.fn(),
     commitDragTransaction: jest.fn(),
     batchUpdateViewItemTiles: jest.fn(),
     batchUpdateRectangles: jest.fn(),
-    batchUpdateTextBoxTiles: jest.fn()
+    batchUpdateTextBoxTiles: jest.fn(),
+    batchUpdateLabelTiles: jest.fn()
   };
 }
 
@@ -98,5 +105,191 @@ describe('handleArrowKey — selection-aware nudge vs pan (B6)', () => {
     const uiState = makeUiState();
     expect(handleArrowKey(makeKey('a'), uiState, makeDeps())).toBe(false);
     expect(uiState.actions.setScroll).not.toHaveBeenCalled();
+  });
+});
+
+// Promoted from the exploratory lane (I3/SEL-01). The batch updaters are the
+// DRAG commit path and write `offset: u.offset` unconditionally — deliberately,
+// so a drag that re-snaps an item clears the residual by passing `undefined`.
+// The nudge passed no offset at all, so every arrow press erased an off-grid
+// item's sub-tile residual and snapped it onto the grid: the ADR 0023
+// offset-omission class, in its keyboard consumer.
+describe('handleArrowKey — the off-grid residual (SEL-01)', () => {
+  const OFFSET = { x: -8.7, y: -12.74 };
+
+  it('carries a nudged item’s offset through unchanged', () => {
+    const uiState = makeUiState({ selectedIds: [{ type: 'ITEM', id: 'n1' }] });
+    const deps = makeDeps({
+      items: [{ id: 'n1', tile: { x: 5, y: 5 }, offset: OFFSET }]
+    });
+
+    handleArrowKey(makeKey('ArrowRight'), uiState, deps);
+
+    expect(deps.batchUpdateViewItemTiles).toHaveBeenCalledWith([
+      { id: 'n1', tile: { x: 6, y: 5 }, offset: OFFSET }
+    ]);
+  });
+
+  it('carries it for rectangles and text boxes too', () => {
+    const uiState = makeUiState({
+      selectedIds: [
+        { type: 'RECTANGLE', id: 'r1' },
+        { type: 'TEXTBOX', id: 't1' }
+      ]
+    });
+    const deps = makeDeps({
+      rectangles: [
+        { id: 'r1', from: { x: 0, y: 0 }, to: { x: 2, y: 2 }, offset: OFFSET }
+      ],
+      textBoxes: [{ id: 't1', tile: { x: 3, y: 3 }, offset: OFFSET }]
+    });
+
+    handleArrowKey(makeKey('ArrowRight'), uiState, deps);
+
+    expect(deps.batchUpdateRectangles).toHaveBeenCalledWith([
+      { id: 'r1', from: { x: 1, y: 0 }, to: { x: 3, y: 2 }, offset: OFFSET }
+    ]);
+    expect(deps.batchUpdateTextBoxTiles).toHaveBeenCalledWith([
+      { id: 't1', tile: { x: 4, y: 3 }, offset: OFFSET }
+    ]);
+  });
+
+  it('leaves a snapped item’s absent offset absent', () => {
+    const uiState = makeUiState({ selectedIds: [{ type: 'ITEM', id: 'n1' }] });
+    const deps = makeDeps({ items: [{ id: 'n1', tile: { x: 5, y: 5 } }] });
+
+    handleArrowKey(makeKey('ArrowRight'), uiState, deps);
+
+    expect(deps.batchUpdateViewItemTiles).toHaveBeenCalledWith([
+      { id: 'n1', tile: { x: 6, y: 5 }, offset: undefined }
+    ]);
+  });
+});
+
+// Promoted from the exploratory lane (I1/PTR-11) — see
+// tests-exploratory/I1-pointer/ptr-04-07-08-11-13.explore.spec.ts in the
+// campaign history. The nudge used to assert in a comment that `selectedIds`
+// cannot hold locked/hidden refs; E2/RED-15 falsified that (acquisition is
+// gated, but locking a layer does not re-validate a live selection), so the
+// arrows moved locked items one tile per press while the mouse drag refused.
+describe('handleArrowKey — the layer gate (PTR-11)', () => {
+  const lockedGate = (lockedId: string) => (ref: { id: string }) =>
+    ref.id !== lockedId;
+
+  it('does not nudge a selected item whose layer is locked', () => {
+    const uiState = makeUiState({ selectedIds: [{ type: 'ITEM', id: 'n1' }] });
+    const deps = {
+      ...makeDeps({ items: [{ id: 'n1', tile: { x: 5, y: 5 } }] }),
+      isItemInteractable: lockedGate('n1')
+    };
+
+    handleArrowKey(makeKey('ArrowRight'), uiState, deps);
+
+    expect(deps.batchUpdateViewItemTiles).not.toHaveBeenCalled();
+    expect(deps.beginDragTransaction).not.toHaveBeenCalled();
+    // Nothing nudge-able survived the gate, so the keystroke falls back to pan —
+    // the same fallback a connectors-only selection takes.
+    expect(uiState.actions.setScroll).toHaveBeenCalledTimes(1);
+  });
+
+  it('nudges only the unlocked members of a mixed selection', () => {
+    const uiState = makeUiState({
+      selectedIds: [
+        { type: 'ITEM', id: 'locked' },
+        { type: 'ITEM', id: 'free' }
+      ]
+    });
+    const deps = {
+      ...makeDeps({
+        items: [
+          { id: 'locked', tile: { x: 0, y: 0 } },
+          { id: 'free', tile: { x: 2, y: 2 } }
+        ]
+      }),
+      isItemInteractable: lockedGate('locked')
+    };
+
+    handleArrowKey(makeKey('ArrowRight'), uiState, deps);
+
+    expect(deps.batchUpdateViewItemTiles).toHaveBeenCalledWith([
+      { id: 'free', tile: { x: 3, y: 2 } }
+    ]);
+  });
+
+  it('nudges normally when no gate is supplied (no layers configured)', () => {
+    const uiState = makeUiState({ selectedIds: [{ type: 'ITEM', id: 'n1' }] });
+    const deps = makeDeps({ items: [{ id: 'n1', tile: { x: 5, y: 5 } }] });
+
+    handleArrowKey(makeKey('ArrowRight'), uiState, deps);
+
+    expect(deps.batchUpdateViewItemTiles).toHaveBeenCalledWith([
+      { id: 'n1', tile: { x: 6, y: 5 } }
+    ]);
+  });
+});
+
+// Promoted from the exploratory lane (R5/OVL-14). A floating Label was the one
+// canvas entity with no keyboard nudge at all: it was missing from
+// NUDGEABLE_TYPES, so the arrow keys PANNED the canvas with one selected, while
+// the mouse drag moved it fine.
+describe('handleArrowKey — floating Labels nudge too (OVL-14)', () => {
+  it('nudges a selected Label instead of panning', () => {
+    const uiState = makeUiState({ selectedIds: [{ type: 'LABEL', id: 'l1' }] });
+    const deps = makeDeps({
+      labels: [{ id: 'l1', tile: { x: 4, y: 4 } }]
+    });
+
+    expect(handleArrowKey(makeKey('ArrowRight'), uiState, deps)).toBe(true);
+
+    expect(deps.batchUpdateLabelTiles).toHaveBeenCalledWith([
+      { id: 'l1', tile: { x: 5, y: 4 }, offset: undefined }
+    ]);
+    expect(uiState.actions.setScroll).not.toHaveBeenCalled();
+  });
+
+  it('carries a Label off-grid residual, like every other type', () => {
+    const OFFSET = { x: -3.5, y: 7.25 };
+    const uiState = makeUiState({ selectedIds: [{ type: 'LABEL', id: 'l1' }] });
+    const deps = makeDeps({
+      labels: [{ id: 'l1', tile: { x: 4, y: 4 }, offset: OFFSET }]
+    });
+
+    handleArrowKey(makeKey('ArrowUp'), uiState, deps);
+
+    expect(deps.batchUpdateLabelTiles).toHaveBeenCalledWith([
+      { id: 'l1', tile: { x: 4, y: 5 }, offset: OFFSET }
+    ]);
+  });
+
+  it('moves a mixed Label + node selection in ONE transaction', () => {
+    const uiState = makeUiState({
+      selectedIds: [
+        { type: 'ITEM', id: 'n1' },
+        { type: 'LABEL', id: 'l1' }
+      ]
+    });
+    const deps = makeDeps({
+      items: [{ id: 'n1', tile: { x: 0, y: 0 } }],
+      labels: [{ id: 'l1', tile: { x: 4, y: 4 } }]
+    });
+
+    handleArrowKey(makeKey('ArrowRight'), uiState, deps);
+
+    // One press = one undo step, however many types it touched.
+    expect(deps.beginDragTransaction).toHaveBeenCalledTimes(1);
+    expect(deps.commitDragTransaction).toHaveBeenCalledTimes(1);
+    expect(deps.batchUpdateViewItemTiles).toHaveBeenCalled();
+    expect(deps.batchUpdateLabelTiles).toHaveBeenCalled();
+  });
+
+  it('does not throw when a caller supplies no Label updater', () => {
+    // The dep is optional so callers predating the Label nudge keep compiling.
+    const uiState = makeUiState({ selectedIds: [{ type: 'LABEL', id: 'l1' }] });
+    const deps = makeDeps({ labels: [{ id: 'l1', tile: { x: 4, y: 4 } }] });
+    delete (deps as { batchUpdateLabelTiles?: unknown }).batchUpdateLabelTiles;
+
+    expect(() =>
+      handleArrowKey(makeKey('ArrowRight'), uiState, deps)
+    ).not.toThrow();
   });
 });

@@ -1,8 +1,8 @@
 // Shared geometry + draw for the floating Label chip (ADR 0031). Used by BOTH
-// the Canvas2D render layer (LabelsCanvas) and the DOM hit-proxy (LabelHitLayer)
+// the Canvas2D render layer (SceneCanvas) and the DOM hit-proxy (LabelHitLayer)
 // so the painted chip and its hit box can never drift. Mirrors the node-label
-// chip geometry in NodesCanvas (padding / radius / max-width) for a consistent
-// look, but is self-contained so the perf-critical NodesCanvas stays untouched.
+// chip geometry in SceneCanvas (padding / radius / max-width) for a consistent
+// look, but is self-contained so the perf-critical SceneCanvas stays untouched.
 
 import { Label } from 'src/types';
 import { DEFAULT_FONT_FAMILY } from 'src/config';
@@ -44,7 +44,7 @@ export interface LabelChipLayout {
 
 // Rounded-rect path with a manual fallback: ctx.roundRect throws on the app's
 // older supported browsers (Safari <16.4, Firefox <112), which would blank the
-// whole layer (same guard as NodesCanvas).
+// whole layer (same guard as SceneCanvas).
 export const roundRectPath = (
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -126,7 +126,7 @@ export interface ChipColors {
 // Draw a label chip CENTERED at (cx, cy) in the CURRENT (already pan/zoom
 // transformed) canvas space, using a PRECOMPUTED layout (the caller caches it
 // per (text, fontSize, bold, italic) so pan/zoom redraws skip measureText —
-// mirrors NodesCanvas's label-layout cache). Per-label backgroundColor / color
+// mirrors SceneCanvas's label-layout cache). Per-label backgroundColor / color
 // override the theme defaults. Strikethrough and underline are drawn manually
 // (Canvas2D has no text-decoration), per line, from the cached line widths —
 // both are decoration-only, so neither joins the layout cache key.

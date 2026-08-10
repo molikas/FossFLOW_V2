@@ -1,11 +1,12 @@
 import { produce } from 'immer';
-import {
-  generateId,
-  getItemAtTile,
-  hasMovedTile,
-  setWindowCursor
-} from 'src/utils';
+import { generateId, getItemAtTile, hasMovedTile, setWindowCursor } from 'src/utils';
 import { exceedsTapSlop } from 'src/config/tapGesture';
+import {
+  connectorItemAtTile,
+  countParallelConnectors,
+  isDegenerateConnector,
+  parallelWaypointTile
+} from './connectorHitTest';
 import {
   ModeActions,
   Connector as ConnectorI,
@@ -88,12 +89,72 @@ const handleClickFirst = (
   });
 };
 
+// Abandon the in-flight connector without committing it: delete, close the
+// bracket (which nets to zero patches, so no spurious history entry) and reset
+// the tool. The shared ending for every "this is not a connector" outcome —
+// a degenerate result (CONN-07/CONN-10) or a gesture that never travelled.
+const revertInFlight = ({ uiState, scene }: State, connectorId: string) => {
+  scene.deleteConnector(connectorId);
+  scene.commitDragTransaction();
+  uiState.actions.setMode({
+    type: 'CONNECTOR',
+    showCursor: true,
+    id: null,
+    startAnchor: undefined,
+    isConnecting: false
+  });
+};
+
+// CONN-11: the router is a pure function of the two endpoints, so a SECOND
+// connector between the same node pair is routed along byte-identical tiles and
+// renders as one line — unreachable by pointer, so it cannot be selected,
+// styled, labelled or deleted. Seed a waypoint that pulls it off the direct
+// route. Returns the connector unchanged when it isn't node-to-node, when the
+// pair has no other connector, or when the two nodes' tiles are unknown.
+const fanOutParallel = (
+  connector: ConnectorI,
+  scene: State['scene']
+): ConnectorI => {
+  const first = connector.anchors[0];
+  const last = connector.anchors[connector.anchors.length - 1];
+  // Only fan a fresh two-anchor node→node connector; once it has waypoints of
+  // its own the user has already given it a distinct route.
+  if (connector.anchors.length !== 2) return connector;
+  const itemA = first?.ref?.item;
+  const itemB = last?.ref?.item;
+  if (!itemA || !itemB || itemA === itemB) return connector;
+
+  const existing = countParallelConnectors(
+    scene.currentView.connectors ?? [],
+    itemA,
+    itemB,
+    connector.id
+  );
+  if (existing === 0) return connector;
+
+  const items = scene.currentView.items ?? [];
+  const tileA = items.find((i) => i.id === itemA)?.tile;
+  const tileB = items.find((i) => i.id === itemB)?.tile;
+  if (!tileA || !tileB) return connector;
+
+  const waypoint = parallelWaypointTile(tileA, tileB, existing);
+  if (!waypoint) return connector;
+
+  return produce(connector, (draft) => {
+    draft.anchors.splice(1, 0, {
+      id: generateId(),
+      ref: { tile: waypoint }
+    });
+  });
+};
+
 // Click mode, second click: complete the connection (or reset if the
 // in-progress connector vanished).
 const handleClickSecond = (
-  { uiState, scene }: State,
+  state: State,
   itemAtTile: ItemAtTile
 ) => {
+  const { uiState, scene } = state;
   const currentMode = uiState.mode;
   if (currentMode.type !== 'CONNECTOR' || !currentMode.id) return;
 
@@ -116,9 +177,24 @@ const handleClickSecond = (
   }
 
   // Update the second anchor to the click position.
-  const newConnector = produce(connector, (draft) => {
-    draft.anchors[1] = makeAnchor(itemAtTile, uiState.mouse.position.tile);
+  const resolved = produce(connector, (draft) => {
+    draft.anchors[draft.anchors.length - 1] = makeAnchor(
+      itemAtTile,
+      uiState.mouse.position.tile
+    );
   });
+
+  // CONN-10 / CONN-07: both ends on the same target is not a connector. That is
+  // also `createConnectorAt`'s SEED state (both anchors on the pressed item), so
+  // "the user clicked the same node twice" and "the user never resolved the far
+  // end" produce the identical shape — which is why a self-loop was the default
+  // rather than an edge case. Revert instead of committing.
+  if (isDegenerateConnector(resolved.anchors)) {
+    revertInFlight(state, currentMode.id);
+    return;
+  }
+
+  const newConnector = fanOutParallel(resolved, scene);
 
   scene.updateConnector(currentMode.id, newConnector);
   scene.commitDragTransaction();
@@ -182,7 +258,8 @@ export const Connector: ModeActions = {
   exit: () => {
     setWindowCursor('default');
   },
-  mousemove: ({ uiState, scene }) => {
+  mousemove: (state) => {
+    const { uiState, scene } = state;
     if (
       uiState.mode.type !== 'CONNECTOR' ||
       !uiState.mode.id ||
@@ -208,37 +285,36 @@ export const Connector: ModeActions = {
         return;
       }
 
-      const itemAtTile = getItemAtTile({
-        tile: uiState.mouse.position.tile,
-        scene
+      const itemAtTile = connectorItemAtTile(state);
+
+      // CONN-04: this used to rebuild the end anchor with a fresh
+      // `generateId()` on EVERY tile the pointer crossed — three distinct ids
+      // across three moves — so anything holding the id from a frame earlier
+      // (an overlay React key, a selection ref, `mouse.targetAnchorId`) pointed
+      // at an anchor that no longer existed. Only the `ref` changes while
+      // drawing; the identity is allocated once, at create.
+      const newConnector = produce(connectorItem, (draft) => {
+        const last = draft.anchors.length - 1;
+        draft.anchors[last] = {
+          ...draft.anchors[last],
+          ref:
+            itemAtTile?.type === 'ITEM'
+              ? { item: itemAtTile.id }
+              : { tile: uiState.mouse.position.tile }
+        };
       });
 
-      if (itemAtTile?.type === 'ITEM') {
-        const newConnector = produce(connectorItem, (draft) => {
-          draft.anchors[1] = { id: generateId(), ref: { item: itemAtTile.id } };
-        });
-
-        scene.updateConnector(connectorMode.id!, newConnector);
-      } else {
-        const newConnector = produce(connectorItem, (draft) => {
-          draft.anchors[1] = {
-            id: generateId(),
-            ref: { tile: uiState.mouse.position.tile }
-          };
-        });
-
-        scene.updateConnector(connectorMode.id!, newConnector);
-      }
+      scene.updateConnector(connectorMode.id!, newConnector);
     }
   },
   mousedown: (state) => {
-    const { uiState, scene, isRendererInteraction } = state;
+    const { uiState, isRendererInteraction } = state;
     if (uiState.mode.type !== 'CONNECTOR' || !isRendererInteraction) return;
 
-    const itemAtTile = getItemAtTile({
-      tile: uiState.mouse.position.tile,
-      scene
-    });
+    // CONN-15: the layer gate. A locked or hidden node reads as bare tile here,
+    // so the tool cannot bind an anchor to an entity the user declared
+    // off-limits — the same predicate every Cursor path is handed.
+    const itemAtTile = connectorItemAtTile(state);
 
     if (uiState.connectorInteractionMode !== 'click') {
       // Drag mode: original behavior.
@@ -256,9 +332,30 @@ export const Connector: ModeActions = {
   mouseup: (state) => {
     const { uiState, scene } = state;
     if (uiState.mode.type !== 'CONNECTOR' || !uiState.mode.id) return;
+    const connectorId = uiState.mode.id;
 
     // Drag mode: the press→drag→release commits the connection on release.
     if (uiState.connectorInteractionMode === 'drag') {
+      // CONN-07: this used to commit whatever `anchors[1]` last resolved to,
+      // with no tap-slop check — so a zero-travel press-release on empty canvas
+      // committed the start tile TWICE: a zero-length connector attached to
+      // nothing, impossible to select because there is nothing to click, which
+      // then survived save and reload. A gesture that never travelled did not
+      // draw anything; the same is true of one whose two ends coincide.
+      const down = uiState.mouse.mousedown?.screen;
+      const travelled =
+        !!down && exceedsTapSlop(down, uiState.mouse.position.screen);
+      const drawn = (scene.currentView.connectors ?? []).find(
+        (c) => c.id === connectorId
+      );
+      if (!travelled || !drawn || isDegenerateConnector(drawn.anchors)) {
+        revertInFlight(state, connectorId);
+        return;
+      }
+
+      const fanned = fanOutParallel(drawn, scene);
+      if (fanned !== drawn) scene.updateConnector(drawn.id, fanned);
+
       scene.commitDragTransaction();
       uiState.actions.resetConnectorDefaults?.(); // #8: one-shot pre-draw style
       if (uiState.mode.type === 'CONNECTOR' && uiState.mode.returnToCursor) {
@@ -291,11 +388,7 @@ export const Connector: ModeActions = {
     const dragged =
       !!down && exceedsTapSlop(down, uiState.mouse.position.screen);
     if (dragged) {
-      const itemAtTile = getItemAtTile({
-        tile: uiState.mouse.position.tile,
-        scene
-      });
-      handleClickSecond(state, itemAtTile);
+      handleClickSecond(state, connectorItemAtTile(state));
       return;
     }
 
@@ -305,14 +398,6 @@ export const Connector: ModeActions = {
     // connector so it can never land as free-floating junk (ADR 0022's
     // stray-click guard, now scoped to a click instead of blocking the gesture).
     if (uiState.mode.startAnchor?.itemId) return;
-    scene.deleteConnector(uiState.mode.id);
-    scene.commitDragTransaction();
-    uiState.actions.setMode({
-      type: 'CONNECTOR',
-      showCursor: true,
-      id: null,
-      startAnchor: undefined,
-      isConnecting: false
-    });
+    revertInFlight(state, connectorId);
   }
 };

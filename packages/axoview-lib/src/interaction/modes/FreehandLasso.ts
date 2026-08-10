@@ -16,6 +16,10 @@ import {
   segmentIntersectsPolygon
 } from 'src/utils';
 import { getConnectorMovementAnchorRefs } from 'src/utils/connectorSelection';
+import {
+  mergeMarqueeSelection,
+  isAdditiveModifier
+} from 'src/utils/selectableRefs';
 
 interface FreehandScene {
   items: ViewItem[];
@@ -317,7 +321,17 @@ export const FreehandLasso: ModeActions = {
       );
       // Mirror into the persistent multi-selection (ADR-0006). Optional-call
       // so mock uiState in unit tests doesn't need the new action.
-      uiState.actions.setSelectedIds?.(items);
+      //
+      // I3/SEL-15 (ruled 2026-07-30, ADR 0006 §2 addendum): with the additive
+      // modifier held the marquee EXTENDS the selection instead of replacing
+      // it. Shared with `Lasso.mouseup` so the two tools cannot drift.
+      uiState.actions.setSelectedIds?.(
+        mergeMarqueeSelection(
+          uiState.selectedIds ?? [],
+          items,
+          isAdditiveModifier(uiState.mouse.modifiers)
+        )
+      );
     } else {
       // Reset dragging state but keep selection if it exists
       uiState.actions.setMode(

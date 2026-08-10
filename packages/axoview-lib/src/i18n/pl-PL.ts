@@ -329,6 +329,7 @@ const locale: LocaleProps = {
     namePlaceholder: 'Nazwa elementu…'
   },
   topBarStyleControls: {
+    mixed: 'Mieszane',
     rotate90: 'Obróć o 90°',
     noColor: 'Brak koloru',
     pickColorFromScreen: 'Pobierz kolor z ekranu',
@@ -579,6 +580,12 @@ const locale: LocaleProps = {
   },
   // D8 — LayersPanel
   layersPanel: {
+    deleteLayerTitle: 'Usunąć warstwę?',
+    deleteLayerBody: 'Ta warstwa zawiera {count} element(ów). Co ma się z nimi stać?',
+    deleteLayerHiddenWarning: 'Ta warstwa jest UKRYTA. Zachowanie zawartości sprawi, że stanie się ona ponownie WIDOCZNA — element bez warstwy jest zawsze pokazywany.',
+    deleteLayerCancel: 'Anuluj',
+    deleteLayerKeep: 'Zachowaj zawartość',
+    deleteLayerDeleteContents: 'Usuń także zawartość',
     header: 'Warstwy',
     addLayer: 'Dodaj warstwę',
     deleteSelectedLayer: 'Usuń wybraną warstwę',

@@ -43,10 +43,13 @@ export const Rectangle = memo(
 
     // Use custom color if provided, otherwise use the predefined color value.
     const colorValue = customColor ? customColor : predefinedColor?.value;
-    // 'transparent' is an explicit no-fill choice (distinct from an unset colour,
-    // which renders nothing): keep a visible grey outline so the area is still
-    // seen and selectable (SVG fill="transparent" stays hit-testable).
-    const isTransparent = colorValue === 'transparent';
+    // ADR 0039 addendum (STYL-03, owner 2026-07-30): "no fill" is an ABSENT
+    // colour — the strip clears both `customColor` and the legacy `color`
+    // preset. The `'transparent'` sentinel is still READ (diagrams written
+    // before the ruling carry it) and means the same thing. Either way the area
+    // keeps a visible grey outline so it stays seen and selectable
+    // (SVG fill="transparent" stays hit-testable).
+    const isTransparent = !colorValue || colorValue === 'transparent';
 
     // ADR 0023 off-grid: compose the SceneLayer-px offset into the SAME
     // translate3d that hosts the live drag delta, so they add (the IsoTileArea
@@ -80,16 +83,12 @@ export const Rectangle = memo(
       return undefined;
     }, [borderStyle, strokeWidth]);
 
-    if (!colorValue) {
-      return null;
-    }
-
     return (
       <div data-drag-id={id} style={dragStyle}>
         <IsoTileArea
           from={from}
           to={to}
-          fill={colorValue}
+          fill={isTransparent ? 'transparent' : colorValue}
           fillOpacity={fillOpacity}
           cornerRadius={22}
           stroke={{

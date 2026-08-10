@@ -66,7 +66,15 @@ export function AppStorageProvider({ children }: { children: React.ReactNode }) 
   const [isInitialized, setIsInitialized] = useState(false);
   const [isServerStorage, setIsServerStorage] = useState(false);
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig | null>(null);
-  const [activeProviderId, setActiveProviderIdState] = useState('local');
+  // A2/STOR-12 — the manager singleton outlives every React tree, so IT owns
+  // the active place and this state is only a mirror of it. Seeding from
+  // `useState('local')` meant a remount (any /display round trip: EditorPage is
+  // the element of every route) re-rendered as "local" while every read and
+  // write still went to Drive — and `remoteStorageActive` picks the
+  // autosave-vs-session-dirty branch, the status cluster and the guards.
+  const [activeProviderId, setActiveProviderIdState] = useState(
+    () => manager.activeProviderId
+  );
   const initStarted = useRef(false);
 
   useEffect(() => {

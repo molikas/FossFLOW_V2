@@ -16,7 +16,6 @@ import {
   type IconUsageReport
 } from 'axoview';
 import { scanIconUsage } from './services/iconUsage';
-import { isPersistedDiagramBlob } from './services/storage/types';
 import { AppStorageProvider, useAppStorage } from './providers/AppStorageContext';
 import { AuthProvider } from './providers/AuthProvider';
 import {
@@ -33,6 +32,7 @@ import { AppToolbar } from './components/AppToolbar';
 import { EmptyStateScreen } from './components/EmptyStateScreen';
 import { NotFound } from './components/NotFound';
 import { dismissBootScreens } from './utils/bootScreen';
+import { buildZipImportSummary } from './utils/importSummary';
 import { APP_BASENAME } from './appBase';
 import { DiagnosticsOverlay } from './components/DiagnosticsOverlay';
 import { DiagnosticsToggleButton } from './components/DiagnosticsToggleButton';
@@ -42,10 +42,9 @@ import { LocalModeShareErrorDialog } from './components/LocalModeShareErrorDialo
 import { ReadonlyLoadErrorDialog } from './components/ReadonlyLoadErrorDialog';
 import { PublicShareLoadErrorDialog } from './components/PublicShareLoadErrorDialog';
 import { SaveErrorDialog } from './components/SaveErrorDialog';
-import { ImportErrorDialog } from './components/ImportErrorDialog';
 import { ExportProjectZipDialog } from './components/fileExplorer/ExportProjectZipDialog';
 import { ImportDialog } from './components/fileExplorer/ImportDialog';
-import { parseProject, importProject } from './services/project/projectZip';
+import { sanitizeImportedBlob } from './services/storage/importedBlob';
 import { notificationStore } from './stores/notificationStore';
 import { diagnosticsStore } from './stores/diagnosticsStore';
 import ChangeLanguage from './components/ChangeLanguage';
@@ -57,37 +56,7 @@ const basename = APP_BASENAME;
 
 const EXPORTER_TAG = `axoview-app@${process.env.REACT_APP_VERSION ?? 'dev'}`;
 
-// Success message for a top-level project-zip import: "Imported N diagrams
-// across M folders at the top level" (folder clause omitted when none).
-function buildZipImportSummary(
-  diagramCount: number,
-  folderCount: number
-): string {
-  const parts = [`${diagramCount} diagram${diagramCount !== 1 ? 's' : ''}`];
-  if (folderCount > 0) {
-    parts.push(`${folderCount} folder${folderCount !== 1 ? 's' : ''}`);
-  }
-  return `Imported ${parts.join(' across ')} at the top level`;
-}
 
-function parseJsonOrThrow(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error('That file is not valid JSON.');
-  }
-}
-
-// Prefer the diagram's embedded title/name; fall back to the file basename
-// (minus the .json / .compact.json suffix).
-function resolveImportedDiagramName(file: File, data: unknown): string {
-  const blob = isPersistedDiagramBlob(data) ? data : {};
-  const embedded = blob.title || blob.name || blob.t || '';
-  const fileBase = file.name.replace(/\.(?:compact\.)?json$/i, '');
-  return typeof embedded === 'string' && embedded.trim()
-    ? embedded.trim()
-    : fileBase;
-}
 
 function App() {
   return (
@@ -199,10 +168,14 @@ function EditorShell() {
   );
 
   const [linkedDiagrams, setLinkedDiagrams] = useState<Array<{ id: string; name: string }>>([]);
-  const [treeIsEmpty, setTreeIsEmpty] = useState(true);
   const [showImportDialog, setShowImportDialog] = useState(false);
-  const [importError, setImportError] = useState(false);
-  const importFileInputRef = useRef<HTMLInputElement>(null);
+
+  // The two routes where the viewer is reading SOMEONE ELSE'S diagram: a public
+  // snapshot and a Drive preview. `/display/<id>` is not one — that is the
+  // owner's own read-only view of their own storage. S3/DRV-09.
+  // (`useLocation().pathname` is basename-relative, so these are bare.)
+  const isSharedViewerRoute = (pathname: string): boolean =>
+    pathname.startsWith('/display/p/') || pathname.startsWith('/display/drive/');
 
   // Lib dispatches two custom events for diagram-link affordances:
   // - `axoview-navigate-to-diagram` (from the NodePanel readonly link) →
@@ -218,12 +191,32 @@ function EditorShell() {
     const handler = (e: Event) => {
       const id = (e as CustomEvent<{ id?: string }>).detail?.id;
       if (!id) return;
+      // S3/DRV-09: `/display/<id>` is the OWNER-readonly loader — it resolves
+      // the id against the storage of whoever is looking. On a shared route
+      // that is the RECIPIENT's storage, which does not contain the sender's
+      // diagram, so the hop dead-ended in the generic "Could not open this
+      // diagram" with nothing explaining that the target lives in the sender's
+      // workspace and was never shared.
+      //
+      // There is no id remapping to do — a share publishes ONE diagram, and the
+      // link inside it points at a sibling the sender did not publish. So the
+      // honest answer is to say that rather than to navigate into a wall. The
+      // affordance itself stays visible: it is content the author put there,
+      // and hiding it would silently change what the shared diagram says.
+      if (isSharedViewerRoute(location.pathname)) {
+        notificationStore.push({
+          severity: 'info',
+          message:
+            'That link points to another diagram in the sender’s workspace, which was not shared with you. Ask them for a link to it.'
+        });
+        return;
+      }
       const fromEditor = (location.state as { fromEditor?: boolean } | null)?.fromEditor;
       navigate(`/display/${id}`, fromEditor ? { state: { fromEditor: true } } : undefined);
     };
     window.addEventListener('axoview-navigate-to-diagram', handler);
     return () => window.removeEventListener('axoview-navigate-to-diagram', handler);
-  }, [navigate, location.state]);
+  }, [navigate, location.state, location.pathname]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -251,62 +244,23 @@ function EditorShell() {
     // or when the current diagram changes (covers session-mode saves).
     // Filter out the current diagram so the link picker cannot self-reference
     // (baseline finding #2 / B-2).
-    Promise.all([
-      storage.listDiagrams(),
-      storage.listFolders()
-    ]).then(([diagrams, folders]) => {
+    storage.listDiagrams().then((diagrams) => {
       const currentId = currentDiagram?.id;
       setLinkedDiagrams(
         diagrams
           .filter((d) => d.id !== currentId)
           .map((d) => ({ id: d.id, name: d.name }))
       );
-      setTreeIsEmpty(diagrams.length === 0 && folders.length === 0);
     }).catch(() => {});
   }, [storage, isInitialized, fileTreeRefreshToken, currentDiagram]);
 
-  const handleDirectImportFile = useCallback(async (file: File) => {
-    if (!storage) return;
-    try {
-      const isZip = /\.zip$/i.test(file.name);
-      if (isZip) {
-        const parsed = await parseProject(file);
-        await importProject({ storage }, parsed, { destination: { kind: 'root' } });
-        refreshFileTree();
-        setFileExplorerOpen(true);
-        notificationStore.push({
-          severity: 'success',
-          message: buildZipImportSummary(
-            parsed.manifest.diagrams.length,
-            parsed.manifest.folders.length
-          )
-        });
-      } else {
-        const text = await file.text();
-        const data = parseJsonOrThrow(text);
-        const blob = isPersistedDiagramBlob(data) ? data : {};
-        const name = resolveImportedDiagramName(file, data);
-        const newId = await storage.createDiagram({ ...blob, name, title: name }, null);
-        refreshFileTree();
-        setFileExplorerOpen(true);
-        notificationStore.push({ severity: 'success', message: `Imported diagram "${name}"` });
-        await openDiagramById(newId, name);
-      }
-    } catch (err) {
-      // ADR 0011 — failure-of-intent: the user picked a file to import and it
-      // could not be parsed. Surface the explicit dialog instead of a toast.
-      console.error('handleDirectImportFile failed:', err);
-      setImportError(true);
-    }
-  }, [storage, refreshFileTree, openDiagramById, setFileExplorerOpen]);
-
+  // A3/ZIP-09 (owner ruling): the empty-tree "import straight to root" path is
+  // gone — `ImportDialog` is the one import flow, for an empty tree as much as
+  // a populated one, and it surfaces read failures through the same
+  // `ImportErrorDialog` this path used to own.
   const handleImportClick = useCallback(() => {
-    if (treeIsEmpty) {
-      importFileInputRef.current?.click();
-    } else {
-      setShowImportDialog(true);
-    }
-  }, [treeIsEmpty]);
+    setShowImportDialog(true);
+  }, []);
 
   const currentLocale =
     allLocales[i18n.language as keyof typeof allLocales] || allLocales['en-US'];
@@ -473,33 +427,35 @@ function EditorShell() {
         </Box>
       </Box>
 
-      {/* Hidden file input for empty-tree direct import */}
-      <input
-        ref={importFileInputRef}
-        type="file"
-        accept=".zip,.json,application/zip,application/json"
-        style={{ display: 'none' }}
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) handleDirectImportFile(f);
-          e.target.value = '';
-        }}
-      />
-
-      {/* Import dialog for non-empty tree */}
+      {/* The one import flow (A3/ZIP-09) */}
       {showImportDialog && storage && (
         <ImportDialog
           open
           onClose={() => setShowImportDialog(false)}
           storage={storage}
-          onImported={async () => {
+          onImported={async (outcome) => {
             refreshFileTree();
             setFileExplorerOpen(true);
-            notificationStore.push({ severity: 'success', message: 'Import complete' });
+            if (!outcome) {
+              notificationStore.push({ severity: 'success', message: 'Import complete' });
+              return;
+            }
+            // A3/ZIP-05 + ZIP-02: report what actually landed, and name what did
+            // not — as a warning, not a success.
+            const shortfall = outcome.diagramCount < outcome.claimedDiagramCount;
+            notificationStore.push({
+              severity: shortfall || outcome.droppedLinks > 0 ? 'warning' : 'success',
+              message: buildZipImportSummary(
+                outcome.diagramCount,
+                outcome.folderCount,
+                outcome.claimedDiagramCount,
+                outcome.droppedLinks
+              )
+            });
           }}
           onImportSingleJson={async (data, suggestedName) => {
             const newId = await storage.createDiagram(
-              { ...(data as object), name: suggestedName, title: suggestedName },
+              sanitizeImportedBlob(data, suggestedName), // A3/ZIP-06
               null
             );
             refreshFileTree();
@@ -559,11 +515,6 @@ function EditorShell() {
 
       {/* ADR 0011 — direct (empty-tree) file import parse failure. No retry;
           re-picking a file is the recovery affordance. */}
-      <ImportErrorDialog
-        open={importError}
-        onDismiss={() => setImportError(false)}
-      />
-
       {/* First-connect Google Drive root-folder chooser (default vs custom). */}
       <DriveSetupGate />
 

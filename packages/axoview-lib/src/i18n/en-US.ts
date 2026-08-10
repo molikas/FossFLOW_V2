@@ -322,6 +322,7 @@ const locale: LocaleProps = {
     namePlaceholder: 'Name (shown in Layers)…'
   },
   topBarStyleControls: {
+    mixed: 'Mixed',
     rotate90: 'Rotate 90°',
     noColor: 'No color',
     pickColorFromScreen: 'Pick color from screen',
@@ -570,6 +571,12 @@ const locale: LocaleProps = {
   },
   // D8 — LayersPanel chrome. Sentence case; {count} is interpolated.
   layersPanel: {
+    deleteLayerTitle: 'Delete layer?',
+    deleteLayerBody: 'This layer holds {count} element(s). What should happen to them?',
+    deleteLayerHiddenWarning: 'This layer is HIDDEN. Keeping its contents makes them VISIBLE again — an element with no layer is always shown.',
+    deleteLayerCancel: 'Cancel',
+    deleteLayerKeep: 'Keep contents',
+    deleteLayerDeleteContents: 'Delete contents too',
     header: 'Layers',
     addLayer: 'Add layer',
     deleteSelectedLayer: 'Delete selected layer',

@@ -52,4 +52,48 @@ describe('ImportErrorDialog', () => {
       document.querySelector('[data-axoview-id="dialog-import-error"]')
     ).not.toBeNull();
   });
+
+  // A3/ZIP-08 — nine distinct ProjectZipError codes all reached the user as
+  // "This file isn't a valid Axoview diagram", which is actively wrong for four
+  // of them: a 200 MB archive, an incomplete archive and one from a newer
+  // Axoview are all valid Axoview files.
+  describe('failure-specific copy', () => {
+    const bodyFor = (code: string) => {
+      const { unmount } = render(
+        <ImportErrorDialog open onDismiss={jest.fn()} error={{ code }} />
+      );
+      const text = document.body.textContent ?? '';
+      unmount();
+      return text;
+    };
+
+    test('a too-large archive is not called invalid', () => {
+      expect(bodyFor('TOO_LARGE')).toMatch(/too large to import/);
+    });
+
+    test('a newer-version archive says to update Axoview', () => {
+      expect(bodyFor('UNSUPPORTED_VERSION')).toMatch(/newer version of Axoview/);
+    });
+
+    test('an incomplete archive says what is missing', () => {
+      expect(bodyFor('MISSING_DIAGRAM')).toMatch(/incomplete/);
+      expect(bodyFor('BAD_DIAGRAM')).toMatch(/incomplete/);
+    });
+
+    test('a damaged manifest says damaged', () => {
+      expect(bodyFor('BAD_MANIFEST')).toMatch(/damaged/);
+      expect(bodyFor('BAD_FOLDER_GRAPH')).toMatch(/damaged/);
+    });
+
+    test('an unclassified failure keeps the generic copy', () => {
+      expect(bodyFor('ZIP_ERROR')).toMatch(/isn't a valid Axoview diagram/);
+    });
+
+    test('no error at all keeps the generic copy', () => {
+      render(<ImportErrorDialog open onDismiss={jest.fn()} />);
+      expect(
+        screen.getByText(/This file isn't a valid Axoview diagram/)
+      ).toBeInTheDocument();
+    });
+  });
 });

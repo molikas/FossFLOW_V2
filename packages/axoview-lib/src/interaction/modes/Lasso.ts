@@ -20,6 +20,10 @@ import {
   segmentIntersectsRect
 } from 'src/utils';
 import { getConnectorMovementAnchorRefs } from 'src/utils/connectorSelection';
+import {
+  mergeMarqueeSelection,
+  isAdditiveModifier
+} from 'src/utils/selectableRefs';
 
 interface LassoScene {
   items: ViewItem[];
@@ -305,7 +309,17 @@ export const Lasso: ModeActions = {
     // tools that read selectedIds (delete, Ctrl+A, panel auto-hide, the
     // BottomDock "N selected" badge) see the same set. ADR-0006. Optional-call
     // so mode-action unit tests with a minimal actions mock keep working.
-    uiState.actions.setSelectedIds?.(uiState.mode.selection!.items);
+    //
+    // I3/SEL-15 (ruled 2026-07-30, ADR 0006 §2 addendum): with the additive
+    // modifier held the marquee EXTENDS the selection instead of replacing it —
+    // the same modifier the click path has honoured since change #10.
+    uiState.actions.setSelectedIds?.(
+      mergeMarqueeSelection(
+        uiState.selectedIds ?? [],
+        uiState.mode.selection!.items,
+        isAdditiveModifier(uiState.mouse.modifiers)
+      )
+    );
 
     // 2026-07-02: after the marquee completes, drop back to CURSOR (keeping the
     // selection) instead of lingering in LASSO. This makes post-lasso clicks

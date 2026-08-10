@@ -26,6 +26,7 @@
  *   Human – pretty-printed JSON with labels, summary stats, ISO timestamps
  */
 import { useEffect, useRef, useState, useCallback, useSyncExternalStore } from 'react';
+import { downloadBlob } from '../utils/downloadBlob';
 import { diagnosticsStore } from '../stores/diagnosticsStore';
 
 // ── env / persistence ─────────────────────────────────────────────────────────
@@ -125,14 +126,13 @@ export function pushEvent(buf: DiagEvent[], ev: DiagEvent) {
 }
 
 // ── download helpers ──────────────────────────────────────────────────────────
+// A5/CHR-11: one implementation (`downloadBlob` -> the lib's `downloadFile`).
+// This copy revoked the object URL synchronously after `click()`, which on some
+// browsers cancels the download outright — a diagnostics bundle that silently
+// never arrives is worse than most, since it is the thing you reach for when
+// something else is already wrong.
 function downloadFile(content: string, name: string) {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(
-    new Blob([content], { type: 'application/json' })
-  );
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  downloadBlob(new Blob([content], { type: 'application/json' }), name);
 }
 
 const stamp = () => new Date().toISOString().replace(/[:.]/g, '-');

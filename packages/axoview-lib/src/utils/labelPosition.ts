@@ -1,7 +1,7 @@
 // Pure node-label positioning math (ADR 0024). Kept dependency-free and
 // unit-testable — the `labelScale.ts` precedent — so the on-canvas drag (the
 // label chip is its own handle) and the renderers (DOM `Label`, bulk
-// `NodesCanvas`) all resolve the same geometry from one place.
+// `SceneCanvas`) all resolve the same geometry from one place.
 //
 // The label's vertical placement is a SIGNED offset: positive = the chip sits
 // ABOVE the node (the legacy behaviour, stalk drawn upward); negative = BELOW it

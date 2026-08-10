@@ -24,8 +24,11 @@ describe('Model item reducers works correctly', () => {
       scene
     });
 
+    // TXT-05: the reducer is now the ONE chokepoint that seeds `label = name`
+    // (ADR 0032 decouple), so a stored item carries the seeded label alongside
+    // everything it was created with.
     expect(newState.model.items[newState.model.items.length - 1]).toStrictEqual(
-      newItem
+      { ...newItem, label: 'newItem' }
     );
   });
 
@@ -71,11 +74,46 @@ describe('createModelItem — no double-write regression', () => {
     expect(matches).toHaveLength(1);
   });
 
-  test('returned item equals the input newModelItem exactly', () => {
+  test('returned item equals the input plus the seeded label, and nothing else', () => {
     const newItem: ModelItem = { id: 'exact-match', name: 'Exact' };
     const newState = createModelItem(newItem, baseState);
     const stored = newState.model.items[newState.model.items.length - 1];
-    expect(stored).toStrictEqual(newItem);
+    expect(stored).toStrictEqual({ ...newItem, label: 'Exact' });
+  });
+
+  // TXT-05 — the ADR 0032 seed runs at CREATION, not only on load. Without it a
+  // never-reloaded node has no `label`, the renderer's `label ?? name` fallback
+  // is live, and renaming the node in Layers moves its canvas text: the same
+  // gesture on the same node behaved differently before and after a reload.
+  test('a created node is seeded out of the name fallback (TXT-05)', () => {
+    const newState = createModelItem(
+      { id: 'seeded', name: 'Untitled' },
+      baseState
+    );
+    const stored = newState.model.items[newState.model.items.length - 1];
+    expect(stored.label).toBe('Untitled');
+  });
+
+  test('an explicit label wins — including an empty one that hides the label', () => {
+    const withLabel = createModelItem(
+      { id: 'explicit', name: 'Identity', label: 'On canvas' },
+      baseState
+    );
+    expect(
+      withLabel.model.items[withLabel.model.items.length - 1].label
+    ).toBe('On canvas');
+
+    const hidden = createModelItem(
+      { id: 'hidden', name: 'Identity', label: '' },
+      baseState
+    );
+    expect(hidden.model.items[hidden.model.items.length - 1].label).toBe('');
+  });
+
+  test('an item with no name is left alone (nothing to seed from)', () => {
+    const newState = createModelItem({ id: 'nameless', name: '' }, baseState);
+    const stored = newState.model.items[newState.model.items.length - 1];
+    expect(stored.label).toBeUndefined();
   });
 
   test('input state is not mutated (immutability)', () => {
@@ -93,13 +131,33 @@ describe('deleteModelItem — sparse array pin', () => {
     expect(() => getItemByIdOrThrow(newState.model.items, nodeId)).toThrow();
   });
 
-  test('array length is unchanged after delete (sparse — documents current behavior)', () => {
+  // E2/RED-01. The pin above was written to document the sparse-array
+  // behaviour and said in as many words that "any future splice-based fix will
+  // be caught by the change in this assertion" — this is that change.
+  test('the array SHRINKS after delete — no hole is left behind', () => {
     const nodeId = 'node1';
     const before = modelFixture.items.length;
     const newState = deleteModelItem(nodeId, { model: modelFixture, scene });
-    // delete operator creates a hole; length is preserved. This pin documents
-    // the known sparse-array behavior (§10 gotcha) so any future splice-based
-    // fix will be caught by the change in this assertion.
-    expect(newState.model.items.length).toBe(before);
+    expect(newState.model.items.length).toBe(before - 1);
+  });
+
+  test('and no slot holds undefined, which is what broke the editor', () => {
+    // `delete draft.model.items[i]` looked like a removal and was not one:
+    // Immer's copy materialised the index, so it was PRESENT holding
+    // `undefined`. `validateView`'s `items.map(i => i.id)` then threw, and
+    // because `updateViewItem` validates on every update, ONE call made the
+    // whole view permanently un-editable. `JSON.stringify` also emitted `null`
+    // for the slot, so the corruption is what got saved.
+    const newState = deleteModelItem('node1', { model: modelFixture, scene });
+    expect(newState.model.items.every((i) => !!i)).toBe(true);
+    expect(JSON.stringify(newState.model.items)).not.toContain('null');
+  });
+
+  test('the survivors keep their order and identity', () => {
+    const before = modelFixture.items.map((i) => i.id);
+    const newState = deleteModelItem('node1', { model: modelFixture, scene });
+    expect(newState.model.items.map((i) => i.id)).toEqual(
+      before.filter((id) => id !== 'node1')
+    );
   });
 });

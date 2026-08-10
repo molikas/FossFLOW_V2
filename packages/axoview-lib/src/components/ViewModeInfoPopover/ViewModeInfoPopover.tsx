@@ -46,7 +46,20 @@ import { RichTextEditor } from 'src/components/RichTextEditor/RichTextEditor';
 const HOVER_OPEN_MS = 150;
 const HOVER_CLOSE_MS = 100;
 
-const INFO_TYPES = new Set(['ITEM', 'CONNECTOR', 'RECTANGLE', 'TEXTBOX']);
+// Types whose SELECTION opens the popover. F2/VIEW-05 added 'LABEL': the hover
+// branch already had a dedicated `viewModeHoveredLabelId` path and
+// `deriveItemInfo` a full `case 'LABEL'`, but the selection path was gated here
+// — so a selected Label was filtered out before the derivation it already had
+// was ever called. The hover branch is notes-gated (owner 2026-07-01), so a
+// Label carrying only a LINK had no route to its popover at all, while the same
+// content on a node opened it.
+const INFO_TYPES = new Set([
+  'ITEM',
+  'CONNECTOR',
+  'RECTANGLE',
+  'TEXTBOX',
+  'LABEL'
+]);
 
 export const ViewModeInfoPopover = () => {
   const { t } = useTranslation('viewModeInfoPopover');
@@ -60,7 +73,7 @@ export const ViewModeInfoPopover = () => {
     (s) => s.mouse.position.tile,
     (a, b) => a.x === b.x && a.y === b.y
   );
-  const { items, textBoxes, hitConnectors, rectangles } = useScene();
+  const { items, textBoxes, hitConnectors, rectangles, layers } = useScene();
 
   // --- Pinned target (click selection in view mode) ---------------------------
   // Narrow out AddItemControls ('ADD_ITEM') so .id/.tile are available, then
@@ -86,14 +99,15 @@ export const ViewModeInfoPopover = () => {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    // A hovered chip WINS over the tile hit: chips paint ABOVE the canvas
-    // layers (LabelsCanvas mounts after NodesCanvas), so what the pointer is
+    // A hovered chip WINS over the tile hit: a Label chip paints ABOVE nodes
+    // (the `label` type rank in `compareSceneDrawOrder` — ADR 0031 §2, now a
+    // sort-key property rather than a mount-order one), so what the pointer is
     // visually on top of is the chip. Both paths feed the same intent timers.
     const hit: ItemReference | null = viewModeHoveredLabelId
       ? { type: 'LABEL', id: viewModeHoveredLabelId }
       : getItemAtTile({
           tile: hoverTile,
-          scene: { items, textBoxes, hitConnectors, rectangles }
+          scene: { items, textBoxes, hitConnectors, rectangles, layers }
         });
     if (timerRef.current) clearTimeout(timerRef.current);
     if (hit) {
@@ -110,6 +124,7 @@ export const ViewModeInfoPopover = () => {
     textBoxes,
     hitConnectors,
     rectangles,
+    layers,
     viewModeHoveredLabelId
   ]);
 
@@ -130,8 +145,9 @@ export const ViewModeInfoPopover = () => {
     if (!active) return null;
     // Per-type derivation lives in deriveItemInfo (pure, unit-tested) — notes
     // parity across all five element types is enforced there. LABEL hover
-    // arrives via viewModeHoveredLabelId (labels aren't tile-hit-tested; a
-    // pinned label stays a follow-up — INFO_TYPES gates the pinned path).
+    // arrives via viewModeHoveredLabelId (labels aren't tile-hit-tested); the
+    // PINNED label path is live too since F2/VIEW-05 added 'LABEL' to
+    // INFO_TYPES.
     const { name, notes, headerLink, anchorTile, anchorOffset } =
       deriveItemInfo(active.type, {
         modelItem,
