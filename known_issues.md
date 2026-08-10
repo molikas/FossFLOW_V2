@@ -336,7 +336,7 @@ These are distinct mechanisms, not stack-skew, so the sequence-stamping work doe
 - **D-8 — paste→undo→redo restored empty connector paths — FIXED 2026-06-16 (PR #49, [ADR 0021](docs/adr/0021-paste-algorithmic-perf-and-spatial-index.md) item 7).** Paste records a provisional empty path in the scene history entry (`createConnector(..., skipPathfinding=true)`), and `computePathsAsync` fills the real paths *outside* history (`skipHistory=true`). So paste → `Ctrl+Z` → `Ctrl+Y` re-applied the recorded patch with empty paths → pasted connectors rendered pathless until a later edit touched them. **Fix:** `useHistory.undo/redo` calls a scoped `resyncScene()` that re-routes the active view (`SYNC_SCENE`, written `skipHistory` so it never perturbs either undo/redo stack) — but **only when** an active-view connector actually has a missing/empty (non-`unroutable`) path, so the common model-only undo (e.g. a rename) pays just an O(C) `tiles.length` scan, never a synchronous full re-route at 700+ connectors. Guarded by the `useHistory` unit suites ([useHistory.test.tsx](packages/axoview-lib/src/hooks/__tests__/useHistory.test.tsx) + [useHistory.realStore.test.tsx](packages/axoview-lib/src/hooks/__tests__/useHistory.realStore.test.tsx)).
 - **D-9 — cross-view (page-switch) undo applies scene patches to the wrong view.** The scene store holds only the current view but its history stack is global and unscoped; `changeView` rebuilds the scene with `skipHistory=true` and does not clear/scope history. Undoing after a page switch applies the previous view's scene patches to the current view (phantom/stale `scene.connectors[id]`) while the model undo reverts an off-screen view. **Fix sketch:** scope scene history per-view, or clear/snapshot on `changeView`. Larger change; deferred. **Repro committed 2026-07-29** by the exploratory
   campaign (HIST-09):
-  [`hist-09-10.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/E1-history/hist-09-10.explore.spec.ts)
+  `hist-09-10.explore.spec.ts` (retired campaign lane — git history)
   — draw two connectors on page 1, switch to an empty page 2, Ctrl+Z, and page 2's
   scene cache ends up holding page 1's connector path (`test.fail()`, with a
   passing characterization test alongside it).
@@ -692,7 +692,7 @@ un-recorded page creation lives in a subtree the undo rolls back wholesale. Draw
 connector, click "Add page", press Ctrl+Z: **the new page silently disappears**
 and `uiState.view` is left pointing at its id — a dangling active-view reference
 that every reader papers over by falling back to `views[0]`. Measured e2e in
-[`hist-09-10.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/E1-history/hist-09-10.explore.spec.ts).
+`hist-09-10.explore.spec.ts` (retired campaign lane — git history).
 
 **Workaround:** delete the page manually (that *is* undoable).
 
@@ -909,11 +909,13 @@ object of its type").
 
 **Workaround:** click empty canvas after deleting.
 
-**Status:** Open. Fix direction: clear (or filter) `selectedIds` and `itemControls`
-in the delete transaction — and, more durably, make selection resolution
-defensive so a dangling id degrades to "not selected" rather than to a reducer
-throw. Repro:
-[`hist-11-13.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/E1-history/hist-11-13.explore.spec.ts).
+**Status:** Fixed in 9e9fdf47 (2026-08-10, mop-up wave) — the durable second
+option. `LayerContextProvider`'s invalidation effect (the one place that already
+sees every input to "may this ref stay selected") now also prunes any
+`selectedIds`/`itemControls` ref whose entity is gone, on every model change —
+so a delete, and an undo/redo of one, leaves the selection coherent (INV-2) with
+no reducer throw. Promoted regression:
+[`selectionLiveness.test.tsx`](packages/axoview-lib/src/hooks/__tests__/selectionLiveness.test.tsx).
 
 ## `deleteModelItem` corrupts the model: the deleted slot stays as `undefined`, then `validateView` throws on it
 
@@ -1312,12 +1314,14 @@ it, so nothing downstream catches the collision.
 
 **Workaround:** delete and re-draw the waypoint on the pasted copy.
 
-**Status:** Open. Fix direction: extend `idMap` to anchor ids and remap
-`anchor.id` alongside `anchor.ref` (anchor-to-anchor refs inside the pasted set
-must follow the same map); add an anchor-id-uniqueness check to `validateView`
-so the class cannot come back through another duplication path (ZIP import,
-"duplicate page"). Repro:
-[`scn-03-04.explore.test.tsx`](packages/axoview-lib/src/__explore__/E3/scn-03-04.explore.test.tsx).
+**Status:** Fixed in 9e9fdf47 (2026-08-10, mop-up wave) — `handlePaste` remaps
+every pasted anchor id through an `anchorIdMap` (fresh id per anchor), and
+anchor-to-anchor refs inside the pasted set follow the same map; a ref pointing
+outside the set detaches to the referenced anchor's tile. The load-time identity
+repair already dedupes anchor ids for files the bug produced, and CLIP-01's
+class gate covers the ZIP-import/duplicate-page paths, so no `validateView`
+change was needed. Promoted regression:
+[`useCopyPaste.pasteIntegrity.test.tsx`](packages/axoview-lib/src/clipboard/__tests__/useCopyPaste.pasteIntegrity.test.tsx).
 
 ## Paste validates the view before rectangles, text boxes and labels are added — so those land unchecked
 
@@ -1344,11 +1348,12 @@ after deleting the colour from the palette.
 
 **Workaround:** delete the pasted rectangle to un-poison the view.
 
-**Status:** Open. Fix direction: build the *complete* view — rectangles, text
-boxes and labels included — before the single `validateView` call, so the
-all-or-nothing guarantee the code documents actually covers everything it
-pastes. Repro:
-[`scn-05-08.explore.test.tsx`](packages/axoview-lib/src/__explore__/E3/scn-05-08.explore.test.tsx).
+**Status:** Fixed in 9e9fdf47 (2026-08-10, mop-up wave) — `pasteItems` builds a
+complete probe view (rectangles, text boxes and labels included) and validates
+THAT before committing anything, so the all-or-nothing guarantee covers
+everything the paste lands. A paste whose assembled view is invalid now commits
+nothing and returns false (see SCN-12). Promoted regression:
+[`useSceneActions.pasteGuards.test.tsx`](packages/axoview-lib/src/hooks/__tests__/useSceneActions.pasteGuards.test.tsx).
 
 ## The batch drag updaters are "drag-only" by convention only — an out-of-drag call is un-undoable
 
@@ -1371,10 +1376,13 @@ un-undoable behaviour by default.
 **Reachability:** latent today (every current caller is inside a bracket); this is
 a trap for the next feature that reaches for the fast path.
 
-**Status:** Open. Fix direction: make the updaters assert (or no-op with a
-dev warning) when `dragInProgress` is false, which becomes trivial once the drag
-flag moves into the store — see the mid-drag entry (HIST-07). Repro:
-[`scn-05-08.explore.test.tsx`](packages/axoview-lib/src/__explore__/E3/scn-05-08.explore.test.tsx).
+**Status:** Fixed in 9e9fdf47 (2026-08-10, mop-up wave) — now that the drag flag
+lives in the shared `editSession` (HIST-07), the four batch updaters call
+`assertDragBracket`: outside an open `beginDragTransaction` they no-op with a dev
+warning instead of landing a visible, un-undoable, unvalidated edit. Every
+current caller is inside a bracket, so the drag hot path is unchanged; a new
+caller reaching for the fast path is refused. Promoted regression:
+[`useSceneActions.editGuards.test.tsx`](packages/axoview-lib/src/hooks/__tests__/useSceneActions.editGuards.test.tsx).
 
 ## Connector previews written during a transaction are erased by the commit
 
@@ -1425,11 +1433,13 @@ surfacing it, and the write facade never got the matching fallback.
 
 **Workaround:** switch pages (which calls `setView` with a real id).
 
-**Status:** Open. Fix direction: make the fallback authoritative — if
-`useSceneData` decides `views[0]` is current, write that id back to `ui.view` so
-reads and writes agree — or drop the fallback and repair `ui.view` at its source.
-Fixing HIST-04 removes the main way to reach the state. Repro:
-[`scn-09-13.explore.test.tsx`](packages/axoview-lib/src/__explore__/E3/scn-09-13.explore.test.tsx).
+**Status:** Fixed in 9e9fdf47 (2026-08-10, mop-up wave) — `useSceneActions`
+resolves `currentViewId` through the SAME `views[0]` fallback the read facade
+uses when `ui.view` names a view the model does not have, so reads and writes
+address the same page: with a dangling active view an edit lands on the page the
+canvas renders instead of throwing. (HIST-04's fix already removes the main way
+to reach the state; this closes the disagreement itself.) Promoted regression:
+[`useSceneActions.editGuards.test.tsx`](packages/axoview-lib/src/hooks/__tests__/useSceneActions.editGuards.test.tsx).
 
 ## One stale item reference discards an entire multi-delete
 
@@ -1453,10 +1463,11 @@ except `ITEM`.
 
 **Workaround:** re-select before deleting.
 
-**Status:** Open. Fix direction: build the item-id liveness set alongside the
-others and filter `ITEM` refs through it; more generally, a dead ref in a
-selection should be skipped, never fatal. Repro:
-[`scn-09-13.explore.test.tsx`](packages/axoview-lib/src/__explore__/E3/scn-09-13.explore.test.tsx).
+**Status:** Fixed in 9e9fdf47 (2026-08-10, mop-up wave) — `deleteSelectedItems`
+builds the item-id liveness set alongside the four it already had and filters
+`ITEM` refs through it, so a dead ref is skipped rather than throwing and
+discarding the whole multi-delete. Promoted regression:
+[`useSceneActions.editGuards.test.tsx`](packages/axoview-lib/src/hooks/__tests__/useSceneActions.editGuards.test.tsx).
 
 ## An invalid paste is abandoned silently — Ctrl+V appears to do nothing
 
@@ -1475,9 +1486,12 @@ devtools.
 and warns instead of notifying because it runs inside a `startTransition`
 callback. SCN-06 shows the guard can be reached with ordinary content.
 
-**Status:** Open. Fix direction: surface the same "could not paste" notification
-the empty-clipboard path uses. Repro:
-[`scn-09-13.explore.test.tsx`](packages/axoview-lib/src/__explore__/E3/scn-09-13.explore.test.tsx).
+**Status:** Fixed in 9e9fdf47 (2026-08-10, mop-up wave) — `pasteItems` returns
+whether the paste committed, and `handlePaste` shows a `couldNotPaste` warning
+toast (new i18n key across all 13 locales) when it did not, exactly the way the
+empty-clipboard path surfaces `nothingToPaste`. Ctrl+V no longer appears to do
+nothing on a rejected paste. Promoted regression:
+[`useCopyPaste.pasteIntegrity.test.tsx`](packages/axoview-lib/src/clipboard/__tests__/useCopyPaste.pasteIntegrity.test.tsx).
 
 ## New pages can duplicate an existing page name
 
@@ -1515,10 +1529,13 @@ target view's layer set is never consulted.
 
 **Workaround:** re-assign the pasted items to a layer on the target page.
 
-**Status:** Open. Fix direction: drop (or remap) `layerId` when the paste target
-view has no matching layer — and add the `INVALID_LAYER_REF` validation check
-from RED-03 so the class cannot return through another duplication path. Repro:
-[`scn-14-15.explore.test.tsx`](packages/axoview-lib/src/__explore__/E3/scn-14-15.explore.test.tsx).
+**Status:** Fixed in 9e9fdf47 (2026-08-10, mop-up wave) — `pasteItems` strips a
+pasted entity's `layerId` when the target view has no such layer (the entity
+lands unassigned, the same repair `repairModel` applies on load). It is applied
+at `pasteItems`, the chokepoint every duplication path funnels through, so the
+class cannot return through another one — the load-path repair (RED-03) already
+covers ZIP import and hand-edited files. Promoted regression:
+[`useSceneActions.pasteGuards.test.tsx`](packages/axoview-lib/src/hooks/__tests__/useSceneActions.pasteGuards.test.tsx).
 
 ## Switching pages during async connector routing writes the old page's paths into the new page's scene
 
@@ -1542,10 +1559,12 @@ nothing cancels the queued batches on a view change.
 **Workaround:** switch pages twice — `changeView`'s SYNC_SCENE rebuilds the scene
 from the model.
 
-**Status:** Open. Fix direction: capture the view id at schedule time and abort
-the remaining batches when `uiState.view` no longer matches (a generation counter
-is enough), or route into a per-view scene keyed by that id. Repro:
-[`scn-14-15.explore.test.tsx`](packages/axoview-lib/src/__explore__/E3/scn-14-15.explore.test.tsx).
+**Status:** Fixed in 9e9fdf47 (2026-08-10, mop-up wave) — `computePathsAsync`
+captures the scheduling view id and drops any rAF batch that fires after
+`uiState.view` has moved on, so a page switch mid-routing no longer writes the
+old page's connector paths into the new page's scene (`changeView`'s SYNC_SCENE
+rebuilds the scene for wherever the user went). Promoted regression:
+[`useSceneActions.editGuards.test.tsx`](packages/axoview-lib/src/hooks/__tests__/useSceneActions.editGuards.test.tsx).
 
 ## Nothing enforces id uniqueness — duplicate item or view ids load clean and one copy becomes unreachable
 
@@ -1600,11 +1619,15 @@ unconditionally. The validation that follows is fatal rather than corrective.
 
 **Workaround:** none in-app; the file must be repaired externally.
 
-**Status:** Open. Fix direction: extend the load filter to resolve `ref.anchor`
-against the surviving connectors' anchor ids (iterating to a fixed point, since
-dropping one connector can orphan another) — the same "drop the bad connector,
-keep the diagram" policy the item-ref case already follows. Repro:
-[`clip-01-03.explore.test.ts`](packages/axoview-lib/src/__explore__/E4/clip-01-03.explore.test.ts).
+**Status:** Fixed in 9e9fdf47 (2026-08-10, mop-up wave) — verified on
+re-derivation: the load-time identity repair (`repairModel.ts`,
+`sweepDanglingAnchorRefs`) already resolves `ref.anchor` against the surviving
+anchors and iterates to a fixed point, dropping a bad connector rather than
+failing the whole load. It landed with RED-07/14's load half; this entry pins
+the exact CLIP-02 scenario (a survivor referencing a dropped connector) as a
+regression. One bad connector no longer makes the diagram refuse to open.
+Promoted regression: the CLIP-02 cases in
+[`repairModel.test.ts`](packages/axoview-lib/src/utils/__tests__/repairModel.test.ts).
 
 ## `useDirtyTracker` leaks a subscription per diagram open, and the dirty flag is never reset
 
@@ -1629,10 +1652,15 @@ keep the diagram" policy the item-ref case already follows. Repro:
 addresses only the timer. The 100 ms delay is a workaround for post-load store
 writes rather than an explicit "load finished" signal.
 
-**Status:** Open. Fix direction: unsubscribe in the effect cleanup (and reset
-`isDirtyRef` there), and replace the timer with an explicit post-load `markClean()`
-from the load path — which also removes the swallowed-edit window. Repro:
-[`clip-04-09.explore.test.tsx`](packages/axoview-lib/src/__explore__/E4/clip-04-09.explore.test.tsx).
+**Status:** Fixed in 9e9fdf47 (2026-08-10, mop-up wave) — the effect drops the
+100 ms defer entirely: on `isReady` it resets the flag (and its ref) clean, then
+subscribes immediately and returns the unsubscribe as cleanup. All three defects
+go with it — the subscription is released on every toggle (no leak), a new load
+starts clean (no stale dirty flag swallowing the next first edit), and an edit
+right after load is tracked (no swallowed-edit window). The load path completes
+its store writes synchronously before flipping `isReady`, so nothing is left for
+the old delay to absorb. Promoted regression:
+[`useDirtyTracker.test.tsx`](packages/axoview-lib/src/hooks/__tests__/useDirtyTracker.test.tsx).
 
 ## Deleting a layer leaves it solo'd in the preview overrides — the canvas can go blank
 
@@ -1651,9 +1679,13 @@ bugs (HIST-13, RED-15).
 
 **Workaround:** switch pages, or toggle preview off and on.
 
-**Status:** Open. Fix direction: clear (or re-resolve) `previewLayerOverrides`
-entries whose layer no longer exists whenever the view's layer set changes. Repro:
-[`clip-04-09.explore.test.tsx`](packages/axoview-lib/src/__explore__/E4/clip-04-09.explore.test.tsx).
+**Status:** Fixed in 9e9fdf47 (2026-08-10, mop-up wave) — the same
+`LayerContextProvider` invalidation effect that prunes stale selection refs
+(HIST-13) now clears a `previewLayerOverrides` solo naming a layer that no longer
+exists (and prunes dead hidden ids). A dead solo id used to hide everything —
+`isEntityVisibleInPreview` shows only the solo'd layer's entities — until a page
+switch; the canvas no longer blanks. Promoted regression:
+[`selectionLiveness.test.tsx`](packages/axoview-lib/src/hooks/__tests__/selectionLiveness.test.tsx).
 
 ## A `preserveViewport` reload keeps the previous model's selection
 
@@ -1671,9 +1703,15 @@ groups the selection reset with the viewport reset, but they answer different
 questions: the viewport should be preserved across a pack swap, the selection
 cannot be (the ids are gone).
 
-**Status:** Open. Fix direction: always clear the selection on load; keep only the
-scroll/zoom restore behind `preserveViewport`. Repro:
-[`clip-08-15.explore.test.tsx`](packages/axoview-lib/src/__explore__/E4/clip-08-15.explore.test.tsx).
+**Status:** Fixed in 9e9fdf47 (2026-08-10, mop-up wave) — the load path clears
+`selectedIds` and `itemControls` on EVERY load; only the scroll/zoom restore
+stays behind `preserveViewport`. The two answered different questions — the
+viewport can survive an icon-pack-swap reload, a selection naming the previous
+model's ids cannot. The `LayerContextProvider` invalidation effect prunes dead
+refs as a backstop for any other model swap. Promoted regressions:
+[`selectionLiveness.test.tsx`](packages/axoview-lib/src/hooks/__tests__/selectionLiveness.test.tsx)
+and the reset assertion in
+[`useInitialDataManager.test.tsx`](packages/axoview-lib/src/hooks/__tests__/useInitialDataManager.test.tsx).
 
 ## The notification slot has no queue — a later toast silently buries an unread error
 
@@ -1688,11 +1726,13 @@ progress toasts while autosave may be reporting a failure.
 **Root cause:** by design, but it collides with the ADR 0011 error-UX contract
 that failures of intent must be surfaced.
 
-**Status:** Open. Fix direction: either a small queue with severity-aware
-precedence (errors are never displaced by non-errors), or route errors to the
-dialog surface ADR 0011 already requires and leave the toast slot for
-informational messages. Repro:
-[`clip-08-15.explore.test.tsx`](packages/axoview-lib/src/__explore__/E4/clip-08-15.explore.test.tsx).
+**Status:** Fixed in 9e9fdf47 (2026-08-10, mop-up wave) — `setNotification` gives
+the single slot severity precedence: a non-error toast arriving while an unread
+error is showing is dropped; errors and explicit clears always land. So a paste
+progress/success toast can no longer bury a failed-save error. (The lighter of
+the two options — no queue; the ADR 0011 dialog surface still owns
+failure-of-intent.) Promoted regression:
+[`uiStateStore.notification.test.tsx`](packages/axoview-lib/src/stores/__tests__/uiStateStore.notification.test.tsx).
 
 ## A group icon-resize can commit a scale outside the schema cap, bricking the next load
 
@@ -1729,13 +1769,15 @@ Promoted regression + class gate: [`modelIdentity.contract.test.ts`](packages/ax
   but nothing bounds magnitude: a tile at `1e12` loads clean, overflows the
   projection math and puts content where no viewport can reach it.
 
-**Status:** Partially fixed in 2168faa5 (2026-07-30) — the **tile-coordinate**
-half (CLIP-15) is closed: `utils/repairModel.ts` clamps a non-finite or absurd
+**Status:** Fixed (both halves). The **tile-coordinate** half (CLIP-15) is closed
+in 2168faa5 (2026-07-30): `utils/repairModel.ts` clamps a non-finite or absurd
 coordinate on load, per the owner's repair-don't-reject ruling. Non-finite is the
 sharp case — the schema rejects it, so those files do not open at all today. The
-**icon-reference** half is now closed too — fixed in wave 4 (2026-08-01), and
-routed into the E2 reference-integrity pass rather than the F5 icon pass because
-that is what it is: a reference to something that is not there.
+**icon-reference** half (CLIP-14) is closed too — fixed in wave 4 (2026-08-01),
+and routed into the E2 reference-integrity pass rather than the F5 icon pass
+because that is what it is: a reference to something that is not there. (Header
+corrected from "Partially fixed" at the 2026-08-10 mop-up: both halves were
+already fixed; only the status line had gone stale.)
 
 It is deliberately **not** a validation change. `validateModelItem` leaves icon
 refs alone on purpose (icons legitimately arrive from packs loaded separately and
@@ -3437,9 +3479,11 @@ survived: nothing compares them.
 
 **Workaround:** none needed; cosmetic.
 
-**Status:** Open, cosmetic. **Deliberately NOT fixed in wave 3** — the one R2/R3
-entry left open, with the analysis sharpened so the decision it needs is properly
-framed.
+**Status:** Open — **accepted open by owner ruling 2026-08-10 (mop-up wave):
+cosmetic, not worth the shader work yet.** The one R2/R3 entry left open, with the
+analysis sharpened so the decision it needs is properly framed. Fix detector (a
+committed expected-fail):
+[`rectangle-corner-radius-parity.spec.ts`](packages/axoview-e2e/tests/rectangle-corner-radius-parity.spec.ts).
 
 Neither offered direction is the small change it looks like:
 
@@ -3455,7 +3499,7 @@ Neither offered direction is the small change it looks like:
   momentary shape change on grab. That is a product decision, not a bug fix.
 
 Repro:
-[`gpu-14-15.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R3-gpu-layers/gpu-14-15.explore.spec.ts).
+`gpu-14-15.explore.spec.ts` (retired campaign lane — git history).
 
 ## Fit-to-view can zoom below the floor every other zoom path enforces
 
@@ -3576,9 +3620,11 @@ but the promotion covers the editing box only.
 **Workaround:** open the box for editing and use the link chip in the inline
 editor, or reach the target diagram from the file explorer.
 
-**Status:** Open. **Deliberately not attempted in wave 3.** Both directions are
-new interaction surface rather than a corrected filter or gate, which is what the
-rest of this wave was: option one mounts a whole new hit-proxy layer (and then
+**Status:** Open — **accepted open by owner ruling 2026-08-10 (mop-up wave): the
+fix needs a new interaction surface, not a tail fix.** Both directions are new
+interaction surface rather than a corrected filter or gate, which is what the
+rest of the campaign's fixes were: option one mounts a whole new hit-proxy layer
+(and then
 owes the layer-filter class gate an entry, a locked/hidden verdict, and a zoom
 LOD decision like every other proxy — see
 [`layerFilter.contract.test.ts`](packages/axoview-lib/src/components/SceneLayers/__tests__/layerFilter.contract.test.ts)),
@@ -3588,8 +3634,9 @@ pipeline wave 3 spent its I-block budget narrowing rather than widening.
 The observation that carries forward is the entry's last sentence, and it is the
 strongest argument for doing this properly: the ADR 0034 link feature has NO
 end-to-end coverage of the resting state at all, so whichever route is taken has
-to arrive with that coverage rather than after it. Repro:
-[`rnd-02-07-overlay-gates.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/R4-renderer/rnd-02-07-overlay-gates.explore.spec.ts).
+to arrive with that coverage rather than after it. Fix detector (a committed
+expected-fail):
+[`text-box-resting-link-navigation.spec.ts`](packages/axoview-e2e/tests/text-box-resting-link-navigation.spec.ts).
 
 ## Selecting an element restacks it above the rest of the diagram
 
@@ -3963,7 +4010,7 @@ Wave 3 did make the ladder decidable rather than scattered — the LOD predicate
 and the constants now live in
 [`config/labelSettings.ts`](packages/axoview-lib/src/config/labelSettings.ts),
 which is where a per-node scale would be introduced. Repro:
-[`scale-nudge-ovl-02-14.explore.test.ts`](packages/axoview-lib/src/__explore__/R5/scale-nudge-ovl-02-14.explore.test.ts).
+`scale-nudge-ovl-02-14.explore.test.ts` (retired campaign lane — git history).
 
 **Direction ruled 2026-07-31 (owner review, wave-3 handoff):** fix in wave 4 as
 **one PR moving all three consumers together** — the per-label factor is derived
@@ -5969,8 +6016,11 @@ only way out is the undocumented Escape/V key.
 
 **Workaround:** n/a (a); press Escape (b).
 
-**Status:** Symptom (b) fixed in wave 4 (2026-08-02); symptom (a) left open
-deliberately, with a reason.
+**Status:** Symptom (b) fixed in wave 4 (2026-08-02); symptom (a) is
+**accepted open by owner ruling 2026-08-10 (mop-up wave)** — a dead-code /
+product-surface decision (`setHideViewControls` has no caller), not a defect
+awaiting a tail fix. No behavioural repro: the "bug" is that no caller exists,
+which is a grep contract, not a runtime symptom.
 
 **(b) — the latent trap is closed.** `setHideViewControls` now resets
 `annotation.tool` to `'select'`, so hiding the chrome can no longer leave a
@@ -6455,12 +6505,13 @@ on the node's tile still selects it.
 **Workaround:** click the node's original tile (roughly the centre-bottom of the
 drawn icon).
 
-**Status:** Open. This is a documented trade-off rather than an oversight, so the
-fix is a product call: either extend the hit test to the scaled extent (which
-also has to answer what happens when two enlarged icons overlap), or make the
-selectable region visible so the user is not misled about what is clickable.
-Repro:
-[`iconscale.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/F5-icons/iconscale.explore.spec.ts).
+**Status:** Open — **accepted open by owner ruling 2026-08-10 (mop-up wave): a
+documented ADR 0044 §6 trade-off (the resize is visual-only; collision, anchoring
+and hit-testing stay tile-sized), not an oversight.** A fix is a product call:
+either extend the hit test to the scaled extent (which also has to answer what
+happens when two enlarged icons overlap), or make the selectable region visible.
+Fix detector (a committed expected-fail):
+[`resized-icon-hit-area.spec.ts`](packages/axoview-e2e/tests/resized-icon-hit-area.spec.ts).
 
 ## A failed auto-save throws the unsaved edit away
 
@@ -6758,10 +6809,12 @@ not the harness: `Uncaught SyntaxError: Unexpected end of JSON input` at
 **Workaround:** clear site data (or delete the `axoview-diagrams` key in
 DevTools).
 
-**Status:** Open. Fix direction: wrap the first parse the way the last-opened
-reader is wrapped — warn, `removeItem`, boot with an empty list. Closes the
-catalogued coverage gap "boot with a corrupted localStorage session (recovery
-path)". Repro: [`boot-life-10.explore.spec.ts`](packages/axoview-e2e/tests-exploratory/A1-lifecycle/boot-life-10.explore.spec.ts).
+**Status:** Fixed in 9e9fdf47 (2026-08-10, mop-up wave) — the first parse is now
+wrapped like the last-opened reader: on a corrupt value it warns, `removeItem`s
+it and boots with an empty list, so a refresh cannot reproduce the crash. Closes
+the catalogued coverage gap "boot with a corrupted localStorage session
+(recovery path)". Promoted regression: the LIFE-10 cases in
+[`DiagramLifecycleProvider.readonlyAndLoad.test.tsx`](packages/axoview-app/src/providers/__tests__/DiagramLifecycleProvider.readonlyAndLoad.test.tsx).
 
 ## Ctrl+S on a read-only /display page saves — and says it saved
 
@@ -6786,9 +6839,11 @@ an app-shell surface.
 
 **Workaround:** don't press Ctrl+S on a `/display` URL.
 
-**Status:** Open. Fix direction: return early from `handleSaveClick` when
-`isReadonlyUrl` (and, for symmetry, from the Ctrl+O branch of the same listener).
-Repro: [`readonly-rename-life-11-12-15.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/readonly-rename-life-11-12-15.explore.test.tsx).
+**Status:** Fixed in 9e9fdf47 (2026-08-10, mop-up wave) — `handleSaveClick`
+returns early when `isReadonlyUrl`, and `handleOpenClick` does the same for Ctrl+O
+symmetry. A read-only `/display` route no longer writes on a keystroke or claims
+"saved". Promoted regression: the LIFE-11 cases in
+[`DiagramLifecycleProvider.readonlyAndLoad.test.tsx`](packages/axoview-app/src/providers/__tests__/DiagramLifecycleProvider.readonlyAndLoad.test.tsx).
 
 ## Renaming from the toolbar reverts the name inside the file
 
@@ -6848,9 +6903,12 @@ path does call the provider, so this is again two rituals for one operation
 
 **Workaround:** delete from the file explorer instead.
 
-**Status:** Open. Fix direction: route the dialog's delete through the same
-provider call the explorer uses, and clear the last-opened pointer when it names
-the deleted id. Repro: [`open-delete-life-09-13.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/open-delete-life-09-13.explore.test.tsx).
+**Status:** Fixed in 9e9fdf47 (2026-08-10, mop-up wave) — `deleteDiagram` routes
+through `storage.deleteDiagram(id, false)` (the same hard-delete the file
+explorer uses) and clears the `axoview-last-opened` / `-data` pair when it names
+the deleted id. The stored blob is reclaimed and the boot pointer no longer names
+a row that is gone. Promoted regression: the LIFE-13 case in
+[`DiagramLifecycleProvider.readonlyAndLoad.test.tsx`](packages/axoview-app/src/providers/__tests__/DiagramLifecycleProvider.readonlyAndLoad.test.tsx).
 
 ## Diagrams opened from the Load dialog lose their imported icons
 
@@ -6878,10 +6936,13 @@ the canvas. Only the last-opened diagram escapes, because
 
 **Workaround:** open diagrams from the file explorer.
 
-**Status:** Open. Fix direction: have `executeLoad` fetch the blob from the
-storage provider (as `openDiagramById` does) and use the list entry only for the
-name/timestamps. Repro:
-[`readonly-rename-life-11-12-15.explore.test.tsx`](packages/axoview-app/src/__explore__/A1/readonly-rename-life-11-12-15.explore.test.tsx).
+**Status:** Fixed in 9e9fdf47 (2026-08-10, mop-up wave) — `executeLoad` fetches
+the full blob from the storage provider (as `openDiagramById` does) and uses the
+restored list entry only for name/timestamps, so a diagram opened through the
+Load dialog keeps its imported icons instead of rendering them as tombstones. It
+falls back to the list copy for a diagram the provider does not have. Promoted
+regression: the LIFE-15 case in
+[`DiagramLifecycleProvider.readonlyAndLoad.test.tsx`](packages/axoview-app/src/providers/__tests__/DiagramLifecycleProvider.readonlyAndLoad.test.tsx).
 
 ## Record correction — area A2's entries were never filed (2026-07-30)
 

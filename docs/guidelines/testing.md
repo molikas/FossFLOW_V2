@@ -376,6 +376,15 @@ one file: heat map, per-area defect classes, owner rulings, the delta anchor.
 The per-hypothesis area files are retired to git history; the rig notes that
 generalise live in the skill's §9.
 
+**Between campaigns there is NO lane (ADR 0047, 2026-08-10).** The
+`__explore__/` and `tests-exploratory/` trees exist only while a campaign runs;
+its close-out deletes them, converting every surviving open-bug repro to a
+colocated `it.failing` / `test.fail()` test in the normal suite next to the code
+it tests — which CI runs. So an open campaign bug is a `test.fail()` you will
+find beside the feature, not in a quarantined tree; grep `known_issues.md` for
+`accepted open by owner ruling` to see which are deliberate. The explore configs
+stay (`passWithNoTests`) so `/explore` can refill the trees.
+
 ### ADR 0023 hardening additions — off-grid rendered geometry (2026-07-23)
 
 Follow-up to the seven-bug off-grid cluster fixed in `8ee54861`. **Why these exist, in one line:** ADR 0023's own acceptance tests assert the *data model* (tile stays integer, `offset` is committed), and every one of those seven bugs shipped green under them — they all lived in the gap between where an item is DRAWN and where it is FRAMED / HIT-TESTED. These suites assert that gap. Each file carries a "Why this exists" header; the ADR 0023 addendum (2026-07-23) names the invariant suite as the new acceptance surface for off-grid geometry.

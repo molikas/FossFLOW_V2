@@ -179,9 +179,48 @@ frozen lane rots against a moving substrate exactly the way §"Negative /
 risks" predicted. Delta sweeps touching the lane every cycle remain the
 mitigation.
 
+## Addendum — 2026-08-10, mop-up wave: locked decision #1 restored, and there is NO standing lane
+
+The owner's review of PR #86 found the wave-6 close-out claim ("all 240 fixed
+or dispositioned") overstated: a grep of `known_issues.md` found ~18 entries
+still `Open` — the remediation waves fixed root-cause *clusters*, and
+out-of-cluster entries stayed open silently because no wave reported an
+open-entry tally. Two rulings followed.
+
+1. **Mop-up wave (wave 7) on the branch, before #86 merges** — locked decision
+   #1 (fix all, no triage-to-backlog) stands. The 18 were fixed (fix commit
+   `9e9fdf47`), CLIP-14/15's stale "Partially fixed" header corrected, and **4
+   entries accepted open by owner ruling 2026-08-10** — GPU-15 (cosmetic),
+   RND-07 (needs a new interaction surface), ICON-08 (documented ADR 0044 §6
+   trade-off), VIEW-09a (dead-code / product-surface decision). Each behavioural
+   one carries a committed expected-fail as its fix detector. The full tally is
+   in [exploratory-2026-07.md](../reviews/exploratory-2026-07.md#final-tally-2026-08-10-mop-up).
+   **New standing rule (in the `/explore` report contract): a wave-close report
+   MUST state the open-entry tally as a grep-verifiable number, with the grep.**
+
+2. **There is NO standing lane between campaigns — §1 and the 2026-08-09
+   addendum's point 2 are amended.** The 2026-08-09 experience proved a frozen
+   lane rots against a moving substrate (GPU-15/ICON-08 addressed deleted
+   canvases). So the resting state is now: **the `__explore__/` and
+   `tests-exploratory/` trees do not exist between campaigns.** Open-bug repros
+   live as **colocated `it.failing` / `test.fail()` tests in the normal suites,
+   next to the code they test, which CI watches** — not in a quarantined lane
+   nobody runs. A campaign *recreates* the trees while it runs (the `/explore`
+   skill's §5/§11) and *deletes* them at close-out, converting each surviving
+   open repro to a colocated failing test; reusable rigs move to neutral
+   test-util locations (`testUtils/`, `helpers/`). The explore configs stay
+   (with `passWithNoTests`) so a campaign can refill the trees. This keeps §1's
+   invariants — a red repro is still committable the day a bug is found, and it
+   still never feeds the coverage ratchet or a default gate red — while putting
+   the repro somewhere CI actually watches it. The `2026-08-10` lane dissolution
+   executed this: `__explore__/` and `tests-exploratory/` are gone;
+   `axoview-e2e/helpers/glOracles.ts` and `axoview-app/src/testUtils/lifecycleHarness.tsx`
+   are the relocated rigs.
+
 ## Acceptance criteria
 
-- **Contract:** default `npm test` per package and the main Playwright config discover zero files from `__explore__/` / `tests-exploratory/` (quarantine holds — re-verify with `--listTests` after any config change).
+- **Contract:** whenever a campaign lane exists, default `npm test` per package and the main Playwright config discover zero files from `__explore__/` / `tests-exploratory/` (quarantine holds — re-verify with `--listTests` after any config change). Between campaigns those trees do not exist and the explore scripts exit 0 over them (`passWithNoTests`).
 - **Flip rule:** at least one fixed campaign bug demonstrates the full path: probe promoted to a main suite, known_issues entry annotated Fixed, lane copy gone.
+- **No standing lane (2026-08-10):** at rest, `git ls-files` shows no `__explore__/` or `tests-exploratory/` file; every open-bug repro is a colocated `it.failing`/`test.fail()` in a normal suite that CI runs.
 - **Skill:** `/explore` cold-starts a delta wave in a fresh session with no conversational context and no API key configured.
-- **Archive:** after remediation starts, `docs/exploratory/` no longer exists; `docs/reviews/exploratory-2026-07/` carries the frozen record and docs lint stays green.
+- **Archive:** `docs/reviews/exploratory-2026-07.md` (single file) carries the frozen record and docs lint stays green; the working tree is deleted (git history is the archive).

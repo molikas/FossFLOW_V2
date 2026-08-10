@@ -75,7 +75,7 @@ Work on a dedicated branch off `master` (`explore/<date>-<scope>`), never on `ma
 
 **Tier discipline:** hypotheses about event routing, hit-testing or gestures **must** use T3. This repo has shipped a regression that synthetic-event tests structurally could not see ([ADR 0022 addendum](../../docs/adr/0022-canvas-pointer-interaction-model.md)). Everything else takes the cheapest tier that can falsify.
 
-**Where probes live** (each config's `testMatch` is exact — a misnamed file is not an error, it is simply never run):
+**Where probes live** (each config's `testMatch` is exact — a misnamed file is not an error, it is simply never run). **These trees do not exist between campaigns (§11); a campaign CREATES them and the close-out deletes them.** `mkdir -p` the area directory before the first probe:
 
 | Package | Path | Run |
 |---|---|---|
@@ -99,7 +99,7 @@ The lane is **quarantined**: not in CI, not in the default suites, excluded from
 4. **Round-trips.** save→load, export→import (JSON and ZIP), undo→redo→undo, copy→paste, iso↔2D↔iso, reload. A round trip that is not the identity (modulo documented ID rewriting) is a finding.
 5. **Differential / parity.** The same logical operation through different routes must produce the same model delta: mouse vs keyboard vs touch vs context menu; on-grid vs off-grid; GPU vs DOM; edit mode vs inert-in-view-mode.
 6. **Metamorphic.** Order and framing shouldn't matter: op-then-zoom ≡ zoom-then-op; move A then B ≡ move B then A (disjoint).
-7. **Pixel read-back.** The rendering block is **not** pixel-blind — the bulk canvas is `preserveDrawingBuffer: true`, so `drawImage` into a 2D canvas + `getImageData` answers "what did the GPU paint?". Helpers: `packages/axoview-e2e/helpers/sceneCanvas.ts`, `tests-exploratory/_rig/glOracles.ts`. **Prefer a per-type counter (`data-connectors-drawn` and friends) to a pixel count** whenever the question is "did THIS entity type draw?" — since the canvas merge, "which canvas has pixels?" cannot answer it.
+7. **Pixel read-back.** The rendering block is **not** pixel-blind — the bulk canvas is `preserveDrawingBuffer: true`, so `drawImage` into a 2D canvas + `getImageData` answers "what did the GPU paint?". Helpers: `packages/axoview-e2e/helpers/sceneCanvas.ts` and `packages/axoview-e2e/helpers/glOracles.ts` (`paintedPixels`, `layerCounters`, `setCanvasMode`, context-loss — moved out of the lane to `helpers/` at the 2026-08-10 dissolution, since colocated render specs use it). **Prefer a per-type counter (`data-connectors-drawn` and friends) to a pixel count** whenever the question is "did THIS entity type draw?" — since the canvas merge, "which canvas has pixels?" cannot answer it.
 
 ---
 
@@ -176,8 +176,8 @@ Also: **an assertion written "either way" is a tautology.** `expect(x).toEqual(c
 ### 9c. Setup-throw traps
 
 - **Playwright fixtures are LAZY — an e2e probe must destructure `app`, not just `page`.** `async ({ page })` boots no diagram, so `window.__axoview__` is undefined and every locator times out — indistinguishable from evidence. Write `async ({ page, app })` even when `app` is unused.
-- **jsdom has no canvas 2D context.** `getTextBoxDimensions` throws, so any T1 probe touching text boxes needs `installCanvasStub()` from `src/__explore__/canvasStub.ts`. **A PROMOTED test cannot use it** (it lives in the lane) — give the main suite its own local stub.
-- **`installCanvasStub()` is not enough for anything that DRAWS** — use `installDrawing2DStub()` from `src/__explore__/R2/glStub.ts`.
+- **jsdom has no canvas 2D context.** `getTextBoxDimensions` throws, so any T1 probe touching text boxes needs a canvas stub. Recreate `installCanvasStub()` at `src/__explore__/canvasStub.ts` at the start of a campaign (git-history has the last copy under that path). **A PROMOTED/colocated test cannot import it** (it lives in the campaign lane that gets deleted) — give the main suite its own local stub, or use the lib's own `src/webgl/glStub.ts` (`installDrawing2DStub()`), which is permanent product-adjacent test infra.
+- **`installCanvasStub()` is not enough for anything that DRAWS** — use `installDrawing2DStub()` from `src/webgl/glStub.ts` (a permanent lib test helper, not a lane rig).
 - **`useCopyPaste` needs `<ClipboardProvider>`** — use `ClipboardProviders` from `E3/harness.tsx`.
 - **`jest.mock` drops the classes a component `instanceof`-checks**, and only on the failure path — which is the path the probe is testing. Re-export the real class via `jest.requireActual`.
 - **`jest.spyOn` returns the EXISTING spy on a second call**, so calls accumulate across tests in one file. `mockClear()` right after acquiring it.
@@ -222,7 +222,7 @@ Also: **an assertion written "either way" is a tautology.** `expect(x).toEqual(c
 - **Transform handles:** `[data-axoview-id="canvas-transform-anchor"]`, `canvas-rotate-handle`, `canvas-resize-readout`.
 - **The left dock shows ONE panel at a time** — opening Layers closes Elements.
 - **The renderer's bounding rect spans the whole window** and the docks render inside it, so rect-containment "is this on the canvas?" is wrong. Use `document.elementFromPoint`.
-- `tests-exploratory/_rig/dom-probe.explore.spec.ts` is a skipped DOM-dump helper — unskip locally to find a new hook.
+- A skipped DOM-dump helper (`tests-exploratory/_rig/dom-probe.explore.spec.ts` in campaign history) — a `page.evaluate` that dumps `data-*` hooks — is worth recreating locally to find a new selector; unskip it, read, re-skip.
 
 ### 9g. Writing the record
 
@@ -242,7 +242,14 @@ When a wave's finding is a *class* rather than an instance, the fix wave will wa
 
 ---
 
-## 11. Campaign close-out — the archive step (ADR 0047 §5, as amended 2026-08-09)
+## 11. Campaign close-out — the archive step (ADR 0047 §5, amended 2026-08-09 and 2026-08-10)
+
+**There is NO standing lane between campaigns (2026-08-10).** A campaign
+*recreates* the `__explore__/` and `tests-exploratory/` trees while it runs and
+*deletes them at close-out*. Open-bug repros do not live in a quarantined lane
+between campaigns — they live as **colocated failing-marked tests** in the
+normal suites, next to the code they test, which CI watches. The explore
+configs stay (with `passWithNoTests`) so the next campaign can refill the trees.
 
 A **wave** ends by updating the frozen review's delta-anchor section (§2). A
 **campaign** (a full multi-area program with its own working directory of
@@ -263,14 +270,29 @@ ledger + area files) ends by compressing, never by freezing the tree:
    method lives in this skill).
 3. Repoint every inbound link (known_issues.md, testing.md, the ADRs, this
    skill) to the new doc or de-link to plain text, in the same change.
-4. Sweep the lane to its standing state: probes for **Fixed** entries deleted
-   (the flip rule already promoted their regressions), **FALSIFIED**
-   characterizations deleted (promote a curated few to a main suite if they
-   have regression value — never leave them in the lane), **Open** repros
-   stay, plus the named rigs (§9's stubs/harnesses and `_rig/`) and anything a
-   kept probe imports. Re-verify quarantine in both directions, tsc, knip, and
-   that every explore script exits 0 (an empty per-package lane passes via
-   `passWithNoTests`).
+4. **Dissolve the lane.** Every probe leaves `__explore__/` and
+   `tests-exploratory/`, which are then deleted:
+   - **Fixed** entries — the flip rule already promoted their regressions; the
+     probe is gone.
+   - **FALSIFIED** characterizations — deleted (promote a curated few to a main
+     suite if they have real regression value).
+   - **Open / accepted-open** repros — **converted to a colocated
+     `it.failing` (Jest) / `test.fail()` (Playwright) test in the NORMAL suite
+     next to the code it tests**, named for the BEHAVIOUR (no campaign IDs in
+     filenames — the `known_issues` pointer goes in a header comment).
+     **Re-verify each still fails for the recorded reason before converting** —
+     a substrate move (a merge, a refactor) can make an old probe address code
+     that no longer exists (GPU-15/ICON-08 addressed pre-merge per-type
+     canvases). A dead-code "no caller exists" finding has no runtime repro to
+     convert; leave it as a documented grep contract.
+   - **Nondeterminism guard:** if a converted repro flakes in the main suite,
+     do not ship it flaky — keep that one as a `skipped` test with the
+     `known_issues` pointer and say so in the report.
+   - **Rigs:** move still-referenced harnesses/stubs/oracles to neutral
+     test-util locations named for what they harness (`testUtils/`, `helpers/`);
+     delete the rest.
+   Then re-verify quarantine both directions, tsc, knip, and that every explore
+   script exits 0 over the now-absent trees (`passWithNoTests`).
 
 ## Notes for Claude
 
@@ -280,6 +302,20 @@ ledger + area files) ends by compressing, never by freezing the tree:
 2. **Gate:** one line — suites/e2e counts, green or red.
 3. **Next:** ONE sentence — the first action of the successor session. All further detail goes in the wave file's resume point, not in chat.
 4. **Owner:** the word **"nothing"**, or ONE question with a recommended default so it can be answered in a word. If several compete, ask the most blocking one and record the rest as "proceeding with X unless overruled".
+
+**Every wave-close report MUST state the open-entry tally as a grep-verifiable
+number, with the grep** (mandated 2026-08-10 — the wave-6 "final sweep" reported
+no tally and left ~18 entries silently open, which is what forced the mop-up
+wave). A characterization ("almost all fixed") is not a tally; the number is:
+
+```bash
+grep -c '\*\*Found by:\*\* exploratory campaign' known_issues.md   # total filed
+grep -c 'accepted open by owner ruling' known_issues.md            # deliberately open
+```
+
+The Gate line, or a line beside it, carries `N filed / M accepted-open / rest
+fixed`. If any entry is Open without an accepted-open ruling, the wave is not
+done — name it.
 
 Findings, corrections and lessons are written into their homes (the wave file, `known_issues.md`, `docs/guidelines/testing.md`) and *linked*, never restated in the report. **A report the owner cannot act on in under a minute is a defect in the report.**
 

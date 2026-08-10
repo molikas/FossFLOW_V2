@@ -25,7 +25,8 @@ governed by [ADR 0047](../adr/0047-exploratory-testing-program.md).
 | Product questions raised | 22 — all ruled 2026-07-30 ([rulings below](#owner-rulings-2026-07-30)) |
 | `known_issues.md` entries | 190 at campaign close; 204 tagged entries as of this freeze (remediation filed splits and corrections) |
 | Areas | 27, all DONE, plus one cross-area mop-up wave |
-| Remediation | waves 0–6 on `remediation/exploratory-campaign` (PR #86); ~15 class gates, each red-verified |
+| Remediation | waves 0–7 on `remediation/exploratory-campaign` (PR #86); ~15 class gates, each red-verified |
+| Final tally | 204 filed `known_issues` entries; all Fixed **except 4 accepted open by owner ruling** ([tally below](#final-tally-2026-08-10-mop-up)) |
 
 Every confirmed bug carried a committed `it.failing` / `test.fail()` repro in the
 quarantined probe lane. As fixes landed, each probe was promoted to a main suite
@@ -416,9 +417,45 @@ riding it — one PR; HIST-03 strictly separate (a trimming bug, not a navigatio
 one). Mid-wave addition: HIST-03 must not fall between sessions — it lands the
 same session or is named first in the resume point.
 
+## Final tally (2026-08-10, mop-up wave)
+
+Locked decision #1 was "all 240 fixed, no triage-to-backlog." The owner's
+2026-08-10 review of PR #86 found the wave-6 close-out claim overstated: the
+remediation waves fixed root-cause *clusters*, and ~18 out-of-cluster entries
+had stayed `Open` silently while no wave reported an open-entry tally. The
+mop-up wave (wave 7) closed them and made the completion claim true.
+
+**The register (grep-verifiable):**
+
+```bash
+grep -c '\*\*Found by:\*\* exploratory campaign' known_issues.md          # 204 filed entries
+grep -c 'accepted open by owner ruling 2026-08-10' known_issues.md        # 4  accepted open
+```
+
+| Disposition | Count | Notes |
+|---|---|---|
+| Fixed / dispositioned-fixed | 200 | 18 closed by the mop-up wave (SCN/CLIP paste + selection + session clusters, LIFE app-shell, CLIP-02 load repair); the rest across waves 1–6. CLIP-14/15's "Partially fixed" header was corrected — both halves were already fixed. |
+| Accepted open by owner ruling 2026-08-10 | 4 | see below |
+
+The **4 accepted open** — each a deliberate non-fix, each with its fix detector
+as a committed expected-fail (or, for the dead-code case, a grep contract):
+
+| ID | Reason accepted open | Detector |
+|----|----------------------|----------|
+| GPU-15 | Cosmetic (rounded rectangle corners are square on the bulk paint); not worth the shader work yet. | `tests/rectangle-corner-radius-parity.spec.ts` (`test.fail`) |
+| RND-07 | A link in a resting text box needs a new interaction surface (promote the box above the interactions box), not a tail fix. | `tests/text-box-resting-link-navigation.spec.ts` (`test.fail`) |
+| ICON-08 | A documented ADR 0044 §6 trade-off: icon resize is visual-only, hit area stays tile-sized. | `tests/resized-icon-hit-area.spec.ts` (`test.fail`) |
+| VIEW-09a | Dead code / product-surface decision: `setHideViewControls` has no caller; wiring a control is new product, not remediation. | grep contract (no runtime symptom to repro) |
+
+Two corrections to the mop-up's own inputs, recorded rather than silent (the
+"evidence is reliable, diagnoses are hypotheses" rule applied to the plan):
+**OVL-02 was already Fixed** in wave 4 (2026-08-02), not open — the first of its
+two staged `Status` lines was stale; and **VIEW-09a** is the fourth accepted-open
+entry, in OVL-02's place on the owner's provisional list.
+
 ## Program lessons
 
-What the program cost and returned: 240 confirmed bugs fixed across waves 1–6,
+What the program cost and returned: 240 confirmed bugs fixed across waves 1–7,
 22 rulings implemented, a dozen recorded root causes *corrected* while being
 fixed, ~15 class gates landed (each verified able to go red), and one substrate
 restructure (the canvas merge) that a bug cluster justified but no performance
