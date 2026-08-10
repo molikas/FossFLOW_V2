@@ -607,7 +607,6 @@ const locale: LocaleProps = {
     pastedOne: '{count} Element eingefügt',
     pastedOther: '{count} Elemente eingefügt',
     nothingToPaste: 'Nichts zum Einfügen',
-    couldNotPaste: 'Einfügen nicht möglich — der kopierte Inhalt ist mit diesem Diagramm nicht kompatibel',
     routingConnectors:
       'Wird eingefügt… Verbindungen werden geroutet ({percent}%)'
   },

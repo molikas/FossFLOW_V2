@@ -606,7 +606,6 @@ const locale: LocaleProps = {
     pastedOne: '{count} elemento pegado',
     pastedOther: '{count} elementos pegados',
     nothingToPaste: 'Nada que pegar',
-    couldNotPaste: 'No se pudo pegar — el contenido copiado no es compatible con este diagrama',
     routingConnectors: 'Pegando… enrutando conectores ({percent}%)'
   },
   // D13 — default page name; {count} interpolated.

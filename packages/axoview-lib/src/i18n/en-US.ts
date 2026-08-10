@@ -594,7 +594,6 @@ const locale: LocaleProps = {
     pastedOne: 'Pasted {count} item',
     pastedOther: 'Pasted {count} items',
     nothingToPaste: 'Nothing to paste',
-    couldNotPaste: 'Could not paste — the copied content is not compatible with this diagram',
     routingConnectors: 'Pasting… routing connectors ({percent}%)'
   },
   // D13 — default page name; {count} interpolated.

@@ -211,11 +211,12 @@ describe('a rejected paste is surfaced, not silent (SCN-12)', () => {
       result.current.copyPaste.handlePaste();
     });
 
-    // Nothing committed beyond the pre-paste content, and the user was told.
+    // Nothing committed beyond the pre-paste content, and the user was told
+    // (the same warning the empty-clipboard path uses — SCN-12).
     expect(modelView(result).items.length).toBe(itemsBefore);
     const notification = result.current.uiStateApi.getState().notification;
     expect(notification?.severity).toBe('warning');
-    expect(notification?.message).toMatch(/could not paste/i);
+    expect(notification?.message).toMatch(/nothing to paste/i);
     warn.mockRestore();
   });
 });

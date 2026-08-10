@@ -1487,10 +1487,10 @@ and warns instead of notifying because it runs inside a `startTransition`
 callback. SCN-06 shows the guard can be reached with ordinary content.
 
 **Status:** Fixed in 9e9fdf47 (2026-08-10, mop-up wave) — `pasteItems` returns
-whether the paste committed, and `handlePaste` shows a `couldNotPaste` warning
-toast (new i18n key across all 13 locales) when it did not, exactly the way the
-empty-clipboard path surfaces `nothingToPaste`. Ctrl+V no longer appears to do
-nothing on a rejected paste. Promoted regression:
+whether the paste committed, and `handlePaste` shows the SAME `nothingToPaste`
+warning the empty-clipboard path uses when it did not (the entry's own fix
+direction: "the same notification the empty-clipboard path uses"). Ctrl+V no
+longer appears to do nothing on a rejected paste. Promoted regression:
 [`useCopyPaste.pasteIntegrity.test.tsx`](packages/axoview-lib/src/clipboard/__tests__/useCopyPaste.pasteIntegrity.test.tsx).
 
 ## New pages can duplicate an existing page name

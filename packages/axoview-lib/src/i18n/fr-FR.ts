@@ -610,7 +610,6 @@ const locale: LocaleProps = {
     pastedOne: '{count} élément collé',
     pastedOther: '{count} éléments collés',
     nothingToPaste: 'Rien à coller',
-    couldNotPaste: 'Collage impossible — le contenu copié est incompatible avec ce diagramme',
     routingConnectors: 'Collage… routage des connecteurs ({percent}%)'
   },
   // D13 — default page name; {count} interpolated.

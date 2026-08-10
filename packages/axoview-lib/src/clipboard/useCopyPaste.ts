@@ -366,21 +366,6 @@ export const useCopyPaste = () => {
       if (!originalTileMap.has(vi.id)) originalTileMap.set(vi.id, vi.tile);
     }
 
-    // The concrete tile an existing anchor sits on — for detaching an
-    // anchor-to-anchor ref whose target is NOT in the pasted set (mirrors the
-    // item-ref detach below).
-    const anchorTileOf = (anchorId: string): Coords | undefined => {
-      for (const conn of scene.currentView.connectors ?? []) {
-        for (const a of conn.anchors ?? []) {
-          if (a.id !== anchorId) continue;
-          if (a.ref?.tile) return a.ref.tile;
-          if (a.ref?.item) return originalTileMap.get(a.ref.item);
-          return undefined;
-        }
-      }
-      return undefined;
-    };
-
     // Remap connector anchors — fresh anchor ids (SCN-03), remap known
     // items/anchors, detach refs pointing outside the clipboard set.
     const newConnectors: Connector[] = clipboardData.connectors.map(
@@ -402,9 +387,11 @@ export const useCopyPaste = () => {
             return { ...anchor, id: newAnchorId, ref: { tile } };
           }
           // Anchor-to-anchor ref: inside the pasted set it follows the same
-          // map (SCN-03); outside it, detach to the referenced anchor's tile —
-          // keeping the original id would tether the clone to the source
-          // connector, and on a cross-page paste it would dangle.
+          // map (SCN-03); outside it, detach to the paste point — keeping the
+          // original id would tether the clone to the source connector, and on
+          // a cross-page paste it would dangle. (A cross-set anchor-to-anchor
+          // ref is a rare shape; landing its detached waypoint at the paste
+          // point rather than the source anchor's exact tile is acceptable.)
           if (anchor.ref?.anchor) {
             if (anchorIdMap.has(anchor.ref.anchor)) {
               return {
@@ -413,12 +400,7 @@ export const useCopyPaste = () => {
                 ref: { anchor: anchorIdMap.get(anchor.ref.anchor)! }
               };
             }
-            const tile = anchorTileOf(anchor.ref.anchor) ?? mouseTile;
-            return {
-              ...anchor,
-              id: newAnchorId,
-              ref: { tile: { x: tile.x + offset.x, y: tile.y + offset.y } }
-            };
+            return { ...anchor, id: newAnchorId, ref: { tile: mouseTile } };
           }
           // Tile waypoint: apply paste offset so intermediate points move with the connector
           if (anchor.ref?.tile) {
@@ -502,11 +484,13 @@ export const useCopyPaste = () => {
       );
 
       // E3/SCN-12: an invalid payload used to be abandoned with only a
-      // console.warn — Ctrl+V appeared to do nothing. Surface it the way the
-      // empty-clipboard path does (UX §6.3: failures are surfaced, not left
-      // in devtools), and never claim success for a paste that was rejected.
+      // console.warn — Ctrl+V appeared to do nothing. Surface it with the SAME
+      // warning the empty-clipboard path uses (the entry's fix direction, and
+      // no new boot-critical i18n weight): from the user's seat the paste
+      // yielded nothing either way (UX §6.3: failures are surfaced, not left in
+      // devtools). Never claim success for a paste that was rejected.
       if (!applied) {
-        showNotification(t('couldNotPaste'), 'warning');
+        showNotification(t('nothingToPaste'), 'warning');
         return;
       }
 

@@ -600,7 +600,6 @@ const locale: LocaleProps = {
     pastedOne: '{count} öğe yapıştırıldı',
     pastedOther: '{count} öğe yapıştırıldı',
     nothingToPaste: 'Yapıştırılacak bir şey yok',
-    couldNotPaste: 'Yapıştırılamadı — kopyalanan içerik bu diyagramla uyumlu değil',
     routingConnectors:
       'Yapıştırılıyor… bağlayıcılar yönlendiriliyor ({percent}%)'
   },
