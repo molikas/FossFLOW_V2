@@ -622,7 +622,7 @@ export function DiagramLifecycleProvider({
         const dataWithIcons: DiagramData = {
           ...data,
           title: name,
-          icons: [...iconPackManager.loadedIcons, ...importedIcons],
+          icons: [...iconPackManager.getLoadedIcons(), ...importedIcons],
           colors: data.colors?.length ? data.colors : defaultColors,
           items: Array.isArray(data.items) ? data.items : [],
           views: Array.isArray(data.views) ? data.views : [],
@@ -678,7 +678,7 @@ export function DiagramLifecycleProvider({
         const dataWithIcons: DiagramData = {
           ...data,
           title: data.title || diagramInfo?.name || 'Readonly Diagram',
-          icons: [...iconPackManager.loadedIcons, ...importedIcons],
+          icons: [...iconPackManager.getLoadedIcons(), ...importedIcons],
           colors: data.colors?.length ? data.colors : defaultColors,
           items: Array.isArray(data.items) ? data.items : [],
           views: Array.isArray(data.views) ? data.views : [],
@@ -766,7 +766,7 @@ export function DiagramLifecycleProvider({
         const dataWithIcons: DiagramData = {
           ...data,
           title: name,
-          icons: [...iconPackManager.loadedIcons, ...importedIcons],
+          icons: [...iconPackManager.getLoadedIcons(), ...importedIcons],
           colors: data.colors?.length ? data.colors : defaultColors,
           items: Array.isArray(data.items) ? data.items : [],
           views: Array.isArray(data.views) ? data.views : [],
@@ -1065,7 +1065,7 @@ export function DiagramLifecycleProvider({
       );
       const dataWithIcons: DiagramData = {
         ...data,
-        icons: [...iconPackManager.loadedIcons, ...importedIcons]
+        icons: [...iconPackManager.getLoadedIcons(), ...importedIcons]
       };
       setCurrentDiagram(diagram);
       setDiagramName(diagram.name);
@@ -1179,7 +1179,7 @@ export function DiagramLifecycleProvider({
       const finalIcons = hasDefaultIcons
         ? loadedIcons
         : [
-            ...iconPackManager.loadedIcons,
+            ...iconPackManager.getLoadedIcons(),
             ...loadedIcons.filter((icon) => icon.collection === 'imported')
           ];
 
@@ -1254,7 +1254,7 @@ export function DiagramLifecycleProvider({
         const blankData = {
           title: name,
           name,
-          icons: iconPackManager.loadedIcons,
+          icons: iconPackManager.getLoadedIcons(),
           colors: defaultColors,
           items: [],
           views: [],
