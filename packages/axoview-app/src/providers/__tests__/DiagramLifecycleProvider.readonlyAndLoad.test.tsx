@@ -33,10 +33,36 @@ jest.mock('react-i18next', () => ({
 }));
 jest.mock('@isoflow/isopacks/dist/utils', () => ({ flattenCollections: () => [] }));
 jest.mock('@isoflow/isopacks/dist/isoflow', () => ({}), { virtual: true });
+// A FAITHFUL pack-manager mock. The previous one returned `loadedIcons: []`
+// and a no-op `loadPacksForDiagram`, so no test in the repo could observe the
+// only interesting thing the real hook does: fetch a pack ASYNCHRONOUSLY and
+// grow the catalog afterwards. That blind spot is why LIFE-16's bug shipped —
+// LIFE-15 below proved an IMPORTED icon survives a load, and imported icons
+// travel inside the diagram, so it passed for a reason that never touched the
+// pack path.
+//
+// `loadedIcons` stays empty on purpose: in the real hook that field is the
+// render-time snapshot every load path captured BEFORE its await, so it can
+// never hold a pack fetched during that await. Only `getLoadedIcons()` can.
+const mockPackIcon = {
+  id: 'material_DoubleArrow',
+  name: 'Double Arrow',
+  collection: 'material',
+  url: 'data:image/svg+xml,pack'
+};
+let mockPackCatalog: Array<Record<string, unknown>> = [];
 jest.mock('../../services/iconPackManager', () => ({
   useIconPackManager: () => ({
     loadedIcons: [],
-    loadPacksForDiagram: async () => {},
+    getLoadedIcons: () => mockPackCatalog,
+    loadPacksForDiagram: async (data: { requiredPacks?: unknown }) => {
+      const packs = data && data.requiredPacks;
+      if (Array.isArray(packs) && packs.indexOf('material') !== -1) {
+        await Promise.resolve(); // the fetch the stale closure outlives
+        mockPackCatalog = mockPackCatalog.concat([mockPackIcon]);
+      }
+      return mockPackCatalog;
+    },
     togglePack: () => {},
     toggleLazyLoading: () => {},
     lazyLoadingEnabled: false,
@@ -282,5 +308,79 @@ describe('LIFE-15 — the Load dialog keeps imported icons', () => {
     expect(
       h.ctx().currentModel?.icons?.some((i) => i.id === 'my-logo')
     ).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// LIFE-16 — a diagram whose items need a lazily-loaded pack lands WITH that
+// pack's icons.
+//
+// The production report: a Drive-shared diagram opened with every
+// `material_*` node blank while its imported icons rendered fine, sometimes in
+// the editor too. Cause: each load path did
+//
+//     await iconPackManager.loadPacksForDiagram(data)
+//     icons: [...iconPackManager.loadedIcons, ...importedIcons]
+//
+// and `loadedIcons` is state captured before the await, so the committed model
+// never held the pack that had just been fetched. An effect in the provider
+// re-loaded the canvas when `loadedIcons` changed identity and hid this — but
+// it bails on `!axoviewRef.current`, i.e. exactly when the canvas is not
+// mounted yet: the cold-boot readonly routes, and the editor's open-from-empty-
+// state. The fix reads the catalog through `getLoadedIcons()`, which is
+// ref-backed and therefore correct the instant the pack resolves.
+// ---------------------------------------------------------------------------
+describe('LIFE-16 — a lazily-loaded pack reaches the committed model', () => {
+  const IMPORTED = {
+    id: 'my-logo',
+    name: 'my-logo',
+    collection: 'imported',
+    url: 'data:image/png;base64,AAA'
+  };
+
+  beforeEach(() => {
+    mockPackCatalog = [];
+  });
+
+  async function bootReadonlyWithPack() {
+    routeParams = { readonlyDiagramId: 'diag-1' };
+    window.history.pushState({}, '', '/display/diag-1');
+    const d = makeStorage({
+      listDiagrams: async () => [
+        { id: 'diag-1', name: 'Shared', lastModified: '2026-01-01T00:00:00.000Z' }
+      ],
+      loadDiagram: async () => ({
+        title: 'Shared',
+        // Lean-saved exactly as the storage providers write it: pack icons
+        // stripped, `requiredPacks` recording what must be refetched.
+        requiredPacks: ['material'],
+        icons: [IMPORTED],
+        items: [{ id: 'i1', name: 'Node', icon: 'material_DoubleArrow' }],
+        views: []
+      })
+    } as never);
+    appStorage = appStorageValue({ remoteStorageActive: false, storage: d.storage });
+    const h = renderLifecycle();
+    await waitFor(() => expect(h.ctx().currentDiagram?.id).toBe('diag-1'));
+    return h;
+  }
+
+  it('the readonly /display route commits the pack icon its items reference', async () => {
+    const h = await bootReadonlyWithPack();
+    const ids = (h.ctx().currentModel?.icons ?? []).map((i) => i.id);
+    // CONTROL — imported icons travel inside the diagram and never regressed.
+    // This is the assertion LIFE-15 already made, and why the bug hid.
+    expect(ids).toContain('my-logo');
+    expect(ids).toContain('material_DoubleArrow');
+  });
+
+  it('the item that needs the pack icon can resolve it', async () => {
+    const h = await bootReadonlyWithPack();
+    const model = h.ctx().currentModel;
+    const iconIds = new Set((model?.icons ?? []).map((i) => i.id));
+    const unresolved = (model?.items ?? [])
+      .map((it) => (it as { icon?: string }).icon)
+      .filter((id): id is string => !!id && !iconIds.has(id));
+    expect(unresolved).toEqual([]);
   });
 });

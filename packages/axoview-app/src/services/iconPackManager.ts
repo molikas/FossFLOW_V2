@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { flattenCollections } from '@isoflow/isopacks/dist/utils';
 import type { ProcessedCollection } from '@isoflow/isopacks/dist/types';
 import type { Icon } from 'axoview';
@@ -253,13 +253,46 @@ export const useIconPackManager = (coreIcons: Icon[]) => {
     Record<IconPackName, ProcessedCollection>
   >({} as Record<IconPackName, ProcessedCollection>);
 
+  // The catalog, readable SYNCHRONOUSLY.
+  //
+  // Every caller does `await loadPacksForDiagram(data)` and then builds the
+  // model's icon list. `loadedIcons` is state, so the value in that closure was
+  // captured BEFORE the await and never contains the pack that was just
+  // fetched — the committed model shipped without it. In the editor a
+  // compensating effect in DiagramLifecycleProvider re-loaded the canvas when
+  // `loadedIcons` changed identity and hid the bug; that effect bails when the
+  // canvas is not mounted yet, which is precisely the cold-boot readonly routes
+  // (public share, Drive display, /display/:id). There the miss was permanent:
+  // a diagram whose items reference `material_*` rendered those nodes against a
+  // catalog that had only the core set plus the diagram's own imported icons —
+  // which is why imported icons kept working while pack icons did not.
+  //
+  // The ref is written in the same statement as every setLoadedIcons, so
+  // `getLoadedIcons()` is correct the instant a pack resolves. State stays, so
+  // React still re-renders; the ref is what post-await code reads.
+  const loadedIconsRef = useRef<Icon[]>(coreIcons);
+  const commitIcons = useCallback((icons: Icon[]) => {
+    loadedIconsRef.current = icons;
+    setLoadedIcons(icons);
+  }, []);
+  const getLoadedIcons = useCallback(() => loadedIconsRef.current, []);
+
+  // In-flight/completed pack names, tracked by ref rather than by reading
+  // `packInfo` state. Two call sites can race into loadPack('material') before
+  // a single setPackInfo has flushed — both would see `loading: false`, both
+  // would fetch, and both would append, duplicating ~2 100 icons in the
+  // catalog. A ref settles that synchronously.
+  const packClaimRef = useRef<Set<IconPackName>>(new Set());
+
   // Load a specific pack
   const loadPack = useCallback(
     async (packName: IconPackName) => {
-      // Already loaded?
+      // Already loaded, or a concurrent caller already claimed it?
       if (packInfo[packName].loaded || packInfo[packName].loading) {
         return;
       }
+      if (packClaimRef.current.has(packName)) return;
+      packClaimRef.current.add(packName);
 
       // Set loading state
       setPackInfo((prev) => ({
@@ -273,6 +306,7 @@ export const useIconPackManager = (coreIcons: Icon[]) => {
         // throwing. Treat it as "nothing to add" — the pack simply is not one
         // this build ships.
         if (!pack) {
+          packClaimRef.current.delete(packName);
           setPackInfo((prev) => ({
             ...prev,
             [packName]: { ...prev[packName], loading: false }
@@ -300,10 +334,11 @@ export const useIconPackManager = (coreIcons: Icon[]) => {
         }));
 
         // Add icons to the loaded icons array
-        setLoadedIcons((prev) => [...prev, ...flattenedIcons]);
+        commitIcons([...loadedIconsRef.current, ...flattenedIcons]);
 
         return flattenedIcons;
       } catch (error) {
+        packClaimRef.current.delete(packName);
         console.error(`Failed to load ${packName} icon pack:`, error);
         setPackInfo((prev) => ({
           ...prev,
@@ -317,7 +352,7 @@ export const useIconPackManager = (coreIcons: Icon[]) => {
         throw error;
       }
     },
-    [packInfo]
+    [packInfo, commitIcons]
   );
 
   // Enable/disable a pack
@@ -345,10 +380,11 @@ export const useIconPackManager = (coreIcons: Icon[]) => {
             newIcons.push(flattenCollections([loadedPackData[pack]]));
           }
         }
-        setLoadedIcons(newIcons.flat());
+        packClaimRef.current.delete(packName);
+        commitIcons(newIcons.flat());
       }
     },
-    [enabledPacks, loadPack, coreIcons, loadedPackData]
+    [enabledPacks, loadPack, coreIcons, loadedPackData, commitIcons]
   );
 
   // Toggle lazy loading
@@ -381,7 +417,8 @@ export const useIconPackManager = (coreIcons: Icon[]) => {
   // `item.icon?.collection` always evaluated to undefined.
   const loadPacksForDiagram = useCallback(
     async (diagramData: unknown) => {
-      if (!diagramData || typeof diagramData !== 'object') return;
+      if (!diagramData || typeof diagramData !== 'object')
+      return loadedIconsRef.current;
       const blob = diagramData as {
         requiredPacks?: unknown;
         items?: unknown;
@@ -399,6 +436,10 @@ export const useIconPackManager = (coreIcons: Icon[]) => {
           saveEnabledPacks(newEnabledPacks);
         }
       }
+
+      // Returned so a caller never has to reach back through the (stale)
+      // `loadedIcons` field to find what it just asked for.
+      return loadedIconsRef.current;
     },
     [packInfo, enabledPacks, loadPack]
   );
@@ -427,6 +468,7 @@ export const useIconPackManager = (coreIcons: Icon[]) => {
     enabledPacks,
     packInfo,
     loadedIcons,
+    getLoadedIcons,
     togglePack,
     toggleLazyLoading,
     loadAllPacks,

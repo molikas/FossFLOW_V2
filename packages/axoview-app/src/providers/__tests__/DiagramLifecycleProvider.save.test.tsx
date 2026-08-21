@@ -31,6 +31,7 @@ jest.mock('@isoflow/isopacks/dist/isoflow', () => ({}), { virtual: true });
 jest.mock('../../services/iconPackManager', () => ({
   useIconPackManager: () => ({
     loadedIcons: [],
+    getLoadedIcons: () => [],
     loadPacksForDiagram: async () => {},
     togglePack: () => {},
     toggleLazyLoading: () => {},
