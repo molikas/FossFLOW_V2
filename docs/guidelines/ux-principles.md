@@ -1,12 +1,29 @@
 # Axoview UX Principles
 
-**Last updated:** 2026-07-19 (§4.2 "trace each shape" selection/hover rim — ADR 0044); 2026-07-15 (docs housekeeping — moved to `docs/guidelines/`; stamp reconciled with four edits that landed after the 2026-07-02 date: §8.12 canvas-region fidelity contract → [canvas-rendering-guidelines.md](canvas-rendering-guidelines.md) (2026-07-08); §1.5 theme-at-every-render-root rule + dialog/app-surface typography recipe (2026-07-14); §4.2 strengthened on-canvas selection/hover language (2026-07-14). Prior substantive reshape: 2026-07-02 — styling→top-bar strip; identity name→Metadata section; name↔label decouple; unified label sizing)
+**Last updated:** 2026-08-21 (section index added; §8.5's example re-pointed at the surface it actually renders on — `AuthControl`'s `SessionStatusRow`. Content last revised 2026-07-19 — §4.2 "trace each shape" selection/hover rim, [ADR 0044](../adr/0044-on-canvas-icon-resize.md)) · revision history: `git log --follow docs/guidelines/ux-principles.md`
 **Status:** Living reference. Update when principles evolve — **and bump the date above in the same commit** (it silently drifted ~12 days / 4 commits before the 2026-07-15 sweep).
 **Audience:** Anyone (or any agent) building UI surfaces, fixing bugs, or reviewing PRs that touch the canvas, side panels, file explorer, or layers.
 
 This is the design language that governs Axoview's UI. It's not opinion — it's the consolidated set of choices already shipped, expressed as principles so new work doesn't drift.
 
 When in doubt, **mirror what already exists** in the reference implementations listed at the bottom.
+
+## Contents
+
+Read the section that covers the surface you're touching — this file is a reference, not a briefing.
+
+1. [Layout](#1-layout) — the `Section` primitive, header casing, labels vs placeholders, tabbed scroll clipping, the six typography tiers (§1.5)
+2. [Affordances](#2-affordances) — in-row action visibility, distinct icons per concept, hover-revealed header clusters, the context menu as the *sole* per-item command surface, enabled/disabled contrast
+3. [Keyboard](#3-keyboard) — F2 renames everywhere; Enter confirms, Escape cancels
+4. [Selection model](#4-selection-model) — two-way panel ↔ canvas sync, file-tree independence, locked/hidden items, the multi-select gesture matrix
+5. [Item type parity](#5-item-type-parity) — the uniform control-panel stack, connector mirrors node, no icon overloading, one on-canvas text sizing model
+6. [State persistence reassurance](#6-state-persistence-reassurance) — progress *and* confirmation, empty states, validation surfacing, the branded cold-start splash
+7. [Localization](#7-localization) — every string through locales; translation tone
+8. [Layout regions and overlays](#8-layout-regions-and-overlays) — the largest section: panels overlay and never push the canvas, `EmptyStateScreen` confinement, the status cluster (§8.5), screen-pixel-stable canvas chrome (§8.8), ephemeral view-mode chrome (§8.10), the canvas fidelity boundary (§8.12)
+9. [Touch & pointer interaction](#9-touch--pointer-interaction) — direct manipulation, long-press as a contextual reveal, live-gesture affordances, platform touch chrome, modes never see a `PointerEvent`
+10. [Reference implementations](#10-reference-implementations) — the files to mirror
+11. [Whole-experience coherence](#11-whole-experience-coherence) — the edit/view/present split and the consequences pass
+12. [When this document is wrong](#when-this-document-is-wrong) — how to correct it
 
 ---
 
@@ -470,20 +487,25 @@ Apply the same rule to any future full-canvas overlay (modal-backdrop variants, 
 
 ### 8.5 Status cluster — chip carries the mode signal, not the wrapper
 
-A single mode badge (here: the orange `SESSION` chip) is enough to communicate the mode. Don't double up with a tinted background around the cluster — the redundancy reduces contrast for the actual content (save state text, storage gauge) without adding information.
+A single mode badge (the `Session` chip) is enough to communicate the mode. Don't double up with a tinted background around the row — the redundancy reduces contrast for the actual content (the storage gauge, the save-state text) without adding information.
+
+The shipped instance is `SessionStatusRow` in [`AuthControl.tsx`](../../packages/axoview-app/src/components/AuthControl.tsx), inside the avatar menu:
 
 ```tsx
-// ✅ Correct — chip alone signals the mode
-<Box sx={{ display: 'flex', gap: 0.5, px: 0.5 }}>
-  {saveText && <Typography>{saveText}</Typography>}
-  <Chip label="SESSION" sx={{ bgcolor: 'warning.dark', color: 'warning.contrastText' }} />
+// ✅ Correct — chip alone signals the mode; the row itself is untinted
+<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt }}>
+  <Chip
+    label={<Typography variant="micro" component="span">{t('status.session', 'Session')}</Typography>}
+    size="small"
+    sx={{ height: 16, bgcolor: 'warning.dark', color: 'warning.contrastText', '& .MuiChip-label': { px: 0.5 } }}
+  />
   <SessionStorageGauge />
 </Box>
 
 // ❌ Wrong — orange tint on the wrapper duplicates the chip's signal
-<Box sx={{ bgcolor: 'warning.main', opacity: 0.85, ... }}>
-  <Typography sx={{ color: 'warning.contrastText' }}>{saveText}</Typography>
-  <Chip label="SESSION" ... />
+<Box sx={{ bgcolor: 'warning.main', opacity: 0.85, display: 'flex', gap: 0.75 }}>
+  <Chip label="Session" sx={{ color: 'warning.contrastText' }} />
+  <SessionStorageGauge />
 </Box>
 ```
 
@@ -493,7 +515,7 @@ Conditional content should render conditionally. Don't reserve space with an emp
 
 The same principle applies to mode banners outside the cluster (e.g. [`LocalModeBanner`](../../packages/axoview-app/src/components/LocalModeBanner.tsx)). The badge in the cluster is the load-bearing signal; a banner that reinforces it should be quiet — accent stripe, caption typography, outlined or no button — not a tinted bar that competes with the chip.
 
-> **2026-07-06 (owner override, storage-ux-unification):** the `SESSION` chip + storage gauge no longer live in the toolbar status cluster at all — they moved into the **avatar menu** (`AuthControl`'s `SessionStatusRow`), and `StatusCluster` renders save-state text only (nothing when silent). The chip-in-cluster code example above is retained for the *principle* (one badge, no tinted wrapper), not as a map of where the chip currently renders. Toolbar layout side of the same override: ADR 0005 §1 amendment 2026-07-06.
+> **Provenance (2026-07-06, owner override, storage-ux-unification):** the chip + storage gauge moved out of the toolbar status cluster into the avatar menu, and `StatusCluster` now renders save-state text only (nothing when silent). Toolbar-layout side of the same override: ADR 0005 §1 amendment 2026-07-06.
 
 ### 8.6 Save action sits flush against StatusCluster — they are one group
 

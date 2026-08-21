@@ -1,6 +1,16 @@
-# /audit — Axoview Quality & Architecture Audit
+---
+description: Static analysis, CI-gate, coverage, architecture, UX and perf-hot-path audit of the axoview monorepo, ending in a dated executive report written to docs/reviews/. Subject is the code and its gates, not the docs (that is /docs-sweep). Measures and reports; it does not work the fix backlog and does not run E2E tests.
+---
+
+# /audit — Quality & Architecture Audit
 
 Run a comprehensive static analysis, coverage evaluation, security audit, and architecture review of the Axoview monorepo. Produces an executive-level report. Does NOT run E2E tests.
+
+**Scope.** This command reports; it does not work the Recommendations backlog. The one exception is a *measurement* defect — a gate, grep or threshold in this file that reports something untrue. Fix that in the same session and say so in the report, because every downstream number inherits it (that is what the 2026-07-29 pass did with the madge and bundle gates). Product-code fixes wait for the user to pick from §10; the interpretation tables below say what the fix would be so the recommendation is actionable, not so you apply it.
+
+**Measured scope.** Phase 1 lint covers `axoview-lib` and `axoview-app` — the two packages `eslint.config.mjs` declares. Phase 3 coverage covers `axoview-lib` only. `axoview-backend`, `axoview-worker` and `axoview-e2e` are not scanned here. Every grade in the report names the packages it was computed over: a monorepo letter grade derived from one package is the madge-denominator failure (Phase 5) in a different costume.
+
+**Delegation.** The phase scans are independent, so parallelise them when a phase has a self-contained command set and enough output to be worth the round trip — that is the test (CLAUDE.md → Delegating), not a target number of agents. Ask each one for the raw command output, not a summary: the report's numbers have to trace back to a command, and a summarised phase has nothing left to cite. Do not split one phase across agents, and do not delegate Phase 6 — synthesis needs every output in one head.
 
 > **UX consistency check:** when reviewing UI code, flag deviations from [`docs/guidelines/ux-principles.md`](../../docs/guidelines/ux-principles.md) — the Axoview design language. Inline `Typography` headers instead of `Section`, ALL CAPS labels, opacity-0 affordances, missing F2/Enter/Escape, etc. should appear in the audit report under "UX consistency."
 >
@@ -8,14 +18,18 @@ Run a comprehensive static analysis, coverage evaluation, security audit, and ar
 
 ## Phase 1 — Static Code Analysis
 
-Run the following in sequence, capturing all output:
+Every command in this file runs from the repo root, and every phase fence re-anchors itself — the gate scripts (`check:audit`, `check:cycles`, `check:bundle`) live only in the root `package.json`, so from inside a workspace they resolve to nothing and npm reports a missing script, which reads like a skipped phase rather than a break. **A gate that produces no number is a break, not a zero:** report it as a Critical Finding against the audit itself. Select a package with `--workspace=`, never by `cd`-ing into it.
+
+Capture the output of both:
 
 ```bash
-# ESLint only (separate from tsc to isolate rule violations)
-cd packages/axoview-lib && npx eslint src --ext .ts,.tsx --format stylish 2>&1
+cd "$(git rev-parse --show-toplevel)"
 
-# TypeScript strict type check (catches what ESLint misses)
-npm run lint 2>&1
+# ESLint only (separate from tsc to isolate rule violations)
+npx eslint packages/axoview-lib/src packages/axoview-app/src --ext .ts,.tsx --format stylish 2>&1
+
+# TypeScript strict type check (catches what ESLint misses) — lib + app
+npm run lint --workspaces --if-present 2>&1
 ```
 
 > **Prettier was removed from this phase on 2026-07-29.** It reported 156
@@ -29,12 +43,14 @@ npm run lint 2>&1
 **Metrics to extract:**
 - ESLint: total errors, total warnings, breakdown by rule (`no-explicit-any`, `no-unused-vars`, `exhaustive-deps`)
 - TypeScript: total error count, which files, which categories (type mismatch vs missing props)
-- Count `any` usages in production source: `grep -rn ": any" src --include="*.ts" --include="*.tsx" | grep -v ".test." | wc -l`
-- Count suppressions: `grep -rn "@ts-ignore\|@ts-nocheck" src | wc -l`
+- Count `any` usages in production source: `grep -rn ": any" packages/axoview-lib/src packages/axoview-app/src --include="*.ts" --include="*.tsx" | grep -v ".test." | wc -l`
+- Count suppressions: `grep -rn "@ts-ignore\|@ts-nocheck" packages/axoview-lib/src packages/axoview-app/src | wc -l`
 
 ## Phase 2 — Security & Dependency Audit
 
 ```bash
+cd "$(git rev-parse --show-toplevel)"
+
 # The GATE (also runs in CI): fails only on advisories that are neither fixed
 # nor explicitly accepted in scripts/audit-allowlist.json.
 npm run check:audit 2>&1
@@ -59,8 +75,15 @@ npm audit --workspaces 2>&1
 ## Phase 3 — Test Coverage
 
 ```bash
-cd packages/axoview-lib && npx jest --coverage --passWithNoTests 2>&1
+cd "$(git rev-parse --show-toplevel)"
+npm test --workspace=packages/axoview-lib -- --coverage 2>&1
 ```
+
+> **No coverage table is a broken measurement, not a zero.** There is deliberately
+> no `--passWithNoTests` here: a jest resolution that finds no tests would exit 0
+> and leave this phase's entire output empty, which reads as a clean run. If the
+> table does not appear, report it as a Critical Finding against the audit itself
+> and fix it in the same session, before any coverage number goes in the report.
 
 **Metrics to extract from the coverage table:**
 - Overall: Statements / Branches / Functions / Lines % (target: ≥70%)
@@ -71,14 +94,19 @@ cd packages/axoview-lib && npx jest --coverage --passWithNoTests 2>&1
 ## Phase 4 — Build Verification
 
 ```bash
+cd "$(git rev-parse --show-toplevel)"
+
 # Library build
-cd packages/axoview-lib && npm run build 2>&1 | tail -20
+npm run build --workspace=packages/axoview-lib 2>&1 | tail -20
 
 # App build
-cd packages/axoview-app && npm run build 2>&1 | tail -30
+npm run build --workspace=packages/axoview-app 2>&1 | tail -30
 
 # The GATE (also runs in CI): asserts the editor's boot-critical JS against
-# scripts/bundle-budget.json instead of merely printing sizes.
+# scripts/bundle-budget.json instead of merely printing sizes. It runs from the
+# repo root and reads packages/axoview-app/build/app.html, so both builds above
+# must finish first — with no build present it exits 2 (the gate is broken),
+# which is not the same as a budget failure (exit 1).
 npm run check:bundle 2>&1
 ```
 
@@ -99,8 +127,11 @@ npm run check:bundle 2>&1
 Explore and read the following, then assess each dimension:
 
 ```bash
+cd "$(git rev-parse --show-toplevel)"
+
 # File size inventory — God file detection
-find src -name "*.ts" -o -name "*.tsx" | xargs wc -l | sort -rn | head -25
+find packages/axoview-lib/src packages/axoview-app/src \
+  -name "*.ts" -o -name "*.tsx" | xargs wc -l | sort -rn | head -25
 
 # Circular dependency check — the GATE (also runs in CI). Asserts the DENOMINATOR
 # (>=280 files reached) before the cycle count, then ratchets the count against
@@ -114,7 +145,8 @@ find src -name "*.ts" -o -name "*.tsx" | xargs wc -l | sort -rn | head -25
 npm run check:cycles 2>&1
 
 # Memoization coverage
-grep -rn "React.memo\|useMemo\|useCallback" src --include="*.tsx" --include="*.ts" | grep -v ".test." | wc -l
+grep -rn "React.memo\|useMemo\|useCallback" packages/axoview-lib/src packages/axoview-app/src \
+  --include="*.tsx" --include="*.ts" | grep -v ".test." | wc -l
 
 # Store structure
 ls packages/axoview-lib/src/stores/
@@ -144,9 +176,11 @@ Also read:
 Run grep checks against [`docs/guidelines/ux-principles.md`](../../docs/guidelines/ux-principles.md). Each finding is a deviation; report under "UX consistency" in the executive report.
 
 ```bash
-# §1.5 — inline fontSize on Typography (drift; theme owns it)
+# §1.5 — inline fontSize on Typography (drift; theme owns it). Scoped away from
+# SVG text nodes, canvas labels and overlays — the theme does not own those, and
+# an unscoped grep returns them by the hundred and pre-labels them all High.
 grep -rn "fontSize:" packages/axoview-lib/src packages/axoview-app/src \
-  --include="*.tsx" | grep -v "__tests__\|theme\.ts\|test\.tsx"
+  --include="*.tsx" | grep -v "__tests__\|theme\.ts\|test\.tsx\|\.svg\|Canvas\|Overlay"
 
 # §1.5 — inline fontWeight on Typography (drift outside content emphasis)
 grep -rn "fontWeight={\|fontWeight: " packages/axoview-lib/src packages/axoview-app/src \
@@ -192,16 +226,16 @@ grep -c 'id="ax-splash"' packages/axoview-app/app-shell.html
 
 | Pattern | Severity | Action |
 |---|---|---|
-| `fontSize` on Typography sx | High — drift | Replace with the appropriate variant. If no variant fits, propose adding to theme.ts. |
+| `fontSize` on a Typography sx | Medium — High if it overrides a variant that already fits | Replace with the appropriate variant. If no variant fits, propose adding to theme.ts. A `fontSize` on an SVG text node or a canvas label is not drift — the theme does not own those. |
 | `fontWeight` on Typography sx | Medium | Allowed only for content emphasis (e.g. bolding a single value); never for headers/labels. |
 | `textTransform: 'uppercase'` | High | Replace with `overline` variant (sentence case + tracked in our theme) or fix the source string. |
 | `<TextField label="…">` | Medium | Replace with external `Section`/`caption` label + `placeholder=`. |
 | ALL-CAPS literal in JSX | Medium | Convert to sentence case unless it's a vendor TLA (AWS/GCP/DNS) or a chip-style mode badge. |
 | `console.error` without `setNotification` for user-triggered failure | Medium | Add a notification with severity:'error' summarising the issue. |
 | `createPortal(...)` inside a MUI container's children | Medium | Dev-only warning; hoist the portal to be a sibling of the MUI container (it renders into its target node regardless of JSX position). The `UiOverlay` fix is the reference pattern — `git log -S createPortal -- packages/axoview-lib/src` to find it. |
-| `id="ax-splash"` missing from `public/index.html` (count = 0) | High | Cold-start splash was removed — restore from UX §6.4. Without it the app shows a white screen during bundle parse + storage probes (~1–4 s). |
+| `id="ax-splash"` missing from `packages/axoview-app/app-shell.html` (count = 0) | High | Cold-start splash was removed — restore from UX §6.4. Without it the app shows a white screen during bundle parse + storage probes (~1–4 s). `public/index.html` is the marketing landing (ADR 0040) and correctly has no splash — a 0 there is not a finding. |
 
-The audit report must include a **UX Consistency** subsection: count of findings per pattern, top 3 offending files, and whether any high-severity violations exist (any high-severity violation downgrades the maintainability score by one letter grade).
+The audit report must include a **UX Consistency** subsection: count of findings per pattern, the per-file counts for each pattern (all of them — see Phase 6), and whether any high-severity violations exist (any high-severity violation downgrades the maintainability score by one letter grade).
 
 ## Phase 5c — Performance & Hot-Path Anti-Pattern Audit
 
@@ -240,13 +274,11 @@ grep -rn "flushSync" packages/axoview-lib/src \
 grep -rn "console\.log" packages/axoview-lib/src packages/axoview-app/src \
   --include="*.ts" --include="*.tsx" | grep -v "__tests__\|\.test\.\|test\.tsx\|renderProbe\.ts\|DiagnosticsOverlay\.tsx"
 
-# console.warn / console.debug — REVIEW ONLY, not a defect count. Split out
-# 2026-07-29: the combined grep returned 20 hits and called them all High, but
-# every one was a deliberate diagnostic — the four WebGL canvases' null-batch
-# warnings (added by the 2026-07-08 review precisely to kill a SILENT-blank
-# failure), error boundaries, svgOptimizer fallbacks, invalid-data discards. Zero
-# were console.log. Reporting those as "strip before commit" would have argued
-# for deleting the fix a previous review had just landed.
+# console.warn / console.debug — REVIEW ONLY, not a defect count. Most hits are
+# deliberate diagnostics: the WebGL canvases' null-batch warnings (they exist to
+# turn a silent blank canvas into a loud one), error boundaries, svgOptimizer
+# fallbacks, invalid-data discards. Reporting those as "strip before commit"
+# argues for deleting a fix on purpose.
 # Read each hit; flag only ones that are debugging residue or that fire on a
 # user-facing failure without a matching setNotification (UX §6.3).
 grep -rn "console\.\(warn\|debug\)" packages/axoview-lib/src packages/axoview-app/src \
@@ -264,7 +296,7 @@ grep -rn "console\.\(warn\|debug\)" packages/axoview-lib/src packages/axoview-ap
 | `flushSync` outside `previewConnectorPaths` | High | Defeats React batching. Justify in a comment or remove. See A-5. |
 | Stray `console.*` in production source | High | Strip before commit. See A-6. |
 
-The audit report must include a **Performance hot-path** subsection: count of findings per pattern (A-1 through A-6), top 3 offending files per pattern, and whether any high-severity violations exist (any high-severity violation downgrades the Performance Architecture score by one letter grade).
+The audit report must include a **Performance hot-path** subsection: count of findings per pattern (A-1 through A-6), the per-file counts for each pattern (all of them — see Phase 6), and whether any high-severity violations exist (any high-severity violation downgrades the Performance Architecture score by one letter grade).
 
 ## Phase 5d — Whole-experience coherence & orphan detection
 
@@ -301,33 +333,40 @@ The audit report must include an **Experience coherence** subsection: list any o
 
 ## Phase 6 — Executive Report
 
-Synthesize all findings into a report with this structure:
+Write the report to `docs/reviews/technical-review-<YYYY-MM-DD>.md`. Read the most recent report already in `docs/reviews/` first and write **deltas** against it — what changed, what regressed, what closed — carrying its per-dimension grades forward so the scorecard is comparable run to run. Do not restate an unchanged finding: cite the prior report and move on. If a run teaches you a durable false-positive pattern, record it in that report's method note rather than growing this command file.
+
+Synthesize all findings into a report with this structure. **Target ≤250 lines**; `technical-review-2026-07-29.md` (299 lines) is the calibration. The audience is an owner deciding what to fund before a release, so every section earns its place by changing a decision: sections 1-3 carry the numbers, 5-8 carry the evidence with file paths, 9-11 carry the calls. A section with nothing to report is one line saying so, not a paragraph explaining that there was nothing to report.
 
 1. **Executive Summary** — health scorecard table (A–F per dimension)
 2. **Critical Findings** — numbered, must-fix before next release
 3. **Quality Metrics Dashboard** — all numeric scores in one table with thresholds
 4. **Coverage Deep Dive** — well-tested vs zero-coverage modules
 5. **Architecture Assessment** — per-dimension narrative with file path evidence
-6. **UX Consistency** — Phase 5b findings: count per pattern, top offending files, high-severity violations
-7. **Performance hot-path** — Phase 5c findings: count per A-1..A-6 pattern, top offending files, high-severity violations
+6. **UX Consistency** — Phase 5b findings: count per pattern, per-file counts, high-severity violations
+7. **Performance hot-path** — Phase 5c findings: count per A-1..A-6 pattern, per-file counts, high-severity violations
 8. **Experience coherence** — Phase 5d findings: orphaned controls, phantom surfaces, gesture contradictions
 9. **Risk Register** — top risks ranked by Likelihood × Impact
 10. **Recommendations** — P1 (immediate) / P2 (next sprint) / P3 (quarterly) backlog
 11. **Positive Highlights** — what is working well
 
+Where a section reports per-file counts, report **all** of them — a table of file → count, not a top-N. An executive reader stops after the first few rows, but the tail is what next run's delta is computed against, and a file left out of the report leaves the session for good.
+
+**Every number here names the command that produced it** — grades, per-pattern counts and Risk Register rankings included. If a figure did not come out of a command run in this session, either run the command or mark it an estimate. Never carry a number forward from a previous report without re-running its source. (That is workflow.md → Design principle 1, applied to the report itself.)
+
 ## Reference Thresholds
 
-| Metric | Minimum Acceptable | Target |
+| Metric (source) | Minimum Acceptable | Target |
 |--------|-------------------|--------|
-| Statement coverage | 50% | 70%+ |
-| Branch coverage | 50% | 70%+ |
-| ESLint errors | 0 | 0 |
-| npm audit HIGH/CRITICAL | 0 | 0 |
-| Lib bundle (gzip) | <1MB | <500KB |
-| App entry chunk (gzip) | <500KB | <200KB |
-| God files (>400 lines) | Documented | 0 |
-| Circular dependencies | 0 | 0 |
-| Prettier violations | 0 | 0 |
-| @ts-ignore suppressions | <5 | 0 |
-| Hot-path `useScene()` in `SceneLayers/` | 0 | 0 |
-| Stray `console.log` in production source | 0 | 0 |
+| Statement coverage (Phase 3) | 50% | 70%+ |
+| Branch coverage (Phase 3) | 50% | 70%+ |
+| ESLint errors (Phase 1) | 0 | 0 |
+| npm audit HIGH/CRITICAL (Phase 2, `check:audit`) | 0 UNREVIEWED — the accepted entries in `scripts/audit-allowlist.json` are not findings | 0 unreviewed, and none past its `reviewBy` |
+| Boot-critical JS, gzip (Phase 4, `check:bundle`) | the ceiling in `scripts/bundle-budget.json` | lower the ratchet when the `import()` split lands |
+| Lib bundle, gzip (Phase 4) | reported, not gated — no script asserts it | report the change since the last review |
+| God files (>400 lines) (Phase 5) | no growth vs the prior report | fewer than last run |
+| Circular dependencies (Phase 5, `check:cycles`) | the ratchet in `scripts/cycles-baseline.json` (`maxCycles`) | lower than last run |
+| @ts-ignore suppressions (Phase 1) | <5 | 0 |
+| Hot-path `useScene()` in `SceneLayers/` (Phase 5c) | 0 | 0 |
+| Stray `console.log` in production source (Phase 5c) | 0 | 0 |
+
+Every row here names the command or gate file that owns its number. Where a row names a gate file, **that file is the authority** — a target here that contradicts a committed baseline is a bug in this table, not a finding about the code, and the ratchets exist precisely so the number cannot be raised to make a run look clean. A threshold that lives only in this table asserts nothing and is decoration: that is why Prettier and the prose bundle limits came out on 2026-07-29. A new threshold gets added to `scripts/` in the same change that adds its row.

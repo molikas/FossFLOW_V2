@@ -1,6 +1,6 @@
 # Workflow — Canonical session cadence
 
-> **Status:** Authoritative · **Last updated:** 2026-07-15 (docs housekeeping — `docs/` reorganised into `guidelines/` + `reviews/`; dead tactical-exemplar links removed; the doc map below added) · **Audience:** anyone (human or Claude) opening a session against this repo.
+> **Status:** Authoritative · **Last updated:** 2026-08-21 (prompt-surface audit — `/explore` and `/docs-sweep` folded into the cadence and the router, the commit-subject rule corrected against commitlint, Principle 8 added, the cadence-anomaly register retired to git) · **Audience:** anyone (human or Claude) opening a session against this repo.
 >
 > This doc names the canonical sequence of a working session: which skill fires when, where the artifacts land, and what the design principles are. It is the single source of truth for "how we work here." Skill bodies cross-reference this doc; this doc does not duplicate skill bodies.
 
@@ -19,12 +19,12 @@
 
 | Where | What | Who writes it |
 |---|---|---|
-| [docs/guidelines/](guidelines/) | Durable **how-we-build** references, kept true to the code: `architecture` · `ux-principles` · `canvas-rendering-guidelines` · `testing` · `perf-troubleshooting` | Whoever changes the behaviour, in the same commit. `/notes` sweeps at end-of-session |
+| [docs/guidelines/](guidelines/) | Durable **how-we-build** references, kept true to the code: `architecture` · `ux-principles` · `canvas-interaction` · `canvas-rendering-guidelines` · `testing` · `perf-troubleshooting` · `docs-verified-negatives` (`ls docs/guidelines/` is the authority if this list disagrees) | Whoever changes the behaviour, in the same commit. `/notes` sweeps at end-of-session |
 | [docs/reviews/](reviews/) | **Frozen** reviewer-grade snapshots (`technical-review-*`) — immutable once cut, true only as of their freeze date | Cut deliberately at a ship boundary; never edited afterwards |
 | [docs/adr/](adr/) | One durable **decision** each | `/feature start\|extend\|supersede` |
 | [docs/tactical/](tactical/) | Short-lived working docs | `/feature start`, deleted at `/feature wrap` |
 | [reports/](../reports/) · `perf-results/raw/` | **Generated output — gitignored, regenerable, never committed.** Audit registers, gate worklists, static-analysis reports. Same tier as `playwright-report/`: a build artifact, not a doc. *(Exceptions are explicit and few: `perf-results/decision-log.md` + `baseline.md` are DURABLE by [ADR 0020](adr/0020-engine-perf-harness-and-measurement-protocol.md)'s retention policy, and a cut `docs/reviews/` report is a doc.)* | Whatever emits it (`/audit`, `/docs-sweep`, `npm run perf`) |
-| [docs/features.md](features.md) | The durable **feature inventory** — what this fork adds vs upstream, with ADR links. Tracks `integration`, so it can lead the released line. The root README carries only the condensed Highlights | **`/notes`**, from `feat`/`ux` commits |
+| [docs/features.md](features.md) | The durable **feature inventory** — what this fork adds vs upstream, with ADR links. Tracks the working branch, so it can list features ahead of the released line. The root README carries only the condensed Highlights | **`/notes`**, from `feat`/`ux` commits |
 | [docs/deployment.md](deployment.md) · [docs/manual-test-baseline.md](manual-test-baseline.md) | Deploy walkthrough · point-in-time manual walk record | Whoever changes the target · re-walked on demand |
 | [PLAN.md](../PLAN.md) · [known_issues.md](../known_issues.md) | Roadmap dashboard · open-issues register | `/feature wrap` · `/notes` + `/shake-out` |
 
@@ -37,10 +37,8 @@ A session moves left-to-right through the stages below. Most sessions skip stage
 ```
                      ┌─────────────────────────────────────────────┐
                      │  Session start                              │
-                     │  - Read MEMORY.md (auto-loaded)             │
                      │  - Read PLAN.md / relevant tactical         │
                      │  - Pick the unit of work                    │
-                     │  - TodoWrite the sub-task list              │
                      └────────────────────────────┬────────────────┘
                                                   │
                           ┌───────────────────────┴───────────────────────┐
@@ -63,26 +61,27 @@ A session moves left-to-right through the stages below. Most sessions skip stage
                               │  - manual UI check               │
                               └────────────────┬─────────────────┘
                                                │
-                                       ┌───────┴───────┐
-                                       ▼               ▼
-                              ┌────────────┐    ┌─────────────┐
-                              │  /audit    │    │ /shake-out  │
-                              │  (heavy    │    │ (iterative  │
-                              │   sweep)   │    │  polish)    │
-                              └─────┬──────┘    └──────┬──────┘
-                                    │                  │
-                                    │  ┌───────────────┘
-                                    │  │
-                                    ▼  ▼
+                          ┌────────────────────┼────────────────────┐
+                          ▼                    ▼                    ▼
+                  ┌───────────────┐    ┌───────────────┐    ┌───────────────┐
+                  │  /audit       │    │  /explore     │    │  /shake-out   │
+                  │  (heavy       │    │  (predict &   │    │  (iterative   │
+                  │   sweep)      │    │   probe —     │    │   polish)     │
+                  │               │    │   files,      │    │               │
+                  │               │    │   never fixes)│    │               │
+                  └───────┬───────┘    └───────┬───────┘    └───────┬───────┘
+                          │                    │                    │
+                          └─────────────┬──────┴────────────────────┘
+                                        ▼
                               ┌──────────────────────┐
-                              │  /review or          │   (built-in skills,
+                              │  code-review or      │   (built-in skills,
                               │  /security-review    │    plugin-provided)
                               └─────────┬────────────┘
                                         ▼
                               ┌──────────────────────────┐
-                              │  /notes                  │
-                              │  CHANGELOG + docs sync   │
-                              │  (optional release cut)  │
+                              │  /notes                  │   (/docs-sweep runs in
+                              │  CHANGELOG + docs sync   │    this band too, on
+                              │  (optional release cut)  │    demand — docs ⇄ code)
                               └─────────┬────────────────┘
                                         ▼
                               ┌──────────────────────────┐
@@ -109,10 +108,10 @@ A session moves left-to-right through the stages below. Most sessions skip stage
 | Tactical doc finished | `/feature wrap <topic>` | Adds PLAN.md line, deletes the tactical, retires its memory pointer. |
 | End-of-session doc sync | `/notes` | README · architecture.md · testing.md · known_issues.md · PLAN.md · ADR statuses · tactical wrap. **Releases are auto-cut by semantic-release on merge as a tag + GitHub Release — never hand-cut. The in-repo `CHANGELOG.md`/versions are not committed back (GitHub Releases is canonical); the in-app version is injected from the tag at build ([ADR 0045](adr/0045-release-version-provenance-and-in-app-surfacing.md)).** |
 | Heavy multi-dimension review | `/audit` | Static analysis + security + coverage + build + architecture + UX/perf greps. Pre-release or quarterly. **Subject = the code.** |
-| Docs feel stale, duplicated, or drifted from the code | `/docs-sweep` | **Subject = the docs.** `lint` (governance metadata, also a CI gate) · `consolidate` (restated facts, calcified tacticals, stale currency claims) · `gate` (discharge the ADR⇄code conformance register — long-running, resumable). |
+| Docs feel stale, duplicated, or drifted from the code | `/docs-sweep` | **Subject = the docs.** `lint` (governance metadata, also a CI gate) · `consolidate` (restated facts, calcified tacticals, stale currency claims) · `gate` (discharge the ADR⇄code conformance register — long-running, resumable) · `defossilize` (residue of a superseded design — fossil names, dead strings, stale comments and types that would lead a from-scratch rewrite back to the retired design; **edits code, so run the regression**). |
 | Iterative bug-fix / polish loop on shipped surfaces | `/shake-out` | Per-issue verification loop; one coherent commit per bundle, whose **body** carries the user-facing per-fix bullet list that the release notes render ([ADR 0046](adr/0046-release-notes-generation-and-reference-integrity.md)). |
 | Hunting defects nobody has reported yet | `/explore` | Hypothesis-driven exploratory sweep ([ADR 0047](adr/0047-exploratory-testing-program.md)): predict specific failures, probe them in the quarantined lane, file each verdict. **Delta mode by default** — scopes areas by `git diff` against the last-swept commit. **Finds and files; never fixes.** Runs headless (`claude -p "/explore"`) for a scheduled sweep. |
-| Pre-merge code or security review | `/review` / `/security-review` | Built-in skills; fire just before `/ship`. |
+| Pre-merge code or security review | `code-review` / `/security-review` | Built-in skills; fire just before `/ship`. |
 | Promote `integration` → `master` | `/ship` | Test gate + version-coherence check + interactive plan. Doesn't bump versions. |
 | Periodic usability validation (pre-release / post-UX-overhaul) | UX journey test — [ADR 0028](adr/0028-ux-journey-testing-protocol.md) | Persona-driven Chrome-agent run + **mandatory code-verification** of severe findings → a `docs/tactical/` backlog. On-demand, not a slash command yet. |
 
@@ -141,7 +140,7 @@ Build/test scope by change class:
 
 **UI verification is mandatory** for any change touching `packages/axoview-*/src/components/` — start the dev server, exercise the feature in a browser, monitor for regressions in neighbouring surfaces. Type-check + test suite verify code correctness; the browser is the only thing that verifies feature correctness.
 
-**Commit subject convention** — `@commitlint/config-conventional`'s `subject-case` rule rejects upper-case sentence-style subjects. Reference codes like `T2`, `B-9a`, `M8`, `ADR 0011 pass` are exempt (not English words); narrative phrases inside the subject must be lower-case (e.g. `locked decision #16` rather than `Locked Decision #16`). The convention is enforced locally by simple-git-hooks (G8) and in CI by commitlint (T2 G3). **No issue footers:** while the project uses no issue tracker (issues are triaged in chat), commits carry no `Closes #N` / `Fixes #N` issue footers — there is nothing to close, and the release-notes generator suppresses issue-reference links so stray `#tokens` never render as dead links ([ADR 0046](adr/0046-release-notes-generation-and-reference-integrity.md)); revisit if a tracker is ever adopted. A `/shake-out` bundle commit's **body** must carry a user-facing, per-fix bullet list, which the notes generator renders beneath the subject into the GitHub Release and `CHANGELOG.md`.
+**Commit subject convention** — `@commitlint/config-conventional`'s `subject-case` rule rejects a subject that *starts* with an upper-case token, and reference codes are **not** exempt: `fix(canvas): ADR 0011 pass` is rejected. Start lower-case and put the reference code later in the subject — mid-subject capitals are fine, so `test(explore): probe GPU-01 and GPU-04` passes. Narrative phrases inside the subject stay lower-case (`locked decision #16` rather than `Locked Decision #16`). The 18 historical `feat(ux): MQA #NN` subjects in git predate the hook; do not copy them. The convention is enforced locally by simple-git-hooks (G8) and in CI by commitlint (T2 G3). **No issue footers:** while the project uses no issue tracker (issues are triaged in chat), commits carry no `Closes #N` / `Fixes #N` issue footers — there is nothing to close, and the release-notes generator suppresses issue-reference links so stray `#tokens` never render as dead links ([ADR 0046](adr/0046-release-notes-generation-and-reference-integrity.md)); revisit if a tracker is ever adopted. A `/shake-out` bundle commit's **body** must carry a user-facing, per-fix bullet list, which the notes generator renders beneath the subject into the GitHub Release and `CHANGELOG.md`.
 
 ## Tactical-driven sessions
 
@@ -176,9 +175,7 @@ The productization audit (wrapped; git history) is the reference shape. Future a
 
 **Rule:** when working on a visible surface, the screenshot or the live browser is the source of truth. Theories about what code "should" do are subordinate to what the user sees.
 
-**Why:** see the `feedback_be_serious_not_eager` memory. Multiple past sessions piled extra moves onto a delivered artifact because the agent felt eager; that pattern degrades trust and burns context. **Plans aren't fixes.** Bundling extra moves after a delivered artifact is anti-pattern.
-
-This principle is why `/audit` and `/shake-out` both emphasize "verify, don't pile on" — the design didn't accidentally converge there; the memory was the driver.
+**Why:** the browser is the only thing that verifies *feature* correctness — the type-check and the test suite verify *code* correctness. That is the same reason UI verification is mandatory under "Verify" above.
 
 ### 3. Intent verification — stop signs
 
@@ -209,13 +206,21 @@ Skill bodies use `cd packages/...`, `npm run ...`, `grep`. Claude Code's harness
 
 **Rule:** every proposed change states what it makes **redundant**, what it **contradicts**, and what it **orphans** — and reconciles or explicitly flags each *before* it ships. A fix that lands cleanly in isolation but leaves a sibling control stranded, duplicates an affordance, or depends on a surface that doesn't exist is **not done**. Grep to confirm any surface a plan leans on actually exists — *"put it in the X menu"* requires that X menu to be real, or scoped as a build dependency.
 
-**Why:** a per-issue study is well-grounded (Principle 1) yet coherence-blind *by construction* — isolating issues is exactly where cross-issue contradictions hide. The 2026-06-18 canvas-ux-overhaul scaffold routed a command into a context menu that doesn't exist while a sibling ADR reassigned that menu's trigger (right-click) to pan. This is the **opposite** failure from Principle 2's "don't pile on" — hold both at once: **minimal moves, maximal coherence.** See the `feedback_whole_experience_coherence` memory.
+**Why:** a per-issue study is well-grounded (Principle 1) yet coherence-blind *by construction* — isolating issues is exactly where cross-issue contradictions hide. The 2026-06-18 canvas-ux-overhaul scaffold routed a command into a context menu that doesn't exist while a sibling ADR reassigned that menu's trigger (right-click) to pan. This is the **opposite** failure from Principle 8's "stop at the delivered artifact" — hold both at once: **minimal moves, maximal coherence.** See the `feedback_whole_experience_coherence` memory.
 
 **Practiced version:** `/feature` (Phase 1.5) and `/audit` (Phase 5d) run a mandatory consequences pass that names the redundant/contradicted/orphaned surfaces per change and reconciles against mirroring surfaces — selection two-way sync ([ux-principles §4.1](guidelines/ux-principles.md#41-two-way-panel--canvas-sync)), item-type parity (§5), the edit/view/present split (§11).
 
+### 8. Stop at the delivered artifact
+
+**Rule:** when the requested change is delivered and verified, stop. Do not bundle adjacent refactors, tidying, or a second improvement the user did not ask for — offer them instead and let the user pick.
+
+**Why:** see the `feedback_be_serious_not_eager` memory. Multiple past sessions piled extra moves onto a delivered artifact because the agent felt eager; that pattern degrades trust and burns context. **Plans aren't fixes.** This is the **opposite** failure from Principle 7 (trace the ripple) — hold both at once: **minimal moves, maximal coherence.** It is also why `/audit` and `/shake-out` both emphasize "verify, don't pile on" — the design didn't accidentally converge there; the memory was the driver.
+
 ## Review gate
 
-`/review` and `/security-review` (built-in plugin skills) fire **between `/notes` doc sync and `/ship` promotion**. Both are surfaced by the Claude Code system reminder when relevant. The cadence diagram shows the slot; the skills themselves are plugin-provided and not in `.claude/commands/`.
+`code-review` and `/security-review` (built-in plugin skills) fire **between `/notes` doc sync and `/ship` promotion**. Both are surfaced by the Claude Code system reminder when relevant. The cadence diagram shows the slot; the skills themselves are plugin-provided and not in `.claude/commands/`.
+
+**File `/audit`'s findings in the same session.** `/audit`'s raw run output is ephemeral — it produces no persistent artifact of its own, so high-value findings go through `/notes` immediately after the run or they are lost with the session.
 
 ## UX journey testing
 
@@ -224,7 +229,7 @@ governed by [ADR 0028 — UX Journey-Testing Protocol](adr/0028-ux-journey-testi
 **periodically** — before a release, after a broad UX-surface change (an overhaul like ADRs 0022–0027), or
 when usability is in question — **not** every session.
 
-- **Driver:** the Claude for Chrome agent (Sonnet-class) against the `integration` preview (storage-less;
+- **Driver:** a browser-driving agent against a preview build of the branch under test (storage-less;
   server-mode surfaces need a self-hosted build).
 - **Personas:** five fixed personas — beginner · intermediate · expert · presenter · keyboard/i18n — one per run.
 - **Discipline:** the capability map + do-not-report list are **regenerated from the current build each
@@ -236,7 +241,7 @@ when usability is in question — **not** every session.
 - **Output:** a short-lived `docs/tactical/` backlog (the implementation handover) — the first run was
   `ux-retest-fixes.md` (shipped + wrapped; decisions in the ADR 0019/0022/0023/0025 addenda + git history).
 
-## Process debt — deferred skills
+## Skills deliberately not built
 
 The productization audit (§A.9.4; wrapped — see git history) catalogued nine missing-skill candidates. The triage:
 
@@ -256,27 +261,6 @@ The productization audit (§A.9.4; wrapped — see git history) catalogued nine 
 → verification cross-check. A new deferred candidate from [ADR 0028](adr/0028-ux-journey-testing-protocol.md),
 sibling to the deferred `/ux-baseline` (#8). Documented-only for now (the protocol lives in ADR 0028); build
 the command if on-demand UX runs become frequent enough to be worth templating.
-
-**Net effect on productization gate (M8):** zero new skills must be built. The productization baseline blocks on alignment-and-cadence work (this doc + C.9.2 stale-ref pass), not on skill construction.
-
-### Empirical notes
-
-- **Adding `.gitattributes` mid-project is safe when the existing tree is already LF-coherent** — verify with `git diff --stat` or `git status --short` immediately post-add before committing. C.2 Q3 (2026-05-20 / commit `264887a`) confirmed no CRLF renormalization storm on the Windows-dev tree, suggesting prior commits had already respected the LF convention. The risk pattern to watch for is `git status` showing dozens of unrelated paths as modified after the file lands — that is the renormalization tax, and it should be staged as its own follow-up commit so the audit's actual content edits aren't drowned in CRLF noise.
-- **PLAN.md edits should commit eagerly with the surrounding work.** Two PLAN.md blocks ("Completed alongside 2D" + "Playwright migration shipped") sat uncommitted for several sessions and finally landed in commit `39c5130` only because they happened to be in the same file as an unrelated audit-driven edit. Process debt: future sessions should commit PLAN.md alongside the work that motivated the edit rather than letting it accumulate uncommitted.
-
-## Cadence anomalies — locked resolutions
-
-The audit identified nine anomalies (A.9.5 S1–S9). The ones with a written resolution:
-
-- **S1 — `/audit` produces no persistent artifact.** Resolution: high-value findings get filed via `/notes` Q2 immediately after; raw audit-run output is ephemeral. `reports/audit-YYYY-MM-DD.md` may be added later as a low-cost alternative.
-- **S2 — No skill covers session-start.** Resolution: this doc's "Stages of a session" section is the explicit 4-step (memory · plan · pick · TodoWrite) sequence. No new skill needed.
-- **S3 — `/feature start` and `/notes` Phase 4 both touch convention memory.** Resolution: locked above ("`/feature` owns writes; `/notes` Phase 4 only deletes bullets during wrap").
-- **S4 — Build-verification scope is implicit.** Resolution: the change-class table under "Verify" above is the explicit per-class scope.
-- **S5 — UI verification not skill-encoded.** Resolution: documented above as **mandatory** for any `packages/axoview-*/src/components/` edit.
-- **S6 — `/ship` test gate excludes backend + worker.** Resolution: documented as a scope choice (no tests exist there yet); C.8 git-automation tactical adds backend + worker test scaffolding as a future expansion.
-- **S7 — No skill names the Phase B trace harness path.** Resolution: reserved slot in the cadence; `/trace` (deferred A.9.4 #2) plugs in when ADR 0007 lands.
-- **S8 — Built-in `/review` and `/security-review` integration undocumented.** Resolution: "Review gate" section above names both as the canonical pre-merge step.
-- **S9 — `/notes` opt-in cut vs `/ship` mandatory version-coherence.** Resolution: **superseded** — releases are auto-cut by semantic-release on merge to `master` (`.releaserc.json`), so neither skill cuts a release. `/ship`'s version-coherence check now just guards against illegal hand-edits (all 5 package.jsons must stay equal).
 
 ## See also
 

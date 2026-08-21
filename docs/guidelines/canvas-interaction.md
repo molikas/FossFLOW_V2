@@ -1,6 +1,6 @@
 # Axoview Canvas Interaction Guidelines
 
-**Last updated:** 2026-07-23 (added §5.9 per-element interaction contract + new-element checklist; folded from the retired `canvas-interaction-baseline.md` + `canvas-interaction-behavior-map.md` tacticals; reconciled against code)
+**Last updated:** 2026-08-21 (section index added; content last revised 2026-07-23 — §5.9 per-element interaction contract + new-element checklist, folded from the retired `canvas-interaction-baseline.md` + `canvas-interaction-behavior-map.md` tacticals and reconciled against code) · revision history: `git log --follow docs/guidelines/canvas-interaction.md`
 **Status:** Living reference. Update when the interaction layer evolves.
 **Audience:** Anyone (or any agent) touching canvas input — event routing, hit-testing, modes, drag, selection, or the gestures on top of them.
 
@@ -13,6 +13,20 @@ This is the **input contract** for Axoview's canvas — the third of the three c
 The decisions live in ADRs — [0006](../adr/0006-canvas-selection-contract.md) (selection), [0018](../adr/0018-touch-pen-gesture-contract.md) (touch/pen), [0022](../adr/0022-canvas-pointer-interaction-model.md) (pointer model), [0023](../adr/0023-off-grid-positioning-and-collision.md) (off-grid + collision), [0027](../adr/0027-canvas-context-menu.md) (context menu), [0031](../adr/0031-floating-label-entity-model.md) (Label). **This doc is the contract those decisions produced** — the thing you read before changing input code, so you don't silently break an invariant that cost a real bug to learn.
 
 > **Citations are by file + symbol, deliberately.** The predecessor docs pinned `file:line` anchors and every one of them drifted within a month. Grep the symbol.
+
+## Contents
+
+Read the section that covers the code you're about to change — the invariants are section-local.
+
+1. [The dispatch spine](#1-the-dispatch-spine) — the one pipeline every canvas gesture flows through
+2. [The `isRendererInteraction` gate](#2-the-isrendererinteraction-gate) — what separates canvas input from chrome input
+3. [The load-bearing layout](#3-the-load-bearing-layout) — the DOM stack the hit-testing depends on
+4. [Mode registry](#4-mode-registry) — the 13 modes, and the four that carry contracts: [CURSOR](#41-cursor--the-hub) · [DRAG_ITEMS](#42-drag_items--the-css-preview-move) · [CONNECTOR](#43-connector--create) · [PAN](#44-pan--and-the-read-only-click-surface) · [keybindings](#45-keybindings)
+5. [Algorithm contracts](#5-algorithm-contracts) — screen→tile, node-drag collision, nearest-free-tile, group-drag math, the connector router, anchor and item hit-testing, 2D ↔ ISO parity, and the [new-element checklist](#59-per-element-interaction-contract--the-new-element-checklist)
+6. [Perf invariants — the load-bearing set](#6-perf-invariants--the-load-bearing-set) — the [CSS-only drag preview](#61-the-css-only-drag-preview--the-most-fragile-invariant-set) (most fragile), drag transactions, the closed-form router, render isolation, the [open GC cliff](#65-the-open-gc-cliff--do-not-worsen), RAF throttle, how to measure
+7. [Selection invariants](#7-selection-invariants) — what must stay true across every selection path
+8. [Abort / commit semantics](#8-abort--commit-semantics) — including [undo/redo as two independent patch stacks](#81-undoredo-is-two-independent-patch-stacks)
+9. [Reference implementations & guards](#9-reference-implementations--guards) — the files to mirror and the tests that pin them
 
 ---
 

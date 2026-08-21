@@ -13,7 +13,7 @@ That result forces three durable decisions: what the probe lane *is* now that th
 
 ## Decision
 
-### 1. The exploratory lane is permanent infrastructure
+### 1. The exploratory lane is permanent infrastructure — *amended 2026-08-10: the lane is recreated per campaign, not standing (see the addendum)*
 
 The quarantined probe lane — `packages/axoview-e2e/playwright.explore.config.ts` + `tests-exploratory/`, the four per-package `jest.explore.config.js` + `__explore__/` trees, and the root `explore:*` scripts — is retained indefinitely. Its two invariants are unchanged from the campaign: **never runs in CI or the default suites**, and **never feeds the coverage ratchet**. It exists so that a failing repro can always be committed the day a bug is found, without touching the regression gates.
 
@@ -33,7 +33,7 @@ When a campaign (or any review) shows the same defect *shape* recurring across s
 
 ### 4. The recurring agent: a repo skill, run on subscription only
 
-The campaign method (hypothesis ledger, novelty rule, probe tiers, oracles — APPROACH.md, retired to git history with the campaign tree) is repackaged as a versioned project skill, **`.claude/skills/explore.md`**, replacing the hand-carried COLDSTART.md prompt. Properties:
+The campaign method (hypothesis ledger, novelty rule, probe tiers, oracles — APPROACH.md, retired to git history with the campaign tree) is repackaged as a versioned project skill, **[`.claude/commands/explore.md`](../../.claude/commands/explore.md)**, replacing the hand-carried COLDSTART.md prompt. Properties:
 
 - **Stateless and ledger-driven**, like the campaign: all state in the ledger/area files of the active campaign directory; any Claude Code session can cold-start a wave.
 - **Delta-campaign mode is the default:** a new run scopes areas by `git diff` against the last campaign's end commit (plus one cross-pair mop-up wave), regenerating the coverage baseline first so the novelty rule stays honest. Full 27-area sweeps are explicit opt-in.

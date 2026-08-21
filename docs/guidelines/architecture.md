@@ -1,6 +1,6 @@
 # Axoview — Architecture Reference
 
-**Last updated:** 2026-08-09 (rev 30 — the exploratory remediation program closed ([ADR 0047](../adr/0047-exploratory-testing-program.md)): §2 render substrate corrected for the **canvas merge** — four bulk WebGL2 contexts became one sorted draw, which is what lets `zIndex` and `layer.order` cross an entity type, and the picker now resolves the same three tiers from the same comparator; the sort-cache note re-pointed from the removed `NodesCanvas` to `SceneCanvas`. Method for finding this class of defect is now the [`/explore`](../../.claude/commands/explore.md) skill; the campaign record is frozen at [docs/reviews/exploratory-2026-07.md](../reviews/exploratory-2026-07.md)) · 2026-07-29 (rev 29 — §5: three advisory checks promoted to enforced CI ratchets (cycles / bundle budget / advisory allowlist) after the [2026-07-29 review](../reviews/technical-review-2026-07-29.md) found two of them could not fail; coverage floors re-ratcheted; Prettier gate removed) · 2026-07-28 (rev 28 — §2 canvas modes: toggle + viewport-preservation extracted to `useCanvasModeToggle` for view-only parity, with its single-live-consumer invariant recorded) · 2026-07-15 (rev 27 — docs housekeeping: render substrate corrected to WebGL2-sole ([ADR 0038](../adr/0038-webgl-instanced-render-substrate.md)); depth pointers re-aimed at the current reviews; ADR count + test totals refreshed; landing/`/app` split ([ADRs 0040–0041](../adr/)) and Drive-native sharing ([ADR 0042](../adr/0042-drive-native-sharing-and-readonly-preview.md)) folded into §2m; moved to `docs/guidelines/`)
+**Last updated:** 2026-08-21 (rev 31 — header changelog collapsed to this line; the ADR count and the test totals replaced with pointers to the files that measure them) · revision history: `git log --follow docs/guidelines/architecture.md`
 **Codebase root:** `packages/axoview-lib/src` (library) · `packages/axoview-app/src` (application shell) · `packages/axoview-backend/src` (Express + fs adapter) · `packages/axoview-worker/src` (Hono + Cloudflare Pages Functions)
 
 **Purpose:** This is the **orientation map** — what the codebase contains and where each piece lives, tight enough to read in five minutes before touching a surface. It is deliberately *not* the comprehensive reference: decisions live in ADRs, the deep architectural narrative + file-by-file inventory + KPIs live in the frozen technical review, the test catalogue lives in `testing.md`, and runtime issues live in `known_issues.md`. Each section below points to its deeper source.
@@ -9,7 +9,7 @@
 
 | You want… | Read |
 |---|---|
-| The *decision* behind a contract (why it works this way) | [docs/adr/](../adr/) — 41 ADRs |
+| The *decision* behind a contract (why it works this way) | [docs/adr/](../adr/) — one per contract |
 | Quality KPIs, `/audit` scorecard, gate audit | [technical-review-2026-07-29.md](../reviews/technical-review-2026-07-29.md) — the standing full-audit baseline (v3.7.0) |
 | Deep architecture narrative, sequence diagrams, file-by-file inventory | the retired 2026-06 review — git history (the review series keeps latest + landmarks; see [docs/README.md](../README.md)). §2 below is the maintained orientation |
 | The WebGL2 render-substrate fold in depth | [ADR 0038](../adr/0038-webgl-instanced-render-substrate.md) (the scoped 2026-07-08 review is retired — git history) |
@@ -386,7 +386,7 @@ Durable "don't re-introduce this" knowledge — non-obvious fixes whose *why* is
 
 The per-suite test catalogue, layer breakdown, classifications (VALID / SEMI-VALID), and current coverage gaps are maintained in **[docs/guidelines/testing.md](testing.md)** — that is the source of truth for counts and what each suite pins. Aggregate KPIs live in the **[2026-07-29 review](../reviews/technical-review-2026-07-29.md)** (health scorecard §1a, `/audit` pass §9); the older per-wave KPI series (2026-05/06/07 reviews) is retired to git history.
 
-Current totals (measured 2026-07-15): lib 1522 (+1 skipped) / 149 suites · app 266 / 26 · backend 102 / 7 · worker 124 / 4 — **2014 passing across 186 suites** · E2E 75 spec files. The v1.1 wave closed the server-runtime test gap (the only **high**-severity item the post-v1.0.0 review named). [testing.md](testing.md) is the authoritative catalogue; re-measure there rather than trusting this line.
+Suite counts, per-suite contracts, classifications and coverage gaps live in **[testing.md](testing.md)** — that is the only place they are measured; nothing here restates a number. The v1.1 wave closed the server-runtime test gap (the only **high**-severity item the post-v1.0.0 review named).
 
 **Code-quality infrastructure:** ESLint v10 (flat config; `@typescript-eslint/no-explicit-any` is now **error**, baseline driven 144 → 0), Knip v6 (**hard-fail** in CI since 2026-06-10), and Jest coverage floors (global **34 / 23 / 29 / 34** statements/branches/functions/lines, re-ratcheted 2026-07-29 to sit ~6pp under measured reality; `stores/reducers/` and `schemas/` carry their own higher floors). Reports land in `reports/`.
 
