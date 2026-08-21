@@ -1,6 +1,6 @@
 # Axoview Canvas Rendering Guidelines
 
-**Last updated:** 2026-07-09 (compositor overlay for stacked-canvas repaint — §14, PR #64; analytic edge-AA + arrow ground-plane parity — §12/§13, PR #63)
+**Last updated:** 2026-08-21 (section index added; content last revised 2026-07-09 — compositor overlay for stacked-canvas repaint §14, PR #64; analytic edge-AA + arrow ground-plane parity §12/§13, PR #63) · revision history: `git log --follow docs/guidelines/canvas-rendering-guidelines.md`
 **Status:** Living reference. Update when the render substrate evolves.
 **Audience:** Anyone (or any agent) touching the GPU bulk layers, the sprite atlas, line-style geometry, or image export.
 
@@ -10,7 +10,27 @@ WebGL2 is the **sole** bulk substrate ([ADR 0038](../adr/0038-webgl-instanced-re
 
 When in doubt, **mirror what already exists** in the reference implementations at the bottom, and remember the meta-rule (§11): **CI cannot see any of this** — every visual change needs a real-browser check.
 
-Each numbered rule below is one hard-won finding: **symptom → root cause → rule.**
+Each numbered rule below is one hard-won finding: **symptom → root cause → rule.** Read the rule that matches your symptom; they are independent.
+
+## Contents
+
+1. [Premultiplied-alpha atlas — all four parts or none](#1-the-atlas-is-a-premultiplied-alpha-pipeline--all-four-parts-or-none)
+2. [Never draw at the texture edge — inset by a texel](#2-never-draw-at-the-texture-edge--inset-content-and-uvs-by-a-texel)
+3. [Canvas-measured DOM overlays must be `content-box`](#3-a-dom-overlay-sized-to-a-canvas-measured-chip-must-be-content-box)
+4. [Walk parametric geometry by integer index](#4-walk-parametric-geometry-by-integer-index-never-a-float-cursor)
+5. [Scale every GPU stroke by the projection factor](#5-authored-widths-are-unprojected--scale-every-gpu-stroke-by-the-projection-factor)
+6. [Sheared sprites soften — anisotropy mitigates, doesn't cure](#6-sheared-sprites-soften--anisotropic-filtering-is-a-mitigation-not-a-cure)
+7. [Tint white for baked outlines; arbitrary tint only for flat sprites](#7-tint-white-for-baked-light-outlines-arbitrary-tint-only-for-flat-sprites)
+8. [Projection is a geometry-rebuild dependency](#8-projection-is-a-geometry-rebuild-dependency--dom-hit-proxy-and-gpu-paint-share-it)
+9. [Clamp the backing store; carry the effective dpr through](#9-clamp-the-backing-store-and-feed-the-effective-dpr-through-the-whole-render-path)
+10. [Rebuild geometry on scene change only — never per frame](#10-rebuild-geometry-only-on-a-scene-change--never-per-frame)
+11. [CI is pixel-blind — every visual change needs a real browser](#11-ci-is-pixel-blind--every-visual-change-needs-a-real-browser-check) *(the meta-rule)*
+12. [Crisp iso lines/borders/caps — analytic edge-AA, not MSAA](#12-crisp-iso-linesborderscaps--analytic-edge-aa-not-msaa)
+13. [Connector arrows live on the ground plane](#13-connector-arrows-live-on-the-ground-plane-not-facing-the-screen)
+14. [Stacked WebGL canvases need a full-area overlay](#14-stacked-webgl-canvases-need-a-full-area-overlay-so-chrome-recomposites-them)
+15. [Layer visibility/lock re-applied in every paint layer](#15-layer-visibilitylock-lives-only-in-uselayercontext--every-bulk-canvas-and-handle-overlay-must-re-apply-the-filter)
+
+[Deferred ADR 0038 items](#deferred-adr-0038-items) · [Reference implementations](#reference-implementations) · [When this document is wrong](#when-this-document-is-wrong)
 
 ---
 

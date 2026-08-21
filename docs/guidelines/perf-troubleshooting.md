@@ -1,6 +1,6 @@
 # Axoview Performance Troubleshooting Playbook
 
-**Last updated:** 2026-07-15 (docs housekeeping — scope boundary vs the GPU substrate made explicit; moved to `docs/guidelines/`. Content last substantively extended 2026-05-19 with the cold-start case study.)
+**Last updated:** 2026-08-21 (section index added; scope boundary vs the GPU substrate made explicit 2026-07-15, content last substantively extended 2026-05-19 with the cold-start case study) · revision history: `git log --follow docs/guidelines/perf-troubleshooting.md`
 **Status:** Living doc. Add a new "Case study" subsection whenever a perf investigation lands — **and bump the date above** (it sat at 2026-05-16 while a 2026-05-19 case study lived inside this very file).
 
 > Why this exists. The MQA #7 investigation (multi-element drag FPS cliff) burned through several false hypotheses before we found the real bottleneck. This document captures the **diagnostic order**, the **tools we built**, and the **architectural invariants** that resulted — so the next perf round starts from a higher floor.
@@ -17,6 +17,17 @@
 > **[canvas-rendering-guidelines.md](canvas-rendering-guidelines.md)** — the GPU substrate's
 > perf *and* fidelity contract. Use this playbook when the symptom is chrome, panels, drag
 > mechanics, startup, or React re-render churn.
+
+---
+
+## Contents
+
+1. [Companion docs](#companion-docs) — which of the four perf/canvas docs owns your symptom
+2. [Hard rules for perf work](#hard-rules-for-perf-work) — measure before you change anything
+3. [The diagnostic pyramid (cheapest first)](#the-diagnostic-pyramid-cheapest-first) — [1 baseline diag](#step-1--capture-a-baseline-diag-1-minute) · [2 render-count probe](#step-2--render-count-probe-1-minute) · [3 DevTools profile](#step-3--chrome-devtools-performance-profile-5-minutes) · [4 hypothesis + instrumentation](#step-4--root-cause-hypothesis--targeted-instrumentation)
+4. [Anti-patterns we found and fixed](#anti-patterns-we-found-and-fixed) — [A-1 god hook](#a-1--god-hook-usescene-inside-drag-hot-path-components) · [A-2 nested `produce()`](#a-2--nested-immer-produce-in-reducer-chains) · [A-3 commit-dominated drag](#a-3--react-commit-dominates-the-trace-during-drag) · [A-4 two writers per frame](#a-4--two-writers-stomping-the-same-scene-slice-per-frame) · [A-5 React lag behind DOM](#a-5--react-re-render-lag-behind-direct-dom-mutation) · [A-6 diagnostics in production](#a-6--diagnostic-instrumentation-shipped-in-production)
+5. [Case study — startup cold-start gap (2026-05-19)](#case-study--startup-cold-start-gap-2026-05-19)
+6. [Case study — MQA #7 (2026-05-16)](#case-study--mqa-7-2026-05-16) — the multi-element drag FPS cliff this playbook came from
 
 ---
 

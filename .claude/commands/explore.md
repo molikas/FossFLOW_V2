@@ -1,3 +1,8 @@
+---
+description: Run one wave of hypothesis-driven exploratory testing on the axoview monorepo — predict specific failures, probe each with the cheapest executable check that could falsify it, record a verdict, and file confirmed bugs into known_issues.md plus a wave ledger. FINDS AND FILES; it does not fix. Not /audit (metrics and architecture report), not /shake-out (fixing bugs someone already reported), not /code-review (the working diff).
+argument-hint: "[area id | subsystem | commit range] (empty = delta mode)"
+---
+
 # /explore — Axoview Exploratory Bug Hunt
 
 Run one wave of hypothesis-driven exploratory testing: predict specific failures, probe them cheaply, record a verdict for each. This is the standing form of the 2026-07 campaign (385 hypotheses, 240 bugs), distilled so a cold session can run a wave with no conversational context.
@@ -8,6 +13,21 @@ Run one wave of hypothesis-driven exploratory testing: predict specific failures
 The campaign's record is the single frozen review [`docs/reviews/exploratory-2026-07.md`](../../docs/reviews/exploratory-2026-07.md) — heat map, per-area defect classes, standing threads, owner rulings, delta anchor. The per-hypothesis area files are retired to git history; read the record's paragraph for whatever you are probing before predicting its behaviour, and `git show` a retired area file only when you need its full verdict table.
 
 `$ARGUMENTS`, if given, names the scope: an area id (`R3`), a subsystem (`layers panel`), or a commit range. If empty, use **delta mode** (§2).
+
+---
+
+## 0. The wave file
+
+One wave writes one directory at the repo root, `.explore/<YYYY-MM-DD>-<scope>/`, committed on the wave branch (§4) and deleted at campaign close-out (§11) — git history is the archive. It stays out of `docs/reviews/`, which §11 reserves for frozen records. It holds `wave.md` (always), one `<area>.md` per area when a wave runs more than two, and the regenerated `coverage-baseline.md` when §2 calls for one.
+
+`wave.md` carries four things:
+
+1. **Header** — scope, the delta anchor the wave ran from, the branch, the date.
+2. **The hypothesis ledger** — one row per hypothesis: `ID | prediction | tier | verdict | evidence`, where evidence is the probe path or the `known_issues.md` entry it became. Every hypothesis lands here as `PROPOSED` before any of them is probed (§1).
+3. **Product questions** — the `SUSPECT` verdicts, each with the recommended default (§8).
+4. **Resume point** — one paragraph naming what the next session picks up first. The report's part 3 is a one-sentence pointer at this; the detail lives here.
+
+One row per hypothesis and one line of evidence per row: the register carries the defect and the probe carries the proof, so a ledger row that grows into a narrative is duplicating both. **Append, never fork.** A wave has exactly one `wave.md` — a second ledger (`wave-2.md`, `findings.md`, a method doc) splits the set the close-out tally counts, and that is how a wave loses work.
 
 ---
 
@@ -31,6 +51,8 @@ PROPOSE → NOVELTY-CHECK → PROBE → VERDICT → RECORD
 
 **Quota.** ≥10 counted hypotheses (BUG/SUSPECT/FALSIFIED) per area, each backed by an executed probe. Aim to propose ~15 to count 10. Do not inflate: an unprobed prediction is not a verdict.
 
+**Delegation.** The gate is independence and payoff (`CLAUDE.md`); in a wave it lands at the **area**. A wave covering two or three areas that do not share a seam can hand each area to its own sub-agent — give it the area's frozen-review paragraph, §5, §6 and §9, launch them together, and keep probing yourself rather than blocking on the fan-out. A seam wave is one hypothesis space, not two: run it yourself. Below the area the arithmetic inverts — an agent per hypothesis re-reads this whole file to run a probe that takes seconds, and the re-read, not the probe, is the cost. Do not fan out proposal or novelty-check either: a wave's value comes from one mind holding the whole area's hypothesis set, and parallel proposers duplicate each other's guesses. Filing stays with you — `known_issues.md`, the root `package.json` and the wave file take concurrent writes badly (§9g).
+
 ---
 
 ## 2. Scope selection
@@ -44,16 +66,19 @@ PROPOSE → NOVELTY-CHECK → PROBE → VERDICT → RECORD
 
 **Full-area mode.** `$ARGUMENTS` names an area or subsystem: read its paragraph in the frozen review, then `git show` its retired area file (scope, seed seams, matched invariants, known coverage gaps, and every hypothesis already ruled on there) and propose only *novel* ones. The retired table is the dedupe reference — an ID that already carries a verdict is not available for reuse.
 
-**Regenerate the baseline** when the delta is large (say >150 changed source files) or the last sweep is more than a quarter old: re-derive the coverage map for the areas in scope — which files have direct tests, which are only exercised transitively, which invariants the ADRs state — and write it as `coverage-baseline.md` in the campaign's own working directory (it is a regenerated artifact; the previous campaign's copy is retired with its tree, never hand-maintained forward). **Verify a harvested invariant against the source before building a probe on it**; two in the original harvest were stale, and one named a function with no caller at all.
+**Regenerate the baseline** when the delta is large (say >150 changed source files) or the last sweep is more than a quarter old: re-derive the coverage map for the areas in scope — which files have direct tests, which are only exercised transitively, which invariants the ADRs state — and write it as `coverage-baseline.md` in the wave directory (§0) (it is a regenerated artifact; the previous campaign's copy is retired with its tree, never hand-maintained forward). **Verify a harvested invariant against the source before building a probe on it**; two in the original harvest were stale, and one named a function with no caller at all.
 
 ---
 
 ## 3. Read first
 
-1. This file.
-2. The frozen review's paragraph for whatever you are probing (and, when you need the verdict detail, its retired area file via git history) — the rig notes cost ~10 wrong verdicts to learn.
-3. `known_issues.md` — an entry already at `Status: Open` is not a new finding. Confirming one is fine; re-filing it is not.
-4. `docs/guidelines/testing.md` for the lane's place in the suite; `docs/adr/` for the contract a hypothesis claims is violated.
+1. The frozen review's paragraph for the area(s) in scope, plus its standing-threads section — `git show` a retired area file only when you need a verdict's detail.
+2. §9 of this file before writing a probe. Those rig notes cost ~10 wrong verdicts to learn.
+3. `docs/adr/` — the specific ADRs whose contracts your hypotheses claim are violated, not the directory.
+4. `docs/guidelines/testing.md` §Contracts the suite depends on, §Quick Reference, §Classifications and §Known Coverage Gaps for the lane's place in the suite. Contracts is where the exploratory lane's own rules live — what the lane costs to promote, the ADR 0047 flip rule, and *check a gate's exit code, not its output*. Everything below §Suite history is per-wave record; skip it unless you are dating a specific change.
+5. **Do not read `known_issues.md` whole** (see the read budget in `CLAUDE.md`) — grep it, twice: before spending a probe on a symptom you can already describe, and again before filing. `grep -n -i '<symptom keyword>' known_issues.md`, then read the surrounding entry. An entry already `**Status:** Open` is not a new finding — confirming one is fine, re-filing it is not.
+
+Anything else, grep for as a hypothesis needs it. Once you can state a falsifiable prediction, start probing; do not extend the reading phase.
 
 ---
 
@@ -75,7 +100,7 @@ Work on a dedicated branch off `master` (`explore/<date>-<scope>`), never on `ma
 
 **Tier discipline:** hypotheses about event routing, hit-testing or gestures **must** use T3. This repo has shipped a regression that synthetic-event tests structurally could not see ([ADR 0022 addendum](../../docs/adr/0022-canvas-pointer-interaction-model.md)). Everything else takes the cheapest tier that can falsify.
 
-**Where probes live** (each config's `testMatch` is exact — a misnamed file is not an error, it is simply never run). **These trees do not exist between campaigns (§11); a campaign CREATES them and the close-out deletes them.** `mkdir -p` the area directory before the first probe:
+**Where probes live** (each config's `testMatch` is exact — a misnamed file is not an error, it is simply never run). **These trees do not exist between campaigns (§11); a campaign CREATES them and the close-out deletes them.** Create the area directory before the first probe:
 
 | Package | Path | Run |
 |---|---|---|
@@ -129,7 +154,7 @@ Apply per area until the quota is comfortably exceeded:
 
 ## 8. Filing, and the flip rule
 
-- **`BUG`** → an entry in `known_issues.md` in its existing Symptom / Root cause / Workaround / Status format, tagged `**Found by:** exploratory <ID>`, after checking it is not already registered.
+- **`BUG`** → an entry in `known_issues.md` in its existing Symptom / Root cause / Workaround / Status format, tagged `**Found by:** exploratory campaign <ID>` — the word `campaign` is part of the convention and is what the close-out tally greps for — after checking it is not already registered. Write the entry a fix wave can act on: the symptom with its observable consequences, the root cause anchored to a file and line range, the workaround, the status. What does *not* belong is the story of how you found it — the hypothesis, the probe run and the falsified alternatives live in the wave file and the probe, and the register is read by grep.
 - The repro stays in the lane as **`it.failing`** (Jest) / **`test.fail()`** (Playwright), so the lane is green while the bug is red and flips to unexpected-pass the day someone fixes it.
 - **`SUSPECT`** → the wave file's product-questions list, with a recommendation. When the code is self-consistent and no ADR picks a side, that is a question, not a bug.
 - **`FALSIFIED`** probes with real regression value may be promoted into the main suite — curated, never automatic.
@@ -141,7 +166,9 @@ Apply per area until the quota is comfortably exceeded:
 - **A probe that characterises the defect's STRUCTURE can only be retired, not repaired** — "four canvases at one CSS zIndex" was true of the broken world and meaningless afterwards. Assert the claim from the other side instead.
 - **A fix can invalidate a NEIGHBOURING probe's premise**, and a merge closes neighbours *by construction*. Those need an explicit disposition in the record ("no longer reachable via X; the underlying guard is unchanged; re-open if Y"), or the finding evaporates silently. **A lane failure is not automatically a flip.**
 
-**Out of scope / not a finding:** performance (the perf harness owns it, ADR 0020); flake in the *existing* suites; visual taste with no contract behind it; anything already `Status: Open`; anything an existing test asserts.
+**Out of scope / not a finding:** performance (the perf harness owns it, ADR 0020); flake in the *existing* suites; a pure styling preference with nothing on either side of it ("I'd have used more padding"); anything already `**Status:** Open`; anything an existing test asserts.
+
+A visual or behavioural oddity that is *inconsistent with itself* — one surface disagreeing with another, or with `docs/guidelines/ux-principles.md` — is in scope even when no ADR settles it: that is a `SUSPECT` (§1), recorded with a recommended default for the owner to rule on. Only the oddity with no inconsistency behind it at all is out.
 
 ---
 
@@ -176,9 +203,8 @@ Also: **an assertion written "either way" is a tautology.** `expect(x).toEqual(c
 ### 9c. Setup-throw traps
 
 - **Playwright fixtures are LAZY — an e2e probe must destructure `app`, not just `page`.** `async ({ page })` boots no diagram, so `window.__axoview__` is undefined and every locator times out — indistinguishable from evidence. Write `async ({ page, app })` even when `app` is unused.
-- **jsdom has no canvas 2D context.** `getTextBoxDimensions` throws, so any T1 probe touching text boxes needs a canvas stub. Recreate `installCanvasStub()` at `src/__explore__/canvasStub.ts` at the start of a campaign (git-history has the last copy under that path). **A PROMOTED/colocated test cannot import it** (it lives in the campaign lane that gets deleted) — give the main suite its own local stub, or use the lib's own `src/webgl/glStub.ts` (`installDrawing2DStub()`), which is permanent product-adjacent test infra.
-- **`installCanvasStub()` is not enough for anything that DRAWS** — use `installDrawing2DStub()` from `src/webgl/glStub.ts` (a permanent lib test helper, not a lane rig).
-- **`useCopyPaste` needs `<ClipboardProvider>`** — use `ClipboardProviders` from `E3/harness.tsx`.
+- **jsdom has no canvas 2D context.** `getTextBoxDimensions` throws, so any T1 probe touching text boxes needs a stub. Use **`installDrawing2DStub()` from `packages/axoview-lib/src/webgl/glStub.ts`**: it provides `font` / `measureText` *and* the drawing calls, so it covers both text measurement and anything that actually DRAWS — without the drawing calls, construction throws `dctx.clearRect is not a function`, which under `it.failing` reads as a confirmed bug. It is permanent lib test infra, not a lane rig, so a promoted or colocated test can still import it after §11 deletes the lane. Write a local minimal stub only if the probe lives in a package that cannot reach the lib.
+- **`useCopyPaste` needs its clipboard provider tree** — rendering the hook bare throws. The campaign rig that wrapped it was deleted with the lane, so take the current wrapper from the hook's own colocated tests: `packages/axoview-lib/src/clipboard/__tests__/`.
 - **`jest.mock` drops the classes a component `instanceof`-checks**, and only on the failure path — which is the path the probe is testing. Re-export the real class via `jest.requireActual`.
 - **`jest.spyOn` returns the EXISTING spy on a second call**, so calls accumulate across tests in one file. `mockClear()` right after acquiring it.
 - **`jest.doMock` + `jest.resetModules()` leaks across tests in one file**, and re-importing a React component through a reset registry yields a null dispatcher. One such probe per file.
@@ -202,7 +228,7 @@ Also: **an assertion written "either way" is a tautology.** `expect(x).toEqual(c
 
 ### 9e. E2E environment
 
-- **`npm run test:e2e` does not work on this machine** — the script's `node_modules/.bin/playwright` path is not resolvable by cmd.exe. Use `npx playwright test --config packages/axoview-e2e/playwright.config.ts`.
+- **`npm run test:e2e` does not work on Windows** — the script's `node_modules/.bin/playwright` path is not resolvable by cmd.exe. Use `npx playwright test --config packages/axoview-e2e/playwright.config.ts`.
 - **Never pipe Playwright through `tail`** — the pipeline's exit code is `tail`'s, so a run with failures reads as exit 0. Three runs were read as green while 13 journeys were broken. Run unpiped with `--reporter=dot` and check the exit code.
 - **Never run two Playwright invocations at once.** They share the dev-server port and the first HANGS rather than failing — an empty log and no error for as long as you let it.
 - **The dev server serves the BUILT lib.** `prestart` does not build (only `prebuild` does) and `reuseExistingServer` will reuse a stale one, so a lib source change is invisible to Playwright until `npm run build:lib`. It presents as *the element does not exist* — indistinguishable from a product bug, and it cost an 11.3-minute run of 7 false reds. **And `build:lib` over a LIVE dev server poisons it** (`Can't resolve 'axoview'`), presenting as every test failing at `waitForAppReady`. Sequence: **stop the dev server → `build:lib` → let Playwright start a fresh one.**
@@ -212,7 +238,7 @@ Also: **an assertion written "either way" is a tautology.** `expect(x).toEqual(c
 - **`page.mouse` needs PAGE coordinates; `CanvasPOM.tileToScreen` returns interactions-box-relative ones.** Add the interactions layer's `boundingBox()` origin, and close the Elements dock first or it swallows the press.
 - **Children of a `<SceneLayer>` are positioned in CANVAS px; `boundingBox()` returns SCREEN px.** Divide by `uiState.zoom` before comparing against a `measureText` result.
 - **A DOM `<Node>`'s `[data-drag-id]` shell is ZERO-SIZED** (children absolutely positioned), so `elementFromPoint` never returns it and `boundingBox()` times out. Read `textContent` (not `innerText`) for label copy; use painted-bbox read-back for drawn extent.
-- **A full-area e2e run takes 2–6 minutes** — run it in the background, and re-check the whole wave file once at the end.
+- **A full-area e2e run takes 2–6 minutes** — start it in the background and keep proposing or probing while it runs, rather than blocking on it.
 
 ### 9f. DOM selectors for surfaces with no hooks
 
@@ -242,7 +268,7 @@ When a wave's finding is a *class* rather than an instance, the fix wave will wa
 
 ---
 
-## 11. Campaign close-out — the archive step (ADR 0047 §5, amended 2026-08-09 and 2026-08-10)
+## 11. Campaign close-out — the archive step (ADR 0047 §5, as amended 2026-08-09 and 2026-08-10; where this section and the ADR body disagree, this section wins)
 
 **There is NO standing lane between campaigns (2026-08-10).** A campaign
 *recreates* the `__explore__/` and `tests-exploratory/` trees while it runs and
@@ -252,20 +278,23 @@ normal suites, next to the code they test, which CI watches. The explore
 configs stay (with `passWithNoTests`) so the next campaign can refill the trees.
 
 A **wave** ends by updating the frozen review's delta-anchor section (§2). A
-**campaign** (a full multi-area program with its own working directory of
-ledger + area files) ends by compressing, never by freezing the tree:
+**campaign** (a full multi-area program, its wave directories under `.explore/`
+carrying the ledgers and area files) ends by compressing, never by freezing the
+tree:
 
 1. Write ONE file, `docs/reviews/exploratory-<YYYY-MM>.md`, in the
    frozen-review style of [exploratory-2026-07.md](../../docs/reviews/exploratory-2026-07.md):
    the **heat map** (area × hypotheses counted × bugs × known_issues entries ×
-   dominant defect classes — derive entry counts from `grep "Found by:"
-   known_issues.md`), one short paragraph per area naming its bug **classes**
+   dominant defect classes — derive entry counts from the same tag the
+   close-out tally greps, `**Found by:** exploratory campaign <ID>`, so the
+   heat map and the tally count one set), one short paragraph per area naming
+   its bug **classes**
    (not per-bug detail — known_issues.md carries that) plus any record
    corrections, the owner rulings **verbatim**, the program lessons, and the
    **delta anchor** with its sweep history (this section a future sweep
    updates).
-2. **Delete the working tree** — ledger, area files, method notes, the
-   regenerated coverage baseline. Git history is the archive; do not move
+2. **Delete `.explore/`** — every wave directory, with its ledgers, area files
+   and regenerated coverage baseline. Git history is the archive; do not move
    files into `docs/reviews/`, and do not keep APPROACH-style method docs (the
    method lives in this skill).
 3. Repoint every inbound link (known_issues.md, testing.md, the ADRs, this
@@ -299,25 +328,18 @@ ledger + area files) ends by compressing, never by freezing the tree:
 **End-of-session report contract (owner-mandated).** The final message of every session has exactly four parts, in this order, and nothing else:
 
 1. **Shipped:** one line per commit (sha — what).
-2. **Gate:** one line — suites/e2e counts, green or red.
+2. **Gate:** one line — suites/e2e counts, green or red, followed by `N filed / M accepted-open / rest fixed` from the greps below. Every number on this line comes from a tool result in this session: name the command that produced it and its exit code, and if a suite was not run in this session say so rather than inferring it from the last run you remember. If any entry is Open without an accepted-open ruling, the wave is not done — name it here, and the report has a fifth line saying so.
 3. **Next:** ONE sentence — the first action of the successor session. All further detail goes in the wave file's resume point, not in chat.
 4. **Owner:** the word **"nothing"**, or ONE question with a recommended default so it can be answered in a word. If several compete, ask the most blocking one and record the rest as "proceeding with X unless overruled".
 
-**Every wave-close report MUST state the open-entry tally as a grep-verifiable
-number, with the grep** (mandated 2026-08-10 — the wave-6 "final sweep" reported
-no tally and left ~18 entries silently open, which is what forced the mop-up
-wave). A characterization ("almost all fixed") is not a tally; the number is:
+Part 2's tally is these two greps, run in this session — not a characterization. "Almost all fixed" is not a tally, and the line is mandatory because the wave-6 "final sweep" reported no tally and left ~18 entries silently open, which is what forced the mop-up wave (mandated 2026-08-10):
 
 ```bash
 grep -c '\*\*Found by:\*\* exploratory campaign' known_issues.md   # total filed
 grep -c 'accepted open by owner ruling' known_issues.md            # deliberately open
 ```
 
-The Gate line, or a line beside it, carries `N filed / M accepted-open / rest
-fixed`. If any entry is Open without an accepted-open ruling, the wave is not
-done — name it.
-
-Findings, corrections and lessons are written into their homes (the wave file, `known_issues.md`, `docs/guidelines/testing.md`) and *linked*, never restated in the report. **A report the owner cannot act on in under a minute is a defect in the report.**
+Findings, corrections and lessons are written into their homes — the wave file, `known_issues.md`, `docs/guidelines/testing.md`, and, for a rig trap that cost this wave a wrong verdict, §9 of this skill (one bullet, symptom first and fix second, in the voice of the ones already there) — and *linked*, never restated in the report. **A report the owner cannot act on in under a minute is a defect in the report.**
 
 **Two standing lessons about the record itself:**
 

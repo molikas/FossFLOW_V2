@@ -33,5 +33,3 @@ Tacticals rot faster than any other doc here, because they describe a moment (*"
 | `perf-charter.md` | protocol / tier ladder / LEB60 → [ADR 0020](../adr/0020-engine-perf-harness-and-measurement-protocol.md); the unratified T3 sim mandate → `PLAN.md` ENG-T3 |
 
 All three had shipped their work months earlier and had drifted into asserting things that were no longer true (a superseded render substrate, "open" gaps that were closed, a decision that had been reversed). Full text is in git history — `git log --diff-filter=D --name-only -- docs/tactical/`.
-
-**The lesson, worth applying to the next one:** when a tactical's work ships, wrap it. If it holds knowledge worth keeping, that knowledge is a **guideline** (durable how-we-build) or an **ADR** (a decision) — not a permanent resident here.

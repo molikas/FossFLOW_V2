@@ -16,7 +16,7 @@ docs/
 Four kinds of document, by change discipline (see [workflow.md Design principle 4](workflow.md)):
 
 - **Living references** — how the system works *today*; kept in sync with the code. They live in `guidelines/` (how we build) plus a few at `docs/` root (process, deploy, product).
-- **Frozen baselines** — point-in-time deep snapshots in `reviews/`. **Never updated after they're cut** — they record what was true on a date, for reviewer hand-off and historical comparison.
+- **Frozen baselines** — point-in-time deep snapshots in `reviews/`. Their *findings* are **never revised after they're cut** — they record what was true on a date, for reviewer hand-off and historical comparison. Where a review carries a forward-maintained section it says so in its own header (see the exploratory record's delta anchor).
 - **Decision records (ADRs)** — one durable decision each, with rationale. Change only via the `/feature extend|supersede` discipline.
 - **Operational** — moving-state trackers: the roadmap, the open-issues register, the manual-test record.
 
@@ -28,6 +28,8 @@ When a living reference and a frozen baseline disagree, the **living reference w
 
 Read these before touching the relevant surface. Each is a quick-reference, not a comprehensive description — they cross-link to the deeper baselines and ADRs for detail.
 
+**Size discipline** — a living reference that no longer reads in ten minutes has stopped being one. When you add to one, add the smallest thing that carries the rule: one row, one sentence, one clause. **Replace rather than append** when you are updating a fact that is already stated — two statements of one fact drift apart, and the older one is the one a reader hits first. History belongs to git; per-wave detail belongs to the frozen reviews and the release notes. If a section has grown past a screen of narrative, collapse it to one line per event and point at git.
+
 ### `guidelines/` — how we build
 
 | Doc | Read it when… | Scope |
@@ -38,14 +40,15 @@ Read these before touching the relevant surface. Each is a quick-reference, not 
 | [canvas-rendering-guidelines.md](guidelines/canvas-rendering-guidelines.md) | Touching the GPU bulk layers, the sprite atlas, line-style geometry, or image export | The **pixel**-fidelity contract for the WebGL2 substrate |
 | [testing.md](guidelines/testing.md) | You need the regression-suite catalogue — which suite pins which contract, and the coverage gaps | Per-layer suite breakdown, classifications, how to run, CI sharding model |
 | [perf-troubleshooting.md](guidelines/perf-troubleshooting.md) | Chasing a render/drag/startup performance problem in the React/DOM layer | Diagnostic playbook + case studies (drag GC cliff, cold-start gap). For GPU-substrate fidelity/perf, use canvas-rendering-guidelines instead |
+| [docs-verified-negatives.md](guidelines/docs-verified-negatives.md) | Before filing a docs⇄code finding, and before finishing a `/docs-sweep` | The register of claims already investigated and found false — read it so a refuted finding is not re-raised, append to it when a sweep refutes a new one |
 
 ### `docs/` root — process, deploy, product
 
 | Doc | Read it when… | Scope |
 |---|---|---|
-| [workflow.md](workflow.md) | Starting a session — which skill fires when, where artifacts land | Canonical session cadence, skill decision table, seven design principles |
+| [workflow.md](workflow.md) | Starting a session — which skill fires when, where artifacts land | Canonical session cadence, skill decision table, eight design principles |
 | [deployment.md](deployment.md) | Deploying to local dev / Docker / Cloudflare Pages | From-scratch walkthrough per target, auth modes, smoke tests, troubleshooting |
-| [features.md](features.md) | You need the complete list of what this fork adds vs upstream | The durable feature inventory, with ADR links. Maintained by `/notes`; the root README carries only the condensed Highlights. Tracks `integration`, so it may list features not yet in a release |
+| [features.md](features.md) | You need the complete list of what this fork adds vs upstream | The durable feature inventory, with ADR links. Maintained by `/notes`; the root README carries only the condensed Highlights. Tracks the working branch, so it may list features not yet in a release |
 
 ---
 
@@ -67,7 +70,7 @@ Deep snapshots cut on a date and left immutable. Read for the comprehensive narr
 
 ## Decision records (ADRs)
 
-[docs/adr/](adr/) — **41 ADRs** (40 Accepted · 1 superseded-in-part; 0016/0017 are unused numbers), one durable decision each. Start any new work by reading the ADR header for the contract you're about to touch. *(Table rebuilt 2026-07-15 — it had been stale at 35 rows, ending at 0037, since the Drive-storage promotion; 0038–0043 were missing entirely. Same sweep corrected four statuses: 0022/0023/0025/0028 had sat `Proposed` for weeks after their work shipped — 0028 while `workflow.md` already named it the governing protocol. **Nothing is Proposed today**; if you add one, keep this line honest.)*
+[docs/adr/](adr/) — one durable decision each (0016/0017 are unused numbers). **`ls docs/adr/` is the authoritative list** and `grep -rh '^\*\*Status:\*\*' docs/adr/` the status roll-up; the table below is a convenience index, and the directory wins if the two disagree. Start any new work by reading the header of the ADR governing the contract you're about to touch.
 
 | # | Decision |
 |---|---|
@@ -112,6 +115,10 @@ Deep snapshots cut on a date and left immutable. Read for the comprehensive narr
 | [0041](adr/0041-discoverability-metadata-and-social-sharing.md) | Discoverability metadata & social-sharing contract |
 | [0042](adr/0042-drive-native-sharing-and-readonly-preview.md) | Drive-native diagram sharing & read-only preview |
 | [0043](adr/0043-deferred-backend-for-google-api-hardening.md) | Deferred backend for Google-API hardening (auth broker, read proxy, snapshot store) |
+| [0044](adr/0044-on-canvas-icon-resize.md) | On-canvas per-node icon resize (node transform handles) |
+| [0045](adr/0045-release-version-provenance-and-in-app-surfacing.md) | Release version provenance & in-app version surfacing |
+| [0046](adr/0046-release-notes-generation-and-reference-integrity.md) | Release-notes generation: body-level detail & reference integrity |
+| [0047](adr/0047-exploratory-testing-program.md) | Exploratory testing program (probe lane, promotion protocol, `/explore`) |
 
 ---
 
@@ -121,9 +128,7 @@ Short-lived working docs ([workflow.md](workflow.md) Design principle 4): scaffo
 
 **Empty is the healthy state** — see [tactical/README.md](tactical/README.md) for the lifecycle. Three docs that had calcified there were folded out on 2026-07-15: the two `canvas-interaction-*` references became [guidelines/canvas-interaction.md](guidelines/canvas-interaction.md), and `perf-charter.md` was wrapped into [ADR 0020](adr/0020-engine-perf-harness-and-measurement-protocol.md) + PLAN.md's ENG-T3 row.
 
-| In flight | What it is |
-|---|---|
-| [adr-code-audit.md](tactical/adr-code-audit.md) | ADR ⇄ code conformance audit — verify all 41 ADRs' `Status`, cross-links, and decisions against the code. Scaffolded 2026-07-15. |
+**Current contents:** [tactical/README.md](tactical/README.md) — the maintained list. `ls docs/tactical/` is the authority if the two ever disagree.
 
 ---
 
